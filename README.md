@@ -6,13 +6,31 @@ A local-first, agentic system layer for Ubuntu 24.04 LTS that converts kernel-le
 
 ## Features
 
+### Core Capabilities
 - **Interactive Terminal** - Natural language interface to your Ubuntu system
-- **Intent Classification** - Automatically understands what you want to do
+- **Intent Classification** - Automatically understands what you want to do (shell, question, task, fixit)
 - **Safe Command Execution** - Dangerous commands are blocked, privileged operations require confirmation
-- **Man Vault** - Local index of system documentation for grounded responses
-- **Incident Memory** - Learns from past incidents to improve future recommendations
+- **Fixit Service** - Automatic diagnosis and repair of failed commands
+- **Planner Service** - Multi-step system task planning with verification
+
+### Knowledge & Memory
+- **Man Vault** - Local SQLite+FTS5 index of ~24,000 man pages with semantic search
+- **Incident Vault** - Decision memory storing past incidents, actions, and outcomes for learning
+
+### Configuration Management
 - **LLM-Driven Config Generation** - Generate configuration changes from natural language
-- **File Operations** - Safe file read/write with rollback support
+- **Augeas Integration** - Safe config editing with preview, validation, and rollback
+- **File Operations** - Safe file read/write with atomic operations and rollback support
+
+### Telemetry & Monitoring
+- **Journal/Kernel Watchers** - Real-time system event monitoring
+- **eBPF Probes** - Kernel-level telemetry (OOM, disk I/O, network drops, thermal)
+- **Periodic Probes** - SMART, sensors, disk usage, network status
+- **Notifications** - ntfy integration for alerts
+
+### System Management
+- **Reboot Tracking** - GRUB/kernel management with pre/post verification
+- **Polkit Integration** - Secure privileged operations
 
 ## Requirements
 
@@ -110,6 +128,68 @@ Supported configuration domains:
 - **service** - Systemd unit files
 - **cron** - Scheduled tasks
 
+### Fixit (Command Recovery)
+
+When a command fails, use `fix` to diagnose and repair:
+
+```bash
+elle > apt update
+# ... command fails ...
+
+elle > fix
+Analyzing failure...
+
+Diagnosis: Permission denied - requires sudo
+Suggested fix: Run with elevated privileges via Polkit
+
+Apply fix? [y/n]:
+```
+
+### Planner (System Tasks)
+
+For complex system changes, ELLE creates a verified plan:
+
+```bash
+elle > configure nginx as reverse proxy for localhost:3000
+
+Planning...
+
+Plan: Configure Nginx Reverse Proxy
+1. Install nginx (if needed)
+2. Create /etc/nginx/sites-available/proxy.conf
+3. Enable site with symlink
+4. Test configuration (nginx -t)
+5. Reload nginx
+
+Risks:
+- Port 80 must be available
+- Existing nginx config may conflict
+
+Execute plan? [y/n]:
+```
+
+### Augeas Config Editing
+
+Safe configuration editing with preview and rollback:
+
+```python
+from elle.ops.augeas import AugeasController, AugeasOp
+
+controller = AugeasController()
+
+# Preview changes before applying
+ops = [
+    AugeasOp(kind="set", path="/files/etc/ssh/sshd_config/PermitRootLogin", value="no"),
+]
+preview = controller.preview(ops)
+print(preview.diff)
+
+# Execute with automatic backup
+result = controller.execute(ops)
+if not result.success:
+    controller.rollback()  # Restore from backup
+```
+
 ### File Operations
 
 ```python
@@ -132,14 +212,81 @@ doc = (
 )
 ```
 
+### Telemetry & eBPF
+
+ELLE monitors system health via multiple sources:
+
+```python
+from elle.daemon.telemetry import get_recent_events
+from elle.daemon.telemetry.ebpf import is_ebpf_available
+
+# Check eBPF availability
+if is_ebpf_available():
+    print("eBPF probes active: OOM, disk I/O, network drops, thermal")
+
+# Get recent telemetry events
+events = get_recent_events(limit=10, severity="warning")
+for event in events:
+    print(f"{event.ts} [{event.severity}] {event.message}")
+```
+
+### Notifications
+
+Configure ntfy for system alerts:
+
+```python
+from elle.daemon.notifications import get_notification_service
+
+svc = get_notification_service()
+svc.configure(
+    ntfy_url="https://ntfy.sh/my-elle-alerts",
+    min_severity="warning",
+)
+
+# Alerts are sent automatically for:
+# - OOM kills
+# - Disk space critical (>95%)
+# - Service failures
+# - SMART warnings
+```
+
+### Reboot Management
+
+Track kernel updates and verify post-reboot:
+
+```python
+from elle.daemon.reboot import schedule_reboot, get_pending_reboot
+
+# Check if reboot is needed (e.g., kernel update)
+pending = get_pending_reboot()
+if pending:
+    print(f"Reboot required: {pending.reason}")
+    print(f"New kernel: {pending.target_kernel}")
+
+# Schedule with verification
+schedule_reboot(
+    reason="Kernel update to 6.8.0-40",
+    verify_commands=["uname -r", "systemctl is-system-running"],
+)
+```
+
 ## Architecture
 
 ```
-User --> elle (terminal / CLI)
-         |-> Man Vault (local documentation grounding)
-         |-> Incident Vault (decision memory + prior art)
-         |-> Ollama (local inference)
-         |-> elled (telemetry + privileged ops)
+User ──▶ elle (terminal / CLI)
+         ├─▶ Intent Classifier (hybrid: keywords + patterns + SLM)
+         ├─▶ Fixit Service (command failure recovery)
+         ├─▶ Planner Service (multi-step task planning)
+         ├─▶ Man Vault (documentation grounding)
+         ├─▶ Incident Vault (decision memory + prior art)
+         ├─▶ Config Generator (natural language → config)
+         ├─▶ Ollama (local inference)
+         └─▶ elled (telemetry + privileged ops)
+                ├─▶ Journal/Kernel Watchers
+                ├─▶ eBPF Probes (OOM, I/O, network, thermal)
+                ├─▶ Periodic Probes (SMART, sensors, df)
+                ├─▶ Reboot Manager (GRUB, verification)
+                └─▶ Notifications (ntfy)
 ```
 
 ### Key Components
@@ -148,9 +295,15 @@ User --> elle (terminal / CLI)
 |-----------|-------------|
 | `elle` | Interactive terminal REPL and CLI |
 | `elled` | Background daemon for telemetry and privileged ops |
-| Man Vault | SQLite+FTS5 index of system man pages |
-| Incident Vault | Decision memory storing past incidents and outcomes |
-| Config Generator | LLM-driven configuration from natural language |
+| Intent Classifier | Hybrid classification (keywords, patterns, SLM fallback) |
+| Fixit Service | Diagnose and repair failed commands |
+| Planner Service | Plan multi-step system tasks with verification |
+| Man Vault | SQLite+FTS5 index of ~24,000 man pages |
+| Incident Vault | Decision memory storing incidents and outcomes |
+| Config Generator | LLM-driven config from natural language |
+| Augeas Controller | Safe config editing with preview/rollback |
+| eBPF Watcher | Kernel-level telemetry probes |
+| Reboot Manager | GRUB/kernel management with verification |
 
 ## Development
 

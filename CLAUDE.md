@@ -36,24 +36,101 @@ src/elle/
       classifier.py      # Intent classification
       executor.py        # Command execution
       renderer.py        # Output formatting (prompts, colors, plans)
+      incident_renderer.py # Incident display formatting
+      intent.py          # Intent enum and IntentResult model
     fixit/               # Command failure recovery
+      models.py          # FixitRequest, FixitResult, FixitPlan
+      service.py         # FixitService - diagnosis and repair
+      verifier.py        # Verify fix was successful
+      prompts.py         # LLM prompts for diagnosis
+      renderer.py        # Fix plan display
+      interactive.py     # Interactive fix flow
+      fallback.py        # Rule-based fallback fixes
     planner/             # System task planning
+      models.py          # PlanRequest, PlanStep, ExecutionPlan
+      service.py         # PlannerService - multi-step planning
+      verifier.py        # Step verification
+      prompts.py         # LLM prompts for planning
+      renderer.py        # Plan display
+      interactive.py     # Interactive plan execution
+    reboot/              # Reboot tracking commands
+      commands.py        # CLI commands for reboot management
   daemon/
+    main.py              # Daemon entry point
+    config.py            # Daemon configuration
     telemetry/           # Journal/kernel watchers, probes
+      journal.py         # Journald watcher
+      kernel.py          # Kernel message watcher
+      probes.py          # Periodic probes (SMART, sensors, df)
+      queue.py           # Event queue
+      normalizer.py      # Event normalization
+      models.py          # TelemetryEvent model
+      schema.py          # SQLite schema
+      store.py           # Event storage
+      ebpf/              # eBPF kernel probes
+        watcher.py       # eBPF event watcher
+        capabilities.py  # Check eBPF availability
+        models.py        # eBPF event models
+        normalizer.py    # eBPF event normalization
+        bcc/             # BCC probe implementations
+          oom.py         # OOM kill detection
+          block_io.py    # Disk I/O latency
+          net_drops.py   # Network packet drops
+          thermal.py     # Thermal throttling
+          process.py     # Process events
     manvault/            # Man page documentation indexing
+      indexer.py         # Discover and index man pages
+      embedder.py        # Generate embeddings via Ollama
+      retriever.py       # Search (lexical, semantic, hybrid)
+      models.py          # ManDoc, ManChunk, ManSnippet
+      schema.py          # SQLite+FTS5 schema
+      store.py           # CRUD operations
+      service.py         # Background indexing service
     incidents/           # Incident report vault (decision memory)
+      correlator.py      # Event-to-incident grouping
+      retriever.py       # Multi-tier similarity search
+      snapshot.py        # System state capture
+      preconditions.py   # Condition evaluation DSL
+      models.py          # IncidentReport, SystemSnapshot, Fingerprint
+      schema.py          # SQLite+FTS5 schema
+      store.py           # CRUD operations
+      service.py         # Background embedding service
+    notifications/       # Alert notifications
+      models.py          # NotificationConfig, Alert
+      service.py         # ntfy integration
+    reboot/              # Reboot tracking
+      manager.py         # RebootManager
+      grub.py            # GRUB configuration
+      verifier.py        # Post-reboot verification
+      models.py          # RebootRequest, RebootStatus
+      schema.py          # SQLite schema
+      store.py           # Reboot history storage
     ops/                 # Privileged operations
-    api/                 # FastAPI bridge (optional)
+      polkit.py          # Polkit action execution
+    api/                 # FastAPI bridge
+      app.py             # FastAPI application
+      routes.py          # API endpoints
+      models.py          # Request/response models
   ops/
     files/
       models.py          # FileOp, ReadResult, WriteResult
       handler.py         # FileHandler with read/write/move/copy/delete
       text.py            # TextHandler, MarkdownBuilder
-      organizer.py       # Smart file organization
+      organizer.py       # Smart file organization by type/date
     augeas/              # Augeas-based config editing
+      controller.py      # AugeasController - preview/execute/rollback
+      engine.py          # Low-level Augeas wrapper
+      diff.py            # Config diff generation
+      backup.py          # Automatic backup management
+      validators.py      # Config validation (syntax, semantics)
+      lenses.py          # Lens detection and management
+      yaml_handler.py    # YAML-specific handling
+      models.py          # AugeasOp, AugeasResult, AugeasDiff
   rag/
     llm.py               # High-level LLM interface
     ollama_client.py     # Low-level Ollama HTTP client
+    ollama.py            # Ollama utilities
+    engine.py            # RAG engine for context retrieval
     confgen/
       models.py          # ConfigGenRequest, ConfigOp, ConfigGenResult
       prompts.py         # System prompts, templates
@@ -62,12 +139,13 @@ src/elle/
       validator.py       # Pre-apply validation
       service.py         # ConfigGenService
   security/              # Polkit integration
+    polkit_helper.py     # Polkit action helper
   common/
     session.py           # Immutable session state
     models.py            # Pydantic models (TelemetryEvent, CommandPlan, etc.)
     db.py                # SQLite utilities
 packaging/               # Debian packaging files
-tests/                   # pytest test suite
+tests/                   # pytest test suite (~80 test files)
 ```
 
 ## Engine Architecture
@@ -206,9 +284,216 @@ class CommandPlan(BaseModel):
 
 ## Telemetry Sources
 
-- **Journal Watcher**: `journalctl -f -o json` (OOM kills, auth events, network drops, service crashes)
-- **Kernel Watcher**: `journalctl -k` (disk I/O errors, thermal throttling, NIC link changes)
-- **Periodic Probes**: `smartctl`, `sensors`, `df -h`, `ip link`
+ELLE collects system telemetry from multiple sources:
+
+### Journal Watcher
+- Source: `journalctl -f -o json`
+- Events: OOM kills, auth events, network drops, service crashes
+- File: `daemon/telemetry/journal.py`
+
+### Kernel Watcher
+- Source: `journalctl -k`
+- Events: Disk I/O errors, thermal throttling, NIC link changes
+- File: `daemon/telemetry/kernel.py`
+
+### Periodic Probes
+- `smartctl`: SMART disk health
+- `sensors`: Temperature readings
+- `df -h`: Disk usage
+- `ip link`: Network interface status
+- File: `daemon/telemetry/probes.py`
+
+### eBPF Probes (Optional)
+
+When BCC is available, ELLE uses eBPF for kernel-level telemetry:
+
+| Probe | File | Events |
+|-------|------|--------|
+| OOM | `ebpf/bcc/oom.py` | OOM killer invocations |
+| Block I/O | `ebpf/bcc/block_io.py` | Disk I/O latency > threshold |
+| Network Drops | `ebpf/bcc/net_drops.py` | Packet drops by reason |
+| Thermal | `ebpf/bcc/thermal.py` | CPU throttling events |
+| Process | `ebpf/bcc/process.py` | Process exec/exit |
+
+```python
+from elle.daemon.telemetry.ebpf import is_ebpf_available, get_ebpf_watcher
+
+if is_ebpf_available():
+    watcher = get_ebpf_watcher()
+    await watcher.start()
+    # Events are normalized and sent to telemetry queue
+```
+
+### Event Normalization
+
+All events are normalized to `TelemetryEvent`:
+
+```python
+class TelemetryEvent(BaseModel):
+    ts: datetime
+    source: Literal["journal", "kernel", "probe", "ebpf"]
+    severity: Literal["info", "warning", "error", "critical"]
+    category: str  # "oom", "disk", "network", "service", etc.
+    message: str
+    raw: dict
+    fingerprint: str  # For deduplication
+```
+
+## Notifications
+
+ELLE can send alerts via ntfy for critical events.
+
+### Configuration
+
+```python
+from elle.daemon.notifications import NotificationService, get_notification_service
+
+svc = get_notification_service()
+svc.configure(
+    ntfy_url="https://ntfy.sh/my-elle-alerts",
+    ntfy_token="tk_...",  # Optional auth token
+    min_severity="warning",  # info, warning, error, critical
+    categories=["oom", "disk", "service"],  # Filter by category
+)
+```
+
+### Alert Triggers
+
+| Category | Condition | Priority |
+|----------|-----------|----------|
+| OOM | Any OOM kill | High |
+| Disk | Usage > 95% | High |
+| Disk | SMART warning | High |
+| Service | Critical service failed | High |
+| Thermal | CPU throttling | Medium |
+| Auth | Multiple failed logins | Medium |
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `daemon/notifications/models.py` | NotificationConfig, Alert |
+| `daemon/notifications/service.py` | NotificationService with ntfy integration |
+
+## Reboot Manager
+
+The Reboot module tracks kernel updates and verifies system health post-reboot.
+
+### Architecture
+
+```
+Kernel Update → Record Pending Reboot → Schedule → Reboot → Verify → Clear
+                       │                    │         │
+                       └─ Store reason,     │         └─ Run verification
+                          target kernel,    │            commands, compare
+                          verification      │            pre/post state
+                          commands          │
+                                            └─ GRUB default set
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `daemon/reboot/models.py` | RebootRequest, RebootStatus, RebootVerification |
+| `daemon/reboot/manager.py` | RebootManager - scheduling and state |
+| `daemon/reboot/grub.py` | GRUB configuration utilities |
+| `daemon/reboot/verifier.py` | Post-reboot verification |
+| `daemon/reboot/schema.py` | SQLite schema for reboot history |
+| `daemon/reboot/store.py` | Reboot history storage |
+| `cli/reboot/commands.py` | CLI commands |
+
+### Usage
+
+```python
+from elle.daemon.reboot import RebootManager, get_reboot_manager
+
+manager = get_reboot_manager()
+
+# Check if reboot is needed
+pending = manager.get_pending()
+if pending:
+    print(f"Reboot required: {pending.reason}")
+    print(f"Current kernel: {pending.current_kernel}")
+    print(f"Target kernel: {pending.target_kernel}")
+
+# Schedule reboot with verification
+manager.schedule(
+    reason="Kernel update to 6.8.0-40",
+    verify_commands=[
+        "uname -r",  # Check new kernel
+        "systemctl is-system-running",  # Check systemd
+        "docker ps",  # Check containers
+    ],
+    capture_pre_state=True,  # Snapshot before reboot
+)
+
+# After reboot, verification runs automatically
+# Results stored in reboot history
+```
+
+### CLI Commands
+
+```bash
+elle reboot status      # Show pending reboot
+elle reboot schedule    # Schedule reboot
+elle reboot history     # Show reboot history
+elle reboot verify      # Run verification manually
+```
+
+## Daemon API
+
+The FastAPI bridge (`daemon/api/`) provides HTTP access to ELLE's capabilities.
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `daemon/api/app.py` | FastAPI application setup |
+| `daemon/api/routes.py` | API endpoint definitions |
+| `daemon/api/models.py` | Request/response Pydantic models |
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Health check |
+| GET | `/events` | Recent telemetry events |
+| GET | `/events/{id}` | Single event |
+| POST | `/query` | Natural language query |
+| GET | `/incidents` | Recent incidents |
+| GET | `/incidents/{id}` | Single incident |
+| GET | `/manvault/search` | Search documentation |
+| GET | `/manvault/status` | Index status |
+| POST | `/confgen/generate` | Generate config |
+| POST | `/confgen/apply` | Apply config change |
+
+### Running the API
+
+```bash
+# Start daemon with API enabled
+elled --api --api-port 8080
+
+# Or via systemd
+systemctl start elled
+```
+
+### Example Usage
+
+```bash
+# Query system
+curl -X POST http://localhost:8080/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "what is using port 8080?"}'
+
+# Search documentation
+curl "http://localhost:8080/manvault/search?q=mount+nfs&k=5"
+
+# Generate config
+curl -X POST http://localhost:8080/confgen/generate \
+  -H "Content-Type: application/json" \
+  -d '{"request": "disable root SSH login", "target_path": "/etc/ssh/sshd_config"}'
+```
 
 ## Security Model
 
@@ -246,6 +531,226 @@ All classifications logged to `~/.local/state/elle/intent_log.jsonl` for model t
 
 **Golden test set:**
 `tests/intent_cases.jsonl` contains ~200 test cases covering all intent categories.
+
+## Fixit Service
+
+The Fixit service (`cli/fixit/`) provides automatic diagnosis and repair of failed commands.
+
+### Architecture
+
+```
+Command Failure → FixitService.diagnose() → FixitPlan → User Approval → Execute → Verify
+                        │
+                        ├─▶ Analyze exit code, stdout, stderr
+                        ├─▶ Search Incident Vault for similar failures
+                        ├─▶ Query Man Vault for command documentation
+                        └─▶ Generate fix via LLM (or fallback rules)
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `cli/fixit/models.py` | FixitRequest, FixitResult, FixitPlan, FixitStep |
+| `cli/fixit/service.py` | FixitService - main diagnosis and repair logic |
+| `cli/fixit/verifier.py` | Verify fix was successful |
+| `cli/fixit/prompts.py` | LLM prompts for diagnosis |
+| `cli/fixit/fallback.py` | Rule-based fallback fixes (no LLM needed) |
+| `cli/fixit/renderer.py` | Display fix plans |
+| `cli/fixit/interactive.py` | Interactive fix flow |
+
+### Fallback Rules
+
+Common failures have rule-based fixes (no LLM required):
+
+| Pattern | Fix |
+|---------|-----|
+| `Permission denied` | Suggest Polkit elevation |
+| `command not found` | Suggest `apt install` |
+| `No space left on device` | Suggest disk cleanup |
+| `Connection refused` | Check service status |
+| `apt lock` | Wait and retry, or kill stale process |
+
+### Usage
+
+```python
+from elle.cli.fixit import FixitService, get_fixit_service
+
+service = get_fixit_service()
+
+# Diagnose a failed command
+result = service.diagnose(
+    command="apt update",
+    exit_code=1,
+    stdout="",
+    stderr="E: Could not get lock /var/lib/apt/lists/lock",
+)
+
+if result.plan:
+    print(f"Diagnosis: {result.plan.diagnosis}")
+    for step in result.plan.steps:
+        print(f"  - {step.command}: {step.explanation}")
+
+    # Execute the fix
+    outcome = service.execute(result.plan)
+```
+
+### Golden Test Set
+
+`tests/fixit_cases.jsonl` contains test cases for common failure patterns.
+
+## Planner Service
+
+The Planner service (`cli/planner/`) creates multi-step execution plans for system tasks.
+
+### Architecture
+
+```
+User Request → PlannerService.plan() → ExecutionPlan → User Approval → Execute Steps → Verify
+                        │
+                        ├─▶ Classify task complexity
+                        ├─▶ Search Man Vault for relevant docs
+                        ├─▶ Search Incident Vault for prior art
+                        └─▶ Generate plan via LLM
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `cli/planner/models.py` | PlanRequest, PlanStep, ExecutionPlan, PlanOutcome |
+| `cli/planner/service.py` | PlannerService - plan generation and execution |
+| `cli/planner/verifier.py` | Step verification (pre/post conditions) |
+| `cli/planner/prompts.py` | LLM prompts for planning |
+| `cli/planner/renderer.py` | Display plans with risk warnings |
+| `cli/planner/interactive.py` | Interactive plan execution |
+
+### Plan Structure
+
+```python
+class ExecutionPlan(BaseModel):
+    title: str
+    explanation: str
+    steps: tuple[PlanStep, ...]
+    risks: tuple[str, ...]
+    rollback_steps: tuple[PlanStep, ...]
+    requires_privilege: bool
+    estimated_duration: str | None
+
+class PlanStep(BaseModel):
+    index: int
+    description: str
+    command: str | None           # Shell command
+    config_change: ConfigOp | None  # Config operation
+    verification: str | None      # How to verify success
+    can_rollback: bool
+```
+
+### Usage
+
+```python
+from elle.cli.planner import PlannerService, get_planner_service
+
+service = get_planner_service()
+
+# Generate a plan
+plan = service.plan("Configure nginx as reverse proxy for localhost:3000")
+
+if plan:
+    print(f"Plan: {plan.title}")
+    for step in plan.steps:
+        print(f"  {step.index}. {step.description}")
+        if step.command:
+            print(f"     $ {step.command}")
+
+    # Execute with verification
+    outcome = service.execute(plan)
+    print(f"Success: {outcome.success}")
+```
+
+## Augeas Controller
+
+The Augeas module (`ops/augeas/`) provides safe configuration file editing with preview, validation, and rollback.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   Augeas Controller                      │
+├─────────────────────────────────────────────────────────┤
+│  Preview          │  Execute          │  Rollback       │
+│  - dry run        │  - backup first   │  - restore      │
+│  - generate diff  │  - apply ops      │  - verify       │
+│  - validate       │  - validate       │                 │
+├─────────────────────────────────────────────────────────┤
+│  Engine (low-level Augeas wrapper)                      │
+├─────────────────────────────────────────────────────────┤
+│  Lenses           │  Validators       │  Backup         │
+│  - auto-detect    │  - syntax         │  - timestamped  │
+│  - load/reload    │  - semantic       │  - rotate       │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `ops/augeas/models.py` | AugeasOp, AugeasResult, AugeasDiff, AugeasPreview |
+| `ops/augeas/controller.py` | AugeasController - high-level API |
+| `ops/augeas/engine.py` | Low-level Augeas wrapper |
+| `ops/augeas/diff.py` | Generate unified diffs |
+| `ops/augeas/backup.py` | Automatic backup management |
+| `ops/augeas/validators.py` | Config validation |
+| `ops/augeas/lenses.py` | Lens detection and management |
+| `ops/augeas/yaml_handler.py` | YAML-specific handling (Augeas doesn't support YAML natively) |
+
+### Supported File Types
+
+| Type | Lens | Examples |
+|------|------|----------|
+| sshd_config | Sshd | /etc/ssh/sshd_config |
+| fstab | Fstab | /etc/fstab |
+| hosts | Hosts | /etc/hosts |
+| sudoers | Sudoers | /etc/sudoers |
+| cron | Cron | /etc/crontab |
+| ini | Puppet | /etc/php/php.ini |
+| YAML | (custom) | /etc/netplan/*.yaml |
+
+### Usage
+
+```python
+from elle.ops.augeas import AugeasController, AugeasOp, get_controller
+
+controller = get_controller()
+
+# Define operations
+ops = [
+    AugeasOp(kind="set", path="/files/etc/ssh/sshd_config/PermitRootLogin", value="no"),
+    AugeasOp(kind="set", path="/files/etc/ssh/sshd_config/PasswordAuthentication", value="no"),
+]
+
+# Preview changes (dry run)
+preview = controller.preview(ops)
+print(preview.diff)  # Unified diff
+print(f"Valid: {preview.validation.valid}")
+
+# Execute with automatic backup
+result = controller.execute(ops)
+if result.success:
+    print(f"Backup at: {result.backup_path}")
+else:
+    print(f"Error: {result.error}")
+    controller.rollback()  # Restore from backup
+
+# Validate config file
+validation = controller.validate("/etc/ssh/sshd_config", command="sshd -t")
+```
+
+### Backup Management
+
+- Backups stored in `/var/lib/elle/backups/<domain>/<timestamp>/`
+- Automatic rotation (keep last 10 backups per file)
+- Metadata includes: original path, sha256, timestamp, operations applied
 
 ## Subprocess Runner & Denylist
 
