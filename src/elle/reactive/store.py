@@ -1,0 +1,924 @@
+"""CRUD operations for Reactive Functions.
+
+Provides database operations for reactive functions, execution history,
+and function state. All operations follow ELLE's store patterns.
+"""
+
+import json
+import sqlite3
+from datetime import datetime
+from typing import Any
+
+from elle.reactive.models import (
+    ActionResult,
+    ActionSpec,
+    Condition,
+    EventTrigger,
+    ExecutionRecord,
+    PolicySpec,
+    RateLimitState,
+    ReactiveFunction,
+    ScheduleTrigger,
+    StateProbe,
+    Trigger,
+)
+from elle.reactive.schema import ensure_schema, get_connection
+
+
+def _serialize_datetime(dt: datetime) -> str:
+    """Serialize datetime to ISO format string."""
+    return dt.isoformat()
+
+
+def _parse_datetime(s: str) -> datetime:
+    """Parse ISO format string to datetime."""
+    return datetime.fromisoformat(s)
+
+
+def _json_dumps(obj: Any) -> str:
+    """Serialize object to JSON string."""
+    return json.dumps(obj, default=str)
+
+
+def _json_loads(s: str | None) -> Any:
+    """Parse JSON string, returning empty dict/list on None."""
+    if not s:
+        return {}
+    return json.loads(s)
+
+
+# =============================================================================
+# Reactive Function CRUD
+# =============================================================================
+
+
+def create_function(
+    func: ReactiveFunction,
+    conn: sqlite3.Connection | None = None,
+) -> ReactiveFunction:
+    """Create a new reactive function.
+
+    Args:
+        func: The ReactiveFunction to create.
+        conn: SQLite connection. Uses default if not provided.
+
+    Returns:
+        The created ReactiveFunction.
+
+    Raises:
+        sqlite3.IntegrityError: If name already exists.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO reactive_functions (
+                id, name, description, enabled,
+                created_at, updated_at, created_by,
+                trigger_json, condition_json, actions_json,
+                policy_json, state_json, tags_json, source_prompt
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                func.id,
+                func.name,
+                func.description,
+                1 if func.enabled else 0,
+                _serialize_datetime(func.created_at),
+                _serialize_datetime(func.updated_at),
+                func.created_by,
+                _json_dumps(func.trigger.model_dump()),
+                _json_dumps(func.condition.model_dump()) if func.condition else None,
+                _json_dumps([a.model_dump() for a in func.actions]),
+                _json_dumps(func.policy.model_dump()),
+                _json_dumps({k: v.model_dump() for k, v in func.state.items()})
+                if func.state
+                else None,
+                _json_dumps(list(func.tags)) if func.tags else None,
+                func.source_prompt,
+            ),
+        )
+        conn.commit()
+        return func
+
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def update_function(
+    function_id: str,
+    *,
+    name: str | None = None,
+    description: str | None = None,
+    enabled: bool | None = None,
+    trigger: Trigger | None = None,
+    condition: Condition | None = None,
+    actions: tuple[ActionSpec, ...] | None = None,
+    policy: PolicySpec | None = None,
+    state: dict[str, StateProbe] | None = None,
+    tags: tuple[str, ...] | None = None,
+    conn: sqlite3.Connection | None = None,
+) -> ReactiveFunction | None:
+    """Update an existing reactive function.
+
+    Only provided fields are updated.
+
+    Args:
+        function_id: ID of the function to update.
+        **kwargs: Fields to update.
+        conn: SQLite connection.
+
+    Returns:
+        Updated ReactiveFunction, or None if not found.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        # Build update statement dynamically
+        updates = ["updated_at = ?"]
+        values: list[Any] = [_serialize_datetime(datetime.utcnow())]
+
+        if name is not None:
+            updates.append("name = ?")
+            values.append(name)
+        if description is not None:
+            updates.append("description = ?")
+            values.append(description)
+        if enabled is not None:
+            updates.append("enabled = ?")
+            values.append(1 if enabled else 0)
+        if trigger is not None:
+            updates.append("trigger_json = ?")
+            values.append(_json_dumps(trigger.model_dump()))
+        if condition is not None:
+            updates.append("condition_json = ?")
+            values.append(_json_dumps(condition.model_dump()))
+        if actions is not None:
+            updates.append("actions_json = ?")
+            values.append(_json_dumps([a.model_dump() for a in actions]))
+        if policy is not None:
+            updates.append("policy_json = ?")
+            values.append(_json_dumps(policy.model_dump()))
+        if state is not None:
+            updates.append("state_json = ?")
+            values.append(_json_dumps({k: v.model_dump() for k, v in state.items()}))
+        if tags is not None:
+            updates.append("tags_json = ?")
+            values.append(_json_dumps(list(tags)))
+
+        values.append(function_id)
+
+        cursor = conn.cursor()
+        cursor.execute(
+            f"UPDATE reactive_functions SET {', '.join(updates)} WHERE id = ?",
+            values,
+        )
+        conn.commit()
+
+        if cursor.rowcount == 0:
+            return None
+
+        return get_function(function_id, conn=conn)
+
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def get_function(
+    function_id: str,
+    conn: sqlite3.Connection | None = None,
+) -> ReactiveFunction | None:
+    """Get a reactive function by ID.
+
+    Args:
+        function_id: The function UUID.
+        conn: SQLite connection.
+
+    Returns:
+        ReactiveFunction if found, None otherwise.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM reactive_functions WHERE id = ?", (function_id,))
+        row = cursor.fetchone()
+
+        if not row:
+            return None
+
+        return _row_to_function(row)
+
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def get_function_by_name(
+    name: str,
+    conn: sqlite3.Connection | None = None,
+) -> ReactiveFunction | None:
+    """Get a reactive function by name.
+
+    Args:
+        name: The function name.
+        conn: SQLite connection.
+
+    Returns:
+        ReactiveFunction if found, None otherwise.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM reactive_functions WHERE name = ?", (name,))
+        row = cursor.fetchone()
+
+        if not row:
+            return None
+
+        return _row_to_function(row)
+
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def list_functions(
+    enabled_only: bool = False,
+    tags: list[str] | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    conn: sqlite3.Connection | None = None,
+) -> list[ReactiveFunction]:
+    """List reactive functions with optional filtering.
+
+    Args:
+        enabled_only: Only return enabled functions.
+        tags: Filter by tags (any match).
+        limit: Maximum number of results.
+        offset: Offset for pagination.
+        conn: SQLite connection.
+
+    Returns:
+        List of ReactiveFunctions.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        query = "SELECT * FROM reactive_functions WHERE 1=1"
+        params: list[Any] = []
+
+        if enabled_only:
+            query += " AND enabled = 1"
+
+        query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+
+        functions = [_row_to_function(row) for row in cursor.fetchall()]
+
+        # Filter by tags in Python (JSON field filtering)
+        if tags:
+            functions = [f for f in functions if any(t in f.tags for t in tags)]
+
+        return functions
+
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def list_enabled_with_event_trigger(
+    conn: sqlite3.Connection | None = None,
+) -> list[ReactiveFunction]:
+    """List enabled functions that have event triggers.
+
+    Used by the event router to find functions to evaluate.
+
+    Args:
+        conn: SQLite connection.
+
+    Returns:
+        List of enabled ReactiveFunctions with event triggers.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        cursor = conn.cursor()
+        # Filter for enabled functions with event triggers
+        cursor.execute(
+            """
+            SELECT * FROM reactive_functions
+            WHERE enabled = 1
+            AND json_extract(trigger_json, '$.type') = 'event'
+            ORDER BY name
+            """
+        )
+
+        return [_row_to_function(row) for row in cursor.fetchall()]
+
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def list_enabled_with_schedule_trigger(
+    conn: sqlite3.Connection | None = None,
+) -> list[ReactiveFunction]:
+    """List enabled functions that have schedule triggers.
+
+    Used by the scheduler to find functions to schedule.
+
+    Args:
+        conn: SQLite connection.
+
+    Returns:
+        List of enabled ReactiveFunctions with schedule triggers.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT * FROM reactive_functions
+            WHERE enabled = 1
+            AND json_extract(trigger_json, '$.type') = 'schedule'
+            ORDER BY name
+            """
+        )
+
+        return [_row_to_function(row) for row in cursor.fetchall()]
+
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def delete_function(
+    function_id: str,
+    conn: sqlite3.Connection | None = None,
+) -> bool:
+    """Delete a reactive function and all related data.
+
+    Args:
+        function_id: The function UUID.
+        conn: SQLite connection.
+
+    Returns:
+        True if deleted, False if not found.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM reactive_functions WHERE id = ?", (function_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def delete_function_by_name(
+    name: str,
+    conn: sqlite3.Connection | None = None,
+) -> bool:
+    """Delete a reactive function by name.
+
+    Args:
+        name: The function name.
+        conn: SQLite connection.
+
+    Returns:
+        True if deleted, False if not found.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM reactive_functions WHERE name = ?", (name,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def _row_to_function(row: sqlite3.Row) -> ReactiveFunction:
+    """Convert a database row to a ReactiveFunction."""
+    # Parse trigger
+    trigger_data = _json_loads(row["trigger_json"])
+    trigger = _parse_trigger(trigger_data)
+
+    # Parse condition
+    condition = None
+    if row["condition_json"]:
+        condition_data = _json_loads(row["condition_json"])
+        if condition_data:
+            condition = Condition(**condition_data)
+
+    # Parse actions
+    actions_data = _json_loads(row["actions_json"]) or []
+    actions = tuple(ActionSpec(**a) for a in actions_data)
+
+    # Parse policy
+    policy_data = _json_loads(row["policy_json"]) or {}
+    # Handle allowed_hours tuple
+    if "allowed_hours" in policy_data and isinstance(policy_data["allowed_hours"], list):
+        policy_data["allowed_hours"] = tuple(policy_data["allowed_hours"])
+    policy = PolicySpec(**policy_data) if policy_data else PolicySpec()
+
+    # Parse state probes
+    state_data = _json_loads(row["state_json"]) or {}
+    state = {k: StateProbe(**v) for k, v in state_data.items()}
+
+    # Parse tags
+    tags = tuple(_json_loads(row["tags_json"]) or [])
+
+    return ReactiveFunction(
+        id=row["id"],
+        name=row["name"],
+        description=row["description"] or "",
+        enabled=bool(row["enabled"]),
+        created_at=_parse_datetime(row["created_at"]),
+        updated_at=_parse_datetime(row["updated_at"]),
+        created_by=row["created_by"] or "user",
+        trigger=trigger,
+        condition=condition,
+        actions=actions,
+        policy=policy,
+        state=state,
+        tags=tags,
+        source_prompt=row["source_prompt"],
+    )
+
+
+def _parse_trigger(data: dict[str, Any]) -> Trigger:
+    """Parse a trigger dict into a Trigger model."""
+    event_trigger = None
+    schedule_trigger = None
+
+    if data.get("event"):
+        event_trigger = EventTrigger(**data["event"])
+
+    if data.get("schedule"):
+        schedule_trigger = ScheduleTrigger(**data["schedule"])
+
+    return Trigger(
+        type=data["type"],
+        event=event_trigger,
+        schedule=schedule_trigger,
+    )
+
+
+# =============================================================================
+# Execution History CRUD
+# =============================================================================
+
+
+def record_execution(
+    record: ExecutionRecord,
+    conn: sqlite3.Connection | None = None,
+) -> ExecutionRecord:
+    """Record a reactive function execution.
+
+    Args:
+        record: The ExecutionRecord to store.
+        conn: SQLite connection.
+
+    Returns:
+        The stored ExecutionRecord.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO execution_history (
+                id, function_id, function_name, triggered_at,
+                trigger_event_json, condition_result, condition_explanation,
+                actions_executed_json, actions_results_json,
+                success, error, execution_time_ms, incident_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                record.id,
+                record.function_id,
+                record.function_name,
+                _serialize_datetime(record.triggered_at),
+                _json_dumps(record.trigger_event) if record.trigger_event else None,
+                1 if record.condition_result else 0,
+                record.condition_explanation,
+                _json_dumps(list(record.actions_executed)),
+                _json_dumps([r.model_dump() for r in record.actions_results]),
+                1 if record.success else 0,
+                record.error,
+                record.execution_time_ms,
+                record.incident_id,
+            ),
+        )
+        conn.commit()
+        return record
+
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def get_execution_history(
+    function_id: str,
+    limit: int = 50,
+    offset: int = 0,
+    conn: sqlite3.Connection | None = None,
+) -> list[ExecutionRecord]:
+    """Get execution history for a function.
+
+    Args:
+        function_id: The function UUID.
+        limit: Maximum number of results.
+        offset: Offset for pagination.
+        conn: SQLite connection.
+
+    Returns:
+        List of ExecutionRecords, most recent first.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT * FROM execution_history
+            WHERE function_id = ?
+            ORDER BY triggered_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            (function_id, limit, offset),
+        )
+
+        return [_row_to_execution(row) for row in cursor.fetchall()]
+
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def get_recent_executions(
+    limit: int = 50,
+    success_only: bool = False,
+    conn: sqlite3.Connection | None = None,
+) -> list[ExecutionRecord]:
+    """Get recent executions across all functions.
+
+    Args:
+        limit: Maximum number of results.
+        success_only: Only return successful executions.
+        conn: SQLite connection.
+
+    Returns:
+        List of ExecutionRecords, most recent first.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        query = "SELECT * FROM execution_history"
+        params: list[Any] = []
+
+        if success_only:
+            query += " WHERE success = 1"
+
+        query += " ORDER BY triggered_at DESC LIMIT ?"
+        params.append(limit)
+
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+
+        return [_row_to_execution(row) for row in cursor.fetchall()]
+
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def _row_to_execution(row: sqlite3.Row) -> ExecutionRecord:
+    """Convert a database row to an ExecutionRecord."""
+    # Parse actions_results
+    actions_results_data = _json_loads(row["actions_results_json"]) or []
+    actions_results = tuple(ActionResult(**r) for r in actions_results_data)
+
+    return ExecutionRecord(
+        id=row["id"],
+        function_id=row["function_id"],
+        function_name=row["function_name"],
+        triggered_at=_parse_datetime(row["triggered_at"]),
+        trigger_event=_json_loads(row["trigger_event_json"]) if row["trigger_event_json"] else None,
+        condition_result=bool(row["condition_result"]),
+        condition_explanation=row["condition_explanation"] or "",
+        actions_executed=tuple(_json_loads(row["actions_executed_json"]) or []),
+        actions_results=actions_results,
+        success=bool(row["success"]),
+        error=row["error"],
+        execution_time_ms=row["execution_time_ms"] or 0,
+        incident_id=row["incident_id"],
+    )
+
+
+# =============================================================================
+# Function State (Rate Limiting)
+# =============================================================================
+
+
+def get_rate_limit_state(
+    function_id: str,
+    conn: sqlite3.Connection | None = None,
+) -> RateLimitState:
+    """Get rate limiting state for a function.
+
+    Args:
+        function_id: The function UUID.
+        conn: SQLite connection.
+
+    Returns:
+        RateLimitState (with defaults if no state exists).
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT key, value_json FROM function_state
+            WHERE function_id = ?
+            """,
+            (function_id,),
+        )
+
+        state_dict: dict[str, Any] = {}
+        for row in cursor.fetchall():
+            state_dict[row["key"]] = _json_loads(row["value_json"])
+
+        last_execution = None
+        if state_dict.get("last_execution"):
+            last_execution = _parse_datetime(state_dict["last_execution"])
+
+        return RateLimitState(
+            function_id=function_id,
+            last_execution=last_execution,
+            daily_executions=state_dict.get("daily_executions", 0),
+            daily_reset_date=state_dict.get("daily_reset_date", ""),
+        )
+
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def update_rate_limit_state(
+    function_id: str,
+    last_execution: datetime,
+    daily_executions: int,
+    daily_reset_date: str,
+    conn: sqlite3.Connection | None = None,
+) -> None:
+    """Update rate limiting state for a function.
+
+    Args:
+        function_id: The function UUID.
+        last_execution: Last execution timestamp.
+        daily_executions: Daily execution count.
+        daily_reset_date: Date string for daily counter.
+        conn: SQLite connection.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        cursor = conn.cursor()
+        now = _serialize_datetime(datetime.utcnow())
+
+        # Upsert each state key
+        state_items = [
+            ("last_execution", _serialize_datetime(last_execution)),
+            ("daily_executions", daily_executions),
+            ("daily_reset_date", daily_reset_date),
+        ]
+
+        for key, value in state_items:
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO function_state (function_id, key, value_json, updated_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (function_id, key, _json_dumps(value), now),
+            )
+
+        conn.commit()
+
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def set_function_state(
+    function_id: str,
+    key: str,
+    value: Any,
+    conn: sqlite3.Connection | None = None,
+) -> None:
+    """Set a custom state value for a function.
+
+    Args:
+        function_id: The function UUID.
+        key: State key.
+        value: State value (will be JSON serialized).
+        conn: SQLite connection.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO function_state (function_id, key, value_json, updated_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (function_id, key, _json_dumps(value), _serialize_datetime(datetime.utcnow())),
+        )
+        conn.commit()
+
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def get_function_state(
+    function_id: str,
+    key: str,
+    conn: sqlite3.Connection | None = None,
+) -> Any:
+    """Get a custom state value for a function.
+
+    Args:
+        function_id: The function UUID.
+        key: State key.
+        conn: SQLite connection.
+
+    Returns:
+        State value, or None if not found.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT value_json FROM function_state
+            WHERE function_id = ? AND key = ?
+            """,
+            (function_id, key),
+        )
+        row = cursor.fetchone()
+
+        if not row:
+            return None
+
+        return _json_loads(row["value_json"])
+
+    finally:
+        if own_conn:
+            conn.close()
+
+
+# =============================================================================
+# Statistics
+# =============================================================================
+
+
+def get_function_count(
+    enabled_only: bool = False,
+    conn: sqlite3.Connection | None = None,
+) -> int:
+    """Get total number of reactive functions.
+
+    Args:
+        enabled_only: Only count enabled functions.
+        conn: SQLite connection.
+
+    Returns:
+        Total function count.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        cursor = conn.cursor()
+        if enabled_only:
+            cursor.execute("SELECT COUNT(*) FROM reactive_functions WHERE enabled = 1")
+        else:
+            cursor.execute("SELECT COUNT(*) FROM reactive_functions")
+        return cursor.fetchone()[0]
+
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def get_execution_count(
+    function_id: str | None = None,
+    since: datetime | None = None,
+    conn: sqlite3.Connection | None = None,
+) -> int:
+    """Get total number of executions.
+
+    Args:
+        function_id: Filter by function (optional).
+        since: Only count executions after this time.
+        conn: SQLite connection.
+
+    Returns:
+        Total execution count.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        query = "SELECT COUNT(*) FROM execution_history WHERE 1=1"
+        params: list[Any] = []
+
+        if function_id:
+            query += " AND function_id = ?"
+            params.append(function_id)
+
+        if since:
+            query += " AND triggered_at >= ?"
+            params.append(_serialize_datetime(since))
+
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        return cursor.fetchone()[0]
+
+    finally:
+        if own_conn:
+            conn.close()
