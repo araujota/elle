@@ -379,10 +379,13 @@ class EditController:
                                 requires_privilege=requires_privilege,
                             )
 
-            # 7. Record action to Incident Vault (if incident_id provided)
+            # 7. Record action and config state to Incident Vault
             if request.incident_id:
                 try:
-                    from elle.daemon.incidents.store import append_action
+                    from elle.daemon.incidents.store import append_action, store_config_state
+                    from elle.daemon.incidents.semantic_diff import build_config_state
+
+                    # Record the action
                     append_action(
                         request.incident_id,
                         kind="edit",
@@ -395,6 +398,23 @@ class EditController:
                         stdout=diff_result.unified,
                         success=True,
                     )
+
+                    # Compute pre-edit hash from original content
+                    import hashlib
+                    pre_hash = hashlib.sha256(original_content.encode()).hexdigest()
+
+                    # Build and store config state with hashes
+                    config_state = build_config_state(
+                        path=request.file_path,
+                        sha256_before=pre_hash,
+                        backup_path=backup_path,
+                    )
+                    store_config_state(
+                        incident_id=request.incident_id,
+                        which="post",
+                        config_state=config_state,
+                    )
+
                 except ImportError:
                     logger.debug("Incident store not available")
                 except Exception as e:

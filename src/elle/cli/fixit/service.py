@@ -112,7 +112,7 @@ class FixitService:
             failure: The command failure.
 
         Returns:
-            Tuple of man page snippets.
+            Tuple of man page snippets with relevance scores.
         """
         try:
             from elle.daemon.manvault.retriever import search
@@ -131,11 +131,20 @@ class FixitService:
 
             snippets = []
             for result in results:
+                # Extract relevance score if available
+                score = getattr(result, "score", 0.0)
+                if isinstance(score, (int, float)):
+                    # Normalize to 0-1 range
+                    relevance = min(1.0, max(0.0, float(score)))
+                else:
+                    relevance = 0.5  # Default if not available
+
                 snippets.append(ManSnippetContext(
                     name=result.name,
                     section=result.section,
                     snippet=result.snippet,
                     match_section=result.match_section,
+                    relevance_score=relevance,
                 ))
 
             return tuple(snippets)
@@ -234,6 +243,7 @@ class FixitService:
                     outcome_weight=result.get("outcome_weight", 0.5),
                     precondition_match=result.get("precondition_match", 0.0),
                     days_ago=result.get("days_ago", 0),
+                    match_type=result.get("match_type", "hybrid"),
                 ))
 
             # Return top 3 most relevant
@@ -352,14 +362,25 @@ class FixitService:
         incident_id: str,
         result: FixitResult,
     ) -> None:
-        """Finalize the incident with outcome.
+        """Finalize the incident with outcome and provenance.
 
         Args:
             incident_id: The incident ID.
             result: The fixit result.
         """
         try:
-            from elle.daemon.incidents.store import finalize_outcome, update_incident
+            from elle.daemon.incidents.store import (
+                finalize_outcome,
+                store_decision_record,
+                update_incident,
+            )
+            from elle.daemon.incidents.models import (
+                ConfidenceBreakdown,
+                DecisionRecord,
+                IncidentCitation,
+                ManPageCitation,
+                Provenance,
+            )
 
             # Map FixitOutcome to incident outcome
             outcome_map = {
@@ -372,7 +393,7 @@ class FixitService:
             }
             outcome = outcome_map.get(result.outcome, "unknown")
 
-            # Update decision info
+            # Update legacy decision info (for backwards compatibility)
             if result.analysis:
                 decision = {
                     "diagnosis": result.analysis.diagnosis.model_dump(),
@@ -384,6 +405,33 @@ class FixitService:
                     decision=decision,
                     root_cause=result.analysis.diagnosis.root_cause,
                 )
+
+                # Build structured provenance
+                man_citations = self._build_man_citations(result.context)
+                incident_citations = self._build_incident_citations(result.context)
+                provenance = Provenance(
+                    man_pages=man_citations,
+                    prior_incidents=incident_citations,
+                    primary_source=result.context.primary_source,
+                )
+
+                # Compute confidence breakdown
+                confidence = self._compute_confidence(result, provenance)
+
+                # Build decision record
+                planned_commands = tuple(
+                    s.fix.command for s in result.verified_suggestions
+                )
+                decision_record = DecisionRecord(
+                    chosen_approach=result.analysis.diagnosis.summary,
+                    rationale=result.analysis.diagnosis.root_cause,
+                    confidence=confidence,
+                    provenance=provenance,
+                    planned_commands=planned_commands,
+                )
+
+                # Store structured decision record
+                store_decision_record(incident_id, decision_record)
 
             # Finalize outcome
             verification_steps = []
@@ -402,6 +450,116 @@ class FixitService:
             pass
         except Exception as e:
             logger.warning(f"Failed to finalize incident: {e}")
+
+    def _build_man_citations(
+        self,
+        context: FixitContext,
+    ) -> tuple:
+        """Build ManPageCitation tuples from context.
+
+        Args:
+            context: The fixit context.
+
+        Returns:
+            Tuple of ManPageCitation.
+        """
+        from elle.daemon.incidents.models import ManPageCitation
+
+        citations = []
+        for snippet in context.man_snippets:
+            citations.append(ManPageCitation(
+                name=snippet.name,
+                section=snippet.section,
+                snippet=snippet.snippet[:500],  # Truncate for storage
+                match_section=snippet.match_section,
+                relevance_score=snippet.relevance_score,
+            ))
+        return tuple(citations)
+
+    def _build_incident_citations(
+        self,
+        context: FixitContext,
+    ) -> tuple:
+        """Build IncidentCitation tuples from context.
+
+        Args:
+            context: The fixit context.
+
+        Returns:
+            Tuple of IncidentCitation.
+        """
+        from elle.daemon.incidents.models import IncidentCitation
+
+        citations = []
+        for art in context.prior_art:
+            # Extract successful command strings
+            successful_commands = tuple(
+                a.command for a in art.successful_actions if a.command
+            )
+            citations.append(IncidentCitation(
+                incident_id=art.incident_id,
+                title=art.title,
+                outcome=art.outcome,  # type: ignore
+                similarity_score=art.score,
+                match_type=art.match_type,
+                successful_actions=successful_commands,
+            ))
+        return tuple(citations)
+
+    def _compute_confidence(
+        self,
+        result: FixitResult,
+        provenance: Any,
+    ) -> Any:
+        """Compute confidence breakdown from result and provenance.
+
+        Args:
+            result: The fixit result.
+            provenance: The provenance record.
+
+        Returns:
+            ConfidenceBreakdown model.
+        """
+        from elle.daemon.incidents.models import ConfidenceBreakdown
+
+        # Start with LLM confidence
+        llm_conf = result.analysis.diagnosis.confidence if result.analysis else 0.0
+
+        # Man vault contribution
+        man_conf = 0.0
+        if provenance.man_pages:
+            man_scores = [m.relevance_score for m in provenance.man_pages]
+            man_conf = max(man_scores) * 0.3  # Weight man pages at 30%
+
+        # Incident vault contribution
+        incident_conf = 0.0
+        if provenance.prior_incidents:
+            # Prioritize incidents with good outcomes
+            good_incidents = [
+                i for i in provenance.prior_incidents
+                if i.outcome in ("improved", "partial")
+            ]
+            if good_incidents:
+                incident_conf = max(i.similarity_score for i in good_incidents) * 0.4
+
+        # Combine confidences
+        overall = min(1.0, llm_conf * 0.5 + man_conf + incident_conf)
+
+        # Determine dominant tier
+        if incident_conf > man_conf and incident_conf > llm_conf * 0.3:
+            dominant = "semantic" if provenance.prior_incidents else "llm"
+        elif man_conf > llm_conf * 0.3:
+            dominant = "lexical"
+        else:
+            dominant = "llm"
+
+        return ConfidenceBreakdown(
+            overall=overall,
+            from_man_vault=man_conf,
+            from_incident_vault=incident_conf,
+            from_llm=llm_conf * 0.5,
+            dominant_tier=dominant,
+        )
 
     # =========================================================================
     # LLM Analysis

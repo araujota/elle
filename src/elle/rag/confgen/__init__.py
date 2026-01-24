@@ -56,6 +56,8 @@ from elle.rag.confgen.domains import (
     detect_file_type,
     get_handler,
 )
+from elle.rag.confgen.docker import DockerHandler
+from elle.rag.confgen.wireguard import WireguardHandler
 
 # Generator
 from elle.rag.confgen.generator import (
@@ -96,6 +98,7 @@ __all__ = [
     "ValidationIssue",
     # Domains
     "CronHandler",
+    "DockerHandler",
     "DomainHandler",
     "FstabHandler",
     "GeneralHandler",
@@ -104,6 +107,7 @@ __all__ = [
     "SshdHandler",
     "SystemdHandler",
     "UfwHandler",
+    "WireguardHandler",
     "detect_domain",
     "detect_file_type",
     "get_handler",

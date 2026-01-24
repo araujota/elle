@@ -652,16 +652,48 @@ class GeneralHandler(DomainHandler):
 # Handler Registry
 # =============================================================================
 
-_handlers: dict[ConfigDomain, DomainHandler] = {
-    "network": NetplanHandler(),
-    "hosts": HostsHandler(),
-    "filesystem": FstabHandler(),
-    "ssh": SshdHandler(),
-    "firewall": UfwHandler(),
-    "service": SystemdHandler(),
-    "cron": CronHandler(),
-    "general": GeneralHandler(),
-}
+def _build_handlers() -> dict[ConfigDomain, DomainHandler]:
+    """Build the handler registry.
+
+    Lazy loading to avoid circular imports.
+    """
+    handlers: dict[ConfigDomain, DomainHandler] = {
+        "network": NetplanHandler(),
+        "hosts": HostsHandler(),
+        "filesystem": FstabHandler(),
+        "ssh": SshdHandler(),
+        "firewall": UfwHandler(),
+        "service": SystemdHandler(),
+        "cron": CronHandler(),
+        "general": GeneralHandler(),
+    }
+
+    # Add Docker handler
+    try:
+        from elle.rag.confgen.docker import DockerHandler
+        handlers["docker"] = DockerHandler()
+    except ImportError:
+        pass
+
+    # Add WireGuard handler
+    try:
+        from elle.rag.confgen.wireguard import WireguardHandler
+        handlers["wireguard"] = WireguardHandler()
+    except ImportError:
+        pass
+
+    return handlers
+
+
+_handlers: dict[ConfigDomain, DomainHandler] | None = None
+
+
+def _get_handlers() -> dict[ConfigDomain, DomainHandler]:
+    """Get the handler registry (lazy initialization)."""
+    global _handlers
+    if _handlers is None:
+        _handlers = _build_handlers()
+    return _handlers
 
 
 def get_handler(domain: ConfigDomain) -> DomainHandler:
@@ -673,7 +705,8 @@ def get_handler(domain: ConfigDomain) -> DomainHandler:
     Returns:
         The domain handler.
     """
-    return _handlers.get(domain, _handlers["general"])
+    handlers = _get_handlers()
+    return handlers.get(domain, handlers["general"])
 
 
 def detect_domain(path: Path | str) -> ConfigDomain:
@@ -686,8 +719,9 @@ def detect_domain(path: Path | str) -> ConfigDomain:
         The detected domain.
     """
     path = Path(path)
+    handlers = _get_handlers()
 
-    for domain, handler in _handlers.items():
+    for domain, handler in handlers.items():
         if domain != "general" and handler.matches_path(path):
             return domain
 

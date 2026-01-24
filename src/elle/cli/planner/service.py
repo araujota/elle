@@ -30,7 +30,9 @@ def get_llm():
 from elle.cli.planner.models import (
     CheckResult,
     CommandPlan,
+    DockerState,
     ManDocContext,
+    NetworkState,
     PlanContext,
     PlanOutcome,
     PlanResult,
@@ -54,6 +56,9 @@ class PlannerService:
 
     Handles the complete flow from natural language request
     to verified plan to safe execution with rollback.
+
+    Supports both legacy command-based execution and capability-based
+    execution for typed, policy-governed operations.
     """
 
     def __init__(
@@ -61,6 +66,7 @@ class PlannerService:
         use_man_vault: bool = True,
         use_incident_vault: bool = True,
         command_timeout: float = 60.0,
+        use_capabilities: bool = True,
     ) -> None:
         """Initialize the planner service.
 
@@ -68,10 +74,24 @@ class PlannerService:
             use_man_vault: Whether to use Man Vault for documentation.
             use_incident_vault: Whether to use Incident Vault for prior art.
             command_timeout: Timeout for command execution in seconds.
+            use_capabilities: Whether to use capability-based execution.
         """
         self.use_man_vault = use_man_vault
         self.use_incident_vault = use_incident_vault
         self.command_timeout = command_timeout
+        self.use_capabilities = use_capabilities
+        self._capability_executor = None
+
+    @property
+    def capability_executor(self):
+        """Get the capability executor (lazy initialization)."""
+        if self._capability_executor is None and self.use_capabilities:
+            try:
+                from elle.capabilities import get_executor
+                self._capability_executor = get_executor()
+            except ImportError:
+                logger.debug("Capabilities not available")
+        return self._capability_executor
 
     def build_context(
         self,
@@ -106,10 +126,22 @@ class PlannerService:
         if self.use_incident_vault:
             prior_plans = self._search_prior_plans(request, entities)
 
+        # Build domain-specific context
+        docker_state: DockerState | None = None
+        network_state: NetworkState | None = None
+
+        if self._is_docker_task(request, entities):
+            docker_state = self._get_docker_state()
+
+        if self._is_network_task(request, entities):
+            network_state = self._get_network_state()
+
         return PlanContext(
             request=task_request,
             man_docs=man_docs,
             prior_plans=prior_plans,
+            docker_state=docker_state,
+            network_state=network_state,
         )
 
     def generate_plan(self, context: PlanContext) -> CommandPlan | None:
@@ -419,6 +451,255 @@ class PlannerService:
             logger.warning(f"Prior plan search failed: {e}")
             return ()
 
+    def _is_docker_task(self, request: str, entities: tuple[str, ...]) -> bool:
+        """Check if this is a Docker-related task.
+
+        Args:
+            request: The task request.
+            entities: Detected entities.
+
+        Returns:
+            True if Docker-related.
+        """
+        keywords = {"docker", "container", "compose", "image", "volume"}
+        request_lower = request.lower()
+
+        if any(kw in request_lower for kw in keywords):
+            return True
+
+        if "docker" in entities:
+            return True
+
+        return False
+
+    def _is_network_task(self, request: str, entities: tuple[str, ...]) -> bool:
+        """Check if this is a network-related task.
+
+        Args:
+            request: The task request.
+            entities: Detected entities.
+
+        Returns:
+            True if network-related.
+        """
+        keywords = {
+            "firewall", "ufw", "iptables", "port", "network",
+            "wireguard", "vpn", "wg", "route", "dns", "connectivity",
+        }
+        request_lower = request.lower()
+
+        if any(kw in request_lower for kw in keywords):
+            return True
+
+        if "network" in entities or "wireguard" in entities:
+            return True
+
+        return False
+
+    def _get_docker_state(self) -> DockerState:
+        """Get current Docker environment state.
+
+        Returns:
+            DockerState with current container/image info.
+        """
+        import subprocess
+
+        try:
+            # Check if Docker is available
+            result = subprocess.run(
+                ["docker", "info"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            docker_available = result.returncode == 0
+
+            if not docker_available:
+                return DockerState(docker_available=False)
+
+            # Get running containers
+            result = subprocess.run(
+                ["docker", "ps", "--format", "{{json .}}"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            containers = []
+            if result.returncode == 0:
+                import json
+                for line in result.stdout.strip().split("\n"):
+                    if line:
+                        try:
+                            containers.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            pass
+
+            # Get images
+            result = subprocess.run(
+                ["docker", "images", "--format", "{{.Repository}}:{{.Tag}}"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            images = []
+            if result.returncode == 0:
+                images = [i for i in result.stdout.strip().split("\n") if i and i != "<none>:<none>"]
+
+            # Get networks
+            result = subprocess.run(
+                ["docker", "network", "ls", "--format", "{{.Name}}"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            networks = []
+            if result.returncode == 0:
+                networks = [n for n in result.stdout.strip().split("\n") if n]
+
+            # Get volumes
+            result = subprocess.run(
+                ["docker", "volume", "ls", "--format", "{{.Name}}"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            volumes = []
+            if result.returncode == 0:
+                volumes = [v for v in result.stdout.strip().split("\n") if v]
+
+            return DockerState(
+                running_containers=tuple(containers),
+                images=tuple(images[:20]),  # Limit to 20
+                networks=tuple(networks),
+                volumes=tuple(volumes[:20]),  # Limit to 20
+                docker_available=True,
+            )
+
+        except FileNotFoundError:
+            return DockerState(docker_available=False)
+        except subprocess.TimeoutExpired:
+            logger.warning("Docker command timed out")
+            return DockerState(docker_available=False)
+        except Exception as e:
+            logger.warning(f"Failed to get Docker state: {e}")
+            return DockerState(docker_available=False)
+
+    def _get_network_state(self) -> NetworkState:
+        """Get current network state.
+
+        Returns:
+            NetworkState with interface/firewall info.
+        """
+        import subprocess
+
+        interfaces: list[dict] = []
+        firewall_active = False
+        firewall_type = "unknown"
+        default_gateway = None
+        dns_servers: list[str] = []
+        wireguard_interfaces: list[str] = []
+
+        try:
+            # Get interfaces
+            result = subprocess.run(
+                ["ip", "-j", "addr"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                import json
+                try:
+                    ifaces = json.loads(result.stdout)
+                    for iface in ifaces:
+                        interfaces.append({
+                            "name": iface.get("ifname"),
+                            "state": iface.get("operstate"),
+                            "addresses": [
+                                a.get("local")
+                                for a in iface.get("addr_info", [])
+                                if a.get("local")
+                            ],
+                        })
+                except json.JSONDecodeError:
+                    pass
+
+            # Get default gateway
+            result = subprocess.run(
+                ["ip", "route", "show", "default"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0 and result.stdout:
+                import re
+                match = re.search(r"via\s+(\S+)", result.stdout)
+                if match:
+                    default_gateway = match.group(1)
+
+            # Check firewall status (UFW)
+            result = subprocess.run(
+                ["ufw", "status"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                firewall_type = "ufw"
+                firewall_active = "Status: active" in result.stdout
+            else:
+                # Try iptables
+                result = subprocess.run(
+                    ["iptables", "-L", "-n"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode == 0:
+                    firewall_type = "iptables"
+                    # Consider active if has non-default rules
+                    firewall_active = "DROP" in result.stdout or "REJECT" in result.stdout
+
+            # Get DNS servers
+            try:
+                with open("/etc/resolv.conf", "r") as f:
+                    for line in f:
+                        if line.startswith("nameserver"):
+                            parts = line.split()
+                            if len(parts) >= 2:
+                                dns_servers.append(parts[1])
+            except FileNotFoundError:
+                pass
+
+            # Get WireGuard interfaces
+            result = subprocess.run(
+                ["wg", "show", "interfaces"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                wireguard_interfaces = [
+                    i for i in result.stdout.strip().split()
+                    if i
+                ]
+
+        except FileNotFoundError:
+            pass
+        except subprocess.TimeoutExpired:
+            logger.warning("Network command timed out")
+        except Exception as e:
+            logger.warning(f"Failed to get network state: {e}")
+
+        return NetworkState(
+            interfaces=tuple(interfaces),
+            firewall_active=firewall_active,
+            firewall_type=firewall_type,
+            default_gateway=default_gateway,
+            dns_servers=tuple(dns_servers),
+            wireguard_interfaces=tuple(wireguard_interfaces),
+        )
+
     def _parse_plan_response(self, response: dict) -> CommandPlan:
         """Parse LLM response into CommandPlan.
 
@@ -479,6 +760,31 @@ class PlannerService:
     ) -> StepResult:
         """Execute a single plan step.
 
+        Supports both capability-based and command-based execution.
+
+        Args:
+            step: The step to execute.
+            step_index: Index of the step.
+            session: Current session.
+
+        Returns:
+            StepResult with execution details.
+        """
+        # Try capability-based execution first
+        if step.uses_capability and self.capability_executor:
+            return self._execute_capability_step(step, step_index)
+
+        # Fall back to command-based execution
+        return self._execute_command_step(step, step_index, session)
+
+    def _execute_command_step(
+        self,
+        step: PlanStep,
+        step_index: int,
+        session: Session,
+    ) -> StepResult:
+        """Execute a command-based plan step.
+
         Args:
             step: The step to execute.
             step_index: Index of the step.
@@ -489,8 +795,9 @@ class PlannerService:
         """
         start_time = time.time()
 
+        command = step.command or ""
         result = run_safe(
-            step.command,
+            command,
             cwd=session.cwd,
             timeout=self.command_timeout,
             mode=RunMode.CAPTURE,
@@ -500,7 +807,7 @@ class PlannerService:
 
         return StepResult(
             step_index=step_index,
-            command=step.command,
+            command=command,
             exit_code=result.exit_code,
             stdout=result.stdout,
             stderr=result.stderr,
@@ -509,6 +816,97 @@ class PlannerService:
             duration_ms=duration_ms,
             executed_at=datetime.utcnow(),
         )
+
+    def _execute_capability_step(
+        self,
+        step: PlanStep,
+        step_index: int,
+    ) -> StepResult:
+        """Execute a capability-based plan step.
+
+        Args:
+            step: The step to execute.
+            step_index: Index of the step.
+
+        Returns:
+            StepResult with execution details.
+        """
+        import asyncio
+
+        start_time = time.time()
+
+        try:
+            from elle.capabilities import CapabilityNotFoundError
+
+            # Build input model from capability_input dict
+            cap_name = step.capability or ""
+            cap_input = step.capability_input or {}
+
+            # Get the capability to determine input type
+            cap = self.capability_executor.registry.get(cap_name)
+            if not cap:
+                raise CapabilityNotFoundError(cap_name)
+
+            # Try to construct input model
+            # For now, use a generic BaseModel wrapper
+            from pydantic import BaseModel
+
+            class GenericInput(BaseModel):
+                class Config:
+                    extra = "allow"
+
+            input_model = GenericInput(**cap_input)
+
+            # Execute capability (async)
+            async def run_cap():
+                return await self.capability_executor.execute(
+                    cap_name,
+                    input_model,
+                    require_confirmation=False,  # Already confirmed via plan approval
+                )
+
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as pool:
+                        cap_result = pool.submit(
+                            lambda: asyncio.run(run_cap())
+                        ).result()
+                else:
+                    cap_result = loop.run_until_complete(run_cap())
+            except RuntimeError:
+                cap_result = asyncio.run(run_cap())
+
+            duration_ms = int((time.time() - start_time) * 1000)
+
+            return StepResult(
+                step_index=step_index,
+                command=cap_name,
+                exit_code=0 if cap_result.success else 1,
+                stdout=cap_result.evidence.verification_details or "",
+                stderr=cap_result.error or "",
+                success=cap_result.success,
+                privileged=step.requires_privilege,
+                duration_ms=duration_ms,
+                executed_at=datetime.utcnow(),
+            )
+
+        except Exception as e:
+            duration_ms = int((time.time() - start_time) * 1000)
+            logger.error(f"Capability execution failed: {e}")
+
+            return StepResult(
+                step_index=step_index,
+                command=step.capability or "",
+                exit_code=1,
+                stdout="",
+                stderr=str(e),
+                success=False,
+                privileged=step.requires_privilege,
+                duration_ms=duration_ms,
+                executed_at=datetime.utcnow(),
+            )
 
     def _execute_rollback_step(
         self,
@@ -648,7 +1046,7 @@ class PlannerService:
         )
 
     def _finalize_incident(self, result: PlanResult) -> None:
-        """Finalize the incident with outcome.
+        """Finalize the incident with outcome and provenance.
 
         Args:
             result: Final PlanResult.
@@ -675,7 +1073,7 @@ class PlannerService:
             status = "PASS" if check.passed else "FAIL"
             verification_steps.append(f"[{status}] {check.command}")
 
-        # Update with summary
+        # Update with summary (legacy)
         if result.plan:
             update_incident(
                 result.incident_id,
@@ -687,12 +1085,102 @@ class PlannerService:
                 },
             )
 
+            # Store structured decision record with provenance
+            self._store_decision_record(result)
+
         finalize_outcome(
             result.incident_id,
             outcome=outcome,
             verification_steps=verification_steps,
             root_cause=None,  # Could be set by user
         )
+
+    def _store_decision_record(self, result: PlanResult) -> None:
+        """Store a structured decision record for this plan.
+
+        Args:
+            result: The plan result with context.
+        """
+        try:
+            from elle.daemon.incidents.models import (
+                ConfidenceBreakdown,
+                DecisionRecord,
+                IncidentCitation,
+                ManPageCitation,
+                Provenance,
+            )
+            from elle.daemon.incidents.store import store_decision_record
+
+            if not result.incident_id or not result.plan:
+                return
+
+            # Build man page citations
+            man_citations = []
+            for doc in result.context.man_docs:
+                man_citations.append(ManPageCitation(
+                    name=doc.name,
+                    section=doc.section,
+                    snippet=doc.snippet[:500],
+                    relevance_score=0.5,  # Default score
+                ))
+
+            # Build incident citations
+            incident_citations = []
+            for prior in result.context.prior_plans:
+                incident_citations.append(IncidentCitation(
+                    incident_id=prior.incident_id,
+                    title=prior.title,
+                    outcome=prior.outcome,  # type: ignore
+                    similarity_score=prior.score,
+                    match_type="hybrid",
+                    successful_actions=prior.commands_executed,
+                ))
+
+            # Determine primary source
+            if incident_citations and any(
+                i.outcome in ("improved", "partial")
+                for i in incident_citations
+            ):
+                primary_source = "incident_vault"
+            elif man_citations:
+                primary_source = "man_vault"
+            else:
+                primary_source = "llm_only"
+
+            provenance = Provenance(
+                man_pages=tuple(man_citations),
+                prior_incidents=tuple(incident_citations),
+                primary_source=primary_source,  # type: ignore
+            )
+
+            # Compute confidence
+            llm_conf = 0.7  # Default LLM confidence for plans
+            man_conf = 0.2 if man_citations else 0.0
+            incident_conf = 0.3 if incident_citations else 0.0
+
+            confidence = ConfidenceBreakdown(
+                overall=min(1.0, llm_conf + man_conf + incident_conf) / 2,
+                from_man_vault=man_conf,
+                from_incident_vault=incident_conf,
+                from_llm=llm_conf / 2,
+                dominant_tier="llm",
+            )
+
+            # Build decision record
+            decision_record = DecisionRecord(
+                chosen_approach=result.plan.title,
+                rationale=result.plan.explanation,
+                confidence=confidence,
+                provenance=provenance,
+                planned_commands=tuple(s.command for s in result.plan.steps),
+            )
+
+            store_decision_record(result.incident_id, decision_record)
+
+        except ImportError:
+            logger.debug("Incident store not available for decision record")
+        except Exception as e:
+            logger.warning(f"Failed to store decision record: {e}")
 
 
 # =============================================================================

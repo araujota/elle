@@ -15,7 +15,7 @@ import sqlite3
 from pathlib import Path
 
 # Schema version - increment when schema changes
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # Database location
 DB_PATH = Path("/var/lib/elle/incidents.db")
@@ -125,6 +125,36 @@ CREATE TABLE IF NOT EXISTS incident_embeddings (
 )
 """
 
+# Structured decision records (v2)
+DECISION_RECORDS_TABLE = """
+CREATE TABLE IF NOT EXISTS decision_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    incident_id TEXT NOT NULL UNIQUE REFERENCES incidents(id) ON DELETE CASCADE,
+    chosen_approach TEXT NOT NULL,
+    rationale TEXT NOT NULL DEFAULT '',
+    confidence_json TEXT NOT NULL DEFAULT '{}',
+    provenance_json TEXT NOT NULL DEFAULT '{}',
+    planned_commands_json TEXT NOT NULL DEFAULT '[]',
+    decided_at TEXT NOT NULL
+)
+"""
+
+# Config file state tracking (v2)
+CONFIG_STATES_TABLE = """
+CREATE TABLE IF NOT EXISTS config_states (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    incident_id TEXT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+    snapshot_which TEXT NOT NULL CHECK (snapshot_which IN ('pre', 'post')),
+    path TEXT NOT NULL,
+    sha256_before TEXT,
+    sha256_after TEXT,
+    size_bytes INTEGER NOT NULL DEFAULT 0,
+    mtime TEXT,
+    backup_path TEXT,
+    UNIQUE(incident_id, snapshot_which, path)
+)
+"""
+
 # Meta table for tracking state
 META_TABLE = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -191,6 +221,10 @@ INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_snapshots_incident ON incident_snapshots(incident_id)",
     "CREATE INDEX IF NOT EXISTS idx_events_incident ON incident_events(incident_id)",
     "CREATE INDEX IF NOT EXISTS idx_events_event ON incident_events(event_id)",
+    # V2 indexes
+    "CREATE INDEX IF NOT EXISTS idx_decision_records_incident ON decision_records(incident_id)",
+    "CREATE INDEX IF NOT EXISTS idx_config_states_incident ON config_states(incident_id)",
+    "CREATE INDEX IF NOT EXISTS idx_config_states_path ON config_states(path)",
 ]
 
 
@@ -215,6 +249,10 @@ def init_incident_schema(conn: sqlite3.Connection) -> None:
     cursor.execute(EVENTS_TABLE)
     cursor.execute(EMBEDDINGS_TABLE)
     cursor.execute(META_TABLE)
+
+    # V2 tables
+    cursor.execute(DECISION_RECORDS_TABLE)
+    cursor.execute(CONFIG_STATES_TABLE)
 
     # Create FTS table
     cursor.execute(INCIDENTS_FTS)
@@ -281,9 +319,9 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
     """
     current = get_schema_version(conn) or 0
 
-    # Future migrations would go here
-    # if current < 2:
-    #     _migrate_v1_to_v2(conn)
+    # V1 -> V2: Add decision_records and config_states tables
+    if current < 2:
+        _migrate_v1_to_v2(conn)
 
     # Update schema version
     cursor = conn.cursor()
@@ -291,6 +329,37 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
         "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
         ("schema_version", str(SCHEMA_VERSION)),
     )
+    conn.commit()
+
+
+def _migrate_v1_to_v2(conn: sqlite3.Connection) -> None:
+    """Migrate from schema v1 to v2.
+
+    Adds decision_records and config_states tables for provenance tracking.
+
+    Args:
+        conn: SQLite connection.
+    """
+    cursor = conn.cursor()
+
+    # Create new tables
+    cursor.execute(DECISION_RECORDS_TABLE)
+    cursor.execute(CONFIG_STATES_TABLE)
+
+    # Create new indexes
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_decision_records_incident "
+        "ON decision_records(incident_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_config_states_incident "
+        "ON config_states(incident_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_config_states_path "
+        "ON config_states(path)"
+    )
+
     conn.commit()
 
 
@@ -317,6 +386,9 @@ def drop_all_tables(conn: sqlite3.Connection) -> None:
     cursor.execute("DROP TABLE IF EXISTS incident_events")
     cursor.execute("DROP TABLE IF EXISTS incident_snapshots")
     cursor.execute("DROP TABLE IF EXISTS incident_actions")
+    # V2 tables
+    cursor.execute("DROP TABLE IF EXISTS decision_records")
+    cursor.execute("DROP TABLE IF EXISTS config_states")
     cursor.execute("DROP TABLE IF EXISTS incidents")
     cursor.execute("DROP TABLE IF EXISTS meta")
 

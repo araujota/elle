@@ -170,6 +170,72 @@ INCIDENT_PATTERNS = [
 _COMPILED_INCIDENT_PATTERNS = [re.compile(p, re.IGNORECASE) for p in INCIDENT_PATTERNS]
 
 
+# Docker domain patterns
+DOCKER_PATTERNS = [
+    # Container operations (system_task)
+    (r"run\s+\w+\s+(?:container|locally|in\s+docker)", "system_task", 0.95),
+    (r"(?:start|stop|restart|remove|kill)\s+(?:the\s+)?(?:container|docker)", "system_task", 0.90),
+    (r"convert\s+docker\s+run\s+to\s+compose", "system_task", 0.95),
+    (r"create\s+(?:a\s+)?docker[\s-]?compose", "system_task", 0.90),
+    (r"run\s+(?:postgres|mysql|redis|nginx|mongo)\s+(?:locally|container)?", "system_task", 0.90),
+    # Container questions (system_question)
+    (r"what\s+containers?\s+(?:are|is)\s+(?:using|running)", "system_question", 0.90),
+    (r"why\s+(?:did|does|is)\s+(?:the\s+)?container\s+(?:restart|crash|fail)", "system_question", 0.92),
+    (r"which\s+container\s+(?:is\s+)?using\s+(?:most|the\s+most)", "system_question", 0.90),
+    (r"explain\s+(?:the\s+)?docker\s+(?:error|issue|problem)", "system_question", 0.88),
+    (r"show\s+(?:me\s+)?container\s+(?:logs?|stats?|status)", "navigation", 0.85),
+]
+
+_COMPILED_DOCKER_PATTERNS = [(re.compile(p, re.IGNORECASE), i, c) for p, i, c in DOCKER_PATTERNS]
+
+
+# WireGuard/VPN domain patterns
+WIREGUARD_PATTERNS = [
+    # Setup and configuration (system_task)
+    (r"set\s*up\s+(?:a\s+)?(?:wireguard|wg|vpn)", "system_task", 0.95),
+    (r"configure\s+(?:a\s+)?(?:wireguard|wg|vpn)", "system_task", 0.92),
+    (r"create\s+(?:a\s+)?(?:wireguard|wg|vpn)\s+(?:config|configuration|tunnel)", "system_task", 0.95),
+    (r"add\s+(?:a\s+)?(?:wireguard|wg)\s+peer", "system_task", 0.92),
+    # Key management (system_task)
+    (r"rotate\s+(?:the\s+)?(?:wireguard|wg)\s+keys?", "system_task", 0.95),
+    (r"generate\s+(?:new\s+)?(?:wireguard|wg)\s+keys?", "system_task", 0.92),
+    # Monitoring (navigation)
+    (r"show\s+(?:me\s+)?(?:traffic|bandwidth)\s+(?:through|on|for)\s+(?:wireguard|wg|vpn)", "navigation", 0.88),
+    (r"(?:wireguard|wg|vpn)\s+status", "navigation", 0.90),
+    (r"list\s+(?:wireguard|wg)\s+(?:peers?|interfaces?)", "navigation", 0.88),
+    # Questions (system_question)
+    (r"why\s+(?:is|isn't)\s+(?:the\s+)?(?:wireguard|wg|vpn)\s+(?:working|connecting)", "system_question", 0.90),
+    (r"is\s+(?:my\s+)?(?:wireguard|wg|vpn)\s+(?:connected|up|active)", "system_question", 0.85),
+]
+
+_COMPILED_WIREGUARD_PATTERNS = [(re.compile(p, re.IGNORECASE), i, c) for p, i, c in WIREGUARD_PATTERNS]
+
+
+# Network introspection patterns
+NETWORK_PATTERNS = [
+    # Connectivity diagnosis (system_question)
+    (r"why\s+can'?t\s+I\s+(?:reach|connect\s+to|access)", "system_question", 0.92),
+    (r"(?:can'?t|cannot|unable\s+to)\s+(?:reach|connect\s+to|access)", "system_question", 0.88),
+    (r"is\s+\S+\s+(?:reachable|accessible|up)", "system_question", 0.85),
+    (r"diagnose\s+(?:connectivity|connection|network)\s+(?:to|for|issue)?", "system_question", 0.90),
+    # Firewall (system_question for explain, system_task for changes)
+    (r"explain\s+(?:my\s+)?(?:firewall|ufw|iptables)\s*(?:rules?)?", "system_question", 0.92),
+    (r"what\s+(?:is|are)\s+(?:my\s+)?(?:firewall|ufw)\s+rules?", "system_question", 0.90),
+    (r"show\s+(?:me\s+)?(?:firewall|ufw)\s+(?:rules?|status)", "navigation", 0.88),
+    # Service lockdown (system_task)
+    (r"lock\s+(?:down\s+)?\w+\s+to\s+(?:localhost|local)", "system_task", 0.92),
+    (r"restrict\s+\w+\s+to\s+(?:localhost|local|internal)", "system_task", 0.90),
+    (r"(?:allow|block|deny)\s+(?:port\s+)?\d+\s+(?:from|to)", "system_task", 0.88),
+    (r"open\s+port\s+\d+\s+(?:for|to|from)", "system_task", 0.90),
+    (r"close\s+port\s+\d+", "system_task", 0.90),
+    # Network info (navigation/question)
+    (r"what\s+(?:is|are)\s+my\s+(?:ip|address|dns|gateway|route)", "system_question", 0.85),
+    (r"show\s+(?:me\s+)?(?:my\s+)?(?:network|routing|dns)\s+(?:config|configuration|info)", "navigation", 0.85),
+]
+
+_COMPILED_NETWORK_PATTERNS = [(re.compile(p, re.IGNORECASE), i, c) for p, i, c in NETWORK_PATTERNS]
+
+
 # =============================================================================
 # SLM Prompt Template
 # =============================================================================
@@ -414,6 +480,42 @@ class IntentClassifier:
                     confidence=0.90,
                     rationale="Incident vault navigation request",
                     entities=["incidents"],
+                    classified_by="rule",
+                )
+
+        # Docker domain patterns (high confidence)
+        for pattern, intent_str, confidence in _COMPILED_DOCKER_PATTERNS:
+            if pattern.search(text):
+                intent = Intent.from_label(intent_str)
+                return IntentResult(
+                    intent=intent,
+                    confidence=confidence,
+                    rationale="Docker/container operation detected",
+                    entities=["docker"],
+                    classified_by="rule",
+                )
+
+        # WireGuard/VPN domain patterns (high confidence)
+        for pattern, intent_str, confidence in _COMPILED_WIREGUARD_PATTERNS:
+            if pattern.search(text):
+                intent = Intent.from_label(intent_str)
+                return IntentResult(
+                    intent=intent,
+                    confidence=confidence,
+                    rationale="WireGuard/VPN operation detected",
+                    entities=["wireguard"],
+                    classified_by="rule",
+                )
+
+        # Network introspection patterns (high confidence)
+        for pattern, intent_str, confidence in _COMPILED_NETWORK_PATTERNS:
+            if pattern.search(text):
+                intent = Intent.from_label(intent_str)
+                return IntentResult(
+                    intent=intent,
+                    confidence=confidence,
+                    rationale="Network operation detected",
+                    entities=["network"],
                     classified_by="rule",
                 )
 

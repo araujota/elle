@@ -7,7 +7,7 @@ The engine is stateless - it takes input and session state,
 and returns results with updated session state.
 
 Flow:
-    input + session -> classify -> route -> execute -> result + new_session
+    input + session -> classify -> policy check -> route -> execute -> result + new_session
 """
 
 import logging
@@ -28,6 +28,27 @@ from elle.cli.terminal.renderer import Colors
 from elle.common.session import Session
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Policy Integration
+# =============================================================================
+
+# Lazy import to avoid circular dependencies
+_policy_module = None
+
+
+def _get_policy_module():
+    """Lazy load the policy module."""
+    global _policy_module
+    if _policy_module is None:
+        try:
+            from elle import policy
+            _policy_module = policy
+        except ImportError:
+            logger.warning("Policy module not available")
+            _policy_module = False
+    return _policy_module if _policy_module else None
 
 
 class EngineAction(Enum):
@@ -146,6 +167,9 @@ class Engine:
     ) -> EngineResult:
         """Route to appropriate handler based on classified intent.
 
+        Policy evaluation happens here before routing to handlers.
+        This ensures all operations are checked against the policy.
+
         Args:
             user_input: The user's input text.
             intent_result: Classification result.
@@ -155,6 +179,48 @@ class Engine:
         Returns:
             EngineResult from the appropriate handler.
         """
+        # === POLICY EVALUATION ===
+        # Skip policy check for meta commands (help, exit, etc.)
+        if intent_result.intent != Intent.META:
+            policy_result = self._evaluate_policy(user_input, intent_result, session)
+            if policy_result is not None:
+                # Policy blocked or requires interaction
+                if not policy_result.should_proceed:
+                    return EngineResult(
+                        output=self._format_policy_blocked(policy_result.message),
+                        session=session,
+                        success=False,
+                    )
+
+                # Handle confirmation requirement
+                if policy_result.requires_confirmation:
+                    if not self._get_policy_confirmation(policy_result.message):
+                        return EngineResult(
+                            output=f"{Colors.DIM}Cancelled.{Colors.RESET}",
+                            session=session,
+                            success=False,
+                        )
+
+                # Handle justification requirement
+                if policy_result.requires_justification:
+                    justification = self._get_policy_justification(
+                        policy_result.justification_prompt
+                    )
+                    if justification is None:
+                        return EngineResult(
+                            output=f"{Colors.DIM}Cancelled.{Colors.RESET}",
+                            session=session,
+                            success=False,
+                        )
+                    # Record the justification
+                    self._record_policy_justification(policy_result, justification)
+
+                # Handle preview requirement (for system tasks)
+                if policy_result.requires_preview:
+                    # Preview is handled by the task handler itself
+                    logger.debug("Policy requires preview - will be handled by task handler")
+
+        # Route based on intent
         match intent_result.intent:
             case Intent.META:
                 return self._handle_meta(user_input.lower(), session)
@@ -173,6 +239,133 @@ class Engine:
             case _:
                 # Fallback to shell passthrough
                 return self._handle_shell_command(user_input, session, stream_output)
+
+    def _evaluate_policy(
+        self,
+        user_input: str,
+        intent_result: IntentResult,
+        session: Session,
+    ):
+        """Evaluate the current operation against the policy engine.
+
+        Args:
+            user_input: The user's input.
+            intent_result: Classification result.
+            session: Current session state.
+
+        Returns:
+            PolicyEvaluationResult or None if policy module unavailable.
+        """
+        policy = _get_policy_module()
+        if policy is None:
+            return None
+
+        try:
+            # Build the evaluation request based on intent
+            operation_type = self._intent_to_operation_type(intent_result.intent)
+            command = None
+            path = None
+
+            if intent_result.intent == Intent.SHELL_PASSTHROUGH:
+                command = self._extract_shell_command(user_input)
+            elif intent_result.intent == Intent.SYSTEM_TASK:
+                # For tasks, we use the raw input
+                command = user_input
+
+            request = policy.PolicyEvaluationRequest(
+                operation_type=operation_type,
+                command=command,
+                path=path,
+                intent=intent_result.intent.value,
+            )
+
+            return policy.evaluate(request)
+
+        except Exception as e:
+            logger.warning(f"Policy evaluation failed: {e}")
+            return None
+
+    def _intent_to_operation_type(self, intent: Intent) -> str:
+        """Map Intent to OperationType for policy evaluation.
+
+        Args:
+            intent: The classified intent.
+
+        Returns:
+            Operation type string.
+        """
+        mapping = {
+            Intent.SHELL_PASSTHROUGH: "command",
+            Intent.SYSTEM_TASK: "task",
+            Intent.SYSTEM_QUESTION: "question",
+            Intent.FIXIT: "command",
+            Intent.NAVIGATION: "command",
+            Intent.META: "command",
+        }
+        return mapping.get(intent, "command")
+
+    def _format_policy_blocked(self, message: str | None) -> str:
+        """Format a policy blocked message.
+
+        Args:
+            message: Optional policy message.
+
+        Returns:
+            Formatted message string.
+        """
+        if message:
+            return f"{Colors.BOLD_RED}Policy blocked:{Colors.RESET} {message}"
+        return f"{Colors.BOLD_RED}Operation blocked by policy.{Colors.RESET}"
+
+    def _get_policy_confirmation(self, message: str | None) -> bool:
+        """Prompt user for policy confirmation.
+
+        Args:
+            message: Optional message to show.
+
+        Returns:
+            True if user confirmed, False otherwise.
+        """
+        prompt = message or "This operation requires confirmation."
+        print(f"\n{Colors.YELLOW}{prompt}{Colors.RESET}")
+        try:
+            response = input(f"{Colors.BOLD}Continue? [y/N]: {Colors.RESET}").strip().lower()
+            return response in ("y", "yes")
+        except (EOFError, KeyboardInterrupt):
+            return False
+
+    def _get_policy_justification(self, prompt: str | None) -> str | None:
+        """Prompt user for policy justification.
+
+        Args:
+            prompt: Optional prompt to show.
+
+        Returns:
+            Justification text or None if cancelled.
+        """
+        prompt_text = prompt or "Please provide justification for this operation:"
+        print(f"\n{Colors.YELLOW}{prompt_text}{Colors.RESET}")
+        try:
+            justification = input(f"{Colors.BOLD}Justification: {Colors.RESET}").strip()
+            if not justification:
+                return None
+            return justification
+        except (EOFError, KeyboardInterrupt):
+            return None
+
+    def _record_policy_justification(self, result, justification: str) -> None:
+        """Record a policy justification.
+
+        Args:
+            result: Policy evaluation result.
+            justification: User's justification.
+        """
+        policy = _get_policy_module()
+        if policy:
+            try:
+                policy.get_policy_engine().record_justification(result, justification)
+            except Exception as e:
+                logger.warning(f"Failed to record justification: {e}")
 
     def _extract_shell_command(self, user_input: str) -> str:
         """Extract shell command from input, handling prefixes.

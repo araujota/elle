@@ -13,6 +13,11 @@ A local-first, agentic system layer for Ubuntu 24.04 LTS that converts kernel-le
 - **Fixit Service** - Automatic diagnosis and repair of failed commands
 - **Planner Service** - Multi-step system task planning with verification
 
+### Capabilities & Policy System
+- **Typed Capabilities** - Safe, auditable system operations with risk levels and side effects
+- **Policy Engine** - Rule-based access control (allow, deny, require_confirmation, require_preview)
+- **Reactive Functions** - Event-driven automations from natural language ("when disk > 90%, clean docker")
+
 ### Knowledge & Memory
 - **Man Vault** - Local SQLite+FTS5 index of ~24,000 man pages with semantic search
 - **Incident Vault** - Decision memory storing past incidents, actions, and outcomes for learning
@@ -21,6 +26,9 @@ A local-first, agentic system layer for Ubuntu 24.04 LTS that converts kernel-le
 - **LLM-Driven Config Generation** - Generate configuration changes from natural language
 - **Augeas Integration** - Safe config editing with preview, validation, and rollback
 - **File Operations** - Safe file read/write with atomic operations and rollback support
+- **Docker Config** - Docker Compose generation, container diagnostics
+- **WireGuard Config** - VPN tunnel configuration from natural language
+- **Network Diagnosis** - Connectivity testing, firewall explanation, lockdown suggestions
 
 ### Telemetry & Monitoring
 - **Journal/Kernel Watchers** - Real-time system event monitoring
@@ -250,6 +258,68 @@ svc.configure(
 # - SMART warnings
 ```
 
+### Reactive Functions
+
+Create event-driven automations using natural language:
+
+```bash
+elle > /react create "when disk usage exceeds 90%, clean docker images and notify me"
+
+Creating reactive function...
+
+Name: disk-cleanup-alert
+Trigger: event (probe/disk)
+Condition: {event.raw.used_pct} >= 90
+Actions:
+  1. docker.prune (remove unused images)
+  2. notify.send (alert: "Disk cleanup triggered")
+Policy: max_frequency=1h, escalate_on_failure=true
+
+[Approve] [Edit] [Cancel]
+```
+
+Manage reactive functions:
+
+```bash
+elle > /react list                    # List all functions
+elle > /react show disk-cleanup-alert # Show details
+elle > /react enable disk-cleanup     # Enable function
+elle > /react disable disk-cleanup    # Disable function
+elle > /react history disk-cleanup    # View execution history
+elle > /react test disk-cleanup       # Dry-run with sample event
+```
+
+### Docker Utilities
+
+```bash
+# Convert docker run to compose
+elle > docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=secret postgres:15
+# ELLE suggests: Would you like me to convert this to docker-compose.yml?
+
+# Diagnose container issues
+elle > why is my-container restarting?
+# Analyzes logs, exit codes, resource limits
+
+# Explain resource usage
+elle > show docker resource usage
+```
+
+### Network Diagnosis
+
+```bash
+# Diagnose connectivity
+elle > can't connect to api.example.com:443
+# Tests DNS, routing, TLS, firewall rules
+
+# Explain firewall rules
+elle > explain ufw rules
+# Human-readable firewall summary
+
+# Lockdown suggestions
+elle > lock postgres to localhost only
+# Suggests ufw rules for service isolation
+```
+
 ### Reboot Management
 
 Track kernel updates and verify post-reboot:
@@ -280,11 +350,15 @@ User ──▶ elle (terminal / CLI)
          ├─▶ Man Vault (documentation grounding)
          ├─▶ Incident Vault (decision memory + prior art)
          ├─▶ Config Generator (natural language → config)
+         ├─▶ Capabilities (typed operations with policy)
+         ├─▶ Reactive Engine (event-driven automations)
+         ├─▶ Policy Engine (rule-based access control)
          ├─▶ Ollama (local inference)
          └─▶ elled (telemetry + privileged ops)
                 ├─▶ Journal/Kernel Watchers
                 ├─▶ eBPF Probes (OOM, I/O, network, thermal)
                 ├─▶ Periodic Probes (SMART, sensors, df)
+                ├─▶ Reactive Scheduler (cron triggers)
                 ├─▶ Reboot Manager (GRUB, verification)
                 └─▶ Notifications (ntfy)
 ```
@@ -301,6 +375,9 @@ User ──▶ elle (terminal / CLI)
 | Man Vault | SQLite+FTS5 index of ~24,000 man pages |
 | Incident Vault | Decision memory storing incidents and outcomes |
 | Config Generator | LLM-driven config from natural language |
+| Capabilities | Typed system operations with risk levels and side effects |
+| Policy Engine | Rule-based access control for capabilities |
+| Reactive Engine | Event-driven automation execution |
 | Augeas Controller | Safe config editing with preview/rollback |
 | eBPF Watcher | Kernel-level telemetry probes |
 | Reboot Manager | GRUB/kernel management with verification |

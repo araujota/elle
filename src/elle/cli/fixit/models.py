@@ -42,6 +42,10 @@ class ManSnippetContext(BaseModel):
     section: str = Field(description="Man section")
     snippet: str = Field(description="Relevant excerpt")
     match_section: str | None = Field(default=None, description="Section heading")
+    relevance_score: float = Field(
+        default=0.0, ge=0.0, le=1.0,
+        description="Relevance score from search",
+    )
 
 
 class SuccessfulAction(BaseModel):
@@ -82,6 +86,10 @@ class PriorArtContext(BaseModel):
     outcome_weight: float = Field(default=0.5, description="Outcome quality weight")
     precondition_match: float = Field(default=0.0, description="How well preconditions match")
     days_ago: int = Field(default=0, description="Days since this incident")
+    match_type: Literal["fingerprint", "lexical", "semantic", "hybrid"] = Field(
+        default="hybrid",
+        description="How this prior art was matched",
+    )
 
 
 class FixitContext(BaseModel):
@@ -106,6 +114,112 @@ class FixitContext(BaseModel):
         default_factory=tuple,
         description="Similar past incidents",
     )
+
+    def has_vault_context(self) -> bool:
+        """Check if we have context from vaults."""
+        return bool(self.man_snippets) or bool(self.prior_art)
+
+    @property
+    def primary_source(self) -> Literal["man_vault", "incident_vault", "llm_only"]:
+        """Determine the primary source of context."""
+        # Prior incidents with good outcomes are most valuable
+        good_prior = [
+            p for p in self.prior_art
+            if p.outcome in ("improved", "partial") and p.score > 0.5
+        ]
+        if good_prior:
+            return "incident_vault"
+
+        # Man pages provide documentation grounding
+        if self.man_snippets:
+            return "man_vault"
+
+        return "llm_only"
+
+    def build_rationale_summary(self) -> str:
+        """Build a summary string for rationale display."""
+        parts = []
+
+        if self.man_snippets:
+            man_refs = [f"{m.name}({m.section})" for m in self.man_snippets[:2]]
+            parts.append(f"man {', '.join(man_refs)}")
+
+        if self.prior_art:
+            successful = sum(
+                1 for p in self.prior_art
+                if p.outcome in ("improved", "partial")
+            )
+            if successful:
+                parts.append(f"{successful} similar incident(s) succeeded")
+
+        if not parts:
+            return "Suggested by LLM analysis"
+
+        return "Suggested because " + " + ".join(parts)
+
+    def to_rationale_kwargs(self) -> dict[str, Any]:
+        """Convert context to kwargs for rationale panel display.
+
+        Returns:
+            Dict of kwargs for fixit_panel's rationale display.
+        """
+        man_citations = [
+            {
+                "name": m.name,
+                "section": m.section,
+                "snippet": m.snippet,
+                "relevance_score": m.relevance_score,
+                "match_section": m.match_section or "",
+            }
+            for m in self.man_snippets
+        ]
+
+        incident_citations = [
+            {
+                "incident_id": p.incident_id,
+                "title": p.title,
+                "outcome": p.outcome,
+                "similarity_score": p.score,
+                "match_type": p.match_type,
+                "successful_actions": [a.command for a in p.successful_actions],
+            }
+            for p in self.prior_art
+        ]
+
+        # Build confidence breakdown based on sources
+        overall = 0.5  # Default LLM confidence
+        from_man = 0.0
+        from_inc = 0.0
+
+        if man_citations:
+            from_man = max(c.get("relevance_score", 0) for c in man_citations) * 0.3
+            overall += from_man
+
+        if incident_citations:
+            good_outcomes = [
+                c for c in incident_citations
+                if c.get("outcome") in ("improved", "partial")
+            ]
+            if good_outcomes:
+                from_inc = max(c.get("similarity_score", 0) for c in good_outcomes) * 0.4
+                overall += from_inc
+
+        overall = min(1.0, overall)
+
+        confidence = {
+            "overall": overall,
+            "from_man_vault": from_man,
+            "from_incident_vault": from_inc,
+            "from_llm": max(0.0, 0.5 - from_man - from_inc),
+        }
+
+        return {
+            "man_citations": man_citations if man_citations else None,
+            "incident_citations": incident_citations if incident_citations else None,
+            "confidence_breakdown": confidence,
+            "rationale_summary": self.build_rationale_summary(),
+            "show_rationale": self.has_vault_context(),
+        }
 
 
 # =============================================================================

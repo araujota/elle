@@ -6,14 +6,18 @@ Provides a secure wrapper around subprocess execution with:
 - Streaming output option
 - Exit code handling
 - No implicit sudo
-- Denylist for dangerous commands
+- Policy-based denylist for dangerous commands
 
 This module is the foundation for shell passthrough and provides
 the "last failed command" substrate for the fixit feature.
+
+Note: Command denial is now handled by the Policy Engine.
+The DenyReason enum is retained for backwards compatibility.
 """
 
 from __future__ import annotations
 
+import logging
 import re
 import subprocess
 from collections.abc import Callable
@@ -21,6 +25,8 @@ from enum import Enum, auto
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 class RunMode(Enum):
@@ -186,7 +192,79 @@ _COMPILED_HISTORY = _compile_patterns(_HISTORY_CLEAR_PATTERNS)
 
 
 def check_denylist(command: str) -> tuple[bool, DenyReason | None, str | None]:
-    """Check if a command matches the denylist.
+    """Check if a command matches the denylist via the Policy Engine.
+
+    This function delegates to the Policy Engine for evaluation.
+    The DenyReason is inferred from matched rule IDs for backwards
+    compatibility with existing code that depends on specific reasons.
+
+    Args:
+        command: The command string to check.
+
+    Returns:
+        Tuple of (is_denied, reason, explanation).
+    """
+    try:
+        from elle.policy import evaluate_command, PolicyEffect
+
+        result = evaluate_command(command, audit=True)
+
+        if result.effect == PolicyEffect.DENY:
+            # Map matched rules to DenyReason for backwards compatibility
+            reason = _map_rules_to_deny_reason(result.matched_rules)
+            return (True, reason, result.message)
+
+        return (False, None, None)
+
+    except ImportError:
+        # Fallback to legacy check if policy module not available
+        logger.warning("Policy module not available, using legacy denylist")
+        return _check_denylist_legacy(command)
+    except Exception as e:
+        # On any policy evaluation error, fall back to legacy
+        logger.warning(f"Policy evaluation failed: {e}, using legacy denylist")
+        return _check_denylist_legacy(command)
+
+
+def _map_rules_to_deny_reason(matched_rules: tuple[str, ...]) -> DenyReason:
+    """Map policy rule IDs to DenyReason enum.
+
+    Args:
+        matched_rules: Tuple of matched rule IDs.
+
+    Returns:
+        DenyReason based on matched rules.
+    """
+    if not matched_rules:
+        return DenyReason.DESTRUCTIVE_RM  # Default
+
+    # Check the first matched rule (highest priority)
+    rule_id = matched_rules[0]
+
+    rule_mapping = {
+        "deny-sudo": DenyReason.SUDO_ATTEMPT,
+        "deny-destructive-rm": DenyReason.DESTRUCTIVE_RM,
+        "deny-fork-bomb": DenyReason.FORK_BOMB,
+        "deny-filesystem-format": DenyReason.FILESYSTEM_FORMAT,
+        "deny-raw-disk-write": DenyReason.RAW_DISK_WRITE,
+        "deny-recursive-perm": DenyReason.RECURSIVE_PERMISSION,
+        "deny-pipe-to-shell": DenyReason.PIPE_TO_SHELL,
+        "deny-shutdown": DenyReason.SYSTEM_SHUTDOWN,
+        "deny-history-clear": DenyReason.HISTORY_CLEAR,
+    }
+
+    # Check for rule prefix matches
+    for prefix, reason in rule_mapping.items():
+        if rule_id.startswith(prefix):
+            return reason
+
+    return DenyReason.DESTRUCTIVE_RM  # Default fallback
+
+
+def _check_denylist_legacy(command: str) -> tuple[bool, DenyReason | None, str | None]:
+    """Legacy denylist check using hardcoded patterns.
+
+    Used as fallback when policy engine is unavailable.
 
     Args:
         command: The command string to check.

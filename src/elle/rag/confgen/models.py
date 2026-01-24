@@ -28,6 +28,8 @@ ConfigDomain = Literal[
     "cron",
     "package",
     "hosts",
+    "docker",
+    "wireguard",
     "general",
 ]
 

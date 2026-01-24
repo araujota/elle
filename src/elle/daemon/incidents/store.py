@@ -11,12 +11,19 @@ from datetime import datetime
 from typing import Any
 
 from elle.daemon.incidents.models import (
+    ConfigFileState,
+    ConfidenceBreakdown,
+    DecisionRecord,
     Fingerprint,
     IncidentAction,
+    IncidentCitation,
     IncidentReport,
     IncidentSnapshot,
+    ManPageCitation,
     Precondition,
+    Provenance,
     SystemSnapshot,
+    TelemetryCitation,
 )
 from elle.daemon.incidents.schema import ensure_schema, get_connection
 
@@ -1164,6 +1171,332 @@ def get_snapshot_count(
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM incident_snapshots")
         return cursor.fetchone()[0]
+
+    finally:
+        if own_conn:
+            conn.close()
+
+
+# =============================================================================
+# Decision Record CRUD (V2)
+# =============================================================================
+
+
+def store_decision_record(
+    incident_id: str,
+    decision_record: DecisionRecord,
+    conn: sqlite3.Connection | None = None,
+) -> None:
+    """Store a structured decision record for an incident.
+
+    Replaces any existing decision record for this incident.
+
+    Args:
+        incident_id: The incident UUID.
+        decision_record: The structured decision record.
+        conn: SQLite connection.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        cursor = conn.cursor()
+
+        # Serialize nested models
+        confidence_json = _json_dumps(decision_record.confidence.model_dump())
+        provenance_json = _json_dumps(decision_record.provenance.model_dump())
+        planned_commands_json = _json_dumps(list(decision_record.planned_commands))
+
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO decision_records (
+                incident_id, chosen_approach, rationale,
+                confidence_json, provenance_json, planned_commands_json,
+                decided_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                incident_id,
+                decision_record.chosen_approach,
+                decision_record.rationale,
+                confidence_json,
+                provenance_json,
+                planned_commands_json,
+                _serialize_datetime(decision_record.decided_at),
+            ),
+        )
+        conn.commit()
+
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def get_decision_record(
+    incident_id: str,
+    conn: sqlite3.Connection | None = None,
+) -> DecisionRecord | None:
+    """Get the decision record for an incident.
+
+    Args:
+        incident_id: The incident UUID.
+        conn: SQLite connection.
+
+    Returns:
+        DecisionRecord if found, None otherwise.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM decision_records WHERE incident_id = ?",
+            (incident_id,),
+        )
+        row = cursor.fetchone()
+
+        if not row:
+            return None
+
+        return _row_to_decision_record(row)
+
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def _row_to_decision_record(row: sqlite3.Row) -> DecisionRecord:
+    """Convert a database row to a DecisionRecord."""
+    # Parse confidence
+    confidence_data = _json_loads(row["confidence_json"])
+    confidence = ConfidenceBreakdown(**confidence_data) if confidence_data else ConfidenceBreakdown(overall=0.0)
+
+    # Parse provenance
+    provenance_data = _json_loads(row["provenance_json"])
+    provenance = _parse_provenance(provenance_data)
+
+    # Parse planned commands
+    planned_commands = tuple(_json_loads(row["planned_commands_json"]) or [])
+
+    return DecisionRecord(
+        chosen_approach=row["chosen_approach"],
+        rationale=row["rationale"] or "",
+        confidence=confidence,
+        provenance=provenance,
+        planned_commands=planned_commands,
+        decided_at=_parse_datetime(row["decided_at"]),
+    )
+
+
+def _parse_provenance(data: dict[str, Any]) -> Provenance:
+    """Parse a provenance dict into a Provenance model."""
+    if not data:
+        return Provenance()
+
+    # Parse man page citations
+    man_pages = []
+    for mp in data.get("man_pages", []):
+        man_pages.append(ManPageCitation(**mp))
+
+    # Parse incident citations
+    prior_incidents = []
+    for pi in data.get("prior_incidents", []):
+        # Handle successful_actions as tuple
+        if "successful_actions" in pi and isinstance(pi["successful_actions"], list):
+            pi["successful_actions"] = tuple(pi["successful_actions"])
+        prior_incidents.append(IncidentCitation(**pi))
+
+    # Parse triggering events
+    triggering_events = None
+    if data.get("triggering_events"):
+        te_data = data["triggering_events"]
+        # Handle tuples
+        if "event_ids" in te_data and isinstance(te_data["event_ids"], list):
+            te_data["event_ids"] = tuple(te_data["event_ids"])
+        if "event_summaries" in te_data and isinstance(te_data["event_summaries"], list):
+            te_data["event_summaries"] = tuple(te_data["event_summaries"])
+        triggering_events = TelemetryCitation(**te_data)
+
+    return Provenance(
+        man_pages=tuple(man_pages),
+        prior_incidents=tuple(prior_incidents),
+        triggering_events=triggering_events,
+        primary_source=data.get("primary_source", "llm_only"),
+    )
+
+
+# =============================================================================
+# Config State CRUD (V2)
+# =============================================================================
+
+
+def store_config_state(
+    incident_id: str,
+    which: str,
+    config_state: ConfigFileState,
+    conn: sqlite3.Connection | None = None,
+) -> None:
+    """Store a config file state for an incident.
+
+    Replaces any existing state for this (incident_id, which, path).
+
+    Args:
+        incident_id: The incident UUID.
+        which: 'pre' or 'post' snapshot.
+        config_state: The config file state.
+        conn: SQLite connection.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        cursor = conn.cursor()
+
+        mtime_str = (
+            _serialize_datetime(config_state.mtime)
+            if config_state.mtime
+            else None
+        )
+
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO config_states (
+                incident_id, snapshot_which, path,
+                sha256_before, sha256_after, size_bytes,
+                mtime, backup_path
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                incident_id,
+                which,
+                config_state.path,
+                config_state.sha256_before,
+                config_state.sha256_after,
+                config_state.size_bytes,
+                mtime_str,
+                config_state.backup_path,
+            ),
+        )
+        conn.commit()
+
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def get_config_states(
+    incident_id: str,
+    which: str | None = None,
+    conn: sqlite3.Connection | None = None,
+) -> list[ConfigFileState]:
+    """Get config file states for an incident.
+
+    Args:
+        incident_id: The incident UUID.
+        which: Filter by 'pre' or 'post' (None for all).
+        conn: SQLite connection.
+
+    Returns:
+        List of ConfigFileState.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        cursor = conn.cursor()
+
+        if which:
+            cursor.execute(
+                """
+                SELECT * FROM config_states
+                WHERE incident_id = ? AND snapshot_which = ?
+                ORDER BY path
+                """,
+                (incident_id, which),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT * FROM config_states
+                WHERE incident_id = ?
+                ORDER BY snapshot_which, path
+                """,
+                (incident_id,),
+            )
+
+        return [_row_to_config_state(row) for row in cursor.fetchall()]
+
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def _row_to_config_state(row: sqlite3.Row) -> ConfigFileState:
+    """Convert a database row to a ConfigFileState."""
+    mtime = None
+    if row["mtime"]:
+        mtime = _parse_datetime(row["mtime"])
+
+    return ConfigFileState(
+        path=row["path"],
+        sha256_before=row["sha256_before"],
+        sha256_after=row["sha256_after"],
+        size_bytes=row["size_bytes"],
+        mtime=mtime,
+        backup_path=row["backup_path"],
+    )
+
+
+def get_config_state_by_path(
+    path: str,
+    limit: int = 10,
+    conn: sqlite3.Connection | None = None,
+) -> list[tuple[str, str, ConfigFileState]]:
+    """Get all config states for a path across incidents.
+
+    Useful for tracking history of changes to a specific file.
+
+    Args:
+        path: The config file path.
+        limit: Maximum number of results.
+        conn: SQLite connection.
+
+    Returns:
+        List of (incident_id, which, ConfigFileState) tuples.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+        ensure_schema(conn)
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT incident_id, snapshot_which, *
+            FROM config_states
+            WHERE path = ?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (path, limit),
+        )
+
+        results = []
+        for row in cursor.fetchall():
+            state = _row_to_config_state(row)
+            results.append((row["incident_id"], row["snapshot_which"], state))
+
+        return results
 
     finally:
         if own_conn:
