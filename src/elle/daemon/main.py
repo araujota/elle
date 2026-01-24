@@ -1,0 +1,710 @@
+"""Main entry point for the elled daemon.
+
+Orchestrates all daemon components:
+- Journal watcher
+- Kernel watcher
+- Probe runner
+- Event normalizer
+- Event processor (storage + correlation)
+- REST API (optional)
+"""
+
+import argparse
+import asyncio
+import logging
+import os
+import signal
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from elle.daemon.config import Config, get_config, load_config, set_config
+from elle.daemon.telemetry.ebpf.watcher import EBPFWatcher
+from elle.daemon.telemetry.journal import JournalWatcher
+from elle.daemon.telemetry.kernel import KernelWatcher
+from elle.daemon.telemetry.models import DaemonStatus
+from elle.daemon.telemetry.normalizer import Normalizer, get_normalizer
+from elle.daemon.telemetry.probes import ProbeRunner, create_default_probes
+from elle.daemon.telemetry.queue import TelemetryQueue, create_queues
+from elle.daemon.telemetry.schema import ensure_schema, get_connection
+from elle.daemon.telemetry.store import insert_events_batch
+
+logger = logging.getLogger(__name__)
+
+
+class ElledDaemon:
+    """Main daemon orchestrator.
+
+    Coordinates all telemetry collection, processing, and API
+    components with graceful shutdown handling.
+    """
+
+    def __init__(self, config: Config | None = None):
+        """Initialize the daemon.
+
+        Args:
+            config: Configuration object. Uses default if not provided.
+        """
+        self.config = config or get_config()
+        self.shutdown = asyncio.Event()
+        self.started_at: datetime | None = None
+
+        # Queues
+        self.raw_queue: TelemetryQueue[dict[str, Any]] | None = None
+        self.event_queue: TelemetryQueue[Any] | None = None
+
+        # Components
+        self._journal_watcher: JournalWatcher | None = None
+        self._kernel_watcher: KernelWatcher | None = None
+        self._ebpf_watcher: EBPFWatcher | None = None
+        self._probe_runner: ProbeRunner | None = None
+        self._normalizer: Normalizer | None = None
+
+        # Tasks
+        self._tasks: list[asyncio.Task[Any]] = []
+
+        # Services
+        self._notification_service: Any = None
+
+        # Counters
+        self._events_total = 0
+        self._incidents_total = 0
+
+    @property
+    def uptime_sec(self) -> int:
+        """Get daemon uptime in seconds."""
+        if not self.started_at:
+            return 0
+        return int((datetime.now(UTC) - self.started_at).total_seconds())
+
+    def get_status(self) -> DaemonStatus:
+        """Get current daemon status.
+
+        Returns:
+            DaemonStatus object.
+        """
+        from elle.daemon.telemetry.models import QueueStats
+
+        raw_stats = (
+            self.raw_queue.get_stats()
+            if self.raw_queue
+            else QueueStats(name="raw", size=0, max_size=0)
+        )
+        event_stats = (
+            self.event_queue.get_stats()
+            if self.event_queue
+            else QueueStats(name="events", size=0, max_size=0)
+        )
+
+        errors: list[str] = []
+
+        # Check component health
+        if self.config.journal_enabled and self._journal_watcher:
+            if not self._journal_watcher.running:
+                errors.append("Journal watcher not running")
+        if self.config.kernel_enabled and self._kernel_watcher:
+            if not self._kernel_watcher.running:
+                errors.append("Kernel watcher not running")
+        if self.config.ebpf_enabled and self._ebpf_watcher:
+            if not self._ebpf_watcher.running:
+                errors.append("eBPF watcher not running")
+        if self.config.probes_enabled and self._probe_runner:
+            if not self._probe_runner.running:
+                errors.append("Probe runner not running")
+
+        return DaemonStatus(
+            started_at=self.started_at or datetime.now(UTC),
+            uptime_sec=self.uptime_sec,
+            pid=os.getpid(),
+            journal_active=bool(
+                self._journal_watcher and self._journal_watcher.running
+            ),
+            kernel_active=bool(
+                self._kernel_watcher and self._kernel_watcher.running
+            ),
+            probes_active=bool(
+                self._probe_runner and self._probe_runner.running
+            ),
+            api_active=self.config.api.enabled,
+            raw_queue=raw_stats,
+            event_queue=event_stats,
+            events_total=self._events_total,
+            incidents_total=self._incidents_total,
+            healthy=len(errors) == 0,
+            errors=tuple(errors),
+        )
+
+    async def start(self) -> None:
+        """Start all daemon components."""
+        logger.info("Starting elled daemon")
+        self.started_at = datetime.now(UTC)
+
+        # Initialize database
+        self._init_database()
+
+        # Start notification service
+        await self._start_notification_service()
+
+        # Check for pending reboot recovery
+        await self._check_reboot_recovery()
+
+        # Create queues
+        self.raw_queue, self.event_queue = create_queues(
+            raw_size=self.config.queues.raw_queue_size,
+            event_size=self.config.queues.event_queue_size,
+        )
+
+        # Initialize normalizer
+        self._normalizer = get_normalizer()
+
+        # Start watchers
+        if self.config.journal_enabled:
+            self._journal_watcher = JournalWatcher(self.raw_queue, self.shutdown)
+            self._tasks.append(
+                asyncio.create_task(
+                    self._journal_watcher.start(),
+                    name="journal_watcher",
+                )
+            )
+
+        if self.config.kernel_enabled:
+            self._kernel_watcher = KernelWatcher(self.raw_queue, self.shutdown)
+            self._tasks.append(
+                asyncio.create_task(
+                    self._kernel_watcher.start(),
+                    name="kernel_watcher",
+                )
+            )
+
+        # Start eBPF watcher
+        if self.config.ebpf_enabled:
+            self._ebpf_watcher = EBPFWatcher(
+                self.raw_queue,
+                self.shutdown,
+                programs=list(self.config.ebpf.programs),
+            )
+            self._tasks.append(
+                asyncio.create_task(
+                    self._ebpf_watcher.start(),
+                    name="ebpf_watcher",
+                )
+            )
+
+        # Start probes
+        if self.config.probes_enabled:
+            self._probe_runner = ProbeRunner(
+                self.raw_queue,
+                self.shutdown,
+                self.config.thresholds,
+            )
+            for probe in create_default_probes(self.config.thresholds):
+                self._probe_runner.add_probe(probe)
+            self._tasks.append(
+                asyncio.create_task(
+                    self._probe_runner.start(),
+                    name="probe_runner",
+                )
+            )
+
+        # Start normalizer task
+        self._tasks.append(
+            asyncio.create_task(
+                self._normalizer_loop(),
+                name="normalizer",
+            )
+        )
+
+        # Start processor task
+        self._tasks.append(
+            asyncio.create_task(
+                self._processor_loop(),
+                name="processor",
+            )
+        )
+
+        # Start API
+        if self.config.api.enabled:
+            self._tasks.append(
+                asyncio.create_task(
+                    self._run_api(),
+                    name="api",
+                )
+            )
+
+        logger.info(
+            f"elled started with {len(self._tasks)} tasks "
+            f"(journal={self.config.journal_enabled}, "
+            f"kernel={self.config.kernel_enabled}, "
+            f"ebpf={self.config.ebpf_enabled}, "
+            f"probes={self.config.probes_enabled}, "
+            f"api={self.config.api.enabled})"
+        )
+
+    async def stop(self) -> None:
+        """Graceful shutdown of all components."""
+        logger.info("Stopping elled daemon")
+        self.shutdown.set()
+
+        # Cancel all tasks
+        for task in self._tasks:
+            task.cancel()
+
+        # Wait for tasks with timeout
+        if self._tasks:
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*self._tasks, return_exceptions=True),
+                    timeout=5.0,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Some tasks did not stop in time")
+
+        # Stop watchers explicitly
+        if self._journal_watcher:
+            await self._journal_watcher.stop()
+        if self._kernel_watcher:
+            await self._kernel_watcher.stop()
+        if self._ebpf_watcher:
+            await self._ebpf_watcher.stop()
+
+        # Stop notification service
+        await self._stop_notification_service()
+
+        logger.info(
+            f"elled stopped (uptime: {self.uptime_sec}s, "
+            f"events: {self._events_total})"
+        )
+
+    async def run(self) -> None:
+        """Run the daemon until shutdown."""
+        await self.start()
+
+        # Wait for shutdown signal
+        await self.shutdown.wait()
+
+        await self.stop()
+
+    def _init_database(self) -> None:
+        """Initialize database schemas."""
+        try:
+            # Ensure directory exists
+            db_dir = self.config.db_path.parent
+            if not str(db_dir).startswith("/var/lib"):
+                db_dir.mkdir(parents=True, exist_ok=True)
+
+            # Initialize telemetry schema
+            conn = get_connection(self.config.db_path)
+            try:
+                ensure_schema(conn)
+            finally:
+                conn.close()
+
+            logger.debug(f"Database initialized at {self.config.db_path}")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize database: {e}")
+
+    async def _start_notification_service(self) -> None:
+        """Start the notification service."""
+        try:
+            from elle.daemon.notifications import get_service
+
+            self._notification_service = get_service()
+            await self._notification_service.start()
+            logger.info("Notification service started")
+        except ImportError:
+            logger.debug("Notification service not available")
+        except Exception as e:
+            logger.warning(f"Failed to start notification service: {e}")
+
+    async def _stop_notification_service(self) -> None:
+        """Stop the notification service."""
+        if self._notification_service:
+            try:
+                await self._notification_service.stop()
+            except Exception as e:
+                logger.warning(f"Failed to stop notification service: {e}")
+
+    async def _check_reboot_recovery(self) -> None:
+        """Check for and process pending reboot intents.
+
+        Called on daemon startup to detect post-reboot state and
+        run verification if needed.
+        """
+        try:
+            from elle.daemon.reboot import get_manager
+
+            manager = get_manager()
+
+            # Check for pending reboots (status='rebooting')
+            intent = await manager.check_pending_reboots()
+
+            if intent:
+                logger.info(
+                    f"Processed reboot intent: {intent.id} "
+                    f"(status={intent.status}, outcome={intent.outcome})"
+                )
+
+                # Update incident if linked
+                if intent.incident_id and intent.outcome != "unknown":
+                    await self._update_incident_with_reboot_result(intent)
+
+            # Also cleanup stale intents
+            cleaned = await manager.cleanup_stale_intents()
+            if cleaned > 0:
+                logger.warning(f"Cleaned up {cleaned} stale reboot intents")
+
+        except ImportError:
+            logger.debug("Reboot module not available")
+        except Exception as e:
+            logger.error(f"Failed to check reboot recovery: {e}")
+
+    async def _update_incident_with_reboot_result(self, intent: Any) -> None:
+        """Update linked incident with reboot outcome.
+
+        Args:
+            intent: The completed reboot intent.
+        """
+        try:
+            from elle.daemon.incidents.store import update_incident
+
+            if intent.outcome == "improved":
+                update_incident(
+                    intent.incident_id,
+                    outcome="improved",
+                    root_cause=f"Resolved by reboot: {intent.goal}",
+                )
+            elif intent.outcome in ("failed", "rolled_back"):
+                update_incident(
+                    intent.incident_id,
+                    outcome="partial",
+                    verification_steps=[f"Reboot {intent.outcome}: {intent.outcome_detail}"],
+                )
+        except Exception as e:
+            logger.warning(f"Failed to update incident: {e}")
+
+    async def _normalizer_loop(self) -> None:
+        """Process raw events and normalize them."""
+        logger.debug("Normalizer loop started")
+
+        while not self.shutdown.is_set():
+            try:
+                if not self.raw_queue or not self.event_queue:
+                    await asyncio.sleep(0.1)
+                    continue
+
+                # Get batch of raw events
+                raw_events = await self.raw_queue.get_batch(
+                    max_items=100,
+                    timeout=0.5,
+                )
+
+                if not raw_events:
+                    continue
+
+                # Normalize events
+                if self._normalizer:
+                    events = self._normalizer.normalize_batch(raw_events)
+
+                    # Queue normalized events
+                    for event in events:
+                        await self.event_queue.put(event)
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Normalizer error: {e}")
+                await asyncio.sleep(1)
+
+        logger.debug("Normalizer loop stopped")
+
+    async def _processor_loop(self) -> None:
+        """Process normalized events (storage + correlation)."""
+        logger.debug("Processor loop started")
+
+        conn = None
+        try:
+            conn = get_connection(self.config.db_path)
+            ensure_schema(conn)
+        except Exception as e:
+            logger.error(f"Failed to connect to database: {e}")
+
+        while not self.shutdown.is_set():
+            try:
+                if not self.event_queue:
+                    await asyncio.sleep(0.1)
+                    continue
+
+                # Get batch of events
+                events = await self.event_queue.get_batch(
+                    max_items=100,
+                    timeout=1.0,
+                )
+
+                if not events:
+                    continue
+
+                # Store events
+                if conn:
+                    try:
+                        inserted = insert_events_batch(events, conn)
+                        self._events_total += inserted
+                    except Exception as e:
+                        logger.error(f"Failed to store events: {e}")
+
+                # Correlate events (integrate with incident vault)
+                try:
+                    await self._correlate_events(events)
+                except Exception as e:
+                    logger.error(f"Failed to correlate events: {e}")
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Processor error: {e}")
+                await asyncio.sleep(1)
+
+        if conn:
+            conn.close()
+
+        logger.debug("Processor loop stopped")
+
+    async def _correlate_events(self, events: list[Any]) -> None:
+        """Correlate events with incident vault.
+
+        Args:
+            events: List of TelemetryEvents to correlate.
+        """
+        from elle.daemon.incidents.correlator import get_correlator
+
+        correlator = get_correlator()
+
+        for event in events:
+            # Convert to dict format expected by correlator
+            event_dict = {
+                "id": event.event_id,
+                "ts": event.ts,
+                "severity": event.severity,
+                "category": event.category,
+                "message": event.message,
+                "entity": event.entity,
+            }
+
+            # Only correlate warning+ severity
+            if event.severity in ("warning", "error", "critical"):
+                try:
+                    incident_id = correlator.process_event(event_dict)
+                    if incident_id:
+                        self._incidents_total += 1
+                        logger.debug(f"Created/updated incident: {incident_id}")
+
+                        # Send notification for new/escalated incidents
+                        await self._notify_incident(
+                            incident_id=incident_id,
+                            title=event.message[:80],
+                            severity=event.severity,
+                            domain=event.category,
+                        )
+                except Exception as e:
+                    logger.debug(f"Correlation failed: {e}")
+
+    async def _notify_incident(
+        self,
+        incident_id: str,
+        title: str,
+        severity: str,
+        domain: str,
+    ) -> None:
+        """Send notification for an incident.
+
+        Args:
+            incident_id: The incident ID.
+            title: Incident title/summary.
+            severity: Severity level.
+            domain: Incident domain.
+        """
+        # Only notify for error/critical severity
+        if severity not in ("error", "critical"):
+            return
+
+        try:
+            from elle.daemon.notifications import notify_incident
+
+            notify_incident(
+                title=title,
+                severity=severity,
+                domain=domain,
+                incident_id=incident_id,
+            )
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(f"Failed to send incident notification: {e}")
+
+    async def _run_api(self) -> None:
+        """Run the FastAPI server."""
+        logger.info(
+            f"Starting API server on {self.config.api.host}:{self.config.api.port}"
+        )
+
+        try:
+            # Import here to make fastapi optional
+            import uvicorn
+
+            from elle.daemon.api.app import create_app
+
+            app = create_app(self)
+
+            config = uvicorn.Config(
+                app,
+                host=self.config.api.host,
+                port=self.config.api.port,
+                log_level="warning",
+                access_log=False,
+            )
+            server = uvicorn.Server(config)
+
+            # Run until shutdown
+            await server.serve()
+
+        except ImportError:
+            logger.warning("FastAPI not installed, API disabled")
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error(f"API server error: {e}")
+
+
+def setup_logging(level: str = "INFO") -> None:
+    """Configure logging for the daemon.
+
+    Args:
+        level: Log level name.
+    """
+    logging.basicConfig(
+        level=getattr(logging, level.upper(), logging.INFO),
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    # Reduce noise from uvicorn
+    logging.getLogger("uvicorn").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+
+
+async def run_daemon(config: Config | None = None) -> None:
+    """Run the daemon with signal handling.
+
+    Args:
+        config: Optional configuration.
+    """
+    daemon = ElledDaemon(config)
+
+    # Setup signal handlers
+    loop = asyncio.get_event_loop()
+
+    def signal_handler() -> None:
+        logger.info("Received shutdown signal")
+        daemon.shutdown.set()
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, signal_handler)
+
+    try:
+        await daemon.run()
+    finally:
+        # Remove signal handlers
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.remove_signal_handler(sig)
+
+
+def main() -> int:
+    """Main entry point for elled command.
+
+    Returns:
+        Exit code.
+    """
+    parser = argparse.ArgumentParser(
+        description="ELLE Daemon - Local System Intelligence",
+    )
+    parser.add_argument(
+        "-c", "--config",
+        type=Path,
+        help="Configuration file path",
+    )
+    parser.add_argument(
+        "-l", "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        default="INFO",
+        help="Log level",
+    )
+    parser.add_argument(
+        "--no-journal",
+        action="store_true",
+        help="Disable journal watcher",
+    )
+    parser.add_argument(
+        "--no-kernel",
+        action="store_true",
+        help="Disable kernel watcher",
+    )
+    parser.add_argument(
+        "--no-probes",
+        action="store_true",
+        help="Disable periodic probes",
+    )
+    parser.add_argument(
+        "--no-ebpf",
+        action="store_true",
+        help="Disable eBPF telemetry",
+    )
+    parser.add_argument(
+        "--no-api",
+        action="store_true",
+        help="Disable REST API",
+    )
+
+    args = parser.parse_args()
+
+    # Setup logging
+    setup_logging(args.log_level)
+
+    # Load configuration
+    config = load_config(args.config)
+
+    # Apply command-line overrides
+    if args.no_journal or args.no_kernel or args.no_probes or args.no_ebpf or args.no_api:
+        # Create modified config
+        from dataclasses import replace
+
+        from elle.daemon.config import ApiConfig
+
+        api_config = config.api
+        if args.no_api:
+            api_config = ApiConfig(enabled=False)
+
+        config = replace(
+            config,
+            journal_enabled=not args.no_journal and config.journal_enabled,
+            kernel_enabled=not args.no_kernel and config.kernel_enabled,
+            probes_enabled=not args.no_probes and config.probes_enabled,
+            ebpf_enabled=not args.no_ebpf and config.ebpf_enabled,
+            api=api_config,
+        )
+
+    set_config(config)
+
+    # Run daemon
+    try:
+        asyncio.run(run_daemon(config))
+        return 0
+    except KeyboardInterrupt:
+        return 0
+    except Exception as e:
+        logger.error(f"Daemon failed: {e}")
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

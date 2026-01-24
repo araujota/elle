@@ -1,0 +1,57 @@
+[Unit]
+Description=ELLE Daemon - Local System Intelligence
+Documentation=https://github.com/elle/elle
+After=network.target systemd-journald.service
+Wants=network.target
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/elled
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5
+TimeoutStopSec=10
+
+# User/Group (create during package install)
+User=elle
+Group=elle
+
+# Supplementary groups for journal access
+SupplementaryGroups=systemd-journal
+
+# Working directory
+WorkingDirectory=/var/lib/elle
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Allow access to required paths
+ReadWritePaths=/var/lib/elle
+ReadOnlyPaths=/usr/share/man
+ReadOnlyPaths=/sys/class/thermal
+ReadOnlyPaths=/sys/class/net
+ReadOnlyPaths=/proc
+
+# Resource limits
+MemoryMax=512M
+MemoryHigh=384M
+CPUQuota=50%
+TasksMax=64
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=elled
+
+# Environment
+Environment="ELLE_LOG_LEVEL=INFO"
+
+[Install]
+WantedBy=multi-user.target

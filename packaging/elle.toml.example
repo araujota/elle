@@ -1,0 +1,50 @@
+# ELLE Configuration
+# Copy to /etc/elle/elle.toml (system-wide) or ~/.config/elle/elle.toml (user)
+# Environment variables override config values (prefix with ELLE_)
+
+[daemon]
+# Database paths
+db_path = "/var/lib/elle/elle.db"
+incidents_db_path = "/var/lib/elle/incidents.db"
+manvault_db_path = "/var/lib/elle/manvault.db"
+
+# Log level (DEBUG, INFO, WARNING, ERROR)
+log_level = "INFO"
+
+# Feature toggles
+journal_enabled = true
+kernel_enabled = true
+probes_enabled = true
+
+[daemon.api]
+# REST API configuration
+enabled = true
+host = "127.0.0.1"
+port = 8377
+
+[daemon.probes]
+# Probe intervals in seconds
+memory_interval = 30      # Memory pressure check
+disk_interval = 300       # Disk usage check (5 min)
+network_interval = 60     # Network state check
+thermal_interval = 60     # Temperature check
+smart_interval = 3600     # SMART health check (1 hour)
+
+[daemon.thresholds]
+# Alert thresholds
+memory_warning_pct = 0.85     # Memory usage (0-1)
+disk_warning_pct = 0.90       # Disk usage (0-1)
+thermal_warning_c = 80.0      # Temperature in Celsius
+network_error_threshold = 10  # New errors to trigger alert
+
+[daemon.correlation]
+# Event correlation settings
+time_window_sec = 600         # Group events within 10 minutes
+dedupe_window_sec = 60        # Deduplicate within 1 minute
+min_events_for_incident = 1   # Minimum events to create incident
+stale_incident_sec = 900      # Close incidents after 15 minutes idle
+
+[daemon.queues]
+# Internal queue sizes
+raw_queue_size = 10000
+event_queue_size = 5000

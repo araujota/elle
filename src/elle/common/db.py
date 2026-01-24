@@ -1,0 +1,106 @@
+"""Database utilities for ELLE.
+
+SQLite databases:
+- Main DB: /var/lib/elle/elle.db (telemetry events)
+- Man Vault: /var/lib/elle/manvault.db (documentation index)
+"""
+
+import sqlite3
+from pathlib import Path
+
+# Main ELLE database path
+DB_PATH = Path("/var/lib/elle/elle.db")
+
+# Event table schema
+EVENTS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    source TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    category TEXT NOT NULL,
+    message TEXT NOT NULL,
+    raw TEXT NOT NULL
+)
+"""
+
+EVENTS_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts)
+"""
+
+
+def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
+    """Get a connection to the ELLE database.
+
+    Args:
+        db_path: Override database path (for testing).
+
+    Returns:
+        SQLite connection with row factory set.
+    """
+    path = db_path or DB_PATH
+
+    # Ensure directory exists for user-local paths
+    if not str(path).startswith("/var/lib"):
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db(conn: sqlite3.Connection | None = None) -> None:
+    """Initialize the database schema.
+
+    Creates:
+    - events table for telemetry
+
+    Args:
+        conn: SQLite connection. Creates new if not provided.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(EVENTS_SCHEMA)
+        cursor.execute(EVENTS_INDEX)
+        conn.commit()
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def init_all_schemas() -> None:
+    """Initialize all database schemas.
+
+    Initializes:
+    - Main ELLE database (telemetry events)
+    - Man Vault database (documentation index)
+    - Incident Vault database (incident reports)
+
+    Safe to call multiple times.
+    """
+    # Initialize main database
+    init_db()
+
+    # Initialize Man Vault database
+    from elle.daemon.manvault.schema import ensure_schema as ensure_manvault
+    from elle.daemon.manvault.schema import get_connection as get_manvault_conn
+
+    manvault_conn = get_manvault_conn()
+    try:
+        ensure_manvault(manvault_conn)
+    finally:
+        manvault_conn.close()
+
+    # Initialize Incident Vault database
+    from elle.daemon.incidents.schema import ensure_schema as ensure_incidents
+    from elle.daemon.incidents.schema import get_connection as get_incidents_conn
+
+    incidents_conn = get_incidents_conn()
+    try:
+        ensure_incidents(incidents_conn)
+    finally:
+        incidents_conn.close()

@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+  "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>ELLE</vendor>
+  <vendor_url>https://github.com/elle-project/elle</vendor_url>
+  <icon_name>preferences-system</icon_name>
+
+  <!-- General system config editing -->
+  <action id="com.elle.ops.edit-system-config">
+    <description>Edit system configuration file</description>
+    <description xml:lang="en">Edit system configuration file via ELLE</description>
+    <message>Authentication is required to edit system configuration</message>
+    <message xml:lang="en">Authentication is required to edit system configuration</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.imply">com.elle.ops.validate-config</annotate>
+  </action>
+
+  <!-- Netplan editing -->
+  <action id="com.elle.ops.edit-netplan">
+    <description>Edit netplan configuration</description>
+    <description xml:lang="en">Edit network configuration via ELLE</description>
+    <message>Authentication is required to edit network configuration</message>
+    <message xml:lang="en">Authentication is required to edit network configuration</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.imply">com.elle.ops.validate-config</annotate>
+  </action>
+
+  <!-- UFW editing -->
+  <action id="com.elle.ops.edit-ufw">
+    <description>Edit firewall configuration</description>
+    <description xml:lang="en">Edit UFW firewall rules via ELLE</description>
+    <message>Authentication is required to edit firewall configuration</message>
+    <message xml:lang="en">Authentication is required to edit firewall configuration</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+
+  <!-- Fstab editing -->
+  <action id="com.elle.ops.edit-fstab">
+    <description>Edit filesystem mount configuration</description>
+    <description xml:lang="en">Edit /etc/fstab via ELLE</description>
+    <message>Authentication is required to edit mount configuration</message>
+    <message xml:lang="en">Authentication is required to edit mount configuration</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.imply">com.elle.ops.validate-config</annotate>
+  </action>
+
+  <!-- SSHD config editing -->
+  <action id="com.elle.ops.edit-sshd">
+    <description>Edit SSH server configuration</description>
+    <description xml:lang="en">Edit SSH daemon configuration via ELLE</description>
+    <message>Authentication is required to edit SSH configuration</message>
+    <message xml:lang="en">Authentication is required to edit SSH configuration</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.imply">com.elle.ops.validate-config</annotate>
+  </action>
+
+  <!-- Sysctl editing -->
+  <action id="com.elle.ops.edit-sysctl">
+    <description>Edit kernel parameters</description>
+    <description xml:lang="en">Edit sysctl configuration via ELLE</description>
+    <message>Authentication is required to edit kernel parameters</message>
+    <message xml:lang="en">Authentication is required to edit kernel parameters</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.imply">com.elle.ops.validate-config</annotate>
+  </action>
+
+  <!-- Configuration validation -->
+  <action id="com.elle.ops.validate-config">
+    <description>Validate system configuration</description>
+    <description xml:lang="en">Validate system configuration via ELLE</description>
+    <message>Authentication is required to validate configuration</message>
+    <message xml:lang="en">Authentication is required to validate configuration</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+
+  <!-- Cron management -->
+  <action id="com.elle.ops.manage-cron">
+    <description>Manage scheduled tasks</description>
+    <description xml:lang="en">Manage cron jobs via ELLE</description>
+    <message>Authentication is required to manage scheduled tasks</message>
+    <message xml:lang="en">Authentication is required to manage scheduled tasks</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+
+  <!-- Service management -->
+  <action id="com.elle.ops.manage-services">
+    <description>Manage system services</description>
+    <description xml:lang="en">Start, stop, or restart services via ELLE</description>
+    <message>Authentication is required to manage system services</message>
+    <message xml:lang="en">Authentication is required to manage system services</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+
+  <!-- Reading privileged logs -->
+  <action id="com.elle.ops.read-privileged-logs">
+    <description>Read privileged system logs</description>
+    <description xml:lang="en">Read restricted log files via ELLE</description>
+    <message>Authentication is required to read privileged logs</message>
+    <message xml:lang="en">Authentication is required to read privileged logs</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+
+  <!-- GRUB boot configuration management -->
+  <action id="com.elle.ops.manage-grub">
+    <description>Manage GRUB boot configuration</description>
+    <description xml:lang="en">Configure GRUB boot entries via ELLE</description>
+    <message>Authentication is required to manage boot configuration</message>
+    <message xml:lang="en">Authentication is required to manage GRUB boot configuration</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+
+  <!-- System reboot -->
+  <action id="com.elle.ops.reboot">
+    <description>Reboot the system</description>
+    <description xml:lang="en">Trigger system reboot via ELLE</description>
+    <message>Authentication is required to reboot the system</message>
+    <message xml:lang="en">Authentication is required to reboot the system</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+
+</policyconfig>

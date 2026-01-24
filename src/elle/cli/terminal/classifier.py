@@ -1,0 +1,638 @@
+"""Intent classifier for ELLE Terminal.
+
+Hybrid classifier that uses:
+1. Hard keyword routing for meta/navigation commands (no SLM call)
+2. SLM classification via Ollama for natural language inputs
+3. Post-processing with safety overrides and confidence adjustments
+
+The classifier runs before any action is taken, ensuring every input
+is properly categorized and safety-checked.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+from datetime import datetime
+from pathlib import Path
+
+from pydantic import BaseModel, ConfigDict, ValidationError
+
+from elle.cli.subprocess_runner import check_denylist
+from elle.cli.terminal.intent import (
+    CONFIDENCE_THRESHOLD,
+    MEDIUM_CONFIDENCE,
+    Intent,
+    IntentResult,
+    create_clarification_result,
+    create_rule_result,
+)
+from elle.common.session import Session
+from elle.rag.ollama_client import OllamaClient, OllamaError, get_client
+
+logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Hard routes - exact keyword matching (no SLM call needed)
+# =============================================================================
+
+# Meta commands - exact match (case insensitive)
+META_COMMANDS = frozenset({
+    "help", "exit", "quit", "clear", "config", "about", "version",
+})
+
+# Navigation commands - exact match
+NAVIGATION_COMMANDS = frozenset({
+    "status", "events", "logs", "man", "search", "history",
+    "incidents", "incident",  # Incident vault navigation
+})
+
+# Fixit triggers - exact match or prefix
+FIXIT_TRIGGERS = frozenset({
+    "fix", "fix it", "fixit", "why did that fail", "what went wrong",
+})
+
+# Prefix commands - explicit intent markers
+PREFIX_COMMANDS = {
+    "/ask": Intent.SYSTEM_QUESTION,
+    "/do": Intent.SYSTEM_TASK,
+    "/fix": Intent.FIXIT,
+    "/sh": Intent.SHELL_PASSTHROUGH,
+    "/run": Intent.SHELL_PASSTHROUGH,
+    "!": Intent.SHELL_PASSTHROUGH,  # Bang prefix for shell
+}
+
+
+# =============================================================================
+# Shell command detection patterns
+# =============================================================================
+
+# Common shell command prefixes (first word patterns)
+SHELL_COMMAND_PATTERNS = [
+    # File operations
+    r"^(ls|cd|pwd|cat|head|tail|less|more|mkdir|rmdir|rm|cp|mv|touch|chmod|chown)\b",
+    # Text processing
+    r"^(grep|sed|awk|sort|uniq|wc|cut|tr|diff|patch)\b",
+    # System info
+    r"^(ps|top|htop|kill|pkill|pgrep|df|du|free|uname|uptime|who|whoami)\b",
+    # Network
+    r"^(ping|curl|wget|ssh|scp|rsync|netstat|ss|ip|ifconfig|dig|nslookup)\b",
+    # Package management
+    r"^(apt|apt-get|dpkg|snap|pip|npm|cargo|go)\b",
+    # Services
+    r"^(systemctl|service|journalctl)\b",
+    # Docker/containers
+    r"^(docker|podman|kubectl)\b",
+    # Git
+    r"^(git)\b",
+    # Python/Node/etc
+    r"^(python|python3|node|npm|npx|ruby|perl)\b",
+    # Editors (usually for opening files)
+    r"^(vim|vi|nano|emacs|code)\b",
+    # Shell builtins and common utilities
+    r"^(echo|printf|export|source|env|which|whereis|locate|find|xargs|exit|return|test)\b",
+    # Archive/compression
+    r"^(tar|zip|unzip|gzip|gunzip|bzip2|xz)\b",
+    # Build tools
+    r"^(make|cmake|gcc|g\+\+|clang|rustc)\b",
+    # Testing
+    r"^(pytest|jest|mocha|cargo test)\b",
+    # Generic executable patterns
+    r"^\./",  # ./script
+    r"^~/.*/",  # ~/bin/something
+    r"^/",  # Absolute path
+]
+
+_COMPILED_SHELL_PATTERNS = [re.compile(p, re.IGNORECASE) for p in SHELL_COMMAND_PATTERNS]
+
+
+# Question indicators
+QUESTION_INDICATORS = [
+    r"^why\b",
+    r"^how\b",
+    r"^what\b",
+    r"^when\b",
+    r"^where\b",
+    r"^can you explain\b",
+    r"^tell me\b",
+    r"^explain\b",
+    r"\?$",  # Ends with question mark
+]
+
+_COMPILED_QUESTION_PATTERNS = [re.compile(p, re.IGNORECASE) for p in QUESTION_INDICATORS]
+
+
+# Task indicators (imperative requests)
+TASK_INDICATORS = [
+    r"^open port\b",
+    r"^close port\b",
+    r"^enable\b",
+    r"^disable\b",
+    r"^configure\b",
+    r"^set up\b",
+    r"^setup\b",
+    r"^install\b",
+    r"^uninstall\b",
+    r"^create\b",
+    r"^delete\b",
+    r"^add\b",
+    r"^remove\b",
+    r"^update\b",
+    r"^upgrade\b",
+    r"^restart\b",
+    r"^start\b",
+    r"^stop\b",
+    r"^schedule\b",
+    r"^automate\b",
+    r"^backup\b",
+    r"^restore\b",
+]
+
+_COMPILED_TASK_PATTERNS = [re.compile(p, re.IGNORECASE) for p in TASK_INDICATORS]
+
+
+# Incident navigation patterns (natural language for incident vault)
+INCIDENT_PATTERNS = [
+    r"^show\s+(me\s+)?(recent\s+)?incidents?",
+    r"^list\s+(recent\s+)?incidents?",
+    r"^(recent\s+)?incidents?$",
+    r"^what\s+incidents?\s+(do\s+we\s+)?have",
+    r"^any\s+(recent\s+)?incidents?",
+    r"^incident\s+(history|log|reports?)",
+    r"^export\s+(my\s+)?incident",
+    r"^search\s+incidents?",
+    r"^find\s+incidents?",
+    r"show\s+(me\s+)?incident\s+[a-f0-9]+",
+    r"^incident\s+[a-f0-9]+",  # Direct incident ID
+]
+
+_COMPILED_INCIDENT_PATTERNS = [re.compile(p, re.IGNORECASE) for p in INCIDENT_PATTERNS]
+
+
+# =============================================================================
+# SLM Prompt Template
+# =============================================================================
+
+CLASSIFIER_SYSTEM_PROMPT = """You are an intent classifier for a Linux assistant.
+Return ONLY valid JSON matching this exact schema - no other text:
+{
+  "intent": "...",
+  "confidence": 0.0,
+  "rationale": "...",
+  "entities": [],
+  "suggested_followups": [],
+  "requires_clarification": false
+}
+
+INTENTS (use exactly these values):
+- "meta": help, exit, config, about, clear, version
+- "navigation": status, events, logs, man pages, searching docs
+- "fixit": user wants to fix a failed command or understand an error
+- "system_question": user asks why/how/what about system state (not a command)
+- "system_task": user requests a system change in natural language
+- "shell_passthrough": user is entering a shell command to execute directly
+
+RULES:
+- Known keyword (help, exit, status) -> meta/navigation, confidence >= 0.9
+- Shell command (starts with command name, has flags) -> shell_passthrough
+- Question (starts with why/how/what, ends with ?) -> system_question
+- Natural language action request -> system_task
+- Mentions previous failure or error -> fixit
+- Keep rationale to ONE short sentence
+- entities: extract command names, file paths, service names, port numbers
+- If confidence < 0.55, set requires_clarification to true"""
+
+
+CLASSIFIER_PROMPT_TEMPLATE = """CONTEXT:
+cwd: {cwd}
+last_cmd: {last_cmd}
+last_exit: {last_exit}
+
+USER INPUT:
+{text}"""
+
+
+# =============================================================================
+# Classifier Implementation
+# =============================================================================
+
+class ClassificationLog(BaseModel):
+    """Log entry for a classification decision."""
+
+    model_config = ConfigDict(frozen=True)
+
+    timestamp: datetime
+    input_text: str
+    result: IntentResult
+    session_cwd: str
+    session_last_cmd: str | None
+    session_last_exit: int | None
+    model_used: str | None = None
+    latency_ms: float | None = None
+    parse_retried: bool = False
+
+
+class IntentClassifier:
+    """Hybrid intent classifier using rules + SLM.
+
+    Classification precedence:
+    1. Hard keyword routing (meta, navigation, fixit triggers)
+    2. Prefix commands (/ask, /do, /sh, !)
+    3. SLM classification via Ollama
+    4. Post-processing (safety overrides, confidence floors)
+
+    Usage:
+        classifier = IntentClassifier()
+        result = classifier.classify("why is my disk full?", session)
+    """
+
+    # Default model for classification (small and fast)
+    DEFAULT_MODEL = "gemma2:2b"
+    FALLBACK_MODELS = ["phi3.5", "phi3", "llama3.2:1b", "qwen2.5:1.5b"]
+
+    def __init__(
+        self,
+        client: OllamaClient | None = None,
+        model: str | None = None,
+        log_path: Path | None = None,
+    ) -> None:
+        """Initialize the classifier.
+
+        Args:
+            client: Ollama client. Uses shared instance if not provided.
+            model: Model name to use. Auto-detects if not provided.
+            log_path: Path for classification logs. Defaults to ~/.local/state/elle/
+        """
+        self._client = client
+        self._model = model
+        self._detected_model: str | None = None
+        self._log_path = log_path or Path.home() / ".local" / "state" / "elle"
+        self._log_file = self._log_path / "intent_log.jsonl"
+
+    @property
+    def client(self) -> OllamaClient:
+        """Get the Ollama client (lazy initialization)."""
+        if self._client is None:
+            self._client = get_client()
+        return self._client
+
+    @property
+    def model(self) -> str:
+        """Get the model to use (auto-detect if needed)."""
+        if self._model:
+            return self._model
+
+        if self._detected_model:
+            return self._detected_model
+
+        # Auto-detect available model
+        if self.client.is_available():
+            available = self.client.list_models()
+            for candidate in [self.DEFAULT_MODEL] + self.FALLBACK_MODELS:
+                if any(candidate in m for m in available):
+                    self._detected_model = candidate
+                    logger.info(f"Using model: {candidate}")
+                    return candidate
+
+        # Fallback
+        self._detected_model = self.DEFAULT_MODEL
+        return self._detected_model
+
+    def classify(self, text: str, session: Session) -> IntentResult:
+        """Classify user input into an intent.
+
+        Args:
+            text: Raw input string from user.
+            session: Current session state for context.
+
+        Returns:
+            IntentResult with classification and confidence.
+        """
+        text = text.strip()
+
+        # Empty input
+        if not text:
+            return create_rule_result(
+                Intent.META,
+                "Empty input",
+                confidence=1.0,
+            )
+
+        # Step 1: Hard keyword routing
+        result = self._check_hard_routes(text, session)
+        if result:
+            self._log_classification(text, result, session)
+            return result
+
+        # Step 2: Prefix commands
+        result = self._check_prefix_commands(text)
+        if result:
+            self._log_classification(text, result, session)
+            return result
+
+        # Step 3: Pattern-based pre-classification (high confidence shortcuts)
+        result = self._check_patterns(text, session)
+        if result and result.confidence >= MEDIUM_CONFIDENCE:
+            # Apply safety overrides to pattern results too
+            result = self._apply_safety_overrides(text, result)
+            self._log_classification(text, result, session)
+            return result
+
+        # Step 4: SLM classification
+        result = self._classify_with_slm(text, session)
+
+        # Step 5: Post-processing (safety overrides)
+        result = self._apply_safety_overrides(text, result)
+
+        self._log_classification(text, result, session)
+        return result
+
+    def _check_hard_routes(self, text: str, session: Session) -> IntentResult | None:
+        """Check for exact keyword matches."""
+        lower = text.lower()
+
+        # Meta commands
+        if lower in META_COMMANDS:
+            return create_rule_result(
+                Intent.META,
+                f"Exact meta command: {lower}",
+                entities=[lower],
+            )
+
+        # Navigation commands
+        if lower in NAVIGATION_COMMANDS:
+            return create_rule_result(
+                Intent.NAVIGATION,
+                f"Exact navigation command: {lower}",
+                entities=[lower],
+            )
+
+        # Fixit triggers - always route to FIXIT, let handler deal with edge cases
+        if lower in FIXIT_TRIGGERS:
+            if session.last_cmd and session.last_failed:
+                return create_rule_result(
+                    Intent.FIXIT,
+                    "User wants to fix the last failed command",
+                    entities=[session.last_cmd],
+                )
+            elif session.last_cmd:
+                return create_rule_result(
+                    Intent.FIXIT,
+                    "User requested fix (last command succeeded)",
+                    confidence=MEDIUM_CONFIDENCE,
+                )
+            else:
+                return create_rule_result(
+                    Intent.FIXIT,
+                    "User requested fix (no previous command)",
+                    confidence=MEDIUM_CONFIDENCE,
+                )
+
+        return None
+
+    def _check_prefix_commands(self, text: str) -> IntentResult | None:
+        """Check for prefix command markers."""
+        for prefix, intent in PREFIX_COMMANDS.items():
+            if text.startswith(prefix):
+                # Extract the actual content after prefix
+                content = text[len(prefix):].strip()
+                return create_rule_result(
+                    intent,
+                    f"Explicit prefix command: {prefix}",
+                    entities=[content] if content else [],
+                )
+        return None
+
+    def _check_patterns(self, text: str, session: Session) -> IntentResult | None:
+        """Check pattern-based classifications."""
+        # Incident patterns (high priority for incident vault queries)
+        for pattern in _COMPILED_INCIDENT_PATTERNS:
+            if pattern.search(text):
+                return IntentResult(
+                    intent=Intent.NAVIGATION,
+                    confidence=0.90,
+                    rationale="Incident vault navigation request",
+                    entities=["incidents"],
+                    classified_by="rule",
+                )
+
+        # Shell command patterns (highest priority for obvious commands)
+        for pattern in _COMPILED_SHELL_PATTERNS:
+            if pattern.search(text):
+                # Extract the command name
+                first_word = text.split()[0] if text.split() else text
+                return IntentResult(
+                    intent=Intent.SHELL_PASSTHROUGH,
+                    confidence=0.85,
+                    rationale=f"Looks like a shell command starting with '{first_word}'",
+                    entities=[first_word],
+                    classified_by="rule",
+                )
+
+        # Question patterns
+        for pattern in _COMPILED_QUESTION_PATTERNS:
+            if pattern.search(text):
+                return IntentResult(
+                    intent=Intent.SYSTEM_QUESTION,
+                    confidence=0.70,
+                    rationale="Input appears to be a question",
+                    classified_by="rule",
+                )
+
+        # Task patterns (only if not a shell command)
+        for pattern in _COMPILED_TASK_PATTERNS:
+            if pattern.search(text):
+                return IntentResult(
+                    intent=Intent.SYSTEM_TASK,
+                    confidence=0.70,
+                    rationale="Input appears to be a task request",
+                    classified_by="rule",
+                )
+
+        return None
+
+    def _classify_with_slm(self, text: str, session: Session) -> IntentResult:
+        """Classify using the SLM via Ollama."""
+        if not self.client.is_available():
+            logger.warning("Ollama not available, using fallback classification")
+            return self._fallback_classification(text, session)
+
+        # Build prompt
+        prompt = CLASSIFIER_PROMPT_TEMPLATE.format(
+            cwd=session.cwd.name or str(session.cwd),
+            last_cmd=session.last_cmd or "(none)",
+            last_exit=session.last_exit if session.last_exit is not None else "(none)",
+            text=text,
+        )
+
+        try:
+            # Call SLM with JSON mode
+            import time
+            start = time.time()
+
+            response_data = self.client.generate_json(
+                self.model,
+                prompt,
+                system=CLASSIFIER_SYSTEM_PROMPT,
+                max_tokens=150,
+                temperature=0.1,
+            )
+
+            latency_ms = (time.time() - start) * 1000
+            logger.debug(f"SLM classification took {latency_ms:.0f}ms")
+
+            # Parse into IntentResult
+            return self._parse_slm_response(response_data, latency_ms)
+
+        except OllamaError as e:
+            logger.warning(f"SLM classification failed: {e}")
+            return self._fallback_classification(text, session)
+        except Exception as e:
+            logger.error(f"Unexpected error in SLM classification: {e}")
+            return self._fallback_classification(text, session)
+
+    def _parse_slm_response(
+        self,
+        data: dict,
+        latency_ms: float | None = None,
+    ) -> IntentResult:
+        """Parse SLM JSON response into IntentResult."""
+        try:
+            # Normalize intent value
+            intent_str = data.get("intent", "").lower().strip()
+            intent = Intent.from_label(intent_str)
+
+            confidence = float(data.get("confidence", 0.5))
+            rationale = str(data.get("rationale", "SLM classification"))
+            entities = data.get("entities", [])
+            followups = data.get("suggested_followups", [])
+            requires_clarification = data.get("requires_clarification", False)
+
+            # Enforce confidence threshold
+            if confidence < CONFIDENCE_THRESHOLD:
+                requires_clarification = True
+
+            return IntentResult(
+                intent=intent,
+                confidence=confidence,
+                rationale=rationale,
+                entities=entities if isinstance(entities, list) else [],
+                suggested_followups=followups if isinstance(followups, list) else [],
+                requires_clarification=requires_clarification,
+                classified_by="slm",
+            )
+
+        except (ValueError, ValidationError) as e:
+            logger.warning(f"Failed to parse SLM response: {e}")
+            return create_clarification_result(
+                "Could not understand the classification response",
+            )
+
+    def _fallback_classification(self, text: str, session: Session) -> IntentResult:
+        """Fallback classification when SLM is unavailable."""
+        # Try pattern matching again with lower confidence
+        result = self._check_patterns(text, session)
+        if result:
+            # Lower confidence for fallback
+            return IntentResult(
+                intent=result.intent,
+                confidence=result.confidence * 0.8,
+                rationale=f"Fallback: {result.rationale}",
+                entities=result.entities,
+                requires_clarification=result.confidence * 0.8 < CONFIDENCE_THRESHOLD,
+                classified_by="fallback",
+            )
+
+        # Ultimate fallback: ask for clarification
+        return create_clarification_result(
+            "Unable to determine intent (SLM unavailable)",
+        )
+
+    def _apply_safety_overrides(self, text: str, result: IntentResult) -> IntentResult:
+        """Apply safety overrides to the classification."""
+        # Only apply to shell_passthrough
+        if result.intent != Intent.SHELL_PASSTHROUGH:
+            return result
+
+        # Check against denylist
+        denied, reason, explanation = check_denylist(text)
+
+        if denied:
+            # Dangerous command detected - force clarification
+            logger.warning(f"Dangerous command detected: {reason}")
+            return IntentResult(
+                intent=result.intent,
+                confidence=result.confidence * 0.3,  # Drastically reduce confidence
+                rationale=f"Safety check: {explanation}",
+                entities=result.entities,
+                requires_clarification=True,
+                suggested_followups=[
+                    "This command appears dangerous",
+                    "Rephrase your request",
+                    "Use a safer alternative",
+                ],
+                classified_by=result.classified_by,
+            )
+
+        return result
+
+    def _log_classification(
+        self,
+        text: str,
+        result: IntentResult,
+        session: Session,
+        latency_ms: float | None = None,
+    ) -> None:
+        """Log classification for future analysis."""
+        try:
+            # Ensure log directory exists
+            self._log_path.mkdir(parents=True, exist_ok=True)
+
+            log_entry = ClassificationLog(
+                timestamp=datetime.now(),
+                input_text=text,
+                result=result,
+                session_cwd=str(session.cwd),
+                session_last_cmd=session.last_cmd,
+                session_last_exit=session.last_exit,
+                model_used=self._detected_model if result.classified_by == "slm" else None,
+                latency_ms=latency_ms,
+            )
+
+            # Append to log file
+            with open(self._log_file, "a") as f:
+                f.write(log_entry.model_dump_json() + "\n")
+
+        except Exception as e:
+            # Don't fail classification due to logging errors
+            logger.debug(f"Failed to log classification: {e}")
+
+
+# Module-level classifier instance
+_classifier: IntentClassifier | None = None
+
+
+def get_classifier() -> IntentClassifier:
+    """Get the shared classifier instance.
+
+    Returns:
+        The IntentClassifier singleton.
+    """
+    global _classifier
+    if _classifier is None:
+        _classifier = IntentClassifier()
+    return _classifier
+
+
+def classify_intent(text: str, session: Session) -> IntentResult:
+    """Convenience function to classify intent.
+
+    Args:
+        text: User input to classify.
+        session: Current session state.
+
+    Returns:
+        IntentResult with classification.
+    """
+    return get_classifier().classify(text, session)
