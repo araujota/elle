@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -20,7 +19,6 @@ from elle.capabilities.models import (
     CapabilityResult,
     CapabilitySpec,
     DryRunResult,
-    RiskLevel,
     RollbackResult,
     SideEffect,
     VerificationResult,

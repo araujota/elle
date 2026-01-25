@@ -21,12 +21,10 @@ from elle.rag.confgen.generator import LLMConfigGenerator, get_generator
 from elle.rag.confgen.models import (
     ConfigDomain,
     ConfigFileType,
-    ConfigGenError,
     ConfigGenLLMError,
     ConfigGenOutcome,
     ConfigGenRequest,
     ConfigGenResult,
-    ConfigOpMode,
 )
 from elle.rag.confgen.validator import ConfigValidator, get_validator
 

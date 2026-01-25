@@ -24,7 +24,7 @@ from elle.cli.docker.env_models import (
 )
 from elle.cli.docker.env_profiles import extract_image_family
 from elle.cli.docker.env_store import DockerEnvStore
-from elle.cli.ui.theme import Colors, Icons
+from elle.cli.ui.theme import Icons
 
 if TYPE_CHECKING:
     from elle.cli.docker.env_explainer import EnvVarExplainer
@@ -62,7 +62,7 @@ class EnvVarPromptSession:
         *,
         console: Console | None = None,
         store: DockerEnvStore | None = None,
-        explainer: "EnvVarExplainer | None" = None,
+        explainer: EnvVarExplainer | None = None,
         use_saved: bool = True,
         save_values: bool = True,
     ) -> None:
@@ -192,7 +192,7 @@ class EnvVarPromptSession:
         # Create panel
         panel = Panel(
             content,
-            title=f"[bold cyan]Docker Environment Variables[/bold cyan]",
+            title="[bold cyan]Docker Environment Variables[/bold cyan]",
             subtitle=f"[dim]{self.image}[/dim]",
             border_style="cyan",
             padding=(1, 2),

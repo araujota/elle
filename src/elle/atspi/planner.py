@@ -6,11 +6,9 @@ executable sequences of UI actions using LLM.
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 import uuid
-from typing import Any
 
 from elle.atspi.models import UIAction, UIElement, UIRecipe, UITaskPlan
 

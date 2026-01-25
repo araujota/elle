@@ -6,7 +6,6 @@ from elle.ops.stack.models import (
     StackVariable,
 )
 
-
 NODEJS_RECIPE = StackRecipe(
     name="nodejs",
     display_name="Node.js with Nginx Reverse Proxy",

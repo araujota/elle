@@ -134,6 +134,6 @@ def clear() -> None:
     console.clear()
 
 
-def print_renderable(renderable: "RenderableType") -> None:
+def print_renderable(renderable: RenderableType) -> None:
     """Print any rich renderable object."""
     console.print(renderable)

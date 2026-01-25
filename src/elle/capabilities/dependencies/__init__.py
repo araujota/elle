@@ -41,14 +41,13 @@ Example:
 
 from __future__ import annotations
 
-# Models
-from elle.capabilities.dependencies.models import (
-    DependencyCheckResult,
-    DependencyPreference,
-    DependencySpec,
-    InstallationRequest,
-    InstallationResult,
-    PreferenceChoice,
+# Checker
+from elle.capabilities.dependencies.checker import (
+    DependencyChecker,
+    check_dependencies_for_capability,
+    check_dependency,
+    get_checker,
+    reset_checker,
 )
 
 # Core dependencies
@@ -61,20 +60,30 @@ from elle.capabilities.dependencies.core import (
     WIREGUARD_DEPENDENCY,
 )
 
+# Installer
+from elle.capabilities.dependencies.installer import (
+    DependencyInstaller,
+    DependencySecurityError,
+    get_installer,
+    install_dependency,
+    reset_installer,
+)
+
+# Models
+from elle.capabilities.dependencies.models import (
+    DependencyCheckResult,
+    DependencyPreference,
+    DependencySpec,
+    InstallationRequest,
+    InstallationResult,
+    PreferenceChoice,
+)
+
 # Registry
 from elle.capabilities.dependencies.registry import (
     DependencyRegistry,
     get_registry,
     reset_registry,
-)
-
-# Checker
-from elle.capabilities.dependencies.checker import (
-    DependencyChecker,
-    check_dependency,
-    check_dependencies_for_capability,
-    get_checker,
-    reset_checker,
 )
 
 # Store
@@ -84,15 +93,6 @@ from elle.capabilities.dependencies.store import (
     get_store,
     reset_store,
     set_preference,
-)
-
-# Installer
-from elle.capabilities.dependencies.installer import (
-    DependencyInstaller,
-    DependencySecurityError,
-    get_installer,
-    install_dependency,
-    reset_installer,
 )
 
 __all__ = [

@@ -13,8 +13,9 @@ single-keypress navigation for fluid interaction.
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from elle.cli.fixit.models import FixitAction, FixitOutcome, VerifiedFixCommand
 from elle.cli.terminal.renderer import Colors

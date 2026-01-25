@@ -10,13 +10,13 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from elle.ops.augeas.backup import BackupManager, get_manager as get_backup_manager
+from elle.ops.augeas.backup import BackupManager
+from elle.ops.augeas.backup import get_manager as get_backup_manager
 from elle.ops.augeas.diff import DiffGenerator, generate_diff
-from elle.ops.augeas.lenses import detect_domain, detect_lens, is_yaml_file
+from elle.ops.augeas.lenses import is_yaml_file
 from elle.ops.augeas.models import (
     AugeasChange,
     AugeasEditRequest,
@@ -27,11 +27,10 @@ from elle.ops.augeas.models import (
     BatchEditResult,
     EditPreview,
 )
-from elle.ops.augeas.validators import get_validator, validate_config
+from elle.ops.augeas.validators import validate_config
 
 if TYPE_CHECKING:
-    from elle.ops.augeas.engine import AugeasEngine
-    from elle.ops.augeas.yaml_handler import YAMLHandler
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -144,11 +143,12 @@ class EditController:
         Returns:
             Tuple of (modified_content, changes).
         """
-        from elle.ops.augeas.engine import AugeasEngine
+        import shutil
 
         # Create engine with a temporary root to avoid modifying real files
         import tempfile
-        import shutil
+
+        from elle.ops.augeas.engine import AugeasEngine
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Copy file to temp location
@@ -209,6 +209,7 @@ class EditController:
 
         # Parse original
         import io
+
         from ruamel.yaml import YAML
         yaml = YAML()
         yaml.preserve_quotes = True
@@ -382,8 +383,8 @@ class EditController:
             # 7. Record action and config state to Incident Vault
             if request.incident_id:
                 try:
-                    from elle.daemon.incidents.store import append_action, store_config_state
                     from elle.daemon.incidents.semantic_diff import build_config_state
+                    from elle.daemon.incidents.store import append_action, store_config_state
 
                     # Record the action
                     append_action(

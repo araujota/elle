@@ -12,7 +12,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # Reboot reason categories
 RebootReason = Literal[
     "kernel_update",    # Kernel or module update requiring reboot

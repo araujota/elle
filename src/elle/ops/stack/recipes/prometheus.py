@@ -6,7 +6,6 @@ from elle.ops.stack.models import (
     StackVariable,
 )
 
-
 PROMETHEUS_GRAFANA_RECIPE = StackRecipe(
     name="prometheus-grafana",
     display_name="Prometheus + Grafana Monitoring Stack",

@@ -20,8 +20,6 @@ from elle.daemon.incidents.efficacy import (
     SolutionApproachEfficacy,
 )
 from elle.daemon.incidents.models import (
-    Fingerprint,
-    IncidentOutcome,
     IncidentReport,
 )
 from elle.daemon.incidents.schema import ensure_schema, get_connection

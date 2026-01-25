@@ -489,7 +489,7 @@ def suggest_lockdown(
 
     # Add alternatives if specified
     if "alternatives" in restriction_info:
-        commands.append(f"# Alternative network ranges you might also need:")
+        commands.append("# Alternative network ranges you might also need:")
         for alt in restriction_info["alternatives"]:
             commands.append(f"# ufw allow from {alt} to any port {port}")
 

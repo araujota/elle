@@ -1,5 +1,15 @@
 """Rule-based fallback analysis for Fixit.
 
+DEPRECATION NOTICE:
+    The hardcoded patterns in this module are being migrated to the
+    Incident Vault as learnable patterns. See:
+    - elle.daemon.incidents.seeds for the new pattern definitions
+    - elle.daemon.incidents.store for semantic search
+
+    New error patterns should be added to seeds.py rather than here.
+    The patterns here will eventually be removed once the Incident Vault
+    semantic search is fully integrated.
+
 Provides pattern-matching based error analysis when the LLM
 is unavailable. Covers common error categories with
 pre-defined suggestions.

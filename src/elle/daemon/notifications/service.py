@@ -21,9 +21,9 @@ import logging
 import os
 import shutil
 import subprocess
+from collections.abc import Callable
 from functools import lru_cache
-from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from elle.daemon.notifications.models import (
     Notification,
@@ -71,7 +71,7 @@ _notify_initialized = False
 try:
     import gi
     gi.require_version('Notify', '0.7')
-    from gi.repository import Notify, GLib
+    from gi.repository import GLib, Notify
     _gi_available = True
 except (ImportError, ValueError) as e:
     logger.debug(f"PyGObject/libnotify not available: {e}")
@@ -676,7 +676,7 @@ class NotificationService:
                 result = await send_async(notification)
                 self._add_to_history(notification, result)
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
             except asyncio.CancelledError:
                 break

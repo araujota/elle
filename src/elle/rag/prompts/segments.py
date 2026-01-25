@@ -14,7 +14,6 @@ Each segment provides specialized guidance for a particular competency:
 
 from elle.rag.prompts import PromptSegment
 
-
 # =============================================================================
 # Reactive Function Segment
 # =============================================================================

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel
 
 from elle.capabilities.models import CapabilitySpec, RiskLevel
+from elle.policy.models import PolicyEvaluationResult
 
 if TYPE_CHECKING:
     from elle.capabilities.protocol import Capability
@@ -44,7 +45,7 @@ def evaluate_capability(
     capability: Capability,
     input: BaseModel,
     audit: bool = True,
-) -> "PolicyEvaluationResult":
+) -> PolicyEvaluationResult:
     """Evaluate if a capability execution is allowed.
 
     Uses the policy engine to check whether the capability
@@ -128,7 +129,7 @@ def capability_requires_privilege_check(spec: CapabilitySpec) -> bool:
     return spec.requires_privilege
 
 
-def _create_allow_result() -> "PolicyEvaluationResult":
+def _create_allow_result() -> PolicyEvaluationResult:
     """Create an allow result when policy is unavailable.
 
     Returns:
@@ -166,7 +167,7 @@ def _create_allow_result() -> "PolicyEvaluationResult":
         return _MinimalResult()  # type: ignore
 
 
-def _create_confirm_result(message: str) -> "PolicyEvaluationResult":
+def _create_confirm_result(message: str) -> PolicyEvaluationResult:
     """Create a result requiring confirmation.
 
     Args:
@@ -221,7 +222,7 @@ class CapabilityPolicyResult(BaseModel):
     is_blocked: bool = False
 
     @classmethod
-    def from_policy_result(cls, result) -> "CapabilityPolicyResult":
+    def from_policy_result(cls, result) -> CapabilityPolicyResult:
         """Create from a PolicyEvaluationResult.
 
         Args:

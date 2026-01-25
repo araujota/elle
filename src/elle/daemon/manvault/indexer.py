@@ -13,16 +13,14 @@ Indexing pipeline:
 
 from __future__ import annotations
 
-import gzip
 import hashlib
 import logging
 import re
 import sqlite3
 import subprocess
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import datetime
 from pathlib import Path
-from typing import Callable
 
 from elle.daemon.manvault.models import ManChunk, ManDiscoveryItem, ManDoc
 from elle.daemon.manvault.schema import ensure_schema, get_connection
@@ -30,7 +28,6 @@ from elle.daemon.manvault.store import (
     delete_chunks_for_doc,
     get_all_hashes,
     get_doc,
-    upsert_chunk,
     upsert_chunks_batch,
     upsert_doc,
 )

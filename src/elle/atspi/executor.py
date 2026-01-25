@@ -400,9 +400,7 @@ class UIExecutor:
                 ]
                 if not verification_passed:
                     # Check for common variations
-                    if action.verify_state.lower() == "unchecked":
-                        verification_passed = "checked" not in [s.lower() for s in state_after]
-                    elif action.verify_state.lower() == "off":
+                    if action.verify_state.lower() == "unchecked" or action.verify_state.lower() == "off":
                         verification_passed = "checked" not in [s.lower() for s in state_after]
 
         duration_ms = int((time.time() - start_time) * 1000)

@@ -15,7 +15,7 @@ import logging
 import subprocess
 import time
 from collections import defaultdict
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any
 
 from elle.daemon.telemetry.models import TelemetryEvent
@@ -104,7 +104,7 @@ class DockerEventsWatcher:
             try:
                 self._process.terminate()
                 await asyncio.wait_for(self._process.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._process.kill()
             except Exception as e:
                 logger.warning(f"Error stopping docker events process: {e}")

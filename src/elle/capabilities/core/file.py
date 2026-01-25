@@ -242,14 +242,14 @@ class FileReadCapability(BaseCapability):
             return DryRunResult(
                 is_valid=False,
                 validation_errors=(f"File does not exist: {input.path}",),
-                preview_text=f"Cannot read: file does not exist",
+                preview_text="Cannot read: file does not exist",
             )
 
         if not path.is_file():
             return DryRunResult(
                 is_valid=False,
                 validation_errors=(f"Path is not a file: {input.path}",),
-                preview_text=f"Cannot read: path is not a file",
+                preview_text="Cannot read: path is not a file",
             )
 
         size = path.stat().st_size
@@ -259,7 +259,7 @@ class FileReadCapability(BaseCapability):
                 validation_errors=(
                     f"File too large: {size} bytes (max: {input.max_size_bytes})",
                 ),
-                preview_text=f"Cannot read: file too large",
+                preview_text="Cannot read: file too large",
             )
 
         return DryRunResult(
@@ -1153,8 +1153,8 @@ class FileWatchSnapshotCapability(BaseCapability):
 
     def run(self, input: FileWatchSnapshotInput) -> CapabilityResult:
         """Take the snapshot."""
-        from datetime import datetime
         import uuid
+        from datetime import datetime
 
         start_time = time.time()
         path = Path(input.path)

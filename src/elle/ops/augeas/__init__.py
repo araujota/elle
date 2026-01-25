@@ -1,5 +1,26 @@
 """Augeas-based configuration file editing system.
 
+DEPRECATION NOTICE:
+    This module is an internal implementation. For policy-governed config
+    editing with audit trails, use the Capabilities system instead:
+
+        from elle.capabilities import execute_capability
+        from elle.capabilities.core import ConfigEditInput, ConfigOperation
+
+        result = await execute_capability(
+            "config.edit",
+            ConfigEditInput(
+                file_path="/etc/hosts",
+                operations=(
+                    ConfigOperation(kind="set", path="...", value="..."),
+                ),
+                description="Add myserver to hosts",
+            ),
+        )
+
+    The capability provides policy enforcement, incident integration,
+    and automatic rollback on failure.
+
 Provides a safe, robust mechanism for structured config file manipulation
 with mandatory preview/diff, automatic backup, validation, and rollback.
 
@@ -83,23 +104,39 @@ Usage:
 """
 
 # Models
-from elle.ops.augeas.models import (
-    AugeasChange,
-    AugeasEditRequest,
-    AugeasEditResult,
-    AugeasError,
-    AugeasLensNotFoundError,
-    AugeasOp,
-    AugeasParseError,
-    AugeasPermissionError,
-    AugeasStatus,
-    AugeasUnavailableError,
-    AugeasValidationError,
-    BackupListResult,
-    BackupRecord,
-    BatchEditRequest,
-    BatchEditResult,
-    EditPreview,
+# Backup
+from elle.ops.augeas.backup import (
+    BackupManager,
+    backup_file,
+    cleanup_backups,
+    get_latest_backup,
+    list_backups,
+    restore_file,
+)
+from elle.ops.augeas.backup import (
+    get_manager as get_backup_manager,
+)
+
+# Controller
+from elle.ops.augeas.controller import (
+    EditController,
+    execute_batch_edit,
+    execute_edit,
+    get_controller,
+    preview_edit,
+    rollback_edit,
+)
+
+# Diff
+from elle.ops.augeas.diff import (
+    Colors,
+    DiffGenerator,
+    DiffResult,
+    DiffStats,
+    colored_diff,
+    generate_diff,
+    has_changes,
+    unified_diff,
 )
 
 # Engine
@@ -128,26 +165,23 @@ from elle.ops.augeas.lenses import (
     sshd_setting_path,
     sysctl_setting_path,
 )
-
-# Controller
-from elle.ops.augeas.controller import (
-    EditController,
-    execute_batch_edit,
-    execute_edit,
-    get_controller,
-    preview_edit,
-    rollback_edit,
-)
-
-# Backup
-from elle.ops.augeas.backup import (
-    BackupManager,
-    backup_file,
-    cleanup_backups,
-    get_latest_backup,
-    get_manager as get_backup_manager,
-    list_backups,
-    restore_file,
+from elle.ops.augeas.models import (
+    AugeasChange,
+    AugeasEditRequest,
+    AugeasEditResult,
+    AugeasError,
+    AugeasLensNotFoundError,
+    AugeasOp,
+    AugeasParseError,
+    AugeasPermissionError,
+    AugeasStatus,
+    AugeasUnavailableError,
+    AugeasValidationError,
+    BackupListResult,
+    BackupRecord,
+    BatchEditRequest,
+    BatchEditResult,
+    EditPreview,
 )
 
 # Validators
@@ -160,18 +194,6 @@ from elle.ops.augeas.validators import (
     validate_config,
 )
 
-# Diff
-from elle.ops.augeas.diff import (
-    Colors,
-    DiffGenerator,
-    DiffResult,
-    DiffStats,
-    colored_diff,
-    generate_diff,
-    has_changes,
-    unified_diff,
-)
-
 # YAML Handler
 from elle.ops.augeas.yaml_handler import (
     NetplanHandler,
@@ -179,10 +201,12 @@ from elle.ops.augeas.yaml_handler import (
     YAMLEditResult,
     YAMLHandler,
     get_yaml_value,
-    is_available as yaml_is_available,
     load_yaml,
     save_yaml,
     set_yaml_value,
+)
+from elle.ops.augeas.yaml_handler import (
+    is_available as yaml_is_available,
 )
 
 __all__ = [

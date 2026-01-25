@@ -32,6 +32,12 @@ Usage (programmatic):
 """
 
 # Models
+# Interactive UI
+from elle.cli.planner.interactive import (
+    PlannerInteractive,
+    run_interactive_planner,
+    run_noninteractive_planner,
+)
 from elle.cli.planner.models import (
     CheckResult,
     CommandPlan,
@@ -50,13 +56,6 @@ from elle.cli.planner.models import (
     ValidationCheck,
 )
 
-# Service
-from elle.cli.planner.service import (
-    PlannerService,
-    get_planner_service,
-    reset_planner_service,
-)
-
 # Rendering
 from elle.cli.planner.renderer import (
     render_box,
@@ -71,11 +70,11 @@ from elle.cli.planner.renderer import (
     risk_color,
 )
 
-# Interactive UI
-from elle.cli.planner.interactive import (
-    PlannerInteractive,
-    run_interactive_planner,
-    run_noninteractive_planner,
+# Service
+from elle.cli.planner.service import (
+    PlannerService,
+    get_planner_service,
+    reset_planner_service,
 )
 
 # Verification

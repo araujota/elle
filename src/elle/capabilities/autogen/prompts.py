@@ -137,7 +137,7 @@ def build_generation_prompt(man_page: ParsedManPage) -> str:
     if man_page.synopsis:
         prompt_parts.extend([
             "### SYNOPSIS",
-            f"```",
+            "```",
             man_page.synopsis.raw,
             "```",
             "",
@@ -174,7 +174,7 @@ def build_generation_prompt(man_page: ParsedManPage) -> str:
             "### EXAMPLES",
         ])
         for ex in man_page.examples[:5]:  # Limit to 5 examples
-            prompt_parts.append(f"```")
+            prompt_parts.append("```")
             prompt_parts.append(ex.command)
             prompt_parts.append("```")
             if ex.description:
@@ -229,7 +229,7 @@ def build_subcommand_prompt(
     if man_page.synopsis:
         prompt_parts.extend([
             "### SYNOPSIS",
-            f"```",
+            "```",
             man_page.synopsis.raw,
             "```",
             "",

@@ -10,14 +10,13 @@ import re
 from pathlib import Path
 from typing import Any
 
+from elle.rag.confgen.domains import DomainHandler
 from elle.rag.confgen.models import (
     ConfigDomain,
     ConfigFileType,
     ConfigGenValidation,
-    ConfigOp,
     ValidationIssue,
 )
-from elle.rag.confgen.domains import DomainHandler
 
 
 class WireguardHandler(DomainHandler):

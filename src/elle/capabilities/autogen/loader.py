@@ -14,7 +14,7 @@ from elle.capabilities.autogen.models import GeneratedCapabilitySpec, StoredCapa
 from elle.capabilities.autogen.store import get_store
 
 if TYPE_CHECKING:
-    from elle.capabilities.registry import CapabilityRegistry
+    pass
 
 logger = logging.getLogger(__name__)
 

@@ -40,7 +40,7 @@ class DependencyChecker:
 
     def __init__(
         self,
-        registry: "DependencyRegistry",
+        registry: DependencyRegistry,
         cache_ttl: float = 300.0,
     ) -> None:
         """Initialize the checker.
@@ -151,7 +151,7 @@ class DependencyChecker:
 
     def _run_checks(
         self,
-        dep: "DependencySpec",
+        dep: DependencySpec,
     ) -> tuple[bool, str, str | None]:
         """Run availability checks for a dependency.
 

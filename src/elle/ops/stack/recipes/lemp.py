@@ -6,7 +6,6 @@ from elle.ops.stack.models import (
     StackVariable,
 )
 
-
 LEMP_RECIPE = StackRecipe(
     name="lemp",
     display_name="LEMP Stack (Nginx, PHP, MariaDB)",

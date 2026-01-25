@@ -611,7 +611,7 @@ class FileHandler:
         # Write content
         try:
             source.write_text(op.content, encoding=op.encoding)
-        except Exception as e:
+        except Exception:
             # Restore backup if write failed
             if backup_path:
                 shutil.copy2(backup_path, str(source))

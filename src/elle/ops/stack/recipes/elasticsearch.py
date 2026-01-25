@@ -6,7 +6,6 @@ from elle.ops.stack.models import (
     StackVariable,
 )
 
-
 ELASTICSEARCH_RECIPE = StackRecipe(
     name="elasticsearch",
     display_name="Elasticsearch",

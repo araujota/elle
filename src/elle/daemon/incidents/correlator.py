@@ -10,11 +10,10 @@ Implements basic incident detection heuristics.
 
 import re
 import sqlite3
-from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any
 
-from elle.daemon.incidents.models import Fingerprint, IncidentDomain, SystemSnapshot
+from elle.daemon.incidents.models import IncidentDomain
 from elle.daemon.incidents.snapshot import collect_snapshot, extract_fingerprint
 from elle.daemon.incidents.store import (
     attach_snapshot,
@@ -22,7 +21,6 @@ from elle.daemon.incidents.store import (
     link_events,
     update_incident,
 )
-
 
 # Domain detection patterns
 DOMAIN_PATTERNS: list[tuple[str, re.Pattern, str]] = [

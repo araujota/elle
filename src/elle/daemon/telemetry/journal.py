@@ -80,7 +80,7 @@ class JournalWatcher:
                         timeout=5.0,
                     )
                     break
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
 
         self._running = False
@@ -92,7 +92,7 @@ class JournalWatcher:
             try:
                 self._process.terminate()
                 await asyncio.wait_for(self._process.wait(), timeout=2.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._process.kill()
                 await self._process.wait()
             except ProcessLookupError:
@@ -144,7 +144,7 @@ class JournalWatcher:
                         self._errors += 1
                         continue
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # Check shutdown and continue
                     continue
 

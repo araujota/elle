@@ -12,7 +12,6 @@ import asyncio
 import logging
 import re
 from datetime import datetime
-from typing import Any
 
 from elle.cli.terminal.renderer import Colors
 from elle.common.session import Session
@@ -426,7 +425,7 @@ def handle_rollback() -> str:
         Result message.
     """
     try:
-        from elle.daemon.reboot import get_active_intent, get_manager
+        from elle.daemon.reboot import get_active_intent
 
         active = get_active_intent()
         if not active:

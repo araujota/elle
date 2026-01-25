@@ -138,7 +138,7 @@ class AugeasEngine:
 
         logger.debug(f"Initialized AugeasEngine with root={root}")
 
-    def __enter__(self) -> "AugeasEngine":
+    def __enter__(self) -> AugeasEngine:
         """Context manager entry."""
         return self
 
@@ -155,7 +155,7 @@ class AugeasEngine:
             self._pending_changes.clear()
             logger.debug("Closed AugeasEngine")
 
-    def _ensure_open(self) -> "augeas_module.Augeas":
+    def _ensure_open(self) -> augeas_module.Augeas:
         """Ensure the Augeas instance is open.
 
         Returns:

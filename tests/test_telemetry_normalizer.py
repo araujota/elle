@@ -102,6 +102,25 @@ class TestCategoryDetection:
         assert detect_category("docker container started") == "docker"
         assert detect_category("containerd: starting container") == "docker"
 
+    def test_kernel_panic_detection(self):
+        """Test kernel panic pattern detection."""
+        assert detect_category("Kernel panic - not syncing: fatal exception") == "kernel_panic"
+        assert detect_category("Kernel panic-not syncing: VFS: Unable to mount") == "kernel_panic"
+        assert detect_category("BUG: unable to handle page fault at 0xffffffff") == "kernel_panic"
+        assert detect_category("kernel BUG at mm/slub.c:1234") == "kernel_panic"
+        assert detect_category("Oops: 0000 [#1] SMP NOPTI") == "kernel_panic"
+        assert detect_category("Oops: [#1] PREEMPT SMP") == "kernel_panic"
+        assert detect_category("general protection fault: 0000 [#1] SMP") == "kernel_panic"
+        assert detect_category("double fault: 0000 [#1] SMP") == "kernel_panic"
+        assert detect_category("RIP: 0010:some_function+0x42/0x100") == "kernel_panic"
+        assert detect_category("Call Trace:") == "kernel_panic"
+        assert detect_category("Segmentation fault at 0x7fff12345678") == "kernel_panic"
+
+    def test_kernel_panic_distinct_from_oom(self):
+        """OOM messages should be oom category, not kernel_panic."""
+        assert detect_category("Out of memory: Killed process 1234 (nginx)") == "oom"
+        assert detect_category("oom-kill: constraint=NONE") == "oom"
+
     def test_fs_detection(self):
         assert detect_category("EXT4-fs error") == "fs"
         assert detect_category("mount: /dev/sda1 mounted on /mnt") == "fs"
@@ -310,3 +329,91 @@ class TestNormalizer:
         assert stats["processed"] == 0
         assert stats["deduplicated"] == 0
         assert stats["by_category"] == {}
+
+
+class TestKernelPanicDetection:
+    """Tests for kernel panic pattern detection and entity extraction."""
+
+    def test_kernel_panic_severity_is_critical(self):
+        """Kernel panics should always have critical severity."""
+        normalizer = Normalizer(dedupe_window_sec=0)
+        raw = {
+            "_SOURCE": "kernel",
+            "_TRANSPORT": "kernel",
+            "MESSAGE": "Kernel panic - not syncing: VFS: Unable to mount root fs",
+            "PRIORITY": "4",  # Even with warning priority
+            "__REALTIME_TIMESTAMP": "1704067200000000",
+        }
+        event = normalizer.normalize(raw)
+        assert event is not None
+        assert event.category == "kernel_panic"
+        assert event.severity == "critical"
+
+    def test_kernel_panic_severity_override_low_priority(self):
+        """Kernel panic severity should override any priority level."""
+        normalizer = Normalizer(dedupe_window_sec=0)
+        raw = {
+            "_SOURCE": "kernel",
+            "MESSAGE": "BUG: unable to handle page fault at 0xffffffff",
+            "PRIORITY": "6",  # Info level priority
+        }
+        event = normalizer.normalize(raw)
+        assert event is not None
+        assert event.severity == "critical"
+
+    def test_extracts_cpu_from_panic_message(self):
+        """Should extract CPU number from panic context."""
+        msg = "CPU: 3 PID: 1234 Comm: process Tainted: G"
+        entity = extract_entity(msg, "kernel_panic", {})
+        assert entity == "cpu:3"
+
+    def test_extracts_cpu_with_hash(self):
+        """Should extract CPU number with hash notation."""
+        msg = "CPU#7 context from scheduler"
+        entity = extract_entity(msg, "kernel_panic", {})
+        assert entity == "cpu:7"
+
+    def test_extracts_module_from_panic_message(self):
+        """Should extract kernel module from stack trace."""
+        msg = "RIP: 0010:my_driver.ko+0x1234/0x5678"
+        entity = extract_entity(msg, "kernel_panic", {})
+        # Could extract module or function depending on order
+        assert entity is not None
+        assert "my_driver" in entity or "module" in entity
+
+    def test_extracts_function_from_rip(self):
+        """Should extract function name from RIP register."""
+        msg = "RIP: 0010:some_kernel_func+0x42/0x100"
+        entity = extract_entity(msg, "kernel_panic", {})
+        assert entity is not None
+
+    def test_kernel_panic_event_normalized(self):
+        """Full normalization of a kernel panic event."""
+        normalizer = Normalizer(dedupe_window_sec=0)
+        raw = {
+            "_SOURCE": "kernel",
+            "_TRANSPORT": "kernel",
+            "MESSAGE": "Oops: 0000 [#1] SMP NOPTI\nCPU: 2 PID: 1234 Comm: process",
+            "PRIORITY": "2",
+            "__REALTIME_TIMESTAMP": "1704067200000000",
+        }
+        event = normalizer.normalize(raw)
+        assert event is not None
+        assert event.source == "kernel"
+        assert event.category == "kernel_panic"
+        assert event.severity == "critical"
+        # Should extract CPU
+        assert event.entity is not None
+
+    def test_kernel_warning_not_panic(self):
+        """Simple kernel warnings should not be kernel_panic."""
+        # Regular warning without BUG/Oops prefix
+        normalizer = Normalizer(dedupe_window_sec=0)
+        raw = {
+            "_SOURCE": "kernel",
+            "MESSAGE": "warning: some non-critical kernel message",
+            "PRIORITY": "4",
+        }
+        event = normalizer.normalize(raw)
+        # Should be categorized as something else, not kernel_panic
+        assert event is None or event.category != "kernel_panic"

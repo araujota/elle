@@ -7,10 +7,9 @@ execution tracking, and outcomes.
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Literal, TYPE_CHECKING
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-
 
 # =============================================================================
 # Risk Level

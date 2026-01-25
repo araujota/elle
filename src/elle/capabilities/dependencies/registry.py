@@ -37,7 +37,7 @@ class DependencyRegistry:
         self._deps: dict[str, DependencySpec] = {}
         self._by_capability: dict[str, list[str]] = defaultdict(list)
 
-    def register(self, dep: "DependencySpec") -> None:
+    def register(self, dep: DependencySpec) -> None:
         """Register a dependency specification.
 
         Args:
@@ -57,7 +57,7 @@ class DependencyRegistry:
 
         logger.debug(f"Registered dependency: {dep.name}")
 
-    def get(self, name: str) -> "DependencySpec | None":
+    def get(self, name: str) -> DependencySpec | None:
         """Get a dependency by name.
 
         Args:
@@ -68,7 +68,7 @@ class DependencyRegistry:
         """
         return self._deps.get(name)
 
-    def get_for_capability(self, capability: str) -> list["DependencySpec"]:
+    def get_for_capability(self, capability: str) -> list[DependencySpec]:
         """Get all dependencies required by a capability.
 
         Args:
@@ -80,7 +80,7 @@ class DependencyRegistry:
         dep_names = self._by_capability.get(capability, [])
         return [self._deps[name] for name in dep_names if name in self._deps]
 
-    def list_all(self) -> list["DependencySpec"]:
+    def list_all(self) -> list[DependencySpec]:
         """List all registered dependencies.
 
         Returns:

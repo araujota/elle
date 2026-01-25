@@ -9,7 +9,6 @@ Events produced:
 
 import ctypes
 import logging
-import time
 
 from elle.daemon.telemetry.ebpf.bcc.base import BCCProgram, _bytes_to_string
 from elle.daemon.telemetry.ebpf.models import EBPFEventType, EBPFRawEvent

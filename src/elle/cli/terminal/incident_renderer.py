@@ -7,17 +7,14 @@ Provides unicode grid rendering for:
 - Markdown export
 """
 
-from datetime import datetime, timedelta, UTC
-from typing import Any
+from datetime import UTC, datetime, timedelta
 
 from elle.daemon.incidents.models import (
-    IncidentReport,
     IncidentAction,
+    IncidentReport,
     IncidentSnapshot,
     SystemSnapshot,
-    Fingerprint,
 )
-
 
 # =============================================================================
 # Unicode Box Drawing Characters

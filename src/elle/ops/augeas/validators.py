@@ -6,12 +6,10 @@ to ensure syntax correctness before applying changes.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import subprocess
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 

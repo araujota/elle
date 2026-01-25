@@ -16,13 +16,11 @@ Example:
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import re
 import subprocess
-from datetime import datetime, timedelta
-from typing import Any
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 

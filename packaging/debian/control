@@ -9,7 +9,7 @@ Build-Depends: debhelper-compat (= 13),
                python3-pip,
                python3-venv
 Standards-Version: 4.6.2
-Homepage: https://github.com/elle-project/elle
+Homepage: https://araujota.github.io/elle
 Rules-Requires-Root: no
 
 Package: elle

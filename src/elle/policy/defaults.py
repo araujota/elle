@@ -14,7 +14,6 @@ from elle.policy.models import (
     PolicyRule,
 )
 
-
 # =============================================================================
 # Dangerous Command Patterns (from subprocess_runner.py)
 # =============================================================================

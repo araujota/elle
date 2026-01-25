@@ -6,7 +6,6 @@ on THIS machine rather than static weights.
 """
 
 from datetime import datetime
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 

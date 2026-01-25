@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from elle.cli.fixit.models import FixitOutcome, VerificationStatus
 from elle.cli.terminal.renderer import Colors
 
 if TYPE_CHECKING:

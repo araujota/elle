@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from elle.cli.docker.env_models import EnvVarSpec, ImageEnvProfile
 
-
 # =============================================================================
 # Database Images
 # =============================================================================

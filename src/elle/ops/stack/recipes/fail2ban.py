@@ -6,7 +6,6 @@ from elle.ops.stack.models import (
     StackVariable,
 )
 
-
 FAIL2BAN_RECIPE = StackRecipe(
     name="fail2ban",
     display_name="Fail2ban Intrusion Prevention",

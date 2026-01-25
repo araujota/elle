@@ -142,7 +142,7 @@ class TelemetryQueue(Generic[T]):
                 item = await self._queue.get()
             self._processed += 1
             return item
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return None
 
     def get_nowait(self) -> T | None:
@@ -323,7 +323,7 @@ class PriorityQueue(Generic[T]):
                 item = await self._normal.get()
             self._processed += 1
             return item
-        except (asyncio.TimeoutError, asyncio.QueueEmpty):
+        except (TimeoutError, asyncio.QueueEmpty):
             return None
 
     def get_stats(self) -> QueueStats:

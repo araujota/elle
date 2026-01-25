@@ -14,11 +14,11 @@ SAFETY-CRITICAL:
 
 import asyncio
 import logging
+from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import Any, Callable
+from typing import Any
 
 from elle.daemon.reboot.grub import (
-    GRUBError,
     clear_grub_oneshot,
     confirm_boot_success,
     get_boot_id,
@@ -30,9 +30,7 @@ from elle.daemon.reboot.grub import (
 )
 from elle.daemon.reboot.models import (
     AUTO_ROLLBACK_DELAY_SEC,
-    MAX_VERIFICATION_ATTEMPTS,
     STALE_REBOOT_THRESHOLD_HOURS,
-    GRUBState,
     PendingVerification,
     RebootIntent,
     RebootReason,
@@ -44,12 +42,10 @@ from elle.daemon.reboot.store import (
     get_intent,
     get_intents_by_status,
     mark_rebooting,
-    reset_verifications,
     update_intent_status,
     update_verification_result,
 )
 from elle.daemon.reboot.verifier import (
-    check_critical_services,
     collect_failure_diagnostics,
     run_verification_with_retry,
 )
@@ -466,14 +462,14 @@ class RebootManager:
             Incident ID if created/updated successfully.
         """
         try:
+            from elle.daemon.incidents.snapshot import collect_snapshot
             from elle.daemon.incidents.store import (
-                create_incident_draft,
                 append_action,
+                create_incident_draft,
                 finalize_outcome,
                 get_incident,
                 update_incident,
             )
-            from elle.daemon.incidents.snapshot import collect_snapshot
 
             # Build symptoms from diagnostics
             symptoms = []
@@ -529,8 +525,8 @@ class RebootManager:
 
             # Attach pre-reboot snapshot if available
             if intent.pre_snapshot_json:
-                from elle.daemon.incidents.store import attach_snapshot
                 from elle.daemon.incidents.models import SystemSnapshot
+                from elle.daemon.incidents.store import attach_snapshot
 
                 try:
                     pre_snapshot = SystemSnapshot(**intent.pre_snapshot_json)
@@ -665,7 +661,7 @@ class RebootManager:
                 # Intervention occurred - don't rollback
                 logger.info("Rollback cancelled by user intervention")
                 return
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
 
             # Timeout - proceed with rollback

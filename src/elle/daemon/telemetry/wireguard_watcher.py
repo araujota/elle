@@ -18,7 +18,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from elle.daemon.telemetry.queue import TelemetryQueue
@@ -100,7 +100,7 @@ class WireguardWatcher:
                     timeout=self._poll_interval,
                 )
                 break
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
 
         self._running = False
@@ -217,7 +217,7 @@ class WireguardWatcher:
         except FileNotFoundError:
             logger.debug("WireGuard tools not installed")
             return None
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("WireGuard command timed out")
             return None
         except Exception as e:

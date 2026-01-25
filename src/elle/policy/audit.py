@@ -8,12 +8,9 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import TextIO
-
-from pydantic import BaseModel
 
 from elle.policy.models import (
     PolicyAuditEntry,
@@ -143,7 +140,7 @@ class PolicyAuditLogger:
             # Count existing entries
             if self._audit_path.exists():
                 try:
-                    with open(self._audit_path, "r", encoding="utf-8") as f:
+                    with open(self._audit_path, encoding="utf-8") as f:
                         self._entry_count = sum(1 for _ in f)
                 except Exception:
                     self._entry_count = 0
@@ -166,7 +163,7 @@ class PolicyAuditLogger:
                 return
 
             # Read all entries
-            with open(self._audit_path, "r", encoding="utf-8") as f:
+            with open(self._audit_path, encoding="utf-8") as f:
                 lines = f.readlines()
 
             # Keep last half
@@ -216,7 +213,7 @@ class PolicyAuditLogger:
             return entries
 
         try:
-            with open(self._audit_path, "r", encoding="utf-8") as f:
+            with open(self._audit_path, encoding="utf-8") as f:
                 lines = f.readlines()
 
             # Apply offset and limit (from end)
@@ -261,7 +258,7 @@ class PolicyAuditLogger:
             return entries
 
         try:
-            with open(self._audit_path, "r", encoding="utf-8") as f:
+            with open(self._audit_path, encoding="utf-8") as f:
                 for line in reversed(f.readlines()):
                     if len(entries) >= limit:
                         break

@@ -11,10 +11,10 @@ import json
 import logging
 import re
 import uuid
+from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from pathlib import Path
-from typing import TYPE_CHECKING, AsyncIterator
+from typing import TYPE_CHECKING
 
 from elle.cli.engine import Engine, EngineResult, get_engine
 from elle.cli.terminal.classifier import IntentClassifier, get_classifier

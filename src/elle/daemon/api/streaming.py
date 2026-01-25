@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import TYPE_CHECKING, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
 from elle.daemon.api.openai_models import (
     ChatCompletionChunk,
@@ -18,7 +19,6 @@ from elle.daemon.api.openai_models import (
 )
 
 if TYPE_CHECKING:
-    from fastapi.responses import StreamingResponse
 
     from elle.daemon.api.auth import AuthContext
     from elle.daemon.api.engine_adapter import EngineAdapter
@@ -75,10 +75,10 @@ def _create_chunk(
 
 
 async def stream_chat_completion(
-    adapter: "EngineAdapter",
+    adapter: EngineAdapter,
     messages: tuple[ChatMessage, ...],
     mode: ExecutionMode,
-    auth: "AuthContext",
+    auth: AuthContext,
     model: str,
 ):
     """Create a streaming response for chat completions.

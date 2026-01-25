@@ -26,7 +26,6 @@ from elle.cli.engine import Engine, EngineAction, get_engine
 from elle.cli.setup import is_first_run, run_setup_wizard
 from elle.cli.ui import (
     EllePrompt,
-    Icons,
     clear,
     console,
     print_banner,
@@ -94,6 +93,9 @@ class REPL:
 
         # Show reboot/incident status
         self._show_startup_notices()
+
+        # Show one-time sponsor tip
+        self._maybe_show_sponsor_tip()
 
         try:
             while self._running:
@@ -195,6 +197,30 @@ class REPL:
                 pending_reboot=pending_reboot,
                 new_incidents=new_incidents,
             )
+
+    def _maybe_show_sponsor_tip(self) -> None:
+        """Show a one-time tip about sponsorship on first few runs."""
+        state_dir = Path.home() / ".local" / "state" / "elle"
+        tip_flag = state_dir / "sponsor_tip_shown"
+
+        # Only show if we haven't shown it before
+        if tip_flag.exists():
+            return
+
+        # Create the flag file to prevent showing again
+        try:
+            state_dir.mkdir(parents=True, exist_ok=True)
+            tip_flag.touch()
+        except OSError:
+            # Can't write flag, skip the tip to avoid repeat
+            return
+
+        # Show the tip
+        print_muted(
+            "Tip: ELLE is open source. If you find it useful, "
+            "type 'sponsor' to support development."
+        )
+        console.print()
 
     def _get_model_name(self) -> str | None:
         """Get the current LLM model name."""

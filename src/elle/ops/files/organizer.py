@@ -17,7 +17,6 @@ from elle.ops.files.models import (
     FileCategory,
     FileOp,
     FileRequest,
-    FileResult,
     OrganizeRequest,
     OrganizeResult,
 )

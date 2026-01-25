@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="{{ page.description | default: site.description }}">
+  <title>{{ page.title }} | {{ site.title }}</title>
+
+  <!-- Materialize CSS -->
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+
+  <!-- Custom Dark Theme -->
+  <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
+
+  <!-- Syntax Highlighting -->
+  <link rel="stylesheet" href="{{ '/assets/css/syntax.css' | relative_url }}">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="{{ '/assets/img/favicon.svg' | relative_url }}">
+</head>
+<body class="dark-theme">
+
+  <!-- Navigation -->
+  <nav class="nav-extended">
+    <div class="nav-wrapper">
+      <div class="container">
+        <a href="{{ '/' | relative_url }}" class="brand-logo">
+          <span class="logo-icon">&#x25C8;</span> ELLE
+        </a>
+        <a href="#" data-target="mobile-nav" class="sidenav-trigger"><i class="material-icons">menu</i></a>
+        <ul id="nav-mobile" class="right hide-on-med-and-down">
+          {% for item in site.nav %}
+          <li><a href="{{ item.url | relative_url }}"><i class="material-icons left">{{ item.icon }}</i>{{ item.title }}</a></li>
+          {% endfor %}
+          <li><a href="{{ site.github_repo }}" target="_blank"><i class="material-icons left">code</i>GitHub</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Mobile Navigation -->
+  <ul class="sidenav" id="mobile-nav">
+    <li><a href="{{ '/' | relative_url }}" class="brand-logo-sidenav"><span class="logo-icon">&#x25C8;</span> ELLE</a></li>
+    <li><div class="divider"></div></li>
+    {% for item in site.nav %}
+    <li><a href="{{ item.url | relative_url }}"><i class="material-icons">{{ item.icon }}</i>{{ item.title }}</a></li>
+    {% endfor %}
+    <li><a href="{{ site.github_repo }}" target="_blank"><i class="material-icons">code</i>GitHub</a></li>
+    <li><div class="divider"></div></li>
+    <li><a href="{{ site.github_sponsor }}" target="_blank" class="sponsor-link"><i class="material-icons">favorite</i>Sponsor</a></li>
+  </ul>
+
+  <!-- Main Content -->
+  <main>
+    <div class="container">
+      <div class="row">
+        <div class="col s12">
+          {{ content }}
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Sponsor Banner (floating) -->
+  <div class="sponsor-fab">
+    <a href="{{ site.github_sponsor }}" target="_blank" class="btn-floating btn-large pulse sponsor-btn tooltipped" data-position="left" data-tooltip="Support ELLE Development">
+      <i class="material-icons">favorite</i>
+    </a>
+  </div>
+
+  <!-- Footer -->
+  <footer class="page-footer">
+    <div class="container">
+      <div class="row">
+        <div class="col l6 s12">
+          <h5><span class="logo-icon">&#x25C8;</span> ELLE</h5>
+          <p class="grey-text text-lighten-4">
+            Local-first, agentic system intelligence for Ubuntu.<br>
+            Your AI-powered sysadmin that runs entirely on your machine.
+          </p>
+          <a href="{{ site.github_sponsor }}" target="_blank" class="btn waves-effect waves-light sponsor-btn-footer">
+            <i class="material-icons left">favorite</i>Support on GitHub
+          </a>
+        </div>
+        <div class="col l3 s6">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a class="grey-text text-lighten-3" href="{{ '/install' | relative_url }}">Quick Start</a></li>
+            <li><a class="grey-text text-lighten-3" href="{{ '/docs' | relative_url }}">User Guide</a></li>
+            <li><a class="grey-text text-lighten-3" href="{{ '/docs/hardware' | relative_url }}">Hardware</a></li>
+          </ul>
+        </div>
+        <div class="col l3 s6">
+          <h5>Community</h5>
+          <ul>
+            <li><a class="grey-text text-lighten-3" href="{{ site.github_repo }}">GitHub</a></li>
+            <li><a class="grey-text text-lighten-3" href="{{ site.github_repo }}/issues">Issues</a></li>
+            <li><a class="grey-text text-lighten-3" href="{{ site.github_repo }}/discussions">Discussions</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="footer-copyright">
+      <div class="container">
+        <span class="grey-text text-lighten-4">&copy; {{ site.time | date: '%Y' }} ELLE Project</span>
+        <span class="grey-text text-lighten-4 right">
+          Licensed under <a class="grey-text text-lighten-3" href="{{ site.github_repo }}/blob/main/LICENSE">GPL-3.0</a>
+        </span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Materialize JS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Initialize sidenav
+      var elems = document.querySelectorAll('.sidenav');
+      M.Sidenav.init(elems);
+
+      // Initialize tooltips
+      var tooltips = document.querySelectorAll('.tooltipped');
+      M.Tooltip.init(tooltips);
+
+      // Initialize collapsibles
+      var collapsibles = document.querySelectorAll('.collapsible');
+      M.Collapsible.init(collapsibles);
+    });
+  </script>
+</body>
+</html>

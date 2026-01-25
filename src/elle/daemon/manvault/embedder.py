@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import math
 import sqlite3
-from typing import Callable
+from collections.abc import Callable
 
 from elle.daemon.manvault.models import ManChunk
 from elle.daemon.manvault.schema import ensure_schema, get_connection
@@ -23,7 +23,6 @@ from elle.daemon.manvault.store import (
 from elle.rag.ollama_client import (
     OllamaClient,
     OllamaError,
-    OllamaUnavailableError,
     get_client,
 )
 

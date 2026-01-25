@@ -198,7 +198,7 @@ async def generate_and_save(
     return cap_id
 
 
-def load_capabilities(registry: "CapabilityRegistry | None" = None) -> int:
+def load_capabilities(registry: CapabilityRegistry | None = None) -> int:
     """Load all approved capabilities.
 
     Args:

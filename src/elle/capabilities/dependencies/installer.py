@@ -57,9 +57,9 @@ class DependencyInstaller:
 
     def __init__(
         self,
-        registry: "DependencyRegistry",
-        checker: "DependencyChecker",
-        store: "DependencyPreferenceStore",
+        registry: DependencyRegistry,
+        checker: DependencyChecker,
+        store: DependencyPreferenceStore,
     ) -> None:
         """Initialize the installer.
 

@@ -10,8 +10,9 @@ Implements:
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from elle.daemon.api.auth import AuthContext, get_auth_context
 from elle.daemon.api.models import (
     ActionResponse,
     ErrorResponse,
@@ -62,10 +63,16 @@ def get_daemon() -> "ElledDaemon":
 @router.get(
     "/status",
     response_model=StatusResponse,
-    responses={503: {"model": ErrorResponse}},
+    responses={
+        401: {"description": "Authentication required"},
+        503: {"model": ErrorResponse},
+    },
 )
-async def get_status() -> StatusResponse:
-    """Get daemon status and health information."""
+async def get_status(
+    auth: AuthContext = Depends(get_auth_context),
+) -> StatusResponse:
+    """Get daemon status and health information. Requires authentication."""
+    _ = auth
     daemon = get_daemon()
     status = daemon.get_status()
 
@@ -111,7 +118,10 @@ async def get_status() -> StatusResponse:
 @router.get(
     "/events",
     response_model=EventsResponse,
-    responses={503: {"model": ErrorResponse}},
+    responses={
+        401: {"description": "Authentication required"},
+        503: {"model": ErrorResponse},
+    },
 )
 async def get_events(
     since: datetime | None = Query(None, description="Events after this time"),
@@ -123,8 +133,10 @@ async def get_events(
     search: str | None = Query(None, description="Full-text search"),
     limit: int = Query(100, ge=1, le=1000, description="Max results"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
+    auth: AuthContext = Depends(get_auth_context),
 ) -> EventsResponse:
-    """Query telemetry events with filters."""
+    """Query telemetry events with filters. Requires authentication."""
+    _ = auth
     get_daemon()  # Verify daemon is running
 
     try:
@@ -180,7 +192,10 @@ async def get_events(
 @router.get(
     "/incidents",
     response_model=IncidentsResponse,
-    responses={503: {"model": ErrorResponse}},
+    responses={
+        401: {"description": "Authentication required"},
+        503: {"model": ErrorResponse},
+    },
 )
 async def get_incidents(
     since: datetime | None = Query(None, description="Incidents after this time"),
@@ -190,8 +205,10 @@ async def get_incidents(
     search: str | None = Query(None, description="Full-text search"),
     limit: int = Query(100, ge=1, le=1000, description="Max results"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
+    auth: AuthContext = Depends(get_auth_context),
 ) -> IncidentsResponse:
-    """Query incidents with filters."""
+    """Query incidents with filters. Requires authentication."""
+    _ = auth
     get_daemon()  # Verify daemon is running
 
     try:
@@ -244,12 +261,17 @@ async def get_incidents(
     "/incident/{incident_id}",
     response_model=IncidentDetailResponse,
     responses={
+        401: {"description": "Authentication required"},
         404: {"model": ErrorResponse},
         503: {"model": ErrorResponse},
     },
 )
-async def get_incident(incident_id: str) -> IncidentDetailResponse:
-    """Get full incident details by ID."""
+async def get_incident(
+    incident_id: str,
+    auth: AuthContext = Depends(get_auth_context),
+) -> IncidentDetailResponse:
+    """Get full incident details by ID. Requires authentication."""
+    _ = auth
     get_daemon()  # Verify daemon is running
 
     try:

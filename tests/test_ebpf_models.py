@@ -199,6 +199,6 @@ class TestEventMappings:
 
     def test_categories_are_valid(self):
         """Test that all categories are valid telemetry categories."""
-        valid_categories = {"oom", "disk", "net", "service", "thermal", "other"}
+        valid_categories = {"oom", "disk", "net", "service", "thermal", "syscall", "other"}
         for category in EBPF_EVENT_CATEGORIES.values():
             assert category in valid_categories, f"Invalid category: {category}"

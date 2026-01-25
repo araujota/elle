@@ -84,6 +84,32 @@ Example Usage:
 """
 
 # Models
+# GRUB
+from elle.daemon.reboot.grub import (
+    GRUBError,
+    GRUBResult,
+    clear_grub_oneshot,
+    confirm_boot_success,
+    detect_grub_mode,
+    get_boot_id,
+    get_grub_default,
+    get_grub_entries,
+    get_grub_state,
+    get_saved_default,
+    has_rebooted_since,
+    is_grub_available,
+    prepare_rollback,
+    set_grub_default,
+    set_grub_oneshot,
+    trigger_rollback_reboot,
+)
+
+# Manager
+from elle.daemon.reboot.manager import (
+    RebootManager,
+    RebootManagerError,
+    get_manager,
+)
 from elle.daemon.reboot.models import (
     AUTO_ROLLBACK_DELAY_SEC,
     CRITICAL_MOUNT_POINTS,
@@ -135,26 +161,6 @@ from elle.daemon.reboot.store import (
     update_verification_result,
 )
 
-# GRUB
-from elle.daemon.reboot.grub import (
-    GRUBError,
-    GRUBResult,
-    clear_grub_oneshot,
-    confirm_boot_success,
-    detect_grub_mode,
-    get_boot_id,
-    get_grub_default,
-    get_grub_entries,
-    get_grub_state,
-    get_saved_default,
-    has_rebooted_since,
-    is_grub_available,
-    prepare_rollback,
-    set_grub_default,
-    set_grub_oneshot,
-    trigger_rollback_reboot,
-)
-
 # Verifier
 from elle.daemon.reboot.verifier import (
     VerificationResult,
@@ -171,13 +177,6 @@ from elle.daemon.reboot.verifier import (
     run_all_verifications,
     run_verification,
     run_verification_with_retry,
-)
-
-# Manager
-from elle.daemon.reboot.manager import (
-    RebootManager,
-    RebootManagerError,
-    get_manager,
 )
 
 __all__ = [

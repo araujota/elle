@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Callable, Iterator
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from elle.atspi.models import AccessibleApp, UIElement
 
@@ -663,7 +664,7 @@ class ATSPIClient:
                 action_iface = element.queryAction()
 
             if not action_iface:
-                logger.warning(f"Element has no action interface")
+                logger.warning("Element has no action interface")
                 return False
 
             # Find action index

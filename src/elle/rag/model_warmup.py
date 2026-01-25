@@ -23,7 +23,7 @@ import asyncio
 import logging
 import re
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -286,7 +286,7 @@ class ModelWarmupService:
             return WarmupResult(
                 success=True,
                 model=model,
-                message=f"Model warmed successfully",
+                message="Model warmed successfully",
                 duration_ms=duration_ms,
             )
 

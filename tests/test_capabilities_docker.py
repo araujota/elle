@@ -7,6 +7,8 @@ from unittest.mock import MagicMock, patch
 
 from elle.capabilities.core.docker import (
     DOCKER_CAPABILITIES,
+    DockerDiagnoseCapability,
+    DockerDiagnoseInput,
     DockerInspectCapability,
     DockerInspectInput,
     DockerListCapability,
@@ -293,12 +295,197 @@ class TestDockerListCapability:
         assert result.output.total == 0
 
 
+class TestDockerDiagnoseCapability:
+    """Tests for DockerDiagnoseCapability."""
+
+    def test_spec(self):
+        """Test capability spec is valid."""
+        cap = DockerDiagnoseCapability()
+        spec = cap.spec
+
+        assert spec.name == "docker.diagnose"
+        assert spec.domain == "docker"
+        assert spec.risk == "none"
+        assert spec.requires_privilege is False
+        assert spec.side_effects == ()
+        assert spec.idempotent is True
+
+    @patch("elle.capabilities.core.docker._is_docker_available")
+    def test_dry_run_docker_not_available(self, mock_available):
+        """Test dry run when docker is not available."""
+        mock_available.return_value = False
+
+        cap = DockerDiagnoseCapability()
+        input_data = DockerDiagnoseInput(container="test")
+
+        result = cap.dry_run(input_data)
+
+        assert result.is_valid is False
+        assert "not available" in result.preview_text.lower()
+
+    @patch("elle.capabilities.core.docker._is_docker_available")
+    @patch("elle.capabilities.core.docker._run_docker_command")
+    def test_dry_run_container_not_found(self, mock_run, mock_available):
+        """Test dry run with nonexistent container."""
+        mock_available.return_value = True
+        mock_run.return_value = MagicMock(returncode=1, stdout="")
+
+        cap = DockerDiagnoseCapability()
+        input_data = DockerDiagnoseInput(container="nonexistent")
+
+        result = cap.dry_run(input_data)
+
+        assert result.is_valid is False
+        assert "not found" in result.preview_text.lower()
+
+    @patch("elle.capabilities.core.docker._is_docker_available")
+    @patch("elle.cli.docker.diagnostics.diagnose_container_restart")
+    def test_run_wraps_diagnostics_module(self, mock_diagnose, mock_available):
+        """Should wrap existing diagnostics.py function."""
+        mock_available.return_value = True
+
+        # Create mock diagnosis result
+        from elle.cli.docker.diagnostics import ContainerDiagnosis, ContainerInfo
+
+        mock_container = ContainerInfo(
+            id="abc123def456",
+            name="test-nginx",
+            image="nginx:latest",
+            status="exited",
+            state="exited",
+            exit_code=137,
+            restart_count=3,
+            oom_killed=True,
+        )
+        mock_diagnosis = ContainerDiagnosis(
+            container=mock_container,
+            summary="Container was killed due to memory exhaustion",
+            likely_cause="Out of memory (OOM) kill",
+            causes=("Container was killed by OOM",),
+            logs_excerpt="Out of memory: Killed process",
+            recommendations=("Increase memory limit",),
+            severity="error",
+        )
+        mock_diagnose.return_value = mock_diagnosis
+
+        cap = DockerDiagnoseCapability()
+        result = cap.run(DockerDiagnoseInput(container="abc123"))
+
+        assert result.success is True
+        assert result.output.likely_cause == "Out of memory (OOM) kill"
+        assert result.output.severity == "error"
+        assert result.output.oom_killed is True
+        mock_diagnose.assert_called_once_with("abc123")
+
+    @patch("elle.capabilities.core.docker._is_docker_available")
+    @patch("elle.cli.docker.diagnostics.diagnose_container_restart")
+    def test_evidence_includes_docker_commands(self, mock_diagnose, mock_available):
+        """Evidence should list docker inspect/logs commands."""
+        mock_available.return_value = True
+
+        from elle.cli.docker.diagnostics import ContainerDiagnosis, ContainerInfo
+
+        mock_container = ContainerInfo(
+            id="test123",
+            name="test",
+            image="test:latest",
+            status="exited",
+            state="exited",
+        )
+        mock_diagnose.return_value = ContainerDiagnosis(
+            container=mock_container,
+            summary="Test",
+            likely_cause="Unknown",
+            severity="info",
+        )
+
+        cap = DockerDiagnoseCapability()
+        result = cap.run(DockerDiagnoseInput(container="test123"))
+
+        assert result.success is True
+        assert "docker inspect test123" in result.evidence.commands_executed
+        assert "docker logs" in str(result.evidence.commands_executed)
+
+    @patch("elle.capabilities.core.docker._is_docker_available")
+    @patch("elle.cli.docker.diagnostics.diagnose_container_restart")
+    def test_handles_container_not_found(self, mock_diagnose, mock_available):
+        """Should handle missing container gracefully."""
+        mock_available.return_value = True
+        mock_diagnose.side_effect = Exception("No such container: missing")
+
+        cap = DockerDiagnoseCapability()
+        result = cap.run(DockerDiagnoseInput(container="missing"))
+
+        assert result.success is False
+        assert "not found" in result.error.lower() or "No such container" in result.error
+
+
+class TestDockerAutodiagnoseReactiveTemplate:
+    """Tests for the reactive function template."""
+
+    def test_template_exists(self):
+        """Template should be importable."""
+        from elle.reactive.templates import DOCKER_AUTO_DIAGNOSE
+
+        assert DOCKER_AUTO_DIAGNOSE is not None
+        assert DOCKER_AUTO_DIAGNOSE.id == "builtin:docker-auto-diagnose"
+
+    def test_template_trigger_matches_death_events(self):
+        """Template should trigger on die, oom, kill events."""
+        from elle.reactive.templates import DOCKER_AUTO_DIAGNOSE
+
+        trigger = DOCKER_AUTO_DIAGNOSE.trigger
+        assert trigger.type == "event"
+        assert trigger.event is not None
+        assert trigger.event.source == "probe"
+        assert trigger.event.category == "docker"
+
+        # Check match patterns include death events
+        match = trigger.event.match
+        assert "$or" in match
+        or_conditions = match["$or"]
+        event_types = [c.get("_DOCKER_EVENT") for c in or_conditions]
+        assert "die" in event_types
+        assert "oom" in event_types
+        assert "kill" in event_types
+
+    def test_template_invokes_diagnose_capability(self):
+        """Template action should invoke docker.diagnose."""
+        from elle.reactive.templates import DOCKER_AUTO_DIAGNOSE
+
+        assert len(DOCKER_AUTO_DIAGNOSE.actions) == 1
+        assert DOCKER_AUTO_DIAGNOSE.actions[0].capability == "docker.diagnose"
+        assert "container" in DOCKER_AUTO_DIAGNOSE.actions[0].input
+
+    def test_template_has_rate_limiting(self):
+        """Template should rate-limit to avoid crashloop spam."""
+        from elle.reactive.templates import DOCKER_AUTO_DIAGNOSE
+
+        policy = DOCKER_AUTO_DIAGNOSE.policy
+        assert policy.max_frequency is not None
+        assert policy.max_frequency == "1m"
+        assert policy.require_confirmation is False
+
+    def test_template_is_enabled_by_default(self):
+        """Docker diagnose template should be enabled by default."""
+        from elle.reactive.templates import DOCKER_AUTO_DIAGNOSE
+
+        assert DOCKER_AUTO_DIAGNOSE.enabled is True
+
+    def test_builtin_templates_list(self):
+        """BUILTIN_TEMPLATES should include docker-auto-diagnose."""
+        from elle.reactive.templates import BUILTIN_TEMPLATES
+
+        template_ids = [t.id for t in BUILTIN_TEMPLATES]
+        assert "builtin:docker-auto-diagnose" in template_ids
+
+
 class TestDockerCapabilitiesRegistry:
     """Tests for Docker capabilities registration."""
 
     def test_all_capabilities_exported(self):
         """Test all capabilities are in DOCKER_CAPABILITIES."""
-        assert len(DOCKER_CAPABILITIES) == 5
+        assert len(DOCKER_CAPABILITIES) == 7
 
         names = {cap().spec.name for cap in DOCKER_CAPABILITIES}
         expected = {
@@ -307,5 +494,7 @@ class TestDockerCapabilitiesRegistry:
             "docker.inspect",
             "docker.rollback",
             "docker.list",
+            "docker.diagnose",
+            "docker.configure-env",
         }
         assert names == expected

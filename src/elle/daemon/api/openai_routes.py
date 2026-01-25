@@ -30,7 +30,7 @@ from elle.daemon.api.openai_models import (
     ChatCompletionResponse,
     ModelsListResponse,
 )
-from elle.daemon.api.streaming import stream_chat_completion, stream_error
+from elle.daemon.api.streaming import stream_chat_completion
 
 if TYPE_CHECKING:
     pass
@@ -143,21 +143,41 @@ async def chat_completions(
 @openai_router.get(
     "/models",
     response_model=ModelsListResponse,
+    responses={
+        401: {"description": "Authentication required"},
+    },
 )
-async def list_models() -> ModelsListResponse:
+async def list_models(
+    auth: AuthContext = Depends(get_auth_context),
+) -> ModelsListResponse:
     """List available models.
 
     Returns the three ELLE execution modes as models:
     - `elle`: Full execution mode
     - `elle.readonly`: Read-only mode
     - `elle.capabilities_only`: Returns capabilities without execution
+
+    Requires authentication.
     """
+    # Auth is enforced by dependency - if we get here, request is authenticated
+    _ = auth  # Mark as used
     return ModelsListResponse(data=ELLE_MODELS)
 
 
-@openai_router.get("/models/{model_id}")
-async def get_model(model_id: str):
+@openai_router.get(
+    "/models/{model_id}",
+    responses={
+        401: {"description": "Authentication required"},
+        404: {"description": "Model not found"},
+    },
+)
+async def get_model(
+    model_id: str,
+    auth: AuthContext = Depends(get_auth_context),
+):
     """Get information about a specific model.
+
+    Requires authentication.
 
     Args:
         model_id: The model ID to retrieve.
@@ -168,6 +188,7 @@ async def get_model(model_id: str):
     Raises:
         HTTPException: If model not found.
     """
+    _ = auth  # Mark as used
     for model in ELLE_MODELS:
         if model.id == model_id:
             return model

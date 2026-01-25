@@ -15,16 +15,12 @@ import sqlite3
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
-
 from elle.daemon.manvault.embedder import cosine_similarity, get_embedder
 from elle.daemon.manvault.models import ManSnippet
 from elle.daemon.manvault.schema import ensure_schema, get_connection
 from elle.daemon.manvault.store import (
     get_all_embeddings,
-    get_chunks_for_doc,
     get_doc,
-    get_doc_by_id,
 )
 from elle.rag.ollama_client import OllamaError
 

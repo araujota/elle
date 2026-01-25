@@ -19,7 +19,7 @@ import logging
 import re
 import socket
 import subprocess
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -157,7 +157,7 @@ def _check_route(target: str) -> ConnectivityCheck:
             return ConnectivityCheck(
                 name="Route Check",
                 passed=False,
-                result=f"Cannot determine route: DNS resolution failed",
+                result="Cannot determine route: DNS resolution failed",
                 details={"target": target},
             )
 
@@ -414,7 +414,7 @@ def _check_tcp_connection(target: str, port: int, timeout: float = 5.0) -> Conne
                 details={"target": target, "port": port, "error_code": result},
             )
 
-    except socket.timeout:
+    except TimeoutError:
         return ConnectivityCheck(
             name="TCP Connection",
             passed=False,
@@ -527,7 +527,7 @@ def diagnose_connectivity(
     checks.append(route_check)
 
     if not route_check.passed:
-        suggestions.append(f"Check routing table: ip route")
+        suggestions.append("Check routing table: ip route")
         suggestions.append("Verify network interface is up: ip link show")
 
         return ConnectivityDiagnosis(

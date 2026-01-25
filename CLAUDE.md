@@ -92,6 +92,74 @@ mypy src/                 # Type check
 - **Explain → Plan → Confirm → Apply**: Never silently mutate the system
 - **Pydantic everywhere**: All data objects, inputs, outputs, API boundaries use Pydantic models
 
+## CRITICAL: Daemon & Capability Primacy
+
+**THIS SECTION IS NON-NEGOTIABLE. Any deviation requires explicit petition to the user with a written justification explaining why the core architecture cannot support the requirement.**
+
+ELLE's architecture rests on two foundational pillars that must never be bypassed:
+
+### 1. The Daemon Owns ALL Passive Monitoring
+
+The daemon (`elled`) is the **sole owner** of all passive system observation. Period. Full stop.
+
+- **Telemetry ingestion**: Journal, kernel, eBPF, inotify, probes - ALL flow through the daemon
+- **Event correlation**: The daemon normalizes, deduplicates, and fingerprints events
+- **State tracking**: System state changes are detected and recorded by the daemon
+- **No CLI polling**: The CLI never polls or monitors - it queries the daemon or reacts to daemon events
+
+**Why this matters:** Centralized observation enables consistent event handling, prevents race conditions, reduces system load, and ensures complete audit trails.
+
+### 2. Capabilities Are Atomic Building Blocks
+
+Capabilities are **not** wrappers around shell commands. They are typed, policy-governed, auditable operations that serve as the fundamental units of system mutation.
+
+**Capabilities must:**
+- Have explicit input/output schemas (Pydantic models)
+- Declare their risk level and side effects
+- Be governed by the Policy Engine
+- Produce evidence of execution for incident records
+- Be composable by the Planner
+
+**The Planner constructs plans from Capabilities**, not from raw commands. Plans are recorded in Incident Reports with full provenance, enabling:
+- Pattern matching against prior decisions
+- Rollback through capability reversal
+- Policy enforcement at every step
+
+### 3. New Functionality Must Emerge from Core Systems
+
+When new functionality is requested, it **must** come through one of these channels:
+
+| Channel | Examples |
+|---------|----------|
+| **Daemon upgrades** | New watchers, probes, eBPF programs, telemetry sources |
+| **New Capabilities** | Typed operations added to the registry |
+| **Planner improvements** | Better retrieval, synthesis, or plan generation |
+| **Core data objects** | Extended models for Session, Incident, TelemetryEvent |
+| **Reactive Functions** | User-defined automations that compose capabilities |
+
+### 4. "Arms" Are an Absolute Last Resort
+
+An "arm" is a hardcoded flow that bypasses the capability system - direct shell commands, bespoke handlers, or domain-specific modules that don't integrate with the core.
+
+**Arms may only be built when:**
+- There is a **specific safety or reliability reason** the core cannot be trusted
+- The justification is **documented in this file** or in code comments
+- The user has **explicitly approved** the deviation
+
+**Expected frequency:** Exceedingly rare. If you find yourself building arms regularly, the core architecture needs improvement, not workarounds.
+
+### Petition Process
+
+To supersede this principle:
+
+1. **State the requirement** that cannot be met by the core
+2. **Explain why** daemon/capabilities/planner cannot support it
+3. **Propose the deviation** with scope and boundaries
+4. **Document the tradeoff** - what is lost by bypassing the core
+5. **Obtain explicit user approval** before implementation
+
+---
+
 ## Self-Building Architecture
 
 ELLE is designed to **build itself** rather than accumulate discrete feature modules. New functionality should expand the core systems - not extend from them as separate arms.

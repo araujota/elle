@@ -12,10 +12,10 @@ from rich.panel import Panel
 from rich.text import Text
 
 from elle.cli.ui.console import console
-from elle.cli.ui.theme import Colors, Icons, Theme
+from elle.cli.ui.theme import Colors, Icons
 
 if TYPE_CHECKING:
-    from elle.cli.ui.status import SystemStatus
+    pass
 
 # Hand-crafted ASCII logo - compact and readable
 LOGO = r"""
@@ -173,8 +173,8 @@ def print_banner(
 def _print_startup_tips() -> None:
     """Print helpful tips after banner."""
     tips = [
-        f"Type [accent]/help[/accent] for commands",
-        f"Type [accent]exit[/accent] or press [accent]Ctrl+D[/accent] to quit",
+        "Type [accent]/help[/accent] for commands",
+        "Type [accent]exit[/accent] or press [accent]Ctrl+D[/accent] to quit",
     ]
     tip_text = " │ ".join(tips)
     console.print(f"[muted]{tip_text}[/muted]")

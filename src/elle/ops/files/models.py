@@ -7,10 +7,9 @@ and organization operations.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-
 
 # =============================================================================
 # Operation Types

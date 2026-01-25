@@ -15,7 +15,6 @@ import logging
 import re
 import time
 from datetime import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -67,6 +66,7 @@ class PlannerService:
         use_incident_vault: bool = True,
         command_timeout: float = 60.0,
         use_capabilities: bool = True,
+        use_preflight: bool = True,
     ) -> None:
         """Initialize the planner service.
 
@@ -75,12 +75,15 @@ class PlannerService:
             use_incident_vault: Whether to use Incident Vault for prior art.
             command_timeout: Timeout for command execution in seconds.
             use_capabilities: Whether to use capability-based execution.
+            use_preflight: Whether to use preflight validation for packages.
         """
         self.use_man_vault = use_man_vault
         self.use_incident_vault = use_incident_vault
         self.command_timeout = command_timeout
         self.use_capabilities = use_capabilities
+        self.use_preflight = use_preflight
         self._capability_executor = None
+        self._preflight_validator = None
 
     @property
     def capability_executor(self):
@@ -92,6 +95,17 @@ class PlannerService:
             except ImportError:
                 logger.debug("Capabilities not available")
         return self._capability_executor
+
+    @property
+    def preflight_validator(self):
+        """Get the preflight validator (lazy initialization)."""
+        if self._preflight_validator is None and self.use_preflight:
+            try:
+                from elle.ops.preflight import get_validator
+                self._preflight_validator = get_validator()
+            except ImportError:
+                logger.debug("Preflight module not available")
+        return self._preflight_validator
 
     def build_context(
         self,
@@ -231,6 +245,7 @@ class PlannerService:
         result: PlanResult,
         session: Session,
         stop_on_failure: bool = True,
+        skip_preflight: bool = False,
     ) -> PlanResult:
         """Execute an approved plan.
 
@@ -238,6 +253,7 @@ class PlannerService:
             result: Approved PlanResult.
             session: Current session state.
             stop_on_failure: Whether to stop on first failure.
+            skip_preflight: Whether to skip preflight validation.
 
         Returns:
             Updated PlanResult with execution results.
@@ -248,6 +264,15 @@ class PlannerService:
         result = result.with_approved()
         plan = result.plan
         all_succeeded = True
+
+        # Run preflight validation for package operations
+        if not skip_preflight and self.use_preflight:
+            can_proceed, preflight_msg = self.run_preflight_for_plan(plan)
+            if preflight_msg:
+                logger.info(f"Preflight results:\n{preflight_msg}")
+            if not can_proceed:
+                logger.warning("Preflight validation failed, blocking execution")
+                return result.with_outcome(PlanOutcome.ERROR)
 
         # Execute each step
         for i, step in enumerate(plan.steps):
@@ -350,6 +375,153 @@ class PlannerService:
 
         return result
 
+    def run_preflight_for_plan(self, plan: CommandPlan) -> tuple[bool, str | None]:
+        """Run preflight validation for package operations in a plan.
+
+        Detects package operations (apt install, apt upgrade, apt remove)
+        and runs appropriate validation before execution.
+
+        Args:
+            plan: The command plan to validate.
+
+        Returns:
+            Tuple of (can_proceed, validation_message).
+            can_proceed is True if all validations pass.
+            validation_message contains formatted results or None if no validation needed.
+        """
+        if not self.preflight_validator:
+            return (True, None)
+
+        # Extract package operations from plan
+        package_ops = self._extract_package_operations(plan)
+
+        if not package_ops:
+            return (True, None)
+
+        try:
+            from elle.ops.preflight import format_result_for_display
+            from elle.ops.preflight.models import PreflightStatus, PreflightTest
+
+            all_results = []
+            can_proceed = True
+
+            for packages, operation in package_ops:
+                test = PreflightTest(
+                    packages=packages,
+                    operation=operation,
+                )
+                result = self.preflight_validator.validate(test)
+                all_results.append((packages, operation, result))
+
+                if result.status == PreflightStatus.BLOCKED:
+                    can_proceed = False
+
+            # Format results
+            if all_results:
+                lines = ["", "━━━ Pre-flight Validation ━━━", ""]
+                for packages, operation, result in all_results:
+                    pkg_str = ", ".join(packages[:3])
+                    if len(packages) > 3:
+                        pkg_str += f" (+{len(packages) - 3} more)"
+                    lines.append(f"Operation: {operation} {pkg_str}")
+                    lines.append(format_result_for_display(result, use_colors=True))
+                    lines.append("")
+
+                return (can_proceed, "\n".join(lines))
+
+            return (True, None)
+
+        except Exception as e:
+            logger.warning(f"Preflight validation failed: {e}")
+            return (True, f"Preflight check skipped: {e}")
+
+    def _extract_package_operations(
+        self,
+        plan: CommandPlan,
+    ) -> list[tuple[tuple[str, ...], str]]:
+        """Extract package operations from a plan.
+
+        Parses plan steps to find apt/dpkg commands and extracts
+        the packages being installed, upgraded, or removed.
+
+        Args:
+            plan: The command plan.
+
+        Returns:
+            List of (packages, operation) tuples.
+        """
+        operations = []
+
+        # Patterns for package operations
+        apt_install_pattern = re.compile(
+            r"(?:apt(?:-get)?|dpkg)\s+(?:-\w+\s+)*install\s+(?:-\w+\s+)*(.+)",
+            re.IGNORECASE,
+        )
+        apt_upgrade_pattern = re.compile(
+            r"(?:apt(?:-get)?)\s+(?:-\w+\s+)*(?:upgrade|dist-upgrade|full-upgrade)",
+            re.IGNORECASE,
+        )
+        apt_remove_pattern = re.compile(
+            r"(?:apt(?:-get)?|dpkg)\s+(?:-\w+\s+)*(?:remove|purge)\s+(?:-\w+\s+)*(.+)",
+            re.IGNORECASE,
+        )
+
+        for step in plan.steps:
+            command = step.command or ""
+
+            # Check for install
+            match = apt_install_pattern.search(command)
+            if match:
+                packages = self._parse_package_list(match.group(1))
+                if packages:
+                    operations.append((packages, "install"))
+                continue
+
+            # Check for upgrade
+            if apt_upgrade_pattern.search(command):
+                # For full upgrade, we can't know packages in advance
+                # but we can still trigger preflight for the operation
+                operations.append((("upgrade",), "upgrade"))
+                continue
+
+            # Check for remove
+            match = apt_remove_pattern.search(command)
+            if match:
+                packages = self._parse_package_list(match.group(1))
+                if packages:
+                    operations.append((packages, "remove"))
+                continue
+
+        return operations
+
+    def _parse_package_list(self, package_string: str) -> tuple[str, ...]:
+        """Parse a package list from a command string.
+
+        Args:
+            package_string: String containing package names.
+
+        Returns:
+            Tuple of package names.
+        """
+        # Split by whitespace and filter out flags
+        tokens = package_string.split()
+        packages = []
+
+        for token in tokens:
+            # Skip flags
+            if token.startswith("-"):
+                continue
+            # Skip common apt options
+            if token in ("--", "-y", "--yes", "--force-yes", "--no-install-recommends"):
+                continue
+            # Skip version specifiers that start with operators
+            if token.startswith(("=", ">", "<")):
+                continue
+            # Valid package name
+            packages.append(token)
+
+        return tuple(packages)
+
     # =========================================================================
     # Private Methods
     # =========================================================================
@@ -361,6 +533,8 @@ class PlannerService:
     ) -> tuple[ManDocContext, ...]:
         """Search Man Vault for relevant documentation.
 
+        Uses daemon API when available, falling back to direct store access.
+
         Args:
             request: The task request.
             entities: Detected entities.
@@ -368,13 +542,43 @@ class PlannerService:
         Returns:
             Tuple of ManDocContext.
         """
+        # Build query from request and entities
+        query = request
+        if entities:
+            query += " " + " ".join(entities)
+
+        # Try daemon API first (daemon primacy)
+        try:
+            import asyncio
+
+            from elle.cli.daemon_client import get_daemon_client
+
+            client = get_daemon_client()
+
+            async def search_via_daemon() -> list[dict]:
+                if not await client.is_daemon_available():
+                    return []
+                return await client.search_manvault(query=query, limit=4)
+
+            results = asyncio.get_event_loop().run_until_complete(search_via_daemon())
+
+            if results:
+                docs = []
+                for r in results:
+                    docs.append(ManDocContext(
+                        name=r.get("command", ""),
+                        section=r.get("section", ""),
+                        snippet=r.get("snippet", ""),
+                        flags_used=(),
+                    ))
+                logger.debug(f"Got {len(docs)} man docs from daemon API")
+                return tuple(docs)
+        except Exception as e:
+            logger.debug(f"Daemon API man vault search failed: {e}")
+
+        # Fallback to direct store access
         try:
             from elle.daemon.manvault import search
-
-            # Build query from request and entities
-            query = request
-            if entities:
-                query += " " + " ".join(entities)
 
             results = search(query, k=4, search_type="hybrid")
 
@@ -403,6 +607,8 @@ class PlannerService:
     ) -> tuple[PriorPlanContext, ...]:
         """Search Incident Vault for similar past plans.
 
+        Uses daemon API when available, falling back to direct store access.
+
         Args:
             request: The task request.
             entities: Detected entities.
@@ -410,13 +616,47 @@ class PlannerService:
         Returns:
             Tuple of PriorPlanContext.
         """
+        # Build query
+        query = request
+        if entities:
+            query += " " + " ".join(entities)
+
+        # Try daemon API first (daemon primacy)
+        try:
+            import asyncio
+
+            from elle.cli.daemon_client import get_daemon_client
+
+            client = get_daemon_client()
+
+            async def search_via_daemon() -> list[dict]:
+                if not await client.is_daemon_available():
+                    return []
+                return await client.search_incidents(query=query, limit=3)
+
+            results = asyncio.get_event_loop().run_until_complete(search_via_daemon())
+
+            if results:
+                contexts = []
+                for art in results:
+                    contexts.append(PriorPlanContext(
+                        incident_id=art.get("incident_id", ""),
+                        title=art.get("title", ""),
+                        outcome=art.get("outcome", "unknown"),
+                        plan_summary=art.get("summary", ""),
+                        commands_executed=(),  # Not available via simple API
+                        rollback_used=False,
+                        score=art.get("score", 0.0),
+                        days_ago=0,
+                    ))
+                logger.debug(f"Got {len(contexts)} prior plans from daemon API")
+                return tuple(contexts)
+        except Exception as e:
+            logger.debug(f"Daemon API prior plan search failed: {e}")
+
+        # Fallback to direct store access (for full-featured search)
         try:
             from elle.daemon.incidents import get_prior_art
-
-            # Build query
-            query = request
-            if entities:
-                query += " " + " ".join(entities)
 
             prior = get_prior_art(
                 query=query,
@@ -497,208 +737,90 @@ class PlannerService:
         return False
 
     def _get_docker_state(self) -> DockerState:
-        """Get current Docker environment state.
+        """Get current Docker environment state from daemon.
+
+        Queries the daemon's cached state instead of making direct
+        subprocess calls. Falls back to subprocess if daemon unavailable.
 
         Returns:
             DockerState with current container/image info.
         """
-        import subprocess
+        import asyncio
+
+        from elle.cli.daemon_client import get_daemon_client
 
         try:
-            # Check if Docker is available
-            result = subprocess.run(
-                ["docker", "info"],
-                capture_output=True,
-                text=True,
-                timeout=5,
+            client = get_daemon_client()
+            daemon_state = asyncio.get_event_loop().run_until_complete(
+                client.get_docker_state()
             )
-            docker_available = result.returncode == 0
 
-            if not docker_available:
-                return DockerState(docker_available=False)
-
-            # Get running containers
-            result = subprocess.run(
-                ["docker", "ps", "--format", "{{json .}}"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            containers = []
-            if result.returncode == 0:
-                import json
-                for line in result.stdout.strip().split("\n"):
-                    if line:
-                        try:
-                            containers.append(json.loads(line))
-                        except json.JSONDecodeError:
-                            pass
-
-            # Get images
-            result = subprocess.run(
-                ["docker", "images", "--format", "{{.Repository}}:{{.Tag}}"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            images = []
-            if result.returncode == 0:
-                images = [i for i in result.stdout.strip().split("\n") if i and i != "<none>:<none>"]
-
-            # Get networks
-            result = subprocess.run(
-                ["docker", "network", "ls", "--format", "{{.Name}}"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            networks = []
-            if result.returncode == 0:
-                networks = [n for n in result.stdout.strip().split("\n") if n]
-
-            # Get volumes
-            result = subprocess.run(
-                ["docker", "volume", "ls", "--format", "{{.Name}}"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            volumes = []
-            if result.returncode == 0:
-                volumes = [v for v in result.stdout.strip().split("\n") if v]
+            # Convert daemon client's ContainerInfo to dict format expected by planner
+            containers = [
+                {
+                    "ID": c.id,
+                    "Names": c.names,
+                    "Image": c.image,
+                    "Status": c.status,
+                    "State": c.state,
+                    "Ports": c.ports,
+                }
+                for c in daemon_state.running_containers
+            ]
 
             return DockerState(
                 running_containers=tuple(containers),
-                images=tuple(images[:20]),  # Limit to 20
-                networks=tuple(networks),
-                volumes=tuple(volumes[:20]),  # Limit to 20
-                docker_available=True,
+                images=daemon_state.images,
+                networks=daemon_state.networks,
+                volumes=daemon_state.volumes,
+                docker_available=daemon_state.docker_available,
             )
 
-        except FileNotFoundError:
-            return DockerState(docker_available=False)
-        except subprocess.TimeoutExpired:
-            logger.warning("Docker command timed out")
-            return DockerState(docker_available=False)
         except Exception as e:
-            logger.warning(f"Failed to get Docker state: {e}")
+            logger.warning(f"Failed to get Docker state from daemon: {e}")
             return DockerState(docker_available=False)
 
     def _get_network_state(self) -> NetworkState:
-        """Get current network state.
+        """Get current network state from daemon.
+
+        Queries the daemon's cached state instead of making direct
+        subprocess calls. Falls back to subprocess if daemon unavailable.
 
         Returns:
             NetworkState with interface/firewall info.
         """
-        import subprocess
+        import asyncio
 
-        interfaces: list[dict] = []
-        firewall_active = False
-        firewall_type = "unknown"
-        default_gateway = None
-        dns_servers: list[str] = []
-        wireguard_interfaces: list[str] = []
+        from elle.cli.daemon_client import get_daemon_client
 
         try:
-            # Get interfaces
-            result = subprocess.run(
-                ["ip", "-j", "addr"],
-                capture_output=True,
-                text=True,
-                timeout=5,
+            client = get_daemon_client()
+            daemon_state = asyncio.get_event_loop().run_until_complete(
+                client.get_network_state()
             )
-            if result.returncode == 0:
-                import json
-                try:
-                    ifaces = json.loads(result.stdout)
-                    for iface in ifaces:
-                        interfaces.append({
-                            "name": iface.get("ifname"),
-                            "state": iface.get("operstate"),
-                            "addresses": [
-                                a.get("local")
-                                for a in iface.get("addr_info", [])
-                                if a.get("local")
-                            ],
-                        })
-                except json.JSONDecodeError:
-                    pass
 
-            # Get default gateway
-            result = subprocess.run(
-                ["ip", "route", "show", "default"],
-                capture_output=True,
-                text=True,
-                timeout=5,
+            # Convert daemon client's InterfaceInfo to dict format expected by planner
+            interfaces = [
+                {
+                    "name": i.name,
+                    "state": i.state,
+                    "addresses": list(i.addresses),
+                }
+                for i in daemon_state.interfaces
+            ]
+
+            return NetworkState(
+                interfaces=tuple(interfaces),
+                firewall_active=daemon_state.firewall_active,
+                firewall_type=daemon_state.firewall_backend,
+                default_gateway=daemon_state.default_gateway,
+                dns_servers=daemon_state.dns_servers,
+                wireguard_interfaces=daemon_state.wireguard_interfaces,
             )
-            if result.returncode == 0 and result.stdout:
-                import re
-                match = re.search(r"via\s+(\S+)", result.stdout)
-                if match:
-                    default_gateway = match.group(1)
 
-            # Check firewall status (UFW)
-            result = subprocess.run(
-                ["ufw", "status"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            if result.returncode == 0:
-                firewall_type = "ufw"
-                firewall_active = "Status: active" in result.stdout
-            else:
-                # Try iptables
-                result = subprocess.run(
-                    ["iptables", "-L", "-n"],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                if result.returncode == 0:
-                    firewall_type = "iptables"
-                    # Consider active if has non-default rules
-                    firewall_active = "DROP" in result.stdout or "REJECT" in result.stdout
-
-            # Get DNS servers
-            try:
-                with open("/etc/resolv.conf", "r") as f:
-                    for line in f:
-                        if line.startswith("nameserver"):
-                            parts = line.split()
-                            if len(parts) >= 2:
-                                dns_servers.append(parts[1])
-            except FileNotFoundError:
-                pass
-
-            # Get WireGuard interfaces
-            result = subprocess.run(
-                ["wg", "show", "interfaces"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            if result.returncode == 0:
-                wireguard_interfaces = [
-                    i for i in result.stdout.strip().split()
-                    if i
-                ]
-
-        except FileNotFoundError:
-            pass
-        except subprocess.TimeoutExpired:
-            logger.warning("Network command timed out")
         except Exception as e:
-            logger.warning(f"Failed to get network state: {e}")
-
-        return NetworkState(
-            interfaces=tuple(interfaces),
-            firewall_active=firewall_active,
-            firewall_type=firewall_type,
-            default_gateway=default_gateway,
-            dns_servers=tuple(dns_servers),
-            wireguard_interfaces=tuple(wireguard_interfaces),
-        )
+            logger.warning(f"Failed to get network state from daemon: {e}")
+            return NetworkState()
 
     def _parse_plan_response(self, response: dict) -> CommandPlan:
         """Parse LLM response into CommandPlan.
@@ -760,7 +882,9 @@ class PlannerService:
     ) -> StepResult:
         """Execute a single plan step.
 
-        Supports both capability-based and command-based execution.
+        Prioritizes capability-based execution to ensure policy enforcement
+        and audit trails. Falls back to raw commands only when no capability
+        mapping exists.
 
         Args:
             step: The step to execute.
@@ -770,11 +894,39 @@ class PlannerService:
         Returns:
             StepResult with execution details.
         """
-        # Try capability-based execution first
+        from elle.cli.planner.command_mapper import map_command_to_capability
+
+        # 1. If step already has a capability, use it
         if step.uses_capability and self.capability_executor:
             return self._execute_capability_step(step, step_index)
 
-        # Fall back to command-based execution
+        # 2. Try to map command to capability
+        if step.command and self.capability_executor:
+            mapping = map_command_to_capability(step.command)
+            if mapping.success and mapping.capability:
+                # Create a new step with the mapped capability
+                mapped_step = PlanStep(
+                    command=step.command,
+                    explanation=step.explanation,
+                    risk_level=step.risk_level,
+                    requires_privilege=step.requires_privilege,
+                    can_fail=step.can_fail,
+                    capability=mapping.capability,
+                    capability_input=mapping.capability_input,
+                )
+                logger.debug(
+                    f"Mapped command '{step.command}' to capability '{mapping.capability}'"
+                )
+                return self._execute_capability_step(mapped_step, step_index)
+            else:
+                # Log that we're falling back to raw command (audit trail)
+                logger.warning(
+                    f"No capability mapping for command: {step.command} "
+                    f"(reason: {mapping.unmapped_reason}). "
+                    "Falling back to raw execution."
+                )
+
+        # 3. Fall back to command-based execution (legacy path)
         return self._execute_command_step(step, step_index, session)
 
     def _execute_command_step(

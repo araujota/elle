@@ -17,13 +17,11 @@ Example:
 
 from __future__ import annotations
 
-import re
 import shlex
-from typing import Any, TYPE_CHECKING
-
-from pydantic import BaseModel, ConfigDict, Field
+from typing import TYPE_CHECKING, Any
 
 import yaml
+from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
     from rich.console import Console
@@ -150,27 +148,13 @@ def parse_docker_run(command: str) -> DockerRunConfig:
         if token.startswith("-") and not token.startswith("--"):
             if "d" in token:
                 detached = True
-            if "p" in token and len(token) == 2 and i + 1 < len(tokens):
+            if "p" in token and len(token) == 2 and i + 1 < len(tokens) or token == "-p" and i + 1 < len(tokens):
                 i += 1
                 ports.append(tokens[i])
-            elif token == "-p" and i + 1 < len(tokens):
-                i += 1
-                ports.append(tokens[i])
-            elif "v" in token and len(token) == 2 and i + 1 < len(tokens):
+            elif "v" in token and len(token) == 2 and i + 1 < len(tokens) or token == "-v" and i + 1 < len(tokens):
                 i += 1
                 volumes.append(tokens[i])
-            elif token == "-v" and i + 1 < len(tokens):
-                i += 1
-                volumes.append(tokens[i])
-            elif "e" in token and len(token) == 2 and i + 1 < len(tokens):
-                i += 1
-                env_var = tokens[i]
-                if "=" in env_var:
-                    key, val = env_var.split("=", 1)
-                    environment.append((key, val))
-                else:
-                    environment.append((env_var, ""))
-            elif token == "-e" and i + 1 < len(tokens):
+            elif "e" in token and len(token) == 2 and i + 1 < len(tokens) or token == "-e" and i + 1 < len(tokens):
                 i += 1
                 env_var = tokens[i]
                 if "=" in env_var:
@@ -489,7 +473,7 @@ def docker_run_to_compose(
 def docker_run_with_env_prompt(
     command: str,
     *,
-    console: "Console | None" = None,
+    console: Console | None = None,
     skip_prompt: bool = False,
     use_saved: bool = True,
     save_values: bool = True,
@@ -519,8 +503,8 @@ def docker_run_with_env_prompt(
         (('POSTGRES_PASSWORD', 'secret'),)
     """
     from elle.cli.docker.env_detector import DockerEnvDetector
-    from elle.cli.docker.env_prompt import prompt_env_vars
     from elle.cli.docker.env_profiles import extract_image_family, get_profile
+    from elle.cli.docker.env_prompt import prompt_env_vars
 
     # Parse the command first
     config = parse_docker_run(command)

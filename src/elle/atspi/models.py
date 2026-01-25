@@ -7,10 +7,9 @@ All models are frozen (immutable) for safety and caching.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-
 
 # =============================================================================
 # UI Element
@@ -157,7 +156,7 @@ class UIRecipe(BaseModel):
         description="Number of successful executions",
     )
 
-    def with_updated_confidence(self, success: bool) -> "UIRecipe":
+    def with_updated_confidence(self, success: bool) -> UIRecipe:
         """Return a new recipe with updated confidence based on execution outcome.
 
         Args:

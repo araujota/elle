@@ -14,7 +14,6 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -273,7 +272,7 @@ async def _handle_rebuild(args: str) -> str:
     Returns:
         Response string.
     """
-    from elle.atspi import is_atspi_available, learn_application, get_recipe_by_app
+    from elle.atspi import get_recipe_by_app, is_atspi_available, learn_application
 
     if not is_atspi_available():
         return "AT-SPI is not available"

@@ -10,13 +10,10 @@ from __future__ import annotations
 
 import logging
 import re
-import textwrap
 from typing import Any
 
 from elle.capabilities.autogen.models import (
     GeneratedCapabilitySpec,
-    InputFieldSpec,
-    OutputFieldSpec,
 )
 
 logger = logging.getLogger(__name__)
@@ -220,7 +217,7 @@ def generate_capability_class_code(spec: GeneratedCapabilitySpec) -> str:
         ")",
         "from elle.capabilities.protocol import Capability",
         "",
-        f"# Import generated models",
+        "# Import generated models",
         f"# from .{spec.name.replace('.', '_')}_input import {input_class}",
         f"# from .{spec.name.replace('.', '_')}_output import {output_class}",
         "",
@@ -241,11 +238,11 @@ def generate_capability_class_code(spec: GeneratedCapabilitySpec) -> str:
 
     # Add side effects
     for effect in spec.side_effects:
-        lines.append(f"                SideEffect(")
+        lines.append("                SideEffect(")
         lines.append(f'                    kind=SideEffectKind.{effect.upper()},')
         lines.append(f'                    description="{effect} by {spec.name}",')
-        lines.append(f"                    reversible=False,")
-        lines.append(f"                ),")
+        lines.append("                    reversible=False,")
+        lines.append("                ),")
 
     lines.extend([
         "            ),",
@@ -253,7 +250,7 @@ def generate_capability_class_code(spec: GeneratedCapabilitySpec) -> str:
         "            output_schema={},",
         "        )",
         "",
-        f"    def _build_command(self, input_data: Any) -> str:",
+        "    def _build_command(self, input_data: Any) -> str:",
         '        """Build command string from input."""',
         f'        template = "{cmd_template}"',
         "        # Substitute input fields",

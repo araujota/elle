@@ -17,7 +17,6 @@ from elle.daemon.incidents.narrative import (
 )
 from elle.daemon.incidents.schema import ensure_schema, get_connection
 
-
 # Schema additions for storing narratives
 NARRATIVES_TABLE = """
 CREATE TABLE IF NOT EXISTS narratives (
@@ -563,8 +562,8 @@ def generate_narrative_for_incident(
     Returns:
         Generated Narrative, or None if unable to build chain.
     """
-    from elle.daemon.incidents.store import get_incident, get_linked_events
     from elle.daemon.incidents.multihop import MultiHopSearch
+    from elle.daemon.incidents.store import get_incident
 
     own_conn = conn is None
     if own_conn:

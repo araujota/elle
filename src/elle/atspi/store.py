@@ -23,7 +23,6 @@ from elle.atspi.models import (
 )
 from elle.atspi.schema import ensure_schema, get_connection
 
-
 # =============================================================================
 # Serialization Helpers
 # =============================================================================

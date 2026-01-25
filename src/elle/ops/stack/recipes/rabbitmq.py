@@ -6,7 +6,6 @@ from elle.ops.stack.models import (
     StackVariable,
 )
 
-
 RABBITMQ_RECIPE = StackRecipe(
     name="rabbitmq",
     display_name="RabbitMQ Message Broker",

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -28,6 +27,14 @@ class ConfirmationPreference(str, Enum):
     NEVER = "never"  # Never ask (experienced users)
 
 
+class PrivilegeLevel(str, Enum):
+    """Polkit privilege configuration level."""
+
+    SECURE = "secure"  # Always prompt for password (default)
+    CONVENIENT = "convenient"  # Group-based auth (members of 'elle' group skip password)
+    PASSWORDLESS = "passwordless"  # No password required (not recommended)
+
+
 class SetupPreferences(BaseModel):
     """User preferences captured during setup."""
 
@@ -46,6 +53,10 @@ class SetupPreferences(BaseModel):
     # Features
     gui_automation_enabled: bool = False  # AT-SPI requires additional setup
     api_enabled: bool = True
+
+    # Privilege configuration
+    privilege_level: PrivilegeLevel = PrivilegeLevel.SECURE
+    polkit_configured: bool = False
 
     # LLM
     ollama_verified: bool = False
@@ -149,5 +160,33 @@ FEATURE_INFO = {
             "Bound to localhost by default."
         ),
         "default": True,
+    },
+}
+
+PRIVILEGE_LEVEL_INFO = {
+    PrivilegeLevel.SECURE: {
+        "name": "Secure (Recommended)",
+        "description": (
+            "Always require password for privileged operations. "
+            "Polkit caches authentication for 5 minutes per session."
+        ),
+    },
+    PrivilegeLevel.CONVENIENT: {
+        "name": "Convenient",
+        "description": (
+            "Members of the 'elle' group can perform ELLE operations without "
+            "password prompts. You will be added to this group. Requires logout/login."
+        ),
+    },
+    PrivilegeLevel.PASSWORDLESS: {
+        "name": "Passwordless (Not Recommended)",
+        "description": (
+            "No password required for any ELLE privileged operation. "
+            "Only use on single-user systems or development machines."
+        ),
+        "warning": (
+            "This allows ANY process running as your user to perform "
+            "privileged system operations via ELLE."
+        ),
     },
 }

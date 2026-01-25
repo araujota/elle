@@ -755,7 +755,7 @@ class ProbeRunner:
                         timeout=probe.interval,
                     )
                     break
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
 
             except asyncio.CancelledError:
@@ -769,7 +769,7 @@ class ProbeRunner:
                         timeout=min(probe.interval, 60),
                     )
                     break
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
 
 

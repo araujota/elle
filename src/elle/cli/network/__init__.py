@@ -27,16 +27,16 @@ Usage:
 """
 
 from elle.cli.network.diagnosis import (
-    diagnose_connectivity,
-    ConnectivityDiagnosis,
     ConnectivityCheck,
+    ConnectivityDiagnosis,
+    diagnose_connectivity,
 )
 from elle.cli.network.firewall import (
-    explain_firewall_rules,
-    suggest_lockdown,
-    parse_restriction,
     FirewallExplanation,
     FirewallRule,
+    explain_firewall_rules,
+    parse_restriction,
+    suggest_lockdown,
 )
 
 __all__ = [

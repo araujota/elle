@@ -1,0 +1,685 @@
+/* ELLE Documentation - Dark Theme with Materialize */
+
+/* ============================================
+   ROOT VARIABLES
+   ============================================ */
+:root {
+  --bg-primary: #0d1117;
+  --bg-secondary: #161b22;
+  --bg-tertiary: #21262d;
+  --bg-card: #1c2128;
+
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --text-muted: #6e7681;
+
+  --accent-primary: #58a6ff;
+  --accent-secondary: #79c0ff;
+  --accent-green: #3fb950;
+  --accent-purple: #a371f7;
+  --accent-orange: #f0883e;
+  --accent-red: #f85149;
+  --accent-pink: #f778ba;
+
+  --border-color: #30363d;
+  --border-light: #21262d;
+
+  --code-bg: #0d1117;
+  --code-border: #30363d;
+
+  --nav-bg: #010409;
+  --footer-bg: #010409;
+
+  --sponsor-color: #db61a2;
+}
+
+/* ============================================
+   BODY & BASE
+   ============================================ */
+body.dark-theme {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  line-height: 1.6;
+}
+
+/* ============================================
+   NAVIGATION
+   ============================================ */
+nav {
+  background-color: var(--nav-bg) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+nav .nav-wrapper {
+  padding: 0 1rem;
+}
+
+nav .brand-logo {
+  font-weight: 700;
+  font-size: 1.6rem;
+  color: var(--text-primary) !important;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+nav .brand-logo .logo-icon {
+  color: var(--accent-green);
+  font-size: 1.4rem;
+}
+
+nav ul li a {
+  color: var(--text-secondary) !important;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+nav ul li a:hover {
+  color: var(--text-primary) !important;
+  background-color: transparent;
+}
+
+nav ul li a i.material-icons {
+  font-size: 1.2rem;
+  margin-right: 0.3rem;
+}
+
+/* Sidenav (Mobile) */
+.sidenav {
+  background-color: var(--bg-secondary);
+}
+
+.sidenav li > a {
+  color: var(--text-secondary) !important;
+}
+
+.sidenav li > a:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary) !important;
+}
+
+.sidenav .divider {
+  background-color: var(--border-color);
+}
+
+.brand-logo-sidenav {
+  font-size: 1.4rem !important;
+  font-weight: 700 !important;
+  color: var(--text-primary) !important;
+  padding: 0 32px;
+}
+
+/* ============================================
+   MAIN CONTENT
+   ============================================ */
+main {
+  padding: 2rem 0 4rem;
+  min-height: calc(100vh - 300px);
+}
+
+/* ============================================
+   TYPOGRAPHY
+   ============================================ */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-primary);
+  font-weight: 600;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+}
+
+h1 { font-size: 2.4rem; margin-top: 0; }
+h2 { font-size: 1.8rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; }
+h3 { font-size: 1.4rem; }
+h4 { font-size: 1.2rem; }
+
+p {
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+}
+
+a {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--accent-secondary);
+  text-decoration: underline;
+}
+
+strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 2rem 0;
+}
+
+/* ============================================
+   CODE BLOCKS - HIGH CONTRAST
+   ============================================ */
+code {
+  background-color: var(--bg-tertiary);
+  color: var(--accent-orange);
+  padding: 0.2em 0.4em;
+  border-radius: 6px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.9em;
+}
+
+pre {
+  background-color: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+  margin: 1.5rem 0;
+}
+
+pre code {
+  background: none;
+  color: var(--text-primary);
+  padding: 0;
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+/* Terminal-style prompts */
+pre code .gp, /* Generic.Prompt */
+pre code .c1 { /* Comment */
+  color: var(--text-muted);
+}
+
+/* Shell command highlighting */
+pre code .nb { /* Name.Builtin */
+  color: var(--accent-green);
+}
+
+pre code .o { /* Operator */
+  color: var(--accent-purple);
+}
+
+pre code .s, pre code .s1, pre code .s2 { /* String */
+  color: var(--accent-orange);
+}
+
+pre code .nv { /* Variable */
+  color: var(--accent-secondary);
+}
+
+pre code .k { /* Keyword */
+  color: var(--accent-purple);
+}
+
+/* ============================================
+   TABLES
+   ============================================ */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  background-color: var(--bg-secondary);
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+
+thead {
+  background-color: var(--bg-tertiary);
+}
+
+th {
+  color: var(--text-primary);
+  font-weight: 600;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text-primary);
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+tr:hover {
+  background-color: var(--bg-tertiary);
+}
+
+/* ============================================
+   LISTS
+   ============================================ */
+ul, ol {
+  padding-left: 1.5rem;
+  margin: 1rem 0;
+}
+
+li {
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+ul li::marker {
+  color: var(--accent-green);
+}
+
+ol li::marker {
+  color: var(--accent-primary);
+}
+
+/* ============================================
+   CARDS
+   ============================================ */
+.card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.card .card-content {
+  padding: 1.5rem;
+}
+
+.card .card-title {
+  color: var(--text-primary) !important;
+  font-weight: 600;
+}
+
+.card-action {
+  border-top: 1px solid var(--border-color) !important;
+  background-color: var(--bg-tertiary) !important;
+}
+
+.card-action a {
+  color: var(--accent-primary) !important;
+}
+
+/* ============================================
+   BUTTONS
+   ============================================ */
+.btn, .btn-large {
+  background-color: var(--accent-green) !important;
+  color: var(--bg-primary) !important;
+  font-weight: 600;
+  border-radius: 6px;
+  text-transform: none;
+  box-shadow: none;
+}
+
+.btn:hover, .btn-large:hover {
+  background-color: #2ea043 !important;
+  box-shadow: 0 2px 8px rgba(63, 185, 80, 0.3);
+}
+
+.btn-flat {
+  color: var(--accent-primary) !important;
+}
+
+.btn-outline {
+  background-color: transparent !important;
+  border: 1px solid var(--accent-primary);
+  color: var(--accent-primary) !important;
+}
+
+.btn-outline:hover {
+  background-color: var(--accent-primary) !important;
+  color: var(--bg-primary) !important;
+}
+
+/* ============================================
+   CHIPS/BADGES
+   ============================================ */
+.chip {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.badge {
+  background-color: var(--accent-green) !important;
+  color: var(--bg-primary);
+}
+
+/* ============================================
+   COLLAPSIBLE
+   ============================================ */
+.collapsible {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.collapsible-header {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.collapsible-header:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.collapsible-body {
+  background-color: var(--bg-card);
+  border-bottom: none;
+  padding: 1rem 1.5rem;
+}
+
+/* ============================================
+   FEATURE CARDS (HOMEPAGE)
+   ============================================ */
+.feature-card {
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-card) 100%);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  height: 100%;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+  border-color: var(--accent-green);
+}
+
+.feature-card .feature-icon {
+  font-size: 2.5rem;
+  color: var(--accent-green);
+  margin-bottom: 1rem;
+}
+
+.feature-card h4 {
+  margin-top: 0;
+  color: var(--text-primary);
+}
+
+.feature-card p {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+/* ============================================
+   HERO SECTION
+   ============================================ */
+.hero {
+  text-align: center;
+  padding: 3rem 0;
+  margin-bottom: 2rem;
+}
+
+.hero h1 {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+}
+
+.hero h1 .logo-icon {
+  color: var(--accent-green);
+}
+
+.hero .tagline {
+  font-size: 1.3rem;
+  color: var(--text-secondary);
+  max-width: 700px;
+  margin: 0 auto 2rem;
+}
+
+.hero-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ============================================
+   SPONSOR ELEMENTS
+   ============================================ */
+.sponsor-fab {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  z-index: 1000;
+}
+
+.sponsor-btn, .sponsor-btn-footer {
+  background-color: var(--sponsor-color) !important;
+  color: white !important;
+}
+
+.sponsor-btn:hover, .sponsor-btn-footer:hover {
+  background-color: #c04f8a !important;
+}
+
+.sidenav .sponsor-link {
+  color: var(--sponsor-color) !important;
+}
+
+.sidenav .sponsor-link:hover {
+  background-color: rgba(219, 97, 162, 0.1);
+}
+
+/* ============================================
+   FOOTER
+   ============================================ */
+.page-footer {
+  background-color: var(--footer-bg) !important;
+  border-top: 1px solid var(--border-color);
+  margin-top: 4rem;
+  padding-top: 2rem;
+}
+
+.page-footer h5 {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.page-footer h5 .logo-icon {
+  color: var(--accent-green);
+}
+
+.page-footer ul {
+  padding-left: 0;
+}
+
+.page-footer ul li {
+  list-style: none;
+  margin-bottom: 0.5rem;
+}
+
+.page-footer .footer-copyright {
+  background-color: transparent;
+  border-top: 1px solid var(--border-color);
+  padding: 1rem 0;
+}
+
+/* ============================================
+   CALLOUTS / ALERTS
+   ============================================ */
+.callout {
+  padding: 1rem 1.25rem;
+  border-radius: 8px;
+  margin: 1.5rem 0;
+  border-left: 4px solid;
+}
+
+.callout-info {
+  background-color: rgba(88, 166, 255, 0.1);
+  border-color: var(--accent-primary);
+}
+
+.callout-warning {
+  background-color: rgba(240, 136, 62, 0.1);
+  border-color: var(--accent-orange);
+}
+
+.callout-success {
+  background-color: rgba(63, 185, 80, 0.1);
+  border-color: var(--accent-green);
+}
+
+.callout-danger {
+  background-color: rgba(248, 81, 73, 0.1);
+  border-color: var(--accent-red);
+}
+
+.callout strong {
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+/* ============================================
+   TERMINAL DEMO
+   ============================================ */
+.terminal-demo {
+  background-color: var(--code-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 1.5rem 0;
+}
+
+.terminal-header {
+  background-color: var(--bg-tertiary);
+  padding: 0.5rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.terminal-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.terminal-dot.red { background-color: #ff5f57; }
+.terminal-dot.yellow { background-color: #febc2e; }
+.terminal-dot.green { background-color: #28c840; }
+
+.terminal-title {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-left: 0.5rem;
+}
+
+.terminal-body {
+  padding: 1rem 1.25rem;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+.terminal-body .prompt {
+  color: var(--accent-green);
+}
+
+.terminal-body .command {
+  color: var(--text-primary);
+}
+
+.terminal-body .output {
+  color: var(--text-secondary);
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+@media only screen and (max-width: 992px) {
+  .hero h1 {
+    font-size: 2.2rem;
+  }
+
+  .hero .tagline {
+    font-size: 1.1rem;
+  }
+}
+
+@media only screen and (max-width: 600px) {
+  .hero {
+    padding: 2rem 0;
+  }
+
+  .hero h1 {
+    font-size: 1.8rem;
+  }
+
+  h1 { font-size: 1.8rem; }
+  h2 { font-size: 1.4rem; }
+  h3 { font-size: 1.2rem; }
+
+  .sponsor-fab {
+    bottom: 1rem;
+    right: 1rem;
+  }
+
+  .sponsor-fab .btn-large {
+    width: 48px;
+    height: 48px;
+  }
+}
+
+/* ============================================
+   SYNTAX HIGHLIGHTING (ROUGE)
+   ============================================ */
+.highlight {
+  background-color: var(--code-bg);
+  border-radius: 8px;
+}
+
+.highlight pre {
+  margin: 0;
+  border: none;
+}
+
+/* Comments */
+.highlight .c, .highlight .c1, .highlight .cm, .highlight .cs {
+  color: #8b949e;
+  font-style: italic;
+}
+
+/* Keywords */
+.highlight .k, .highlight .kc, .highlight .kd, .highlight .kn,
+.highlight .kp, .highlight .kr, .highlight .kt {
+  color: #ff7b72;
+}
+
+/* Strings */
+.highlight .s, .highlight .s1, .highlight .s2, .highlight .sb,
+.highlight .sc, .highlight .sd, .highlight .se, .highlight .sh,
+.highlight .si, .highlight .sx, .highlight .sr {
+  color: #a5d6ff;
+}
+
+/* Numbers */
+.highlight .m, .highlight .mi, .highlight .mf, .highlight .mh,
+.highlight .mo, .highlight .il {
+  color: #79c0ff;
+}
+
+/* Names */
+.highlight .n, .highlight .na, .highlight .nb, .highlight .nc,
+.highlight .nd, .highlight .ni, .highlight .ne, .highlight .nf,
+.highlight .nl, .highlight .nn, .highlight .no, .highlight .nt,
+.highlight .nv {
+  color: #d2a8ff;
+}
+
+/* Operators */
+.highlight .o, .highlight .ow {
+  color: #ff7b72;
+}
+
+/* Generic */
+.highlight .gd { color: #ffa198; background-color: rgba(248, 81, 73, 0.15); }
+.highlight .gi { color: #7ee787; background-color: rgba(46, 160, 67, 0.15); }
+.highlight .gp { color: #8b949e; }

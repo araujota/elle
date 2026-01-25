@@ -10,10 +10,14 @@ from typing import TYPE_CHECKING
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from elle.daemon.api.auth import AuthMiddleware, get_auth_context
-from elle.daemon.api.engine_adapter import EngineAdapter, get_adapter
+from elle.daemon.api.auth import AuthMiddleware
+from elle.daemon.api.engine_adapter import get_adapter
 from elle.daemon.api.openai_routes import openai_router, set_adapter
 from elle.daemon.api.routes import router, set_daemon
+from elle.daemon.api.state_routes import router as state_router
+from elle.daemon.api.state_routes import set_state_cache
+from elle.daemon.api.vault_routes import router as vault_router
+from elle.daemon.api.vault_routes import set_manvault_service
 
 if TYPE_CHECKING:
     from elle.daemon.main import ElledDaemon
@@ -50,27 +54,49 @@ def create_app(daemon: "ElledDaemon") -> FastAPI:
         allow_headers=["*", "Authorization"],
     )
 
-    # Set up authentication middleware
-    auth_middleware = AuthMiddleware(daemon.config.api_auth)
+    # Get session token from daemon's token manager
+    session_token = None
+    if hasattr(daemon, '_session_token_manager') and daemon._session_token_manager is not None:
+        session_token = daemon._session_token_manager.token
+
+    # Set up authentication middleware with session token
+    auth_middleware = AuthMiddleware(
+        daemon.config.api_auth,
+        session_token=session_token,
+    )
 
     @app.middleware("http")
     async def auth_middleware_handler(request: Request, call_next):
         """Middleware to authenticate requests and attach auth context."""
-        # Skip auth for docs and health endpoints
+        # Skip auth for docs (local development only) and health endpoints
+        # Note: /docs and /redoc are only exposed on localhost
         if request.url.path in ("/docs", "/redoc", "/openapi.json", "/v1/health", "/"):
             return await call_next(request)
 
         try:
             auth_context = await auth_middleware(request)
             request.state.auth_context = auth_context
-        except Exception:
-            # Let the dependency handle auth errors
-            pass
+        except Exception as e:
+            # Re-raise auth errors to reject unauthenticated requests
+            from fastapi import HTTPException
+            if isinstance(e, HTTPException):
+                raise
+            # Other errors - let request proceed but log
+            import logging
+            logging.getLogger(__name__).debug(f"Auth middleware error: {e}")
 
         return await call_next(request)
 
     # Set daemon reference for routes
     set_daemon(daemon)
+
+    # Set up state cache for state routes
+    if hasattr(daemon, '_state_cache') and daemon._state_cache is not None:
+        set_state_cache(daemon._state_cache)
+
+    # Set up Man Vault service for vault routes
+    if hasattr(daemon, '_manvault_service') and daemon._manvault_service is not None:
+        set_manvault_service(daemon._manvault_service)
 
     # Set up engine adapter for OpenAI routes
     adapter = get_adapter()
@@ -78,6 +104,12 @@ def create_app(daemon: "ElledDaemon") -> FastAPI:
 
     # Include existing routes
     app.include_router(router)
+
+    # Include state routes
+    app.include_router(state_router)
+
+    # Include vault routes
+    app.include_router(vault_router)
 
     # Include OpenAI-compatible routes
     app.include_router(openai_router)

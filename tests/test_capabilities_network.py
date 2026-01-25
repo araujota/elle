@@ -235,12 +235,14 @@ class TestNetworkCapabilitiesRegistry:
 
     def test_all_capabilities_exported(self):
         """Test all capabilities are in NETWORK_CAPABILITIES."""
-        assert len(NETWORK_CAPABILITIES) == 3
+        assert len(NETWORK_CAPABILITIES) == 5
 
         names = {cap().spec.name for cap in NETWORK_CAPABILITIES}
         expected = {
             "wireguard.restart",
             "wireguard.status",
+            "wireguard.generate-key",
+            "wireguard.rotate-keys",
             "network.listeners",
         }
         assert names == expected

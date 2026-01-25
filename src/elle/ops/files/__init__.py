@@ -1,5 +1,38 @@
 """General file operations module.
 
+DEPRECATION NOTICE:
+    This module is an internal implementation. For policy-governed file
+    operations with audit trails, use the Capabilities system instead:
+
+        from elle.capabilities import execute_capability
+        from elle.capabilities.core import (
+            FileReadInput,
+            FileWriteInput,
+            FileDeleteInput,
+            FileCopyInput,
+        )
+
+        # Read a file
+        result = await execute_capability(
+            "file.read",
+            FileReadInput(path="/path/to/file"),
+        )
+
+        # Write a file
+        result = await execute_capability(
+            "file.write",
+            FileWriteInput(path="/path/to/file", content="..."),
+        )
+
+        # Delete a file (with policy enforcement)
+        result = await execute_capability(
+            "file.delete",
+            FileDeleteInput(path="/path/to/file"),
+        )
+
+    The capability provides policy enforcement, incident integration,
+    and automatic rollback on failure.
+
 Provides safe file operations with preview, atomic execution,
 rollback support, and smart file organization.
 
@@ -52,6 +85,19 @@ Usage:
 """
 
 # Models
+# Handler
+from elle.ops.files.handler import (
+    FileHandler,
+    copy_file,
+    create_directory,
+    delete_file,
+    execute_operations,
+    get_handler,
+    move_file,
+    preview_operations,
+    read_file,
+    write_file,
+)
 from elle.ops.files.models import (
     DirectoryNotEmptyError,
     FileCategory,
@@ -69,20 +115,6 @@ from elle.ops.files.models import (
     OrganizeResult,
     ReadResult,
     WriteResult,
-)
-
-# Handler
-from elle.ops.files.handler import (
-    FileHandler,
-    copy_file,
-    create_directory,
-    delete_file,
-    execute_operations,
-    get_handler,
-    move_file,
-    preview_operations,
-    read_file,
-    write_file,
 )
 
 # Organizer

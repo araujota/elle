@@ -330,7 +330,7 @@ def _check_bash_syntax(command: str) -> tuple[bool, str]:
         return False, result.stderr.strip()
     except subprocess.TimeoutExpired:
         return True, ""  # Assume OK if timeout
-    except Exception as e:
+    except Exception:
         return True, ""  # Assume OK on error
 
 

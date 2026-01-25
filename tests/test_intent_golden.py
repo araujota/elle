@@ -125,11 +125,9 @@ def load_test_cases() -> list[TestCase]:
 @pytest.fixture
 def classifier() -> IntentClassifier:
     """Create classifier with mocked Ollama (for consistent testing)."""
-    with patch("elle.cli.terminal.classifier.get_client") as mock_get:
-        mock_client = MagicMock()
-        mock_client.is_available.return_value = False
-        mock_get.return_value = mock_client
-        return IntentClassifier(log_path=Path("/tmp/elle-golden-test"))
+    mock_client = MagicMock()
+    mock_client.is_available.return_value = False
+    return IntentClassifier(client=mock_client, log_path=Path("/tmp/elle-golden-test"))
 
 
 @pytest.fixture

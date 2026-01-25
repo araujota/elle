@@ -20,6 +20,7 @@ IntentLabel = Literal[
     "navigation",
     "meta",
     "gui_task",
+    "explain_command",
 ]
 
 
@@ -33,6 +34,7 @@ class Intent(str, Enum):
     NAVIGATION = "navigation"
     META = "meta"
     GUI_TASK = "gui_task"
+    EXPLAIN_COMMAND = "explain_command"
 
     @classmethod
     def from_label(cls, label: str) -> Intent:

@@ -6,7 +6,6 @@ from elle.ops.stack.models import (
     StackVariable,
 )
 
-
 NGINX_RECIPE = StackRecipe(
     name="nginx",
     display_name="Nginx Web Server",

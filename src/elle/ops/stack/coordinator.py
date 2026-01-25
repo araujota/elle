@@ -6,14 +6,11 @@ and verification as a single atomic transaction with rollback support.
 
 import re
 import secrets
-import sqlite3
 import subprocess
 import uuid
 from datetime import datetime
-from typing import Any
 
 from elle.ops.stack.models import (
-    DeploymentStatus,
     GuaranteeResult,
     PhaseResult,
     PrerequisiteCheck,

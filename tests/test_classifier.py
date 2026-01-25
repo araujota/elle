@@ -431,15 +431,11 @@ class TestModuleFunctions:
 
     def test_classify_intent_function(self, session: Session):
         """Test the classify_intent convenience function."""
-        with patch("elle.cli.terminal.classifier.get_client") as mock_get:
-            mock_client = MagicMock()
-            mock_client.is_available.return_value = False
-            mock_get.return_value = mock_client
+        # "help" is a hard route, no Ollama needed
+        result = classify_intent("help", session)
 
-            result = classify_intent("help", session)
-
-            assert result.intent == Intent.META
-            assert result.confidence >= HIGH_CONFIDENCE
+        assert result.intent == Intent.META
+        assert result.confidence >= HIGH_CONFIDENCE
 
 
 # =============================================================================

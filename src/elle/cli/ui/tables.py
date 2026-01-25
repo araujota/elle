@@ -5,10 +5,10 @@ Rich Table-based components for displaying lists and tabular data.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Literal, Sequence
 
-from rich.box import ROUNDED, SIMPLE, MINIMAL
+from rich.box import MINIMAL, ROUNDED, SIMPLE
 from rich.table import Table
 from rich.text import Text
 
@@ -21,9 +21,7 @@ from elle.cli.ui.components import (
     status_badge,
     time_ago,
 )
-from elle.cli.ui.console import console
-from elle.cli.ui.theme import Colors, Icons, Spacing, Theme
-
+from elle.cli.ui.theme import Colors, Icons, Theme
 
 # =============================================================================
 # Incident Table

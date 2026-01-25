@@ -79,8 +79,8 @@ class CapabilityExecutor:
     def __init__(
         self,
         registry: CapabilityRegistry | None = None,
-        incident_store: "IncidentStore | None" = None,
-        dependency_checker: "DependencyChecker | None" = None,
+        incident_store: IncidentStore | None = None,
+        dependency_checker: DependencyChecker | None = None,
     ) -> None:
         """Initialize the executor.
 
@@ -94,7 +94,7 @@ class CapabilityExecutor:
         self._dependency_checker = dependency_checker
 
     @property
-    def dependency_checker(self) -> "DependencyChecker":
+    def dependency_checker(self) -> DependencyChecker:
         """Get the dependency checker (lazy initialization)."""
         if self._dependency_checker is None:
             from elle.capabilities.dependencies.checker import get_checker
@@ -362,7 +362,7 @@ class CapabilityExecutor:
     async def _record_action(
         self,
         incident_id: str,
-        capability: "Capability",
+        capability: Capability,
         input: BaseModel,
         result: CapabilityResult,
     ) -> None:

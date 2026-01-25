@@ -132,6 +132,75 @@ class PackageInfoOutput(BaseModel):
     size: str = Field(default="", description="Package size")
 
 
+class PackageConflictInput(BaseModel):
+    """Input for package conflict detection."""
+
+    model_config = ConfigDict(frozen=True)
+
+    package: str = Field(
+        description="Package name or .deb path to check for conflicts",
+        min_length=1,
+    )
+    include_recommendations: bool = Field(
+        default=True,
+        description="Whether to include resolution recommendations",
+    )
+    timeout_sec: int = Field(
+        default=60,
+        ge=10,
+        le=300,
+        description="Timeout for the operation in seconds",
+    )
+
+
+class ConflictDetail(BaseModel):
+    """Details about a specific package conflict."""
+
+    model_config = ConfigDict(frozen=True)
+
+    conflicting_package: str = Field(description="Name of the conflicting package")
+    conflict_type: Literal["depends", "breaks", "conflicts", "replaces", "held"] = Field(
+        description="Type of conflict",
+    )
+    installed_version: str | None = Field(
+        default=None,
+        description="Currently installed version if applicable",
+    )
+    required_version: str | None = Field(
+        default=None,
+        description="Version required to resolve conflict",
+    )
+    resolution: str = Field(
+        default="",
+        description="Human-readable suggestion to resolve",
+    )
+
+
+class PackageConflictOutput(BaseModel):
+    """Output from package conflict detection."""
+
+    model_config = ConfigDict(frozen=True)
+
+    package: str = Field(description="Package that was checked")
+    has_conflicts: bool = Field(description="Whether conflicts were found")
+    conflicts: tuple[ConflictDetail, ...] = Field(
+        default_factory=tuple,
+        description="Detected conflicts",
+    )
+    broken_deps: tuple[str, ...] = Field(
+        default_factory=tuple,
+        description="Broken or unmet dependencies",
+    )
+    held_packages: tuple[str, ...] = Field(
+        default_factory=tuple,
+        description="Packages held that may block installation",
+    )
+    recommendations: tuple[str, ...] = Field(
+        default_factory=tuple,
+        description="Recommendations to resolve issues",
+    )
+
+
 # =============================================================================
 # Helper Functions
 # =============================================================================
@@ -190,6 +259,100 @@ def _is_package_installed(package: str) -> tuple[bool, str]:
         return (True, version)
 
     return (False, "")
+
+
+def _parse_apt_conflicts(stderr: str) -> list[ConflictDetail]:
+    """Parse apt-get output for dependency conflicts.
+
+    Args:
+        stderr: stderr output from apt-get.
+
+    Returns:
+        List of ConflictDetail objects.
+    """
+    import re
+
+    conflicts: list[ConflictDetail] = []
+
+    # Pattern: "Depends: libfoo (>= 2.0) but 1.5 is installed"
+    depends_pattern = re.compile(
+        r"Depends:\s+(\S+)(?:\s+\(([^)]+)\))?\s+but\s+(\S+)\s+is\s+(?:to be )?installed",
+        re.I,
+    )
+
+    # Pattern: "Breaks: libbar (<< 3.0) but 2.5 is installed"
+    breaks_pattern = re.compile(
+        r"(Breaks|Conflicts):\s+(\S+)(?:\s+\(([^)]+)\))?\s+but\s+(\S+)\s+is\s+(?:to be )?installed",
+        re.I,
+    )
+
+    for line in stderr.splitlines():
+        match = depends_pattern.search(line)
+        if match:
+            conflicts.append(ConflictDetail(
+                conflicting_package=match.group(1),
+                conflict_type="depends",
+                required_version=match.group(2),
+                installed_version=match.group(3),
+                resolution=f"Upgrade {match.group(1)} to version {match.group(2) or 'required'}",
+            ))
+            continue
+
+        match = breaks_pattern.search(line)
+        if match:
+            conflict_type = match.group(1).lower()
+            conflicts.append(ConflictDetail(
+                conflicting_package=match.group(2),
+                conflict_type=conflict_type if conflict_type in ("breaks", "conflicts") else "conflicts",
+                required_version=match.group(3),
+                installed_version=match.group(4),
+                resolution=f"Remove or upgrade {match.group(2)} to resolve {conflict_type}",
+            ))
+
+    return conflicts
+
+
+def _get_held_packages() -> list[str]:
+    """Get list of held packages.
+
+    Returns:
+        List of held package names.
+    """
+    from elle.cli.subprocess_runner import RunMode, run_safe
+
+    result = run_safe(
+        "apt-mark showhold 2>/dev/null",
+        timeout=10.0,
+        mode=RunMode.CAPTURE,
+        check_denylist_flag=False,
+    )
+
+    if result.success and result.stdout.strip():
+        return [p.strip() for p in result.stdout.strip().split("\n") if p.strip()]
+
+    return []
+
+
+def _get_broken_packages() -> list[str]:
+    """Get list of packages with broken dependencies.
+
+    Returns:
+        List of broken package descriptions.
+    """
+    from elle.cli.subprocess_runner import RunMode, run_safe
+
+    result = run_safe(
+        "dpkg --audit 2>/dev/null",
+        timeout=10.0,
+        mode=RunMode.CAPTURE,
+        check_denylist_flag=False,
+    )
+
+    if result.success and result.stdout.strip():
+        # Each line describes a broken package
+        return [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
+
+    return []
 
 
 # =============================================================================
@@ -665,6 +828,118 @@ class PackageInfoCapability(BaseCapability):
 
 
 # =============================================================================
+# Package Conflict Detection Capability
+# =============================================================================
+
+
+class PackageConflictDetectCapability(BaseCapability):
+    """Detect apt/dpkg dependency conflicts."""
+
+    @property
+    def spec(self) -> CapabilitySpec:
+        return CapabilitySpec(
+            name="package.detect-conflicts",
+            summary="Detect and analyze apt/dpkg dependency conflicts",
+            domain="package",
+            risk="none",
+            side_effects=(),  # Read-only operation
+            requires_privilege=False,
+            idempotent=True,
+            trust_level="core",
+            version="1.0.0",
+            input_schema_name="PackageConflictInput",
+            output_schema_name="PackageConflictOutput",
+        )
+
+    def dry_run(self, input: PackageConflictInput) -> DryRunResult:
+        """Preview conflict detection."""
+        return DryRunResult(
+            would_execute=(
+                f"apt-get install --dry-run -s {input.package}",
+                f"apt-cache depends {input.package}",
+                "dpkg --audit",
+                "apt-mark showhold",
+            ),
+            would_modify=(),
+            estimated_risk="none",
+            requires_confirmation=False,
+            preview_text=f"Would check {input.package} for dependency conflicts",
+            is_valid=True,
+        )
+
+    def run(self, input: PackageConflictInput) -> CapabilityResult:
+        """Detect package conflicts."""
+        start_time = time.time()
+
+        conflicts: list[ConflictDetail] = []
+        recommendations: list[str] = []
+        commands_executed: list[str] = []
+
+        # 1. Dry-run install to detect failures
+        success, stdout, stderr, exit_code = _run_apt(
+            f"install --dry-run -s {input.package}",
+            timeout=input.timeout_sec,
+        )
+        commands_executed.append(f"apt-get install --dry-run -s {input.package}")
+
+        # Parse conflicts from output
+        if not success:
+            parsed_conflicts = _parse_apt_conflicts(stderr)
+            conflicts.extend(parsed_conflicts)
+
+            # Check for "Unable to locate package"
+            if "Unable to locate package" in stderr:
+                recommendations.append(f"Package '{input.package}' not found. Run: apt update")
+
+        # 2. Check for held packages
+        held_packages = _get_held_packages()
+        commands_executed.append("apt-mark showhold")
+
+        # Check if target package is held
+        if input.package in held_packages:
+            conflicts.append(ConflictDetail(
+                conflicting_package=input.package,
+                conflict_type="held",
+                resolution=f"Unhold package: apt-mark unhold {input.package}",
+            ))
+
+        if held_packages and input.include_recommendations:
+            recommendations.append(
+                f"Held packages that may block installation: {', '.join(held_packages)}"
+            )
+
+        # 3. Check dpkg state for broken packages
+        broken_deps = _get_broken_packages()
+        commands_executed.append("dpkg --audit")
+
+        if broken_deps and input.include_recommendations:
+            recommendations.append("Broken packages detected. Run: sudo dpkg --configure -a")
+            recommendations.append("Then run: sudo apt-get install -f")
+
+        execution_time = int((time.time() - start_time) * 1000)
+
+        has_conflicts = len(conflicts) > 0 or len(broken_deps) > 0
+
+        return CapabilityResult(
+            success=True,
+            output=PackageConflictOutput(
+                package=input.package,
+                has_conflicts=has_conflicts,
+                conflicts=tuple(conflicts),
+                broken_deps=tuple(broken_deps),
+                held_packages=tuple(held_packages),
+                recommendations=tuple(recommendations),
+            ),
+            execution_time_ms=execution_time,
+            evidence=CapabilityEvidence(
+                commands_executed=tuple(commands_executed),
+                man_vault_citations=("apt-get(8)", "dpkg(1)", "apt-cache(8)"),
+                rationale=f"Analyzed {input.package} for dependency conflicts",
+            ),
+        )
+
+
+# =============================================================================
 # Exports
 # =============================================================================
 
@@ -673,4 +948,5 @@ PACKAGE_CAPABILITIES = [
     PackageRemoveCapability,
     PackageUpdateCapability,
     PackageInfoCapability,
+    PackageConflictDetectCapability,
 ]

@@ -186,7 +186,7 @@ class NotifySendCapability(BaseCapability):
         start_time = time.time()
 
         try:
-            from elle.daemon.notifications import notify, NotificationResult
+            from elle.daemon.notifications import NotificationResult, notify
 
             # Map urgency to notification urgency
             urgency_map = {
@@ -387,7 +387,7 @@ class NotifyAlertCapability(BaseCapability):
 
         # 1. Send desktop notification
         try:
-            from elle.daemon.notifications import notify_incident, notify
+            from elle.daemon.notifications import notify, notify_incident
 
             if input.incident_id:
                 # Use incident notification for click-to-investigate
@@ -460,8 +460,8 @@ class NotifyAlertCapability(BaseCapability):
             Message ID if successful, None otherwise.
         """
         import json
-        import urllib.request
         import urllib.error
+        import urllib.request
 
         # Get topic from input or default
         topic = input.ntfy_topic

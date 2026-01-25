@@ -19,13 +19,7 @@ from typing import TYPE_CHECKING
 # Re-export from new UI system for backwards compatibility
 from elle.cli.ui import (
     Icons,
-    Theme,
-    console,
-    print_error as _print_error,
-    print_success as _print_success,
-    print_warning as _print_warning,
 )
-from elle.cli.ui.panels import plan_panel
 
 if TYPE_CHECKING:
     from elle.common.models import CommandPlan, ExecutionResult
@@ -63,7 +57,7 @@ PROMPT_SUCCESS = Icons.PROMPT_SUCCESS
 
 
 def render_prompt(
-    session: "Session",
+    session: Session,
     has_warnings: bool = False,
 ) -> str:
     """Render the ELLE prompt based on session state.
@@ -95,7 +89,7 @@ def render_prompt(
 
 
 def render_prompt_plain(
-    session: "Session",
+    session: Session,
     has_warnings: bool = False,
 ) -> str:
     """Render the ELLE prompt without ANSI colors.
@@ -116,7 +110,7 @@ def render_prompt_plain(
     return f"elle {PROMPT_IDLE} "
 
 
-def render_output(result: "ExecutionResult") -> str:
+def render_output(result: ExecutionResult) -> str:
     """Render an execution result for terminal display.
 
     Args:
@@ -129,7 +123,7 @@ def render_output(result: "ExecutionResult") -> str:
     raise NotImplementedError
 
 
-def render_plan_preview(plan: "CommandPlan") -> str:
+def render_plan_preview(plan: CommandPlan) -> str:
     """Render a CommandPlan for user confirmation.
 
     DEPRECATED: Use elle.cli.ui.panels.plan_panel() instead for Rich output.
@@ -209,7 +203,7 @@ def render_warning(message: str) -> str:
     return f"{Colors.BOLD_YELLOW}Warning:{Colors.RESET} {message}"
 
 
-def render_banner(session: "Session") -> str:
+def render_banner(session: Session) -> str:
     """Render the startup banner.
 
     DEPRECATED: Use elle.cli.ui.banner.print_banner() instead.

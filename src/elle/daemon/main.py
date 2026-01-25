@@ -31,6 +31,7 @@ from elle.daemon.telemetry.port_probe import PortListenerProbe
 from elle.daemon.telemetry.probes import ProbeRunner, create_default_probes
 from elle.daemon.telemetry.queue import TelemetryQueue, create_queues
 from elle.daemon.telemetry.schema import ensure_schema, get_connection
+from elle.daemon.telemetry.state_cache import StateCache
 from elle.daemon.telemetry.store import insert_events_batch
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,15 @@ class ElledDaemon:
         self._docker_watcher: DockerEventsWatcher | None = None
         self._inotify_watcher: InotifyWatcher | None = None
         self._port_probe: PortListenerProbe | None = None
+
+        # State cache for CLI queries
+        self._state_cache: StateCache | None = None
+
+        # Man Vault service for documentation indexing
+        self._manvault_service: Any = None
+
+        # Session token manager for API authentication
+        self._session_token_manager: Any = None
 
         # Tasks
         self._tasks: list[asyncio.Task[Any]] = []
@@ -156,6 +166,14 @@ class ElledDaemon:
         """Start all daemon components."""
         logger.info("Starting elled daemon")
         self.started_at = datetime.now(UTC)
+
+        # Initialize session token for API authentication
+        # This must happen early so the token is available for API startup
+        from elle.daemon.api.session_token import get_token_manager
+
+        self._session_token_manager = get_token_manager()
+        self._session_token_manager.initialize()
+        logger.info(f"Session token written to {self._session_token_manager.token_path}")
 
         # Initialize database
         self._init_database()
@@ -264,6 +282,24 @@ class ElledDaemon:
                 )
             )
 
+        # Start state cache for CLI state queries
+        self._state_cache = StateCache(
+            docker_refresh_sec=30,
+            network_refresh_sec=60,
+            firewall_refresh_sec=60,
+        )
+        await self._state_cache.start()
+
+        # Start Man Vault service for documentation indexing
+        try:
+            from elle.daemon.manvault.service import get_service as get_manvault_service
+
+            self._manvault_service = get_manvault_service()
+            await self._manvault_service.start()
+            logger.info("Man Vault service started")
+        except Exception as e:
+            logger.warning(f"Failed to start Man Vault service: {e}")
+
         # Start normalizer task
         self._tasks.append(
             asyncio.create_task(
@@ -317,7 +353,7 @@ class ElledDaemon:
                     asyncio.gather(*self._tasks, return_exceptions=True),
                     timeout=5.0,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning("Some tasks did not stop in time")
 
         # Stop watchers explicitly
@@ -333,6 +369,15 @@ class ElledDaemon:
             await self._inotify_watcher.stop()
         if self._port_probe:
             await self._port_probe.stop()
+        if self._state_cache:
+            await self._state_cache.stop()
+        if self._manvault_service:
+            await self._manvault_service.stop()
+
+        # Clean up session token
+        if self._session_token_manager:
+            self._session_token_manager.cleanup()
+            logger.info("Session token cleaned up")
 
         # Stop notification service
         await self._stop_notification_service()

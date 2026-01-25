@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Any
 
 from elle.daemon.incidents.models import (
-    ChangeCategory,
     ConfigFileState,
     SemanticChange,
     SemanticDiff,

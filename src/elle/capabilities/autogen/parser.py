@@ -76,7 +76,7 @@ def read_man_file(path: str) -> str | None:
             with gzip.open(path, "rt", errors="replace") as f:
                 content = f.read()
         else:
-            with open(path, "r", errors="replace") as f:
+            with open(path, errors="replace") as f:
                 content = f.read()
 
         # If it's groff source, process it

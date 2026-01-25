@@ -26,7 +26,6 @@ from elle.capabilities.models import (
 )
 from elle.capabilities.protocol import Capability
 
-
 # =============================================================================
 # Input/Output Models
 # =============================================================================
@@ -224,7 +223,7 @@ class GuiLearnCapability(Capability):
         **kwargs: Any,
     ) -> CapabilityResult:
         """Execute the capability."""
-        from elle.atspi import learn_application, get_recipe_by_app
+        from elle.atspi import get_recipe_by_app, learn_application
 
         start_time = datetime.utcnow()
 
@@ -279,7 +278,7 @@ class GuiLearnCapability(Capability):
         **kwargs: Any,
     ) -> DryRunResult:
         """Preview what would happen."""
-        from elle.atspi import is_atspi_available, get_client
+        from elle.atspi import get_client, is_atspi_available
 
         if not is_atspi_available():
             return DryRunResult(
@@ -378,8 +377,8 @@ class GuiClickCapability(Capability):
     ) -> CapabilityResult:
         """Execute the capability."""
         from elle.atspi import (
-            get_client,
             get_adaptor,
+            get_client,
             get_recipe_by_app,
         )
 
@@ -533,7 +532,7 @@ class GuiTypeCapability(Capability):
         **kwargs: Any,
     ) -> CapabilityResult:
         """Execute the capability."""
-        from elle.atspi import get_client, get_adaptor, get_recipe_by_app
+        from elle.atspi import get_adaptor, get_client, get_recipe_by_app
 
         start_time = datetime.utcnow()
 
@@ -673,7 +672,7 @@ class GuiNavigateCapability(Capability):
         **kwargs: Any,
     ) -> CapabilityResult:
         """Execute the capability."""
-        from elle.atspi import get_client, get_adaptor, get_recipe_by_app
+        from elle.atspi import get_adaptor, get_client, get_recipe_by_app
 
         start_time = datetime.utcnow()
 

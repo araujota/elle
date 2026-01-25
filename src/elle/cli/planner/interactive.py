@@ -7,23 +7,18 @@ Provides REPL-mode interaction for:
 - Outcome confirmation
 """
 
-import sys
 from enum import Enum, auto
 
 from elle.cli.planner.models import (
-    CommandPlan,
     PlanOutcome,
     PlanResult,
 )
 from elle.cli.planner.renderer import (
-    render_box,
     render_check_result,
     render_confirmation_prompt,
     render_execution_summary,
     render_plan,
-    render_step_progress,
     render_step_result,
-    risk_badge,
 )
 from elle.cli.planner.service import get_planner_service
 from elle.cli.planner.verifier import can_auto_approve
@@ -274,7 +269,6 @@ def run_noninteractive_planner(
     Returns:
         Final PlanResult.
     """
-    from elle.cli.planner.renderer import render_plan_result
 
     if result.plan is None:
         return result.with_outcome(PlanOutcome.ERROR)

@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import logging
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elle.cli.fixit.models import (
@@ -162,7 +161,9 @@ class FixitService:
     ) -> tuple[PriorArtContext, ...]:
         """Search Incident Vault for similar past incidents.
 
-        Uses three-tiered retrieval:
+        Uses daemon API when available, falling back to direct store access.
+
+        Three-tiered retrieval:
         1. Domain/entity filtering based on error patterns
         2. FTS search using stderr keywords and command names
         3. Semantic similarity (if embeddings available)
@@ -175,6 +176,52 @@ class FixitService:
         Returns:
             Tuple of prior art contexts with successful actions.
         """
+        # Try daemon API first (daemon primacy)
+        try:
+            import asyncio
+
+            from elle.cli.daemon_client import get_daemon_client
+
+            client = get_daemon_client()
+
+            # Build search query
+            cmd_parts = failure.command.split()
+            cmd_name = cmd_parts[0] if cmd_parts else ""
+            stderr_keywords = self._extract_error_keywords(failure.stderr)
+            query = f"{cmd_name} {' '.join(stderr_keywords[:5])} exit {failure.exit_code}"
+
+            async def search_via_daemon() -> list[dict]:
+                if not await client.is_daemon_available():
+                    return []
+                return await client.search_incidents(query=query, limit=5)
+
+            results = asyncio.get_event_loop().run_until_complete(search_via_daemon())
+
+            if results:
+                arts = []
+                for result in results:
+                    arts.append(PriorArtContext(
+                        incident_id=result.get("incident_id", ""),
+                        title=result.get("title", ""),
+                        outcome=result.get("outcome", "unknown"),
+                        summary=result.get("summary", ""),
+                        decision={},
+                        root_cause=result.get("root_cause"),
+                        verification_steps=(),
+                        successful_actions=(),
+                        trigger_command=None,
+                        score=result.get("score", 0.0),
+                        outcome_weight=0.5,
+                        precondition_match=0.0,
+                        days_ago=0,
+                        match_type="daemon_api",
+                    ))
+                logger.debug(f"Got {len(arts)} incidents from daemon API")
+                return tuple(arts[:3])
+        except Exception as e:
+            logger.debug(f"Daemon API incident search failed, using fallback: {e}")
+
+        # Fallback to direct store access (for full-featured search)
         try:
             from elle.daemon.incidents.correlator import IncidentCorrelator
             from elle.daemon.incidents.retriever import get_prior_art
@@ -369,17 +416,17 @@ class FixitService:
             result: The fixit result.
         """
         try:
-            from elle.daemon.incidents.store import (
-                finalize_outcome,
-                store_decision_record,
-                update_incident,
-            )
             from elle.daemon.incidents.models import (
                 ConfidenceBreakdown,
                 DecisionRecord,
                 IncidentCitation,
                 ManPageCitation,
                 Provenance,
+            )
+            from elle.daemon.incidents.store import (
+                finalize_outcome,
+                store_decision_record,
+                update_incident,
             )
 
             # Map FixitOutcome to incident outcome
@@ -725,6 +772,10 @@ class FixitService:
     ) -> tuple[FixitResult, FixitAction]:
         """Execute a fix command and record the action.
 
+        Prioritizes capability-based execution to ensure policy enforcement
+        and audit trails. Falls back to raw commands only when no capability
+        mapping exists.
+
         Args:
             result: Current fixit result.
             command: The command to execute.
@@ -733,11 +784,83 @@ class FixitService:
         Returns:
             Tuple of (updated result, action taken).
         """
+        import asyncio
+
+        from elle.cli.planner.command_mapper import map_command_to_capability
         from elle.cli.subprocess_runner import RunMode, run_safe
 
         start = time.time()
 
-        # Execute command
+        # Try to map command to capability first
+        mapping = map_command_to_capability(command)
+
+        if mapping.success and mapping.capability:
+            # Execute via capability system
+            try:
+                from elle.capabilities import get_executor
+
+                executor = get_executor()
+                cap = executor.registry.get(mapping.capability)
+
+                if cap:
+                    from pydantic import BaseModel
+
+                    class GenericInput(BaseModel):
+                        class Config:
+                            extra = "allow"
+
+                    input_model = GenericInput(**(mapping.capability_input or {}))
+
+                    async def run_cap():
+                        return await executor.execute(
+                            mapping.capability,
+                            input_model,
+                            require_confirmation=False,
+                        )
+
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            import concurrent.futures
+                            with concurrent.futures.ThreadPoolExecutor() as pool:
+                                cap_result = pool.submit(
+                                    lambda: asyncio.run(run_cap())
+                                ).result()
+                        else:
+                            cap_result = loop.run_until_complete(run_cap())
+                    except RuntimeError:
+                        cap_result = asyncio.run(run_cap())
+
+                    duration_ms = int((time.time() - start) * 1000)
+
+                    action = FixitAction(
+                        command=f"[capability:{mapping.capability}] {command}",
+                        exit_code=0 if cap_result.success else 1,
+                        stdout=cap_result.evidence.verification_details or "",
+                        stderr=cap_result.error or "",
+                        success=cap_result.success,
+                        privileged=False,
+                        duration_ms=duration_ms,
+                    )
+
+                    new_result = result.with_action(action)
+                    if result.incident_id:
+                        self.record_action(result.incident_id, action)
+
+                    return new_result, action
+
+            except Exception as e:
+                logger.warning(f"Capability execution failed, falling back: {e}")
+
+        else:
+            # Log that we're falling back to raw command (audit trail)
+            logger.warning(
+                f"No capability mapping for fix command: {command} "
+                f"(reason: {mapping.unmapped_reason}). "
+                "Falling back to raw execution."
+            )
+
+        # Fall back to raw command execution
         cmd_result = run_safe(
             command,
             cwd=session.cwd,

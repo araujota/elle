@@ -6,7 +6,6 @@ from elle.ops.stack.models import (
     StackVariable,
 )
 
-
 LOKI_RECIPE = StackRecipe(
     name="loki",
     display_name="Grafana Loki",

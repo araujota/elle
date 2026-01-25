@@ -6,7 +6,8 @@ for rendering in rationale panels.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Sequence
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from elle.daemon.incidents.models import (
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
 
 
 def man_citations_to_ui(
-    citations: Sequence["ManPageCitation"],
+    citations: Sequence[ManPageCitation],
 ) -> list[dict[str, str | float]]:
     """Convert ManPageCitation models to UI-compatible dicts.
 
@@ -42,7 +43,7 @@ def man_citations_to_ui(
 
 
 def incident_citations_to_ui(
-    citations: Sequence["IncidentCitation"],
+    citations: Sequence[IncidentCitation],
 ) -> list[dict[str, Any]]:
     """Convert IncidentCitation models to UI-compatible dicts.
 
@@ -66,7 +67,7 @@ def incident_citations_to_ui(
 
 
 def confidence_to_ui(
-    confidence: "ConfidenceBreakdown",
+    confidence: ConfidenceBreakdown,
 ) -> dict[str, float]:
     """Convert ConfidenceBreakdown model to UI-compatible dict.
 
@@ -87,7 +88,7 @@ def confidence_to_ui(
 
 
 def provenance_to_ui(
-    provenance: "Provenance",
+    provenance: Provenance,
 ) -> dict[str, Any]:
     """Convert Provenance model to UI-compatible dict.
 
@@ -106,7 +107,7 @@ def provenance_to_ui(
 
 
 def decision_record_to_ui(
-    record: "DecisionRecord",
+    record: DecisionRecord,
 ) -> dict[str, Any]:
     """Convert DecisionRecord model to UI-compatible dict for display.
 
@@ -131,9 +132,9 @@ def decision_record_to_ui(
 
 
 def build_rationale_kwargs(
-    record: "DecisionRecord | None" = None,
-    provenance: "Provenance | None" = None,
-    confidence: "ConfidenceBreakdown | None" = None,
+    record: DecisionRecord | None = None,
+    provenance: Provenance | None = None,
+    confidence: ConfidenceBreakdown | None = None,
 ) -> dict[str, Any]:
     """Build keyword arguments for plan_panel/fixit_panel rationale display.
 

@@ -21,9 +21,7 @@ from elle.daemon.reboot.models import (
     CRITICAL_MOUNT_POINTS,
     CRITICAL_SERVICES,
     DISK_SPACE_REQUIREMENTS,
-    DMESG_ERROR_PATTERNS,
     DMESG_LINES_TO_CAPTURE,
-    JOURNAL_ERROR_PATTERNS,
     JOURNAL_LINES_TO_CAPTURE,
     MAX_VERIFICATION_ATTEMPTS,
     NETWORK_CHECK_TIMEOUT_SEC,
@@ -94,7 +92,7 @@ async def run_command_check(
                 proc.communicate(),
                 timeout=timeout,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             await proc.wait()
             return (False, -1, "", f"Command timed out after {timeout}s")
@@ -682,7 +680,7 @@ async def check_network_connectivity(
         try:
             await asyncio.wait_for(proc.wait(), timeout=timeout)
             return proc.returncode == 0
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             await proc.wait()
             return False
@@ -1708,6 +1706,6 @@ def _suggest_investigation(
     if missing_modules:
         for mod in missing_modules[:2]:
             suggestions.append(f"modinfo {mod}  # Check module info")
-            suggestions.append(f"dkms status  # Check DKMS status")
+            suggestions.append("dkms status  # Check DKMS status")
 
     return suggestions[:15]  # Top 15 suggestions

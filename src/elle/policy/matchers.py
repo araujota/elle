@@ -13,7 +13,6 @@ from functools import lru_cache
 
 from elle.policy.models import Condition, MatchType, PolicyEvaluationRequest, TimeWindow
 
-
 # =============================================================================
 # Pattern Matching Functions
 # =============================================================================

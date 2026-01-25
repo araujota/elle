@@ -23,43 +23,8 @@ Quick Start:
 """
 
 # Console
-from elle.cli.ui.console import (
-    console,
-    err_console,
-    clear,
-    is_interactive,
-    print_error,
-    print_info,
-    print_muted,
-    print_renderable,
-    print_success,
-    print_warning,
-    rule,
-    terminal_height,
-    terminal_width,
-)
-
-# Theme
-from elle.cli.ui.theme import Colors, Icons, Spacing, Theme
-
 # Banner
 from elle.cli.ui.banner import print_banner, render_banner, render_welcome_back
-
-# Spinner
-from elle.cli.ui.spinner import (
-    PhaseSpinner,
-    SpinnerMessages,
-    async_spinner,
-    classification_phases,
-    classifying,
-    diagnosing,
-    fixit_phases,
-    generating_plan,
-    planner_phases,
-    progress_bar,
-    searching_vault,
-    spinner,
-)
 
 # Components
 from elle.cli.ui.components import (
@@ -88,6 +53,33 @@ from elle.cli.ui.components import (
     time_ago,
     tip,
 )
+from elle.cli.ui.console import (
+    clear,
+    console,
+    err_console,
+    is_interactive,
+    print_error,
+    print_info,
+    print_muted,
+    print_renderable,
+    print_success,
+    print_warning,
+    rule,
+    terminal_height,
+    terminal_width,
+)
+
+# Diff
+from elle.cli.ui.diff import (
+    render_change_summary,
+    render_config_change,
+    render_config_changes,
+    render_diff,
+    render_diff_panel,
+    render_inline_diff,
+    render_side_by_side_diff,
+    render_snapshot_diff,
+)
 
 # Panels
 from elle.cli.ui.panels import (
@@ -104,6 +96,33 @@ from elle.cli.ui.panels import (
     search_results_panel,
 )
 
+# Prompt
+from elle.cli.ui.prompt import (
+    PROMPT_STYLE,
+    SLASH_COMMANDS,
+    ElleCompleter,
+    EllePrompt,
+    create_prompt_session,
+    get_prompt_text,
+    get_status_bar,
+)
+
+# Spinner
+from elle.cli.ui.spinner import (
+    PhaseSpinner,
+    SpinnerMessages,
+    async_spinner,
+    classification_phases,
+    classifying,
+    diagnosing,
+    fixit_phases,
+    generating_plan,
+    planner_phases,
+    progress_bar,
+    searching_vault,
+    spinner,
+)
+
 # Tables
 from elle.cli.ui.tables import (
     command_history_table,
@@ -118,28 +137,8 @@ from elle.cli.ui.tables import (
     snapshot_diff_table,
 )
 
-# Diff
-from elle.cli.ui.diff import (
-    render_change_summary,
-    render_config_change,
-    render_config_changes,
-    render_diff,
-    render_diff_panel,
-    render_inline_diff,
-    render_side_by_side_diff,
-    render_snapshot_diff,
-)
-
-# Prompt
-from elle.cli.ui.prompt import (
-    ElleCompleter,
-    EllePrompt,
-    PROMPT_STYLE,
-    SLASH_COMMANDS,
-    create_prompt_session,
-    get_prompt_text,
-    get_status_bar,
-)
+# Theme
+from elle.cli.ui.theme import Colors, Icons, Spacing, Theme
 
 __all__ = [
     # Console

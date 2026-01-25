@@ -12,7 +12,6 @@ import logging
 import re
 import subprocess
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -952,6 +951,337 @@ class NetworkListenersCapability(BaseCapability):
 
 
 # =============================================================================
+# WireGuard Key Generation Capability
+# =============================================================================
+
+
+class WireGuardGenerateKeyInput(BaseModel):
+    """Input for wireguard.generate-key operation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    include_preshared_key: bool = Field(
+        default=False,
+        description="Also generate a preshared key",
+    )
+
+
+class WireGuardGenerateKeyOutput(BaseModel):
+    """Output from wireguard.generate-key operation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    private_key: str = Field(description="Generated private key (base64)")
+    public_key: str = Field(description="Derived public key (base64)")
+    preshared_key: str | None = Field(
+        default=None,
+        description="Generated preshared key if requested",
+    )
+
+
+class WireGuardGenerateKeyCapability(BaseCapability):
+    """Generate WireGuard keypair."""
+
+    @property
+    def spec(self) -> CapabilitySpec:
+        return CapabilitySpec(
+            name="wireguard.generate-key",
+            summary="Generate a new WireGuard keypair",
+            domain="network",
+            risk="low",
+            side_effects=(),
+            requires_privilege=False,
+            idempotent=False,
+            trust_level="core",
+            version="1.0.0",
+            input_schema_name="WireGuardGenerateKeyInput",
+            output_schema_name="WireGuardGenerateKeyOutput",
+        )
+
+    def dry_run(self, input: WireGuardGenerateKeyInput) -> DryRunResult:
+        """Preview key generation."""
+        if not _is_wireguard_available():
+            return DryRunResult(
+                is_valid=False,
+                validation_errors=("wg command not available",),
+                preview_text="Cannot generate keys: wg not found",
+            )
+
+        return DryRunResult(
+            would_execute=("wg genkey", "wg pubkey"),
+            would_modify=(),
+            estimated_risk="low",
+            requires_confirmation=False,
+            preview_text="Would generate a new WireGuard keypair",
+            is_valid=True,
+        )
+
+    def run(self, input: WireGuardGenerateKeyInput) -> CapabilityResult:
+        """Generate WireGuard keys."""
+        start_time = time.time()
+
+        try:
+            from elle.ops.wireguard.keys import (
+                generate_keypair,
+                generate_preshared_key,
+            )
+
+            private_key, public_key = generate_keypair()
+
+            preshared_key = None
+            if input.include_preshared_key:
+                preshared_key = generate_preshared_key()
+
+            return CapabilityResult(
+                success=True,
+                output=WireGuardGenerateKeyOutput(
+                    private_key=private_key,
+                    public_key=public_key,
+                    preshared_key=preshared_key,
+                ),
+                execution_time_ms=int((time.time() - start_time) * 1000),
+                evidence=CapabilityEvidence(
+                    commands_executed=("wg genkey", "wg pubkey"),
+                    rationale="Generated new WireGuard keypair",
+                ),
+            )
+
+        except Exception as e:
+            return CapabilityResult(
+                success=False,
+                error=str(e),
+                execution_time_ms=int((time.time() - start_time) * 1000),
+            )
+
+
+# =============================================================================
+# WireGuard Key Rotation Capability
+# =============================================================================
+
+
+class WireGuardRotateKeysInput(BaseModel):
+    """Input for wireguard.rotate-keys operation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    interface: str = Field(
+        default="wg0",
+        description="WireGuard interface name",
+        pattern=r"^wg\d+$",
+    )
+    grace_period_seconds: int = Field(
+        default=300,
+        ge=0,
+        le=3600,
+        description="Suggested time before removing old key from peers",
+    )
+
+
+class WireGuardRotateKeysOutput(BaseModel):
+    """Output from wireguard.rotate-keys operation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    interface: str = Field(description="Interface that was rotated")
+    old_public_key: str | None = Field(
+        default=None,
+        description="Previous public key",
+    )
+    new_public_key: str | None = Field(
+        default=None,
+        description="New public key",
+    )
+    backup_path: str | None = Field(
+        default=None,
+        description="Path to config backup",
+    )
+    steps_completed: tuple[str, ...] = Field(
+        default_factory=tuple,
+        description="Steps that were completed",
+    )
+
+
+class WireGuardRotateKeysCapability(BaseCapability):
+    """Rotate WireGuard keys for an interface."""
+
+    @property
+    def spec(self) -> CapabilitySpec:
+        return CapabilitySpec(
+            name="wireguard.rotate-keys",
+            summary="Rotate WireGuard keys without dropping connections",
+            domain="network",
+            risk="high",
+            side_effects=(
+                SideEffect(
+                    kind="network_change",
+                    target="{interface}",
+                    reversible=True,
+                    description="Interface keys will be rotated",
+                ),
+                SideEffect(
+                    kind="privilege_escalation",
+                    target="/etc/wireguard",
+                    reversible=False,
+                    description="Requires root to modify WireGuard config",
+                ),
+            ),
+            requires_privilege=True,
+            idempotent=False,
+            trust_level="core",
+            version="1.0.0",
+            input_schema_name="WireGuardRotateKeysInput",
+            output_schema_name="WireGuardRotateKeysOutput",
+        )
+
+    def dry_run(self, input: WireGuardRotateKeysInput) -> DryRunResult:
+        """Preview key rotation."""
+        if not _is_wireguard_available():
+            return DryRunResult(
+                is_valid=False,
+                validation_errors=("wg command not available",),
+                preview_text="Cannot rotate keys: wg not found",
+            )
+
+        config_path = Path(f"/etc/wireguard/{input.interface}.conf")
+        if not config_path.exists():
+            return DryRunResult(
+                is_valid=False,
+                validation_errors=(f"Config not found: {config_path}",),
+                preview_text=f"Cannot rotate: no config for {input.interface}",
+            )
+
+        is_up = _interface_exists(input.interface)
+
+        return DryRunResult(
+            would_execute=(
+                "wg genkey",
+                "wg pubkey",
+                f"backup /etc/wireguard/{input.interface}.conf",
+                f"update {input.interface}.conf with new key",
+                f"wg-quick down {input.interface}",
+                f"wg-quick up {input.interface}",
+            ),
+            would_modify=(f"/etc/wireguard/{input.interface}.conf",),
+            estimated_risk="high",
+            requires_confirmation=True,
+            preview_text=(
+                f"Would rotate keys for '{input.interface}' "
+                f"({'currently up' if is_up else 'currently down'}). "
+                f"Peers must be updated with new public key within "
+                f"{input.grace_period_seconds}s."
+            ),
+            is_valid=True,
+        )
+
+    def run(self, input: WireGuardRotateKeysInput) -> CapabilityResult:
+        """Rotate WireGuard keys."""
+        start_time = time.time()
+
+        try:
+            from elle.ops.wireguard.keys import rotate_keys_safely
+
+            result = rotate_keys_safely(
+                input.interface,
+                grace_period_seconds=input.grace_period_seconds,
+            )
+
+            if result.success:
+                return CapabilityResult(
+                    success=True,
+                    output=WireGuardRotateKeysOutput(
+                        interface=result.interface,
+                        old_public_key=result.old_public_key,
+                        new_public_key=result.new_public_key,
+                        backup_path=result.backup_path,
+                        steps_completed=result.steps_completed,
+                    ),
+                    side_effects_applied=(
+                        SideEffect(
+                            kind="network_change",
+                            target=input.interface,
+                            reversible=True,
+                            description=(
+                                f"Rotated keys for {input.interface}: "
+                                f"{result.old_public_key[:8] if result.old_public_key else '?'}... -> "
+                                f"{result.new_public_key[:8] if result.new_public_key else '?'}..."
+                            ),
+                        ),
+                    ),
+                    warnings=(
+                        f"Peers must be updated with new public key: {result.new_public_key}",
+                    ),
+                    execution_time_ms=int((time.time() - start_time) * 1000),
+                    evidence=CapabilityEvidence(
+                        commands_executed=result.steps_completed,
+                        rationale=f"Rotated keys for {input.interface}",
+                    ),
+                )
+            else:
+                return CapabilityResult(
+                    success=False,
+                    error=result.error,
+                    execution_time_ms=int((time.time() - start_time) * 1000),
+                    evidence=CapabilityEvidence(
+                        commands_executed=result.steps_completed,
+                    ),
+                )
+
+        except Exception as e:
+            return CapabilityResult(
+                success=False,
+                error=str(e),
+                execution_time_ms=int((time.time() - start_time) * 1000),
+            )
+
+    def rollback(
+        self,
+        input: WireGuardRotateKeysInput,
+        result: CapabilityResult,
+    ) -> RollbackResult:
+        """Rollback by restoring backup config."""
+        if not result.output or not result.output.backup_path:
+            return RollbackResult(
+                success=False,
+                error="No backup path to restore from",
+            )
+
+        backup_path = Path(result.output.backup_path)
+        config_path = Path(f"/etc/wireguard/{input.interface}.conf")
+
+        if not backup_path.exists():
+            return RollbackResult(
+                success=False,
+                error=f"Backup not found: {backup_path}",
+            )
+
+        try:
+            import shutil
+
+            shutil.copy2(backup_path, config_path)
+
+            # Restart interface
+            _run_command(["sudo", "wg-quick", "down", input.interface])
+            _run_command(["sudo", "wg-quick", "up", input.interface])
+
+            return RollbackResult(
+                success=True,
+                rolled_back=(str(config_path),),
+                commands_executed=(
+                    f"restored {config_path} from {backup_path}",
+                    f"wg-quick down {input.interface}",
+                    f"wg-quick up {input.interface}",
+                ),
+            )
+
+        except Exception as e:
+            return RollbackResult(
+                success=False,
+                error=str(e),
+                failed_to_rollback=(str(config_path),),
+            )
+
+
+# =============================================================================
 # Exports
 # =============================================================================
 
@@ -959,4 +1289,6 @@ NETWORK_CAPABILITIES = [
     WireGuardRestartCapability,
     WireGuardStatusCapability,
     NetworkListenersCapability,
+    WireGuardGenerateKeyCapability,
+    WireGuardRotateKeysCapability,
 ]

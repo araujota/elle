@@ -4,11 +4,14 @@ Defines data structures for incident reports, system snapshots,
 actions, similarity features, provenance tracking, and semantic diffs.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from elle.daemon.telemetry.ebpf.syscall_models import SyscallSummary
 
 # =============================================================================
 # Type Aliases
@@ -219,7 +222,7 @@ class IncidentAction(BaseModel):
     of what ELLE actually did.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     id: int | None = Field(default=None, description="Database ID")
     incident_id: str = Field(description="Parent incident UUID")
@@ -239,6 +242,12 @@ class IncidentAction(BaseModel):
     stderr: str | None = Field(default=None, description="Command stderr (truncated)")
     success: bool = Field(default=False, description="Whether action succeeded")
     privileged: bool = Field(default=False, description="Required elevated privileges")
+
+    # Syscall trace (if tracing was enabled)
+    syscall_summary: SyscallSummary | None = Field(
+        default=None,
+        description="Syscall-level summary of what the action actually did",
+    )
 
     # Timing
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -390,13 +399,13 @@ class IncidentReport(BaseModel):
     # NEW: Structured decision record (replaces unstructured decision dict)
     # This is stored separately in the database but loaded into the model
     # Use decision_record when available, fall back to decision dict otherwise
-    decision_record: "DecisionRecord | None" = Field(
+    decision_record: DecisionRecord | None = Field(
         default=None,
         description="Structured decision record with provenance",
     )
 
     # NEW: Config file states tracked during this incident
-    config_states: tuple["ConfigFileState", ...] = Field(
+    config_states: tuple[ConfigFileState, ...] = Field(
         default_factory=tuple,
         description="Config files modified during incident resolution",
     )

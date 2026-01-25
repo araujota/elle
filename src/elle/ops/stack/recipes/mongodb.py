@@ -6,7 +6,6 @@ from elle.ops.stack.models import (
     StackVariable,
 )
 
-
 MONGODB_RECIPE = StackRecipe(
     name="mongodb",
     display_name="MongoDB Server",

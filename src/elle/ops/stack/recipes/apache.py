@@ -6,7 +6,6 @@ from elle.ops.stack.models import (
     StackVariable,
 )
 
-
 APACHE_RECIPE = StackRecipe(
     name="apache",
     display_name="Apache HTTP Server",

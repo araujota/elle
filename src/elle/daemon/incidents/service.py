@@ -8,7 +8,6 @@ Provides:
 
 import asyncio
 import logging
-import sqlite3
 from datetime import datetime, timedelta
 
 from elle.daemon.incidents.models import IncidentVaultStatus
@@ -17,8 +16,6 @@ from elle.daemon.incidents.schema import ensure_schema, get_connection
 from elle.daemon.incidents.store import (
     get_incident,
     get_incidents_without_embeddings,
-    list_incidents,
-    update_incident,
     upsert_embedding,
 )
 

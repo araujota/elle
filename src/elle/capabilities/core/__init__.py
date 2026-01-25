@@ -21,13 +21,13 @@ if TYPE_CHECKING:
     from elle.capabilities.protocol import Capability
 
 
-def get_core_capabilities() -> list[type["Capability"]]:
+def get_core_capabilities() -> list[type[Capability]]:
     """Get all core capability classes.
 
     Returns:
         List of capability classes to register.
     """
-    capabilities: list[type["Capability"]] = []
+    capabilities: list[type[Capability]] = []
 
     # Service capabilities
     try:
@@ -114,6 +114,32 @@ from elle.capabilities.core.config import (
     ConfigPreviewInput,
     ConfigPreviewOutput,
 )
+
+# Docker capabilities
+from elle.capabilities.core.docker import (
+    DOCKER_CAPABILITIES,
+    DockerConfigureEnvCapability,
+    DockerConfigureEnvInput,
+    DockerConfigureEnvOutput,
+    DockerInspectCapability,
+    DockerInspectInput,
+    DockerInspectOutput,
+    DockerListCapability,
+    DockerListInput,
+    DockerListOutput,
+    DockerPruneCapability,
+    DockerPruneInput,
+    DockerPruneOutput,
+    DockerRollbackCapability,
+    DockerRollbackInput,
+    DockerRollbackOutput,
+    DockerStopCapability,
+    DockerStopInput,
+    DockerStopOutput,
+    EnvVarConfig,
+)
+
+# File diff/snapshot capabilities
 from elle.capabilities.core.file import (
     FileCopyCapability,
     FileCopyInput,
@@ -121,12 +147,80 @@ from elle.capabilities.core.file import (
     FileDeleteCapability,
     FileDeleteInput,
     FileDeleteOutput,
+    FileDiffCapability,
+    FileDiffInput,
+    FileDiffOutput,
     FileReadCapability,
     FileReadInput,
     FileReadOutput,
+    FileWatchSnapshotCapability,
+    FileWatchSnapshotInput,
+    FileWatchSnapshotOutput,
     FileWriteCapability,
     FileWriteInput,
     FileWriteOutput,
+)
+
+# GUI capabilities
+from elle.capabilities.core.gui import (
+    GUI_CAPABILITIES,
+    GuiClickCapability,
+    GuiClickInput,
+    GuiClickOutput,
+    GuiExecuteTaskCapability,
+    GuiExecuteTaskInput,
+    GuiExecuteTaskOutput,
+    GuiLearnCapability,
+    GuiLearnInput,
+    GuiLearnOutput,
+    GuiNavigateCapability,
+    GuiNavigateInput,
+    GuiNavigateOutput,
+    GuiTypeCapability,
+    GuiTypeInput,
+    GuiTypeOutput,
+)
+
+# Incident capabilities
+from elle.capabilities.core.incident import (
+    INCIDENT_CAPABILITIES,
+    IncidentAttachCapability,
+    IncidentAttachInput,
+    IncidentAttachOutput,
+    IncidentCreateCapability,
+    IncidentCreateInput,
+    IncidentCreateOutput,
+)
+
+# Network capabilities
+from elle.capabilities.core.network import (
+    NETWORK_CAPABILITIES,
+    NetworkListenersCapability,
+    NetworkListenersInput,
+    NetworkListenersOutput,
+    WireGuardGenerateKeyCapability,
+    WireGuardGenerateKeyInput,
+    WireGuardGenerateKeyOutput,
+    WireGuardRestartCapability,
+    WireGuardRestartInput,
+    WireGuardRestartOutput,
+    WireGuardRotateKeysCapability,
+    WireGuardRotateKeysInput,
+    WireGuardRotateKeysOutput,
+    WireGuardStatusCapability,
+    WireGuardStatusInput,
+    WireGuardStatusOutput,
+)
+
+# Notification capabilities
+from elle.capabilities.core.notify import (
+    NOTIFY_CAPABILITIES,
+    NotifyAlertCapability,
+    NotifyAlertInput,
+    NotifyAlertOutput,
+    NotifySendCapability,
+    NotifySendInput,
+    NotifySendOutput,
 )
 from elle.capabilities.core.package import (
     PackageInfoCapability,
@@ -147,92 +241,6 @@ from elle.capabilities.core.service import (
     ServiceStatusCapability,
     ServiceStatusOutput,
     ServiceStopCapability,
-)
-
-# Docker capabilities
-from elle.capabilities.core.docker import (
-    DOCKER_CAPABILITIES,
-    DockerInspectCapability,
-    DockerInspectInput,
-    DockerInspectOutput,
-    DockerListCapability,
-    DockerListInput,
-    DockerListOutput,
-    DockerPruneCapability,
-    DockerPruneInput,
-    DockerPruneOutput,
-    DockerRollbackCapability,
-    DockerRollbackInput,
-    DockerRollbackOutput,
-    DockerStopCapability,
-    DockerStopInput,
-    DockerStopOutput,
-)
-
-# Notification capabilities
-from elle.capabilities.core.notify import (
-    NOTIFY_CAPABILITIES,
-    NotifyAlertCapability,
-    NotifyAlertInput,
-    NotifyAlertOutput,
-    NotifySendCapability,
-    NotifySendInput,
-    NotifySendOutput,
-)
-
-# Network capabilities
-from elle.capabilities.core.network import (
-    NETWORK_CAPABILITIES,
-    NetworkListenersCapability,
-    NetworkListenersInput,
-    NetworkListenersOutput,
-    WireGuardRestartCapability,
-    WireGuardRestartInput,
-    WireGuardRestartOutput,
-    WireGuardStatusCapability,
-    WireGuardStatusInput,
-    WireGuardStatusOutput,
-)
-
-# Incident capabilities
-from elle.capabilities.core.incident import (
-    INCIDENT_CAPABILITIES,
-    IncidentAttachCapability,
-    IncidentAttachInput,
-    IncidentAttachOutput,
-    IncidentCreateCapability,
-    IncidentCreateInput,
-    IncidentCreateOutput,
-)
-
-# GUI capabilities
-from elle.capabilities.core.gui import (
-    GUI_CAPABILITIES,
-    GuiLearnCapability,
-    GuiLearnInput,
-    GuiLearnOutput,
-    GuiClickCapability,
-    GuiClickInput,
-    GuiClickOutput,
-    GuiTypeCapability,
-    GuiTypeInput,
-    GuiTypeOutput,
-    GuiNavigateCapability,
-    GuiNavigateInput,
-    GuiNavigateOutput,
-    GuiExecuteTaskCapability,
-    GuiExecuteTaskInput,
-    GuiExecuteTaskOutput,
-)
-
-# File diff/snapshot capabilities
-from elle.capabilities.core.file import (
-    FileDiffCapability,
-    FileDiffInput,
-    FileDiffOutput,
-    FileWatchSnapshotCapability,
-    FileWatchSnapshotInput,
-    FileWatchSnapshotOutput,
 )
 
 __all__ = [
@@ -300,6 +308,10 @@ __all__ = [
     "DockerListCapability",
     "DockerListInput",
     "DockerListOutput",
+    "DockerConfigureEnvCapability",
+    "DockerConfigureEnvInput",
+    "DockerConfigureEnvOutput",
+    "EnvVarConfig",
     # Notification
     "NOTIFY_CAPABILITIES",
     "NotifySendCapability",
@@ -316,6 +328,12 @@ __all__ = [
     "WireGuardStatusCapability",
     "WireGuardStatusInput",
     "WireGuardStatusOutput",
+    "WireGuardGenerateKeyCapability",
+    "WireGuardGenerateKeyInput",
+    "WireGuardGenerateKeyOutput",
+    "WireGuardRotateKeysCapability",
+    "WireGuardRotateKeysInput",
+    "WireGuardRotateKeysOutput",
     "NetworkListenersCapability",
     "NetworkListenersInput",
     "NetworkListenersOutput",

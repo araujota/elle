@@ -6,10 +6,10 @@ Design rule: Never show a spinner for <100ms tasks.
 
 from __future__ import annotations
 
-import asyncio
 import time
+from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
-from typing import TYPE_CHECKING, AsyncIterator, Iterator
+from typing import TYPE_CHECKING
 
 from rich.progress import (
     BarColumn,
@@ -112,7 +112,7 @@ class PhaseSpinner:
             self._status.stop()
             self._status = None
 
-    def __enter__(self) -> "PhaseSpinner":
+    def __enter__(self) -> PhaseSpinner:
         self.start()
         return self
 

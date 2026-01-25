@@ -13,6 +13,18 @@ Usage:
         response = llm.generate("Explain systemctl")
 """
 
+# Config generation
+from elle.rag.confgen import (
+    ConfigGenOutcome,
+    ConfigGenRequest,
+    ConfigGenResult,
+    ConfigGenService,
+    ConfigOp,
+    get_confgen_service,
+)
+from elle.rag.confgen import (
+    generate as confgen_generate,
+)
 from elle.rag.llm import (
     LLM,
     LLMConfig,
@@ -32,17 +44,6 @@ from elle.rag.ollama_client import (
     OllamaResponse,
     OllamaUnavailableError,
     get_client,
-)
-
-# Config generation
-from elle.rag.confgen import (
-    ConfigGenOutcome,
-    ConfigGenRequest,
-    ConfigGenResult,
-    ConfigGenService,
-    ConfigOp,
-    generate as confgen_generate,
-    get_confgen_service,
 )
 
 __all__ = [

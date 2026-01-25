@@ -13,7 +13,6 @@ from elle.daemon.telemetry.ebpf.capabilities import can_use_ebpf, get_kernel_ver
 from elle.daemon.telemetry.ebpf.models import (
     EBPF_EVENT_CATEGORIES,
     EBPF_EVENT_SEVERITIES,
-    EBPFProgramStatus,
     EBPFRawEvent,
     EBPFWatcherStatus,
 )

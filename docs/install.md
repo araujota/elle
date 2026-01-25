@@ -1,13 +1,20 @@
 ---
 layout: default
-title: Installation
+title: Quick Start
 ---
 
-# Installation
+# Quick Start
+
+Get ELLE running on your Ubuntu system in minutes.
+
+---
 
 ## From APT Repository (Recommended)
 
-The easiest way to install ELLE is from our APT repository.
+<div class="callout callout-info">
+<strong>Best for most users</strong><br>
+The APT repository provides automatic updates and proper system integration.
+</div>
 
 ### 1. Add the Repository
 
@@ -57,6 +64,89 @@ sudo systemctl enable elled  # Optional: start on boot
 elle
 ```
 
+---
+
+## First-Run Setup Wizard
+
+On first launch, ELLE guides you through configuration with an interactive setup wizard.
+
+<div class="terminal-demo">
+  <div class="terminal-header">
+    <span class="terminal-dot red"></span>
+    <span class="terminal-dot yellow"></span>
+    <span class="terminal-dot green"></span>
+    <span class="terminal-title">ELLE Setup Wizard</span>
+  </div>
+  <div class="terminal-body">
+    <div class="output" style="border: 1px solid #30363d; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+      <strong style="color: #79c0ff;">Welcome to ELLE</strong><br><br>
+      This quick setup will help you configure ELLE for your needs.<br>
+      You can change any of these settings later with /reconfigure.
+    </div>
+    <div><span style="color: #3fb950;">✓</span> Python 3.11</div>
+    <div><span style="color: #3fb950;">✓</span> Ollama is running</div>
+    <div><span style="color: #8b949e;">&nbsp;&nbsp;• Models: phi3.5:3.8b, qwen2.5:7b</span></div>
+  </div>
+</div>
+
+### What the Wizard Configures
+
+<div class="row">
+  <div class="col s12 m6">
+    <div class="card">
+      <div class="card-content">
+        <span class="card-title"><i class="material-icons left">security</i>Safety Settings</span>
+        <ul>
+          <li><strong>Safety Level:</strong> Standard, Cautious, or Minimal</li>
+          <li><strong>Confirmation Prompts:</strong> Always, High-risk only, or Never</li>
+          <li><strong>Config Preview:</strong> Show diffs before editing files</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="col s12 m6">
+    <div class="card">
+      <div class="card-content">
+        <span class="card-title"><i class="material-icons left">sensors</i>Telemetry Sources</span>
+        <ul>
+          <li><strong>System Journal:</strong> Monitor systemd logs</li>
+          <li><strong>Kernel Messages:</strong> Watch for OOM, hardware errors</li>
+          <li><strong>Docker Events:</strong> Track container lifecycle</li>
+          <li><strong>eBPF Tracing:</strong> Advanced syscall monitoring</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col s12 m6">
+    <div class="card">
+      <div class="card-content">
+        <span class="card-title"><i class="material-icons left">extension</i>Optional Features</span>
+        <ul>
+          <li><strong>REST API:</strong> OpenAI-compatible endpoint</li>
+          <li><strong>GUI Automation:</strong> Control desktop apps via AT-SPI</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="col s12 m6">
+    <div class="card">
+      <div class="card-content">
+        <span class="card-title"><i class="material-icons left">lock</i>Privilege Configuration</span>
+        <ul>
+          <li><strong>Secure:</strong> Always require password (default)</li>
+          <li><strong>Convenient:</strong> Group-based authentication</li>
+          <li><strong>Passwordless:</strong> No prompts (dev machines)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+---
+
 ## From Source
 
 For development or if you prefer building from source:
@@ -64,7 +154,7 @@ For development or if you prefer building from source:
 ### Prerequisites
 
 ```bash
-sudo apt install python3.11 python3.11-venv python3-pip git
+sudo apt install python3.11 python3.11-venv python3-pip git libaugeas-dev
 ```
 
 ### Clone and Install
@@ -72,7 +162,7 @@ sudo apt install python3.11 python3.11-venv python3-pip git
 ```bash
 git clone https://github.com/araujota/elle.git
 cd elle
-python3 -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 ```
@@ -87,6 +177,8 @@ elle
 elled
 ```
 
+---
+
 ## Verify Installation
 
 After installation, verify everything is working:
@@ -98,19 +190,58 @@ elle --version
 # Check daemon status
 systemctl status elled
 
-# Check Ollama
+# Check Ollama models
 ollama list
 
-# Run ELLE
+# Launch ELLE
 elle
 ```
 
-On first launch, ELLE will guide you through a setup wizard to configure your preferences.
+You should see the setup wizard on first launch, or the ELLE prompt if you've already configured it:
+
+```
+elle>
+```
+
+---
+
+## Post-Installation
+
+### Privilege Levels
+
+ELLE never uses `sudo`. Privileged operations go through Polkit. During setup, you chose a privilege level:
+
+| Level | Description | When to Use |
+|-------|-------------|-------------|
+| **Secure** | Always prompts for password | Production servers, shared machines |
+| **Convenient** | 'elle' group members skip password | Personal workstations |
+| **Passwordless** | No authentication required | Development VMs, single-user systems |
+
+To change privilege settings later:
+
+```bash
+elle
+elle> /reconfigure
+```
+
+### Configuration Files
+
+| File | Purpose |
+|------|---------|
+| `/etc/elle/elle.toml` | System-wide configuration |
+| `~/.config/elle/elle.toml` | User overrides |
+| `~/.config/elle/policy.yaml` | User policy rules |
+| `/etc/polkit-1/rules.d/50-elle.rules` | Polkit rules (if convenient/passwordless) |
+
+---
 
 ## Uninstall
 
 ```bash
-# Remove ELLE
+# Remove ELLE (keeps data)
+sudo apt remove elle
+
+# Remove ELLE and all data
 sudo apt purge elle
 
 # This removes:
@@ -120,40 +251,86 @@ sudo apt purge elle
 # - The elle system user
 ```
 
-To keep your data, use `sudo apt remove elle` instead of `purge`.
+---
 
 ## Troubleshooting
 
-### ELLE says Ollama is not running
-
-```bash
-# Check Ollama status
+<ul class="collapsible">
+  <li>
+    <div class="collapsible-header"><i class="material-icons">error_outline</i>ELLE says Ollama is not running</div>
+    <div class="collapsible-body">
+      <p>Check if Ollama is installed and running:</p>
+      <pre><code># Check status
 systemctl status ollama
 
 # Start Ollama
 sudo systemctl start ollama
-```
 
-### Permission denied errors
+# Enable auto-start
+sudo systemctl enable ollama</code></pre>
+    </div>
+  </li>
+  <li>
+    <div class="collapsible-header"><i class="material-icons">error_outline</i>Permission denied errors</div>
+    <div class="collapsible-body">
+      <p>The <code>elled</code> daemon runs as the <code>elle</code> user. Ensure the service is running:</p>
+      <pre><code>sudo systemctl restart elled
+journalctl -u elled -f  # View logs</code></pre>
+      <p>If using "Convenient" privilege mode, ensure you've logged out and back in for group membership to take effect.</p>
+    </div>
+  </li>
+  <li>
+    <div class="collapsible-header"><i class="material-icons">error_outline</i>Models not loading</div>
+    <div class="collapsible-body">
+      <p>Verify models are downloaded:</p>
+      <pre><code>ollama list</code></pre>
+      <p>If models are missing, pull them again:</p>
+      <pre><code>ollama pull phi3.5:3.8b-mini-instruct-q8_0
+ollama pull qwen2.5:7b-instruct-q8_0</code></pre>
+    </div>
+  </li>
+  <li>
+    <div class="collapsible-header"><i class="material-icons">error_outline</i>Polkit authentication not working</div>
+    <div class="collapsible-body">
+      <p>If you chose "Convenient" or "Passwordless" mode but still get password prompts:</p>
+      <pre><code># Check if rules file exists
+ls -la /etc/polkit-1/rules.d/50-elle.rules
 
-The `elled` daemon runs as the `elle` user. Ensure the service is running:
+# Check group membership (for Convenient mode)
+groups
 
-```bash
-sudo systemctl restart elled
-journalctl -u elled -f  # View logs
-```
+# If 'elle' not listed, re-run setup or add manually:
+sudo usermod -aG elle $USER
+# Then log out and back in</code></pre>
+    </div>
+  </li>
+  <li>
+    <div class="collapsible-header"><i class="material-icons">error_outline</i>Not enough memory</div>
+    <div class="collapsible-body">
+      <p>ELLE needs ~12GB RAM when both models are loaded. If you have less memory:</p>
+      <ul>
+        <li>Use a smaller generation model: <code>ollama pull qwen2.5:3b-instruct-q8_0</code></li>
+        <li>Increase swap space</li>
+        <li>Enable zram compression</li>
+      </ul>
+      <p>See <a href="{{ '/docs/hardware' | relative_url }}">Hardware Requirements</a> for details.</p>
+    </div>
+  </li>
+</ul>
 
-### Models not loading
+---
 
-Verify models are downloaded:
+## Next Steps
 
-```bash
-ollama list
-```
+Once ELLE is running:
 
-If models are missing, pull them again:
+1. **Ask a question:** `how much disk space is left?`
+2. **Try a task:** `show me recent errors in the logs`
+3. **Create a reactive function:** `/react create`
+4. **Read the docs:** `/help` or [User Documentation]({{ '/docs' | relative_url }})
 
-```bash
-ollama pull phi3.5:3.8b-mini-instruct-q8_0
-ollama pull qwen2.5:7b-instruct-q8_0
-```
+<div style="text-align: center; margin: 2rem 0;">
+  <a href="{{ '/docs' | relative_url }}" class="btn btn-large waves-effect waves-light">
+    <i class="material-icons left">menu_book</i>Read the Documentation
+  </a>
+</div>

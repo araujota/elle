@@ -6,7 +6,6 @@ from elle.ops.stack.models import (
     StackVariable,
 )
 
-
 TRAEFIK_RECIPE = StackRecipe(
     name="traefik",
     display_name="Traefik Reverse Proxy",

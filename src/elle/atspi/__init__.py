@@ -33,6 +33,33 @@ Enable accessibility:
 
 from __future__ import annotations
 
+# Client
+from elle.atspi.client import (
+    ATSPIClient,
+    get_client,
+    is_atspi_available,
+)
+
+# Executor
+from elle.atspi.executor import (
+    UIExecutor,
+    get_executor,
+)
+
+# Learner
+from elle.atspi.learner import (
+    RecipeLearner,
+    get_learner,
+)
+
+# Matcher
+from elle.atspi.matcher import (
+    ElementMatcher,
+    UIAdaptor,
+    get_adaptor,
+    get_matcher,
+)
+
 # Models
 from elle.atspi.models import (
     AccessibleApp,
@@ -52,54 +79,26 @@ from elle.atspi.models import (
     UITaskPlan,
 )
 
-# Client
-from elle.atspi.client import (
-    ATSPIClient,
-    get_client,
-    is_atspi_available,
-)
-
-# Store
-from elle.atspi.store import (
-    create_recipe,
-    delete_recipe,
-    get_recipe,
-    get_recipe_by_app,
-    list_recipes,
-    update_recipe,
-    create_execution,
-    finalize_execution,
-    get_execution,
-    list_executions,
-    search_elements,
-)
-
-# Matcher
-from elle.atspi.matcher import (
-    ElementMatcher,
-    UIAdaptor,
-    get_matcher,
-    get_adaptor,
-)
-
-# Learner
-from elle.atspi.learner import (
-    RecipeLearner,
-    get_learner,
-)
-
 # Planner
 from elle.atspi.planner import (
     UITaskPlanner,
     get_planner,
 )
 
-# Executor
-from elle.atspi.executor import (
-    UIExecutor,
-    get_executor,
+# Store
+from elle.atspi.store import (
+    create_execution,
+    create_recipe,
+    delete_recipe,
+    finalize_execution,
+    get_execution,
+    get_recipe,
+    get_recipe_by_app,
+    list_executions,
+    list_recipes,
+    search_elements,
+    update_recipe,
 )
-
 
 # =============================================================================
 # High-level API

@@ -10,7 +10,7 @@ import logging
 import time
 from datetime import datetime
 
-from elle.policy.audit import get_audit_logger, log_evaluation
+from elle.policy.audit import log_evaluation
 from elle.policy.loader import load_policy
 from elle.policy.matchers import match_condition
 from elle.policy.models import (

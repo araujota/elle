@@ -17,12 +17,12 @@ Usage:
 """
 
 from elle.ops.wireguard.keys import (
-    generate_keypair,
-    generate_preshared_key,
-    derive_public_key,
-    rotate_keys_safely,
     KeyRotationResult,
     WireGuardKeyError,
+    derive_public_key,
+    generate_keypair,
+    generate_preshared_key,
+    rotate_keys_safely,
 )
 
 __all__ = [

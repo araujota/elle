@@ -14,7 +14,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from elle.daemon.reboot.models import GRUBState
 

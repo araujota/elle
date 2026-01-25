@@ -1,8 +1,13 @@
-"""Authentication middleware for OpenAI-compatible API.
+"""Authentication middleware for elled daemon API.
 
-Provides two authentication mechanisms:
-1. UDS Peer Credentials - Uses SO_PEERCRED for local Unix socket connections
-2. API Key - Bearer token authentication for TCP connections
+Provides three authentication mechanisms (in order of precedence):
+1. Session Token - Required for elle CLI access (generated on daemon startup)
+2. UDS Peer Credentials - Uses SO_PEERCRED for local Unix socket connections
+3. API Key - Bearer token authentication for persistent integrations
+
+The session token is the primary auth mechanism for elle CLI. It is generated
+on daemon startup and written to a file readable only by the daemon's user.
+This ensures only the elle CLI running as the same user can access the API.
 
 Authentication determines which execution modes a client is allowed to use.
 """
@@ -23,7 +28,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from elle.daemon.api.openai_models import ExecutionMode
 
 if TYPE_CHECKING:
-    from fastapi import HTTPException, Request
+    from fastapi import Request
 
     from elle.daemon.config import ApiAuthConfig
 
@@ -360,24 +365,36 @@ class AuthMiddleware:
     """FastAPI dependency for authentication.
 
     Examines each request and produces an AuthContext based on:
-    1. UDS peer credentials (for Unix socket connections)
-    2. Bearer token in Authorization header
-    3. Falls back to anonymous (readonly only)
+    1. Session token (X-Elle-Token header or Bearer token starting with 'elle_session_')
+    2. UDS peer credentials (for Unix socket connections)
+    3. API key (Bearer token)
+    4. Falls back to anonymous (readonly only) if allowed
     """
 
     def __init__(
         self,
-        config: "ApiAuthConfig",
+        config: ApiAuthConfig,
         key_store: ApiKeyStore | None = None,
+        session_token: str | None = None,
     ) -> None:
         """Initialize the auth middleware.
 
         Args:
             config: API authentication configuration.
             key_store: Optional API key store. Creates one if not provided.
+            session_token: The current daemon session token.
         """
         self._config = config
         self._key_store = key_store
+        self._session_token = session_token
+
+    def set_session_token(self, token: str) -> None:
+        """Update the session token.
+
+        Args:
+            token: New session token.
+        """
+        self._session_token = token
 
     @property
     def key_store(self) -> ApiKeyStore | None:
@@ -397,7 +414,12 @@ class AuthMiddleware:
         """
         from fastapi import HTTPException
 
-        # Try UDS peer credentials first
+        # Check for session token first (primary auth for elle CLI)
+        session_auth = self._auth_from_session_token(request)
+        if session_auth is not None:
+            return session_auth
+
+        # Try UDS peer credentials
         peer_creds = _get_peer_credentials(request)
         if peer_creds is not None:
             uid, gid = peer_creds
@@ -412,7 +434,7 @@ class AuthMiddleware:
             # Invalid key - reject
             raise HTTPException(
                 status_code=401,
-                detail="Invalid API key",
+                detail="Invalid API key or session token",
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
@@ -423,9 +445,50 @@ class AuthMiddleware:
         # No authentication and anonymous not allowed
         raise HTTPException(
             status_code=401,
-            detail="Authentication required",
+            detail="Authentication required. Ensure elled is running and you have access.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    def _auth_from_session_token(self, request) -> AuthContext | None:
+        """Authenticate using session token.
+
+        Checks X-Elle-Token header or Bearer token for session token.
+
+        Args:
+            request: The incoming request.
+
+        Returns:
+            AuthContext if session token is valid, None otherwise.
+        """
+        import secrets
+
+        if self._session_token is None:
+            return None
+
+        # Check X-Elle-Token header first
+        token = request.headers.get("X-Elle-Token")
+
+        # Fall back to Bearer token
+        if not token:
+            token = _extract_bearer_token(request)
+
+        if not token:
+            return None
+
+        # Validate using constant-time comparison
+        if secrets.compare_digest(token, self._session_token):
+            return AuthContext(
+                source="uds_peer",  # Treat as trusted local client
+                uid=None,
+                gid=None,
+                allowed_modes=(
+                    ExecutionMode.READONLY,
+                    ExecutionMode.EXECUTE,
+                    ExecutionMode.CAPABILITIES_ONLY,
+                ),
+            )
+
+        return None
 
     def _auth_from_peer(self, uid: int, gid: int) -> AuthContext:
         """Create auth context from peer credentials.

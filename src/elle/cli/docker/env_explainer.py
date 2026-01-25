@@ -73,7 +73,7 @@ class EnvVarExplainer:
 
     def __init__(
         self,
-        llm: "LLM | None" = None,
+        llm: LLM | None = None,
         *,
         timeout: float = 30.0,
         max_tokens: int = 256,
@@ -91,7 +91,7 @@ class EnvVarExplainer:
         self._cache: dict[tuple[str, str], EnvVarExplanation] = {}
 
     @property
-    def llm(self) -> "LLM":
+    def llm(self) -> LLM:
         """Get or create the LLM instance."""
         if self._llm is None:
             from elle.rag.llm import get_llm

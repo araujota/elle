@@ -6,7 +6,6 @@ from elle.ops.stack.models import (
     StackVariable,
 )
 
-
 GRAFANA_RECIPE = StackRecipe(
     name="grafana",
     display_name="Grafana Dashboards",

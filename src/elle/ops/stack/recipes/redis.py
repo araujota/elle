@@ -6,7 +6,6 @@ from elle.ops.stack.models import (
     StackVariable,
 )
 
-
 REDIS_RECIPE = StackRecipe(
     name="redis",
     display_name="Redis Cache Server",

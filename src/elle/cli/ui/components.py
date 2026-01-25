@@ -8,17 +8,12 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Literal
 
-from rich.columns import Columns
-from rich.console import Group, RenderableType
-from rich.padding import Padding
 from rich.panel import Panel
 from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
-from elle.cli.ui.console import console
-from elle.cli.ui.theme import Colors, Icons, Spacing, Theme
-
+from elle.cli.ui.theme import Icons
 
 # =============================================================================
 # Badges

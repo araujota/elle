@@ -38,7 +38,7 @@ import time
 from typing import Any, Literal
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from elle.rag.constants import (
     CHARS_PER_TOKEN,
@@ -265,7 +265,7 @@ class ContextWindowManager:
         self._messages.clear()
         self._token_count = 0
 
-    async def compact(self, llm: "LLM") -> str:
+    async def compact(self, llm: LLM) -> str:
         """Compact the context by summarizing earlier messages.
 
         Preserves:

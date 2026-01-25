@@ -14,8 +14,7 @@ import asyncio
 import difflib
 import hashlib
 import logging
-import os
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -169,7 +168,7 @@ class InotifyWatcher:
                 for event in events:
                     await self._process_inotify_event(event, inotify_flags)
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
             except Exception as e:
                 logger.exception(f"Inotify read error: {e}")

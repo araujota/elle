@@ -10,7 +10,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # Type alias for environment variable source
 EnvVarSource = Literal["profile", "image", "compose", "llm", "user"]
 

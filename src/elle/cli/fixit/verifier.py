@@ -208,7 +208,7 @@ def _check_bash_syntax(command: str) -> tuple[bool, str | None]:
         return False, f"Syntax error: {result.stderr.strip()}"
     except subprocess.TimeoutExpired:
         return True, None  # Assume OK if check times out
-    except OSError as e:
+    except OSError:
         return True, None  # Can't run bash, skip check
 
 

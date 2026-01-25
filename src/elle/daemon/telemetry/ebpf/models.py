@@ -144,6 +144,16 @@ class EBPFEventType:
     THERMAL_ZONE_TRIP = "thermal_zone_trip"
     CPU_FREQUENCY = "cpu_frequency"
 
+    # Syscall tracing events
+    SYSCALL_OPENAT = "syscall_openat"
+    SYSCALL_WRITE = "syscall_write"
+    SYSCALL_UNLINKAT = "syscall_unlinkat"
+    SYSCALL_RENAMEAT = "syscall_renameat"
+    SYSCALL_CONNECT = "syscall_connect"
+    SYSCALL_EXECVE = "syscall_execve"
+    SYSCALL_CLONE = "syscall_clone"
+    SYSCALL_GENERIC = "syscall_generic"
+
 
 # Category mapping for eBPF events
 EBPF_EVENT_CATEGORIES: dict[str, str] = {
@@ -157,6 +167,15 @@ EBPF_EVENT_CATEGORIES: dict[str, str] = {
     EBPFEventType.SIGNAL_DELIVER: "service",
     EBPFEventType.THERMAL_ZONE_TRIP: "thermal",
     EBPFEventType.CPU_FREQUENCY: "thermal",
+    # Syscall tracing events
+    EBPFEventType.SYSCALL_OPENAT: "syscall",
+    EBPFEventType.SYSCALL_WRITE: "syscall",
+    EBPFEventType.SYSCALL_UNLINKAT: "syscall",
+    EBPFEventType.SYSCALL_RENAMEAT: "syscall",
+    EBPFEventType.SYSCALL_CONNECT: "syscall",
+    EBPFEventType.SYSCALL_EXECVE: "syscall",
+    EBPFEventType.SYSCALL_CLONE: "syscall",
+    EBPFEventType.SYSCALL_GENERIC: "syscall",
 }
 
 
@@ -172,4 +191,13 @@ EBPF_EVENT_SEVERITIES: dict[str, str] = {
     EBPFEventType.SIGNAL_DELIVER: "warning",
     EBPFEventType.THERMAL_ZONE_TRIP: "warning",
     EBPFEventType.CPU_FREQUENCY: "info",
+    # Syscall tracing events (all info - used for auditing)
+    EBPFEventType.SYSCALL_OPENAT: "info",
+    EBPFEventType.SYSCALL_WRITE: "info",
+    EBPFEventType.SYSCALL_UNLINKAT: "info",
+    EBPFEventType.SYSCALL_RENAMEAT: "info",
+    EBPFEventType.SYSCALL_CONNECT: "info",
+    EBPFEventType.SYSCALL_EXECVE: "info",
+    EBPFEventType.SYSCALL_CLONE: "info",
+    EBPFEventType.SYSCALL_GENERIC: "info",
 }

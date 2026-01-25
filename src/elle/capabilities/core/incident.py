@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -234,10 +233,10 @@ class IncidentCreateCapability(BaseCapability):
 
         try:
             from elle.daemon.incidents.store import (
-                create_incident_draft,
-                update_incident,
                 attach_snapshot,
+                create_incident_draft,
                 link_events,
+                update_incident,
             )
 
             # Create the incident draft
@@ -379,11 +378,11 @@ class IncidentAttachCapability(BaseCapability):
 
         try:
             from elle.daemon.incidents.store import (
-                get_incident,
-                update_incident,
                 append_action,
                 attach_snapshot,
+                get_incident,
                 link_events,
+                update_incident,
             )
 
             # Verify incident exists

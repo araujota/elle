@@ -11,7 +11,6 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # Extended severity levels (journald priorities)
 TelemetrySeverity = Literal["debug", "info", "notice", "warning", "error", "critical"]
 

@@ -21,12 +21,10 @@ from elle.daemon.incidents.models import (
 from elle.daemon.incidents.preconditions import evaluate_preconditions
 from elle.daemon.incidents.schema import ensure_schema, get_connection
 from elle.daemon.incidents.store import (
-    _json_loads,
     _parse_datetime,
     _row_to_incident,
     get_all_embeddings,
 )
-
 
 # Static outcome quality weights (fallback when no efficacy data available)
 STATIC_OUTCOME_WEIGHTS = {

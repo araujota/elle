@@ -3,28 +3,48 @@ description: Local-first system intelligence for Ubuntu
 url: "https://araujota.github.io"
 baseurl: "/elle"
 
-# Theme
-remote_theme: pages-themes/minimal@v0.2.0
-plugins:
-  - jekyll-remote-theme
+# No remote theme - using custom layout
+plugins: []
 
 # Build settings
 markdown: kramdown
 highlighter: rouge
+kramdown:
+  syntax_highlighter: rouge
+  syntax_highlighter_opts:
+    block:
+      line_numbers: false
 
 # Exclude from build
 exclude:
   - Gemfile
   - Gemfile.lock
   - README.md
+  - node_modules
+  - vendor
 
 # Navigation
 nav:
   - title: Home
     url: /
-  - title: Install
+    icon: home
+  - title: Quick Start
     url: /install
-  - title: Docs
+    icon: rocket_launch
+  - title: Documentation
     url: /docs
-  - title: GitHub
-    url: https://github.com/araujota/elle
+    icon: menu_book
+  - title: Hardware
+    url: /docs/hardware
+    icon: memory
+
+# GitHub
+github_repo: https://github.com/araujota/elle
+github_sponsor: https://github.com/sponsors/araujota
+
+# Defaults
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default

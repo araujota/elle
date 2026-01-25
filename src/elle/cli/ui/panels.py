@@ -9,28 +9,23 @@ Each panel follows consistent structure:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
-from typing import TYPE_CHECKING, Literal, Sequence
+from typing import TYPE_CHECKING, Literal
 
-from rich.box import ROUNDED, DOUBLE
+from rich.box import ROUNDED
 from rich.console import Group, RenderableType
-from rich.padding import Padding
 from rich.panel import Panel
 from rich.syntax import Syntax
-from rich.table import Table
 from rich.text import Text
 
 from elle.cli.ui.components import (
-    badge,
     bulleted_list,
-    code_inline,
     command_display,
     confidence_bar,
     confirmation_prompt,
     domain_badge,
-    key_value,
     key_value_table,
-    numbered_list,
     outcome_badge,
     privilege_badge,
     risk_badge,
@@ -41,11 +36,10 @@ from elle.cli.ui.components import (
     time_ago,
     tip,
 )
-from elle.cli.ui.console import console
-from elle.cli.ui.theme import Colors, Icons, Spacing, Theme
+from elle.cli.ui.theme import Colors, Icons, Theme
 
 if TYPE_CHECKING:
-    from pydantic import BaseModel
+    pass
 
 
 # =============================================================================

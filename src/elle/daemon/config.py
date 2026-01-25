@@ -62,11 +62,13 @@ class ApiAuthConfig:
     """Configuration for API authentication.
 
     Controls how the OpenAI-compatible API authenticates requests.
+    By default, anonymous access is DISABLED for security.
+    Only authenticated requests (session token, UDS peer, or API key) are allowed.
     """
 
     # Whether to allow anonymous (unauthenticated) requests
-    # Anonymous requests are limited to readonly mode
-    allow_anonymous: bool = True
+    # SECURITY: Disabled by default. Anonymous requests would be readonly only.
+    allow_anonymous: bool = False
 
     # Path to the API keys database
     # If None, API key authentication is disabled

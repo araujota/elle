@@ -6,7 +6,6 @@ from elle.ops.stack.models import (
     StackVariable,
 )
 
-
 POSTGRES_RECIPE = StackRecipe(
     name="postgres",
     display_name="PostgreSQL Database Server",

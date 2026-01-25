@@ -6,21 +6,21 @@ Uses prompt_toolkit for advanced input handling.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, Literal
+from typing import TYPE_CHECKING, Literal
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
-from prompt_toolkit.completion import Completer, Completion, WordCompleter
-from prompt_toolkit.formatted_text import HTML, FormattedText, merge_formatted_text
+from prompt_toolkit.completion import Completer, WordCompleter
+from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.lexers import PygmentsLexer
 from prompt_toolkit.styles import Style
 
-from elle.cli.ui.theme import Colors, Icons
+from elle.cli.ui.theme import Icons
 
 if TYPE_CHECKING:
     from pathlib import Path
+
     from prompt_toolkit.document import Document
 
 
@@ -83,7 +83,7 @@ class ElleCompleter(Completer):
 
     def get_completions(
         self,
-        document: "Document",
+        document: Document,
         complete_event: object,
     ):
         """Generate completions for current input."""
@@ -191,7 +191,7 @@ def get_status_bar(
 
 def create_prompt_session(
     *,
-    history_file: "Path | None" = None,
+    history_file: Path | None = None,
     enable_history_search: bool = True,
     enable_auto_suggest: bool = True,
     enable_completion: bool = True,
@@ -253,7 +253,7 @@ class EllePrompt:
     def __init__(
         self,
         *,
-        history_file: "Path | None" = None,
+        history_file: Path | None = None,
         show_status_bar: bool = True,
     ) -> None:
         """Initialize the prompt.

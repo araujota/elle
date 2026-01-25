@@ -2,6 +2,9 @@
 
 **Enabling Layer Learning Everything**
 
+[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-❤-ea4aaa?logo=github)](https://github.com/sponsors/araujota)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
 A local-first, agentic system layer for Ubuntu 24.04 LTS that converts kernel-level telemetry into natural language insight and safe system operations.
 
 ## Features
@@ -71,7 +74,7 @@ ollama pull phi3.5:3.8b-mini-instruct-q8_0  # SLM for classification
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/elle.git
+git clone https://github.com/araujota/elle.git
 cd elle
 
 # Create virtual environment
@@ -413,6 +416,140 @@ User ──▶ elle (terminal / CLI)
                 └─▶ Notifications (ntfy)
 ```
 
+### Request Lifecycle
+
+Every natural language message follows this flow through ELLE's processing pipeline:
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         REQUEST LIFECYCLE                                     │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  User Input (CLI or API)
+       │
+       ▼
+┌──────────────────┐
+│  Engine.process  │  ◄── Entry point for all requests
+│  (engine.py)     │      Receives: input string + Session
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                        INTENT CLASSIFICATION                                  │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │ 1. Hard keyword routes    (exact matches: "help", "exit", "status")    │ │
+│  │ 2. Prefix commands        (/ask, /do, /sh, /fix, /react, /learn, !)    │ │
+│  │ 3. Pattern matching       (regex for shell, questions, tasks, GUI)     │ │
+│  │ 4. SLM classification     (Ollama phi3.5 fallback if no pattern hit)   │ │
+│  │ 5. Safety overrides       (reduce confidence for dangerous commands)   │ │
+│  └─────────────────────────────────────────────────────────────────────────┘ │
+│                                                                               │
+│  Output: ClassificationResult(intent, confidence, reasoning)                  │
+│                                                                               │
+│  Intent Types:                                                                │
+│  ├── shell_passthrough   Safe shell commands                                  │
+│  ├── system_question     "Why is nginx failing?" "What uses port 8080?"       │
+│  ├── system_task         "Install nginx", "Configure static IP"               │
+│  ├── gui_task            "Disable bluetooth in settings"                      │
+│  ├── fixit               "fix" after a command failure                        │
+│  ├── navigation          "status", "events", "logs"                           │
+│  ├── meta                "help", "exit", "config"                             │
+│  └── explain_command     "explain: ls -la"                                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                           INTENT ROUTING                                      │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  shell_passthrough ────▶ ┌─────────────────┐                                  │
+│                          │ Denylist Check  │ Block: rm -rf /, fork bombs,     │
+│                          └────────┬────────┘        sudo, curl|bash, etc.     │
+│                                   │                                           │
+│                                   ▼                                           │
+│                          ┌─────────────────┐                                  │
+│                          │ subprocess_run  │ Execute safely, capture output   │
+│                          └─────────────────┘                                  │
+│                                                                               │
+│  system_question ──────▶ ┌─────────────────┐    ┌─────────────────┐           │
+│                          │   Man Vault     │───▶│    Ollama LLM   │           │
+│                          │   (RAG docs)    │    │   (generation)  │           │
+│                          └─────────────────┘    └─────────────────┘           │
+│                                                                               │
+│  system_task ──────────▶ ┌─────────────────────────────────────────────────┐  │
+│                          │              PLANNER SERVICE                     │  │
+│                          │  ┌──────────────────────────────────────────┐   │  │
+│                          │  │ 1. Query Man Vault for relevant docs     │   │  │
+│                          │  │ 2. Query Incident Vault for prior art    │   │  │
+│                          │  │ 3. Query daemon for system state         │   │  │
+│                          │  │ 4. LLM generates CapabilityPlan          │   │  │
+│                          │  │ 5. User confirmation (if required)       │   │  │
+│                          │  └──────────────────────────────────────────┘   │  │
+│                          │                      │                          │  │
+│                          │                      ▼                          │  │
+│                          │  ┌──────────────────────────────────────────┐   │  │
+│                          │  │         CAPABILITY EXECUTION              │   │  │
+│                          │  │  ┌────────────────────────────────────┐  │   │  │
+│                          │  │  │ Policy Engine                      │  │   │  │
+│                          │  │  │ ├── Check rules (ALLOW/DENY)       │  │   │  │
+│                          │  │  │ ├── REQUIRE_CONFIRMATION prompts   │  │   │  │
+│                          │  │  │ └── REQUIRE_PREVIEW shows diff     │  │   │  │
+│                          │  │  └────────────────────────────────────┘  │   │  │
+│                          │  │                   │                       │   │  │
+│                          │  │                   ▼                       │   │  │
+│                          │  │  ┌────────────────────────────────────┐  │   │  │
+│                          │  │  │ Capability Executor                │  │   │  │
+│                          │  │  │ ├── Execute capability             │  │   │  │
+│                          │  │  │ ├── Collect evidence               │  │   │  │
+│                          │  │  │ └── Record to Incident Vault       │  │   │  │
+│                          │  │  └────────────────────────────────────┘  │   │  │
+│                          │  └──────────────────────────────────────────┘   │  │
+│                          └─────────────────────────────────────────────────┘  │
+│                                                                               │
+│  fixit ────────────────▶ ┌─────────────────────────────────────────────────┐  │
+│                          │              FIXIT SERVICE                       │  │
+│                          │  1. Analyze exit code, stdout, stderr            │  │
+│                          │  2. Search Incident Vault for similar failures   │  │
+│                          │  3. Query Man Vault for command docs             │  │
+│                          │  4. LLM diagnosis (or rule-based fallback)       │  │
+│                          │  5. Generate fix via Capabilities                │  │
+│                          └─────────────────────────────────────────────────┘  │
+│                                                                               │
+│  gui_task ─────────────▶ ┌─────────────────────────────────────────────────┐  │
+│                          │             AT-SPI AUTOMATION                    │  │
+│                          │  1. Load UI recipe for target application        │  │
+│                          │  2. LLM plans UITaskPlan from request            │  │
+│                          │  3. Execute UIActions via AT-SPI                 │  │
+│                          │  4. Self-heal if elements moved (fuzzy match)    │  │
+│                          │  5. Record execution to Incident Vault           │  │
+│                          └─────────────────────────────────────────────────┘  │
+│                                                                               │
+│  navigation/meta ──────▶ Direct handlers (status, help, exit, events, etc.)  │
+│                                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                              RESPONSE                                         │
+│                                                                               │
+│  EngineResult:                                                                │
+│  ├── output        Rendered text/markdown for display                         │
+│  ├── session       Updated Session (immutable, new instance)                  │
+│  ├── action        CONTINUE | EXIT | CLEAR                                    │
+│  └── success       True/False                                                 │
+│                                                                               │
+│  Side effects:                                                                │
+│  ├── Incident created/updated in Incident Vault                               │
+│  ├── Telemetry events recorded (if system mutated)                            │
+│  └── Reactive functions may trigger from state changes                        │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Confidence Thresholds:**
+- `HIGH (0.90)` - Proceed without confirmation
+- `MEDIUM (0.75)` - May require confirmation for mutations
+- `MIN (0.55)` - Low confidence, user clarification may be needed
+
 ### Key Components
 
 | Component | Description |
@@ -455,6 +592,181 @@ ruff format src/
 mypy src/
 ```
 
+### OpenAI-Compatible API
+
+ELLE exposes an OpenAI-compatible API for programmatic access. All requests flow through the same intent classification and policy pipeline as the CLI.
+
+**Important:** This is NOT direct LLM access. Every request is classified, policy-checked, and executed through ELLE's capability system.
+
+#### Authentication
+
+The daemon API uses session token authentication. When `elled` starts, it generates a cryptographic token stored at:
+
+```
+$XDG_RUNTIME_DIR/elle/session.token
+```
+
+Include this token in requests via header:
+
+```bash
+# Read the session token
+TOKEN=$(cat $XDG_RUNTIME_DIR/elle/session.token)
+
+# Use X-Elle-Token header
+curl -H "X-Elle-Token: $TOKEN" http://localhost:8420/v1/models
+
+# Or use Bearer token format
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8420/v1/models
+```
+
+#### Available Models (Execution Modes)
+
+| Model ID | Description |
+|----------|-------------|
+| `elle` | Full execution mode - can perform all operations (with policy enforcement) |
+| `elle.readonly` | Read-only mode - queries and explanations only, no system mutations |
+| `elle.capabilities_only` | Returns planned capabilities as `tool_calls` without executing them |
+
+#### Endpoints
+
+**List Models**
+```bash
+GET /v1/models
+
+# Response
+{
+  "object": "list",
+  "data": [
+    {"id": "elle", "object": "model", "owned_by": "elle"},
+    {"id": "elle.readonly", "object": "model", "owned_by": "elle"},
+    {"id": "elle.capabilities_only", "object": "model", "owned_by": "elle"}
+  ]
+}
+```
+
+**Chat Completions**
+```bash
+POST /v1/chat/completions
+
+# Request body
+{
+  "model": "elle",
+  "messages": [
+    {"role": "user", "content": "What is using port 8080?"}
+  ],
+  "stream": false
+}
+
+# Response
+{
+  "id": "chatcmpl-...",
+  "object": "chat.completion",
+  "model": "elle",
+  "choices": [{
+    "index": 0,
+    "message": {
+      "role": "assistant",
+      "content": "Port 8080 is being used by..."
+    },
+    "finish_reason": "stop"
+  }],
+  "usage": {...}
+}
+```
+
+#### Python Example
+
+```python
+import os
+from pathlib import Path
+from openai import OpenAI
+
+# Read session token
+runtime_dir = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+token_path = Path(runtime_dir) / "elle" / "session.token"
+token = token_path.read_text().strip()
+
+# Create client pointing to elled
+client = OpenAI(
+    base_url="http://localhost:8420/v1",
+    api_key=token,  # Token goes here
+)
+
+# Query ELLE
+response = client.chat.completions.create(
+    model="elle.readonly",  # Read-only for safety
+    messages=[
+        {"role": "user", "content": "Show disk usage"}
+    ]
+)
+print(response.choices[0].message.content)
+
+# Execute a task (requires "elle" model)
+response = client.chat.completions.create(
+    model="elle",
+    messages=[
+        {"role": "user", "content": "Clean docker images older than 7 days"}
+    ]
+)
+# Will go through policy checks, may require confirmation
+```
+
+#### Streaming
+
+```python
+response = client.chat.completions.create(
+    model="elle",
+    messages=[{"role": "user", "content": "Explain nginx config"}],
+    stream=True
+)
+
+for chunk in response:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="")
+```
+
+#### curl Examples
+
+```bash
+TOKEN=$(cat $XDG_RUNTIME_DIR/elle/session.token)
+
+# Simple query (readonly mode)
+curl -X POST http://localhost:8420/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-Elle-Token: $TOKEN" \
+  -d '{
+    "model": "elle.readonly",
+    "messages": [{"role": "user", "content": "What services are running?"}]
+  }'
+
+# Execute a task (full mode)
+curl -X POST http://localhost:8420/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-Elle-Token: $TOKEN" \
+  -d '{
+    "model": "elle",
+    "messages": [{"role": "user", "content": "Restart nginx"}]
+  }'
+
+# Get capabilities without execution
+curl -X POST http://localhost:8420/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-Elle-Token: $TOKEN" \
+  -d '{
+    "model": "elle.capabilities_only",
+    "messages": [{"role": "user", "content": "Install nginx as reverse proxy"}]
+  }'
+# Returns tool_calls with planned capabilities
+```
+
+#### Security Notes
+
+- Session tokens are ephemeral - regenerated each time `elled` starts
+- Token file has 600 permissions (owner read/write only)
+- Tokens use constant-time comparison to prevent timing attacks
+- All requests go through the same policy engine as CLI commands
+- High-risk operations still require confirmation via the CLI
+
 ## Configuration
 
 ELLE stores data in:
@@ -471,6 +783,25 @@ ELLE includes multiple safety mechanisms:
 - **Automatic backups** - Critical configs are backed up before modification
 - **Rollback support** - Failed operations can be reverted
 
+## Support ELLE
+
+ELLE is open source and free to use. If you find it valuable, consider sponsoring development:
+
+[![Sponsor on GitHub](https://img.shields.io/badge/Sponsor_on_GitHub-❤-ea4aaa?style=for-the-badge&logo=github)](https://github.com/sponsors/araujota)
+
+**Other ways to help:**
+- Report bugs and suggest features on [GitHub Issues](https://github.com/araujota/elle/issues)
+- Contribute code or documentation
+- Share ELLE with others who might find it useful
+
+**Questions or feedback?** Email: araujota97@gmail.com
+
 ## License
 
 GPL-3.0-or-later
+
+## Links
+
+- **Website:** https://araujota.github.io/elle
+- **Repository:** https://github.com/araujota/elle
+- **Sponsor:** https://github.com/sponsors/araujota

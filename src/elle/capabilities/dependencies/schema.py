@@ -8,7 +8,6 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-
 # Schema version for migrations
 SCHEMA_VERSION = 1
 

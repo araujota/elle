@@ -4,18 +4,14 @@ Validates plans against current system trends and state
 to predict likelihood of success and generate warnings.
 """
 
-from datetime import datetime
 from typing import Any
 
 from elle.cli.planner.models import (
     CommandPlan,
     PlanContext,
-    PlanStep,
     TrendContextRef,
 )
 from elle.daemon.telemetry.trends import (
-    CRITICAL_THRESHOLDS,
-    METRIC_THRESHOLDS,
     PlanValidationResult,
     TrendContext,
     ValidationWarning,
@@ -259,9 +255,7 @@ def get_trend_warnings_for_plan(
     if trend_ref.warning_messages:
         for msg in trend_ref.warning_messages:
             # Check if warning is relevant to plan
-            if _plan_involves_packages(plan) and "disk" in msg.lower():
-                warnings.append(msg)
-            elif _plan_involves_services(plan) and "mem" in msg.lower():
+            if _plan_involves_packages(plan) and "disk" in msg.lower() or _plan_involves_services(plan) and "mem" in msg.lower():
                 warnings.append(msg)
 
     return warnings

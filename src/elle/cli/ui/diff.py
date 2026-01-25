@@ -5,7 +5,7 @@ Displays unified diffs, config changes, and before/after comparisons.
 
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 from rich.console import Group, RenderableType
 from rich.panel import Panel
@@ -13,7 +13,6 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
-from elle.cli.ui.console import console
 from elle.cli.ui.theme import Colors, Icons
 
 
@@ -243,19 +242,19 @@ def render_config_change(
     text = Text()
 
     if operation == "rm" or new_value is None:
-        text.append(f"- ", style="red")
+        text.append("- ", style="red")
         text.append(path, style="path")
         if old_value:
             text.append(f" = {old_value}", style="red")
     elif operation == "ins" or old_value is None:
-        text.append(f"+ ", style="green")
+        text.append("+ ", style="green")
         text.append(path, style="path")
         if new_value:
             text.append(f" = {new_value}", style="green")
     else:
-        text.append(f"~ ", style="yellow")
+        text.append("~ ", style="yellow")
         text.append(path, style="path")
-        text.append(f"\n    ", style="")
+        text.append("\n    ", style="")
         text.append(f"{old_value or '(empty)'}", style="red")
         text.append(f" {Icons.ARROW_RIGHT} ", style="muted")
         text.append(f"{new_value or '(empty)'}", style="green")

@@ -20,7 +20,6 @@ from elle.capabilities.models import (
     CapabilityResult,
     CapabilitySpec,
     DryRunResult,
-    RiskLevel,
     RollbackResult,
     SideEffect,
     VerificationResult,

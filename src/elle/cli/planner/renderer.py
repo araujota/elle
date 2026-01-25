@@ -18,7 +18,6 @@ from elle.cli.planner.models import (
 )
 from elle.cli.terminal.renderer import Colors
 
-
 # =============================================================================
 # Box Drawing Characters
 # =============================================================================
@@ -283,7 +282,7 @@ def render_confirmation_prompt(plan: CommandPlan, auto_approve: bool = False) ->
             f"Press 'y' to proceed, 'r' to review, or 'n' to cancel: "
         )
     else:
-        return f"Proceed? [Y/n/r(review)]: "
+        return "Proceed? [Y/n/r(review)]: "
 
 
 def render_step_progress(step_index: int, total: int, command: str) -> str:

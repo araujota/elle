@@ -13,8 +13,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from elle.daemon.incidents.efficacy import (
     DomainEfficacy,
     EfficacyStats,
-    EntityEfficacy,
-    SolutionApproachEfficacy,
 )
 from elle.daemon.incidents.efficacy_tracker import (
     get_all_domain_efficacy,
@@ -26,7 +24,6 @@ from elle.daemon.incidents.models import (
 )
 from elle.daemon.incidents.narrative import Narrative
 from elle.daemon.incidents.schema import ensure_schema, get_connection
-
 
 # =============================================================================
 # Report Models
@@ -167,8 +164,8 @@ class ReportGenerator:
             ValueError: If incident not found.
         """
         from elle.daemon.incidents.store import (
-            get_incident,
             get_actions,
+            get_incident,
         )
 
         # Get incident
@@ -216,6 +213,7 @@ class ReportGenerator:
         """
         import json
         import sqlite3
+
         from elle.daemon.incidents.narrative import CausalChain
 
         try:

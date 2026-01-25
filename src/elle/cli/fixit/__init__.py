@@ -29,6 +29,17 @@ Usage (programmatic):
 """
 
 # Models
+# Fallback
+from elle.cli.fixit.fallback import (
+    analyze_with_fallback,
+    detect_error_category,
+)
+
+# Interactive UI
+from elle.cli.fixit.interactive import (
+    FixitInteractive,
+    run_interactive_fixit,
+)
 from elle.cli.fixit.models import (
     CommandFailure,
     ErrorCategory,
@@ -48,13 +59,6 @@ from elle.cli.fixit.models import (
     VerifiedFixCommand,
 )
 
-# Service
-from elle.cli.fixit.service import (
-    FixitService,
-    get_fixit_service,
-    reset_fixit_service,
-)
-
 # Rendering
 from elle.cli.fixit.renderer import (
     render_action_result,
@@ -63,10 +67,11 @@ from elle.cli.fixit.renderer import (
     render_outcome_prompt,
 )
 
-# Interactive UI
-from elle.cli.fixit.interactive import (
-    FixitInteractive,
-    run_interactive_fixit,
+# Service
+from elle.cli.fixit.service import (
+    FixitService,
+    get_fixit_service,
+    reset_fixit_service,
 )
 
 # Verification
@@ -74,12 +79,6 @@ from elle.cli.fixit.verifier import (
     filter_safe_suggestions,
     verify_analysis,
     verify_command,
-)
-
-# Fallback
-from elle.cli.fixit.fallback import (
-    analyze_with_fallback,
-    detect_error_category,
 )
 
 __all__ = [

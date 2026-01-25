@@ -310,6 +310,60 @@ class DockerListOutput(BaseModel):
     )
 
 
+class DockerDiagnoseInput(BaseModel):
+    """Input for docker diagnose operation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    container: str = Field(
+        description="Container name or ID to diagnose",
+    )
+    log_lines: int = Field(
+        default=50,
+        ge=10,
+        le=500,
+        description="Number of log lines to analyze",
+    )
+
+
+class DockerDiagnoseOutput(BaseModel):
+    """Output from docker diagnose operation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    container_id: str = Field(description="Container ID")
+    container_name: str = Field(description="Container name")
+    likely_cause: str = Field(description="Most likely cause of failure")
+    severity: str = Field(
+        default="warning",
+        description="Severity of the issue (info, warning, error, critical)",
+    )
+    causes: tuple[str, ...] = Field(
+        default_factory=tuple,
+        description="Possible causes ranked by likelihood",
+    )
+    recommendations: tuple[str, ...] = Field(
+        default_factory=tuple,
+        description="Recommendations to fix the issue",
+    )
+    logs_excerpt: str = Field(
+        default="",
+        description="Relevant log excerpt",
+    )
+    exit_code: int | None = Field(
+        default=None,
+        description="Container exit code if exited",
+    )
+    oom_killed: bool = Field(
+        default=False,
+        description="Whether container was OOM killed",
+    )
+    restart_count: int = Field(
+        default=0,
+        description="Number of times container has restarted",
+    )
+
+
 # =============================================================================
 # Docker Prune Capability
 # =============================================================================
@@ -1160,6 +1214,286 @@ class DockerListCapability(BaseCapability):
 
 
 # =============================================================================
+# Docker Diagnose Capability
+# =============================================================================
+
+
+class DockerDiagnoseCapability(BaseCapability):
+    """Diagnose container failure with root cause analysis."""
+
+    @property
+    def spec(self) -> CapabilitySpec:
+        return CapabilitySpec(
+            name="docker.diagnose",
+            summary="Diagnose container failure with root cause analysis",
+            domain="docker",
+            risk="none",
+            side_effects=(),  # Read-only operation
+            requires_privilege=False,
+            idempotent=True,
+            trust_level="core",
+            version="1.0.0",
+            input_schema_name="DockerDiagnoseInput",
+            output_schema_name="DockerDiagnoseOutput",
+        )
+
+    def dry_run(self, input: DockerDiagnoseInput) -> DryRunResult:
+        """Preview docker diagnose."""
+        if not _is_docker_available():
+            return DryRunResult(
+                is_valid=False,
+                validation_errors=("Docker is not available",),
+                preview_text="Cannot diagnose: Docker is not available",
+            )
+
+        # Check if container exists
+        result = _run_docker_command([
+            "inspect",
+            "--format",
+            "{{.Name}}",
+            input.container,
+        ])
+
+        if result.returncode != 0:
+            return DryRunResult(
+                is_valid=False,
+                validation_errors=(f"Container not found: {input.container}",),
+                preview_text=f"Cannot diagnose: container '{input.container}' not found",
+            )
+
+        return DryRunResult(
+            would_execute=(
+                f"docker inspect {input.container}",
+                f"docker logs --tail {input.log_lines} {input.container}",
+            ),
+            would_modify=(),
+            estimated_risk="none",
+            requires_confirmation=False,
+            preview_text=f"Would diagnose container '{input.container}'",
+            is_valid=True,
+        )
+
+    def run(self, input: DockerDiagnoseInput) -> CapabilityResult:
+        """Diagnose the container."""
+        start_time = time.time()
+
+        if not _is_docker_available():
+            return CapabilityResult(
+                success=False,
+                error="Docker is not available",
+                execution_time_ms=int((time.time() - start_time) * 1000),
+            )
+
+        try:
+            # Import the diagnostics module
+            from elle.cli.docker.diagnostics import diagnose_container_restart
+
+            diagnosis = diagnose_container_restart(input.container)
+
+            return CapabilityResult(
+                success=True,
+                output=DockerDiagnoseOutput(
+                    container_id=diagnosis.container.id,
+                    container_name=diagnosis.container.name,
+                    likely_cause=diagnosis.likely_cause,
+                    severity=diagnosis.severity,
+                    causes=diagnosis.causes,
+                    recommendations=diagnosis.recommendations,
+                    logs_excerpt=diagnosis.logs_excerpt,
+                    exit_code=diagnosis.container.exit_code,
+                    oom_killed=diagnosis.container.oom_killed,
+                    restart_count=diagnosis.container.restart_count,
+                ),
+                execution_time_ms=int((time.time() - start_time) * 1000),
+                evidence=CapabilityEvidence(
+                    commands_executed=(
+                        f"docker inspect {input.container}",
+                        f"docker logs --tail {input.log_lines} {input.container}",
+                    ),
+                    rationale=f"Diagnosed container '{input.container}': {diagnosis.likely_cause}",
+                ),
+            )
+
+        except Exception as e:
+            error_msg = str(e)
+            # Check for common error patterns
+            if "No such container" in error_msg or "not found" in error_msg.lower():
+                return CapabilityResult(
+                    success=False,
+                    error=f"Container not found: {input.container}",
+                    execution_time_ms=int((time.time() - start_time) * 1000),
+                )
+
+            return CapabilityResult(
+                success=False,
+                error=f"Failed to diagnose container: {error_msg}",
+                execution_time_ms=int((time.time() - start_time) * 1000),
+            )
+
+
+# =============================================================================
+# Docker Configure Env Capability
+# =============================================================================
+
+
+class EnvVarConfig(BaseModel):
+    """A single environment variable configuration."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str = Field(description="Environment variable name")
+    value: str = Field(description="Environment variable value")
+    is_sensitive: bool = Field(
+        default=False,
+        description="Whether this is a sensitive value (password, key)",
+    )
+
+
+class DockerConfigureEnvInput(BaseModel):
+    """Input for docker.configure-env operation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    image: str = Field(description="Docker image name (e.g., 'postgres:16')")
+    env_vars: tuple[EnvVarConfig, ...] = Field(
+        description="Environment variables to configure",
+    )
+    persist: bool = Field(
+        default=True,
+        description="Persist configuration for future use",
+    )
+
+
+class DockerConfigureEnvOutput(BaseModel):
+    """Output from docker.configure-env operation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    image: str = Field(description="Image that was configured")
+    image_family: str = Field(description="Extracted image family")
+    vars_saved: int = Field(description="Number of variables saved")
+    persisted: bool = Field(description="Whether config was persisted")
+
+
+class DockerConfigureEnvCapability(BaseCapability):
+    """Configure environment variables for Docker images."""
+
+    @property
+    def spec(self) -> CapabilitySpec:
+        return CapabilitySpec(
+            name="docker.configure-env",
+            summary="Configure and persist environment variables for Docker images",
+            domain="docker",
+            risk="low",
+            side_effects=(
+                SideEffect(
+                    kind="file_write",
+                    target="/var/lib/elle/docker_env.db",
+                    reversible=True,
+                    description="Saves environment configuration to database",
+                ),
+            ),
+            requires_privilege=False,
+            idempotent=True,
+            trust_level="core",
+            version="1.0.0",
+            input_schema_name="DockerConfigureEnvInput",
+            output_schema_name="DockerConfigureEnvOutput",
+        )
+
+    def dry_run(self, input: DockerConfigureEnvInput) -> DryRunResult:
+        """Preview environment configuration."""
+        try:
+            from elle.cli.docker.env_profiles import extract_image_family
+
+            image_family = extract_image_family(input.image)
+
+            var_names = [v.name for v in input.env_vars]
+            sensitive_count = sum(1 for v in input.env_vars if v.is_sensitive)
+
+            return DryRunResult(
+                would_execute=(
+                    f"save {len(var_names)} env vars for {image_family}",
+                ),
+                would_modify=("/var/lib/elle/docker_env.db",),
+                estimated_risk="low",
+                requires_confirmation=sensitive_count > 0,
+                preview_text=(
+                    f"Would configure {len(var_names)} environment variable(s) "
+                    f"for image family '{image_family}'"
+                    f"{f' ({sensitive_count} sensitive)' if sensitive_count > 0 else ''}"
+                ),
+                is_valid=True,
+            )
+
+        except ImportError:
+            return DryRunResult(
+                is_valid=False,
+                validation_errors=("Docker env module not available",),
+                preview_text="Cannot configure: module not available",
+            )
+
+    def run(self, input: DockerConfigureEnvInput) -> CapabilityResult:
+        """Configure environment variables."""
+        start_time = time.time()
+
+        try:
+            from elle.cli.docker.env_profiles import extract_image_family
+            from elle.cli.docker.env_store import (
+                get_connection,
+                init_schema,
+            )
+
+            image_family = extract_image_family(input.image)
+
+            if input.persist:
+                conn = get_connection()
+                init_schema(conn)
+
+                cursor = conn.cursor()
+                for var in input.env_vars:
+                    cursor.execute(
+                        """
+                        INSERT OR REPLACE INTO docker_env_values
+                        (image_family, var_name, var_value, is_sensitive, updated_at)
+                        VALUES (?, ?, ?, ?, datetime('now'))
+                        """,
+                        (image_family, var.name, var.value, 1 if var.is_sensitive else 0),
+                    )
+                conn.commit()
+                conn.close()
+
+            return CapabilityResult(
+                success=True,
+                output=DockerConfigureEnvOutput(
+                    image=input.image,
+                    image_family=image_family,
+                    vars_saved=len(input.env_vars),
+                    persisted=input.persist,
+                ),
+                side_effects_applied=(
+                    SideEffect(
+                        kind="file_write",
+                        target="/var/lib/elle/docker_env.db",
+                        reversible=True,
+                        description=f"Saved {len(input.env_vars)} env vars for {image_family}",
+                    ),
+                ) if input.persist else (),
+                execution_time_ms=int((time.time() - start_time) * 1000),
+                evidence=CapabilityEvidence(
+                    rationale=f"Configured {len(input.env_vars)} env vars for {image_family}",
+                ),
+            )
+
+        except Exception as e:
+            return CapabilityResult(
+                success=False,
+                error=str(e),
+                execution_time_ms=int((time.time() - start_time) * 1000),
+            )
+
+
+# =============================================================================
 # Exports
 # =============================================================================
 
@@ -1169,4 +1503,6 @@ DOCKER_CAPABILITIES = [
     DockerInspectCapability,
     DockerRollbackCapability,
     DockerListCapability,
+    DockerConfigureEnvCapability,
+    DockerDiagnoseCapability,
 ]

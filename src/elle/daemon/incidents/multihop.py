@@ -12,7 +12,6 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from elle.daemon.incidents.models import (
-    Fingerprint,
     IncidentReport,
     IncidentSearchResult,
 )
@@ -290,7 +289,7 @@ class MultiHopSearch:
             return []
 
         try:
-            from elle.daemon.telemetry.store import search_events, list_events
+            from elle.daemon.telemetry.store import list_events, search_events
 
             # First try text search
             results = search_events(query, limit=self.config.max_results_per_hop, conn=conn)
@@ -649,9 +648,7 @@ def temporal_rerank(
 
         # Direction preference
         is_before = result.incident.created_at < reference_time
-        if prefer_before and is_before:
-            temporal_weight *= 1.2
-        elif not prefer_before and not is_before:
+        if prefer_before and is_before or not prefer_before and not is_before:
             temporal_weight *= 1.2
 
         boosted = IncidentSearchResult(

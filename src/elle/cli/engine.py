@@ -18,8 +18,8 @@ from pydantic import BaseModel, ConfigDict
 from elle.cli.subprocess_runner import RunMode, run_safe
 from elle.cli.terminal.classifier import IntentClassifier, get_classifier
 from elle.cli.terminal.incident_renderer import (
-    render_incident_list,
     render_incident_detail,
+    render_incident_list,
     render_incident_markdown,
     render_search_results,
 )
@@ -227,6 +227,10 @@ class Engine:
             case Intent.NAVIGATION:
                 return self._handle_navigation(user_input, session)
             case Intent.SHELL_PASSTHROUGH:
+                # Check if this is a /trace command
+                if user_input.startswith("/trace "):
+                    command = user_input[7:]  # Remove "/trace " prefix
+                    return self._handle_traced_command(command, session, stream_output)
                 # Extract command from prefix if present
                 command = self._extract_shell_command(user_input)
                 return self._handle_shell_command(command, session, stream_output)
@@ -236,6 +240,8 @@ class Engine:
                 return self._handle_system_task(user_input, intent_result, session, stream_output)
             case Intent.FIXIT:
                 return self._handle_fix(session, interactive=stream_output)
+            case Intent.EXPLAIN_COMMAND:
+                return self._handle_explain_command(user_input, session)
             case _:
                 # Fallback to shell passthrough
                 return self._handle_shell_command(user_input, session, stream_output)
@@ -456,6 +462,8 @@ class Engine:
                 output=f"{Colors.DIM}[Search not yet implemented]{Colors.RESET}",
                 session=session,
             )
+        elif lower.startswith("/preflight") or lower == "preflight":
+            return self._handle_preflight_command(user_input, session)
         elif self._is_incident_command(lower):
             return self._handle_incidents(user_input, session)
         elif self._is_reboot_command(lower):
@@ -503,6 +511,165 @@ class Engine:
                 session=session,
                 success=False,
             )
+
+    def _handle_preflight_command(self, user_input: str, session: Session) -> EngineResult:
+        """Handle preflight validation commands.
+
+        Supports:
+        - /preflight <packages>: Validate package installation
+        - /preflight --tier=N <packages>: Force specific tier
+        - /preflight --upgrade <packages>: Validate upgrade
+        - /preflight --remove <packages>: Validate removal
+
+        Args:
+            user_input: The preflight command.
+            session: Current session state.
+
+        Returns:
+            EngineResult with validation results.
+        """
+        import re
+
+        try:
+            from elle.ops.preflight import (
+                format_result_for_display,
+                validate_packages,
+            )
+            from elle.ops.preflight.risk_classifier import (
+                classify_risk,
+                get_risk_summary,
+            )
+        except ImportError as e:
+            return EngineResult(
+                output=f"{Colors.RED}Preflight module not available: {e}{Colors.RESET}",
+                session=session,
+                success=False,
+            )
+
+        # Parse the command
+        # Remove /preflight prefix
+        args = user_input.strip()
+        if args.startswith("/preflight"):
+            args = args[10:].strip()
+        elif args.startswith("preflight"):
+            args = args[9:].strip()
+
+        # Show help if no arguments
+        if not args or args in ("help", "--help", "-h"):
+            return self._preflight_help(session)
+
+        # Parse options
+        tier: int | None = None
+        operation = "install"
+
+        # Check for --tier=N
+        tier_match = re.search(r"--tier[=\s](\d+)", args)
+        if tier_match:
+            tier = int(tier_match.group(1))
+            if tier not in (1, 2, 3):
+                return EngineResult(
+                    output=f"{Colors.RED}Invalid tier: {tier}. Valid tiers are 1, 2, or 3.{Colors.RESET}",
+                    session=session,
+                    success=False,
+                )
+            args = re.sub(r"--tier[=\s]\d+\s*", "", args)
+
+        # Check for --upgrade
+        if "--upgrade" in args:
+            operation = "upgrade"
+            args = args.replace("--upgrade", "").strip()
+
+        # Check for --remove
+        if "--remove" in args:
+            operation = "remove"
+            args = args.replace("--remove", "").strip()
+
+        # Check for --risk (show risk assessment only)
+        show_risk_only = "--risk" in args
+        if show_risk_only:
+            args = args.replace("--risk", "").strip()
+
+        # Parse packages
+        packages = tuple(p.strip() for p in args.split() if p.strip())
+
+        if not packages:
+            return EngineResult(
+                output=f"{Colors.YELLOW}No packages specified.{Colors.RESET}\n\n"
+                f"Usage: /preflight <package> [package2...]\n"
+                f"       /preflight --upgrade <package>\n"
+                f"       /preflight --remove <package>\n"
+                f"       /preflight --tier=2 <package>",
+                session=session,
+                success=False,
+            )
+
+        # If --risk flag, just show risk assessment
+        if show_risk_only:
+            assessment = classify_risk(packages, operation)
+            summary = get_risk_summary(assessment)
+            return EngineResult(
+                output=f"\n{Colors.BOLD}Risk Assessment{Colors.RESET}\n{'━' * 40}\n{summary}",
+                session=session,
+                success=True,
+            )
+
+        # Run validation
+        try:
+            result = validate_packages(packages, operation, force_tier=tier)
+            output = format_result_for_display(result, use_colors=True)
+            return EngineResult(
+                output=output,
+                session=session,
+                success=result.can_proceed,
+            )
+        except Exception as e:
+            logger.exception("Preflight validation failed")
+            return EngineResult(
+                output=f"{Colors.RED}Validation failed: {e}{Colors.RESET}",
+                session=session,
+                success=False,
+            )
+
+    def _preflight_help(self, session: Session) -> EngineResult:
+        """Show preflight command help.
+
+        Args:
+            session: Current session state.
+
+        Returns:
+            EngineResult with help text.
+        """
+        help_text = f"""{Colors.BOLD}Pre-flight Package Validation{Colors.RESET}
+
+Validates package operations before execution to detect potential issues.
+
+{Colors.BOLD}Usage:{Colors.RESET}
+  /preflight <package> [package2...]     Validate package installation
+  /preflight --upgrade <package>         Validate package upgrade
+  /preflight --remove <package>          Validate package removal
+  /preflight --tier=N <package>          Force specific validation tier
+  /preflight --risk <package>            Show risk assessment only
+
+{Colors.BOLD}Validation Tiers:{Colors.RESET}
+  Tier 1: apt --dry-run simulation (fast, ~1s)
+  Tier 2: systemd-nspawn container test (thorough, ~30s)
+  Tier 3: LXD snapshot validation (full, not yet implemented)
+
+{Colors.BOLD}Examples:{Colors.RESET}
+  /preflight nginx                       Validate nginx installation
+  /preflight --upgrade postgresql        Validate PostgreSQL upgrade
+  /preflight --tier=2 openssh-server     Force container validation
+  /preflight --risk systemd              Show risk level only
+
+{Colors.BOLD}Risk Levels:{Colors.RESET}
+  NONE/LOW:    Safe packages, minimal validation
+  MEDIUM:      Standard packages, Tier 1 validation
+  HIGH:        Service packages, Tier 2 recommended
+  CRITICAL:    System packages, Tier 3 recommended
+
+{Colors.DIM}Tip: High-risk packages are automatically validated at Tier 2.{Colors.RESET}"""
+
+        return EngineResult(output=help_text, session=session)
 
     def _is_incident_command(self, text: str) -> bool:
         """Check if text is an incident-related command."""
@@ -596,8 +763,8 @@ class Engine:
         """Show detailed view of a single incident."""
         try:
             from elle.daemon.incidents.store import (
-                get_incident,
                 get_actions,
+                get_incident,
                 get_snapshots,
             )
 
@@ -689,9 +856,9 @@ class Engine:
         """Export recent incidents to markdown files."""
         try:
             from elle.daemon.incidents.store import (
-                list_incidents,
                 get_actions,
                 get_snapshots,
+                list_incidents,
             )
 
             incidents = list_incidents(limit=limit)
@@ -905,12 +1072,239 @@ class Engine:
                     output="ELLE v0.1.0-dev",
                     session=session,
                 )
+            case "sponsor":
+                return EngineResult(
+                    output=self._sponsor_text(),
+                    session=session,
+                )
             case _:
                 return EngineResult(
                     output=f"Unknown meta command: {command}",
                     session=session,
                     success=False,
                 )
+
+    def _handle_traced_command(
+        self,
+        command: str,
+        session: Session,
+        stream: bool,
+    ) -> EngineResult:
+        """Execute a shell command with syscall tracing.
+
+        Args:
+            command: The shell command to execute.
+            session: Current session state.
+            stream: Whether to stream output.
+
+        Returns:
+            EngineResult with command output, trace, and updated session.
+        """
+        import subprocess
+
+        # Try to initialize syscall tracing
+        try:
+            from elle.daemon.telemetry.ebpf.syscall_explainer import (
+                format_trace_for_display,
+            )
+            from elle.daemon.telemetry.ebpf.syscall_manager import (
+                get_syscall_manager,
+                is_syscall_tracing_available,
+            )
+            from elle.daemon.telemetry.ebpf.syscall_models import SyscallTrace
+
+            if not is_syscall_tracing_available():
+                # Fall back to regular execution with a note
+                logger.info("Syscall tracing not available, running without trace")
+                result = self._handle_shell_command(command, session, stream)
+                output = result.output
+                if output:
+                    output += "\n"
+                output += f"{Colors.DIM}(Syscall tracing not available - requires root/eBPF){Colors.RESET}"
+                return EngineResult(
+                    output=output,
+                    session=result.session,
+                    action=result.action,
+                    success=result.success,
+                )
+
+            manager = get_syscall_manager()
+
+        except ImportError:
+            # BCC not available, fall back to regular execution
+            result = self._handle_shell_command(command, session, stream)
+            output = result.output
+            if output:
+                output += "\n"
+            output += f"{Colors.DIM}(Syscall tracing not available){Colors.RESET}"
+            return EngineResult(
+                output=output,
+                session=result.session,
+                action=result.action,
+                success=result.success,
+            )
+
+        # Start the process
+        try:
+            process = subprocess.Popen(
+                command,
+                shell=True,
+                cwd=session.cwd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+
+            # Start tracing the process
+            if not manager.start_trace(command, process.pid, session.cwd):
+                # Tracing failed, but still run the command
+                stdout, stderr = process.communicate(timeout=self.DEFAULT_TIMEOUT)
+                new_session = session.with_command_result(
+                    cmd=command,
+                    stdout=stdout,
+                    stderr=stderr,
+                    exit_code=process.returncode,
+                )
+                output = self._format_command_output(stdout, stderr, process.returncode)
+                output += f"\n{Colors.YELLOW}(Syscall tracing failed to start){Colors.RESET}"
+                return EngineResult(
+                    output=output,
+                    session=new_session,
+                    success=process.returncode == 0,
+                )
+
+            # Wait for process to complete
+            try:
+                stdout, stderr = process.communicate(timeout=self.DEFAULT_TIMEOUT)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                stdout, stderr = process.communicate()
+                trace = manager.stop_trace()
+                new_session = session.with_command_result(
+                    cmd=command,
+                    stdout=stdout,
+                    stderr=stderr,
+                    exit_code=-1,
+                    syscall_trace=trace,
+                )
+                return EngineResult(
+                    output=self._format_timeout(command, self.DEFAULT_TIMEOUT),
+                    session=new_session,
+                    success=False,
+                )
+
+            # Stop tracing and get results
+            trace = manager.stop_trace()
+
+            # Update session with trace
+            new_session = session.with_command_result(
+                cmd=command,
+                stdout=stdout,
+                stderr=stderr,
+                exit_code=process.returncode,
+                syscall_trace=trace,
+            )
+
+            # Format output with trace summary
+            output_parts = []
+
+            # Regular command output
+            if stdout:
+                output_parts.append(stdout.rstrip())
+            if stderr:
+                output_parts.append(f"{Colors.RED}{stderr.rstrip()}{Colors.RESET}")
+
+            # Trace summary
+            if trace.has_trace:
+                output_parts.append("")
+                output_parts.append(f"{Colors.CYAN}━━━ Syscall Trace ━━━{Colors.RESET}")
+                output_parts.append(format_trace_for_display(trace, use_colors=True))
+            elif trace.error:
+                output_parts.append("")
+                output_parts.append(f"{Colors.YELLOW}Trace: {trace.error}{Colors.RESET}")
+
+            # Exit code if failed
+            if process.returncode != 0:
+                output_parts.append("")
+                output_parts.append(
+                    f"{Colors.DIM}Command failed (exit {process.returncode}). "
+                    f"Type 'fix' for help, 'explain' for syscall details.{Colors.RESET}"
+                )
+
+            return EngineResult(
+                output="\n".join(output_parts),
+                session=new_session,
+                success=process.returncode == 0,
+            )
+
+        except Exception as e:
+            logger.error(f"Error executing traced command: {e}")
+            # Try to stop any active trace
+            try:
+                manager.stop_trace()
+            except Exception:
+                pass
+            return EngineResult(
+                output=f"{Colors.RED}Error executing command: {e}{Colors.RESET}",
+                session=session,
+                success=False,
+            )
+
+    def _handle_explain_command(
+        self,
+        user_input: str,
+        session: Session,
+    ) -> EngineResult:
+        """Handle the explain command intent.
+
+        Shows the syscall trace explanation for the last traced command.
+
+        Args:
+            user_input: The user's input.
+            session: Current session state.
+
+        Returns:
+            EngineResult with trace explanation.
+        """
+        # Check if we have a trace
+        if not session.last_cmd:
+            return EngineResult(
+                output="No previous command to explain.",
+                session=session,
+                success=False,
+            )
+
+        if not session.has_trace:
+            return EngineResult(
+                output=(
+                    f"No syscall trace available for: {session.last_cmd}\n\n"
+                    f"{Colors.DIM}Tip: Use '/trace <command>' to execute with syscall tracing.{Colors.RESET}"
+                ),
+                session=session,
+                success=False,
+            )
+
+        # Get the trace explanation
+        try:
+            from elle.daemon.telemetry.ebpf.syscall_explainer import (
+                format_trace_for_display,
+            )
+
+            trace = session.last_syscall_trace
+            explanation = format_trace_for_display(trace, use_colors=True)
+
+            return EngineResult(
+                output=explanation,
+                session=session,
+                success=True,
+            )
+
+        except ImportError:
+            return EngineResult(
+                output=f"{Colors.RED}Syscall tracing module not available.{Colors.RESET}",
+                session=session,
+                success=False,
+            )
 
     def _handle_shell_command(
         self,
@@ -1186,24 +1580,33 @@ class Engine:
   help      Show this help message
   about     About ELLE
   version   Show version
+  sponsor   Support ELLE development
   status    Show session status
   history   Show command history
   clear     Clear the screen
   exit      Exit ELLE terminal
   fix       Analyze last failed command
+  explain   Show what last traced command did
 
 {Colors.BOLD}Prefix Commands:{Colors.RESET}
-  /sh <cmd>   Execute shell command explicitly
-  /ask <q>    Ask a system question
-  /do <task>  Request a system task
-  /fix        Fix last failed command
-  !<cmd>      Shell command shortcut
+  /sh <cmd>     Execute shell command explicitly
+  /trace <cmd>  Execute with syscall tracing
+  /ask <q>      Ask a system question
+  /do <task>    Request a system task
+  /fix          Fix last failed command
+  /explain      Explain last traced command
+  /preflight    Validate packages before install
+  !<cmd>        Shell command shortcut
 
 {Colors.BOLD}Usage:{Colors.RESET}
   Shell commands are auto-detected and executed directly
   Questions (why, how, what) get context-aware answers
   Task requests are planned and executed safely
   Timeout protection: {self.DEFAULT_TIMEOUT:.0f}s default
+
+{Colors.BOLD}Syscall Tracing:{Colors.RESET}
+  Use '/trace <cmd>' to see exactly what a command does
+  Then 'explain' or 'what did that do?' to see details
 
 {Colors.BOLD}After a failed command:{Colors.RESET}
   Type 'fix' to see error details and get suggestions
@@ -1232,7 +1635,50 @@ cloud dependencies, no data leaves your machine.
   - Local RAG-powered knowledge base
 
 {Colors.DIM}License: GPL-3.0-or-later
-Repository: https://github.com/elle-project/elle{Colors.RESET}"""
+Website: https://araujota.github.io/elle
+Repository: https://github.com/araujota/elle
+
+Questions/Feedback: araujota97@gmail.com
+Sponsor: https://github.com/sponsors/araujota{Colors.RESET}"""
+
+    def _sponsor_text(self) -> str:
+        """Generate sponsor information text.
+
+        Returns:
+            Formatted sponsor information string.
+        """
+        sponsor_url = "https://github.com/sponsors/araujota"
+
+        # Try to open the sponsor page in the default browser
+        try:
+            import subprocess
+            subprocess.Popen(
+                ["xdg-open", sponsor_url],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            opened_browser = True
+        except Exception:
+            opened_browser = False
+
+        text = f"""{Colors.BOLD}Support ELLE Development{Colors.RESET}
+
+ELLE is open source and free to use. If you find it useful,
+consider sponsoring development to help keep the project sustainable.
+
+{Colors.BOLD}Sponsor:{Colors.RESET} {sponsor_url}
+
+{Colors.BOLD}Other ways to help:{Colors.RESET}
+  - Report bugs and suggest features on GitHub
+  - Contribute code or documentation
+  - Share ELLE with others who might find it useful
+
+{Colors.DIM}Questions or feedback? Email: araujota97@gmail.com{Colors.RESET}"""
+
+        if opened_browser:
+            text += f"\n\n{Colors.DIM}(Opening sponsor page in browser...){Colors.RESET}"
+
+        return text
 
     def _handle_man_command(self, user_input: str, session: Session) -> EngineResult:
         """Handle man command and subcommands.
@@ -1410,7 +1856,7 @@ for fast lexical and semantic search.{Colors.RESET}"""
             )
 
     def _man_reindex(self, session: Session) -> EngineResult:
-        """Trigger Man Vault reindexing.
+        """Trigger Man Vault reindexing via daemon API.
 
         Args:
             session: Current session state.
@@ -1418,7 +1864,32 @@ for fast lexical and semantic search.{Colors.RESET}"""
         Returns:
             EngineResult confirming reindex started.
         """
+        import asyncio
+
+        from elle.cli.daemon_client import get_daemon_client
+
         try:
+            client = get_daemon_client()
+
+            # Try daemon API first (preferred)
+            async def trigger_via_daemon() -> tuple[bool, str]:
+                if await client.is_daemon_available():
+                    return await client.trigger_manvault_reindex()
+                return False, "Daemon not available"
+
+            success, message = asyncio.get_event_loop().run_until_complete(trigger_via_daemon())
+
+            if success:
+                return EngineResult(
+                    output=(
+                        f"{Colors.GREEN}Reindexing started via daemon...{Colors.RESET}\n"
+                        f"{Colors.DIM}Use 'man status' to check progress{Colors.RESET}"
+                    ),
+                    session=session,
+                )
+
+            # Fallback to direct indexing if daemon unavailable
+            logger.debug(f"Daemon reindex failed: {message}, falling back to direct")
             from elle.daemon.manvault import get_service
 
             service = get_service()
@@ -1429,9 +1900,9 @@ for fast lexical and semantic search.{Colors.RESET}"""
                     session=session,
                 )
 
-            # Note: In a real daemon setup, this would trigger async reindex
-            # For CLI usage, we run synchronously in background
+            # Run synchronously in background thread (fallback only)
             import threading
+
             from elle.daemon.manvault.indexer import index_all
 
             def do_reindex():

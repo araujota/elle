@@ -15,11 +15,9 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from pathlib import Path
 
 from elle.daemon.manvault.embedder import ManVaultEmbedder, get_embedder
 from elle.daemon.manvault.indexer import (
-    CORE_COMMANDS,
     index_all,
     index_incremental,
     is_core_seeded,
@@ -33,7 +31,6 @@ from elle.daemon.manvault.store import (
     count_embeddings,
     get_meta,
     get_section_counts,
-    set_meta,
 )
 from elle.rag.ollama_client import OllamaUnavailableError
 
@@ -123,7 +120,7 @@ class ManVaultService:
             try:
                 # Wait for task to finish with timeout
                 await asyncio.wait_for(self._task, timeout=5.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning("ManVault service stop timed out, cancelling")
                 self._task.cancel()
                 try:

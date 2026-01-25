@@ -7,8 +7,9 @@ polling eBPF programs via BCC.
 import ctypes
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any, Callable
+from typing import Any
 
 from elle.daemon.telemetry.ebpf.models import EBPFProgramStatus, EBPFRawEvent
 

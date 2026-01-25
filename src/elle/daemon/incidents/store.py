@@ -11,8 +11,8 @@ from datetime import datetime
 from typing import Any
 
 from elle.daemon.incidents.models import (
-    ConfigFileState,
     ConfidenceBreakdown,
+    ConfigFileState,
     DecisionRecord,
     Fingerprint,
     IncidentAction,

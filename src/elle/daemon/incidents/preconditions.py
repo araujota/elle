@@ -10,7 +10,6 @@ from typing import Any
 
 from elle.daemon.incidents.models import Fingerprint, Precondition, SystemSnapshot
 
-
 # Safe operators for comparison
 OPERATORS = {
     "==": operator.eq,

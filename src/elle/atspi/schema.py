@@ -9,7 +9,6 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-
 # Default database path
 DEFAULT_DB_PATH = Path("/var/lib/elle/recipes.db")
 

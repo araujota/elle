@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from elle.capabilities.dependencies.models import DependencySpec
 
-
 # =============================================================================
 # Core Dependencies
 # =============================================================================

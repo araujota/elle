@@ -25,21 +25,7 @@ Usage:
 """
 
 # Models
-from elle.rag.confgen.models import (
-    ConfigDomain,
-    ConfigFileType,
-    ConfigGenContext,
-    ConfigGenError,
-    ConfigGenLLMError,
-    ConfigGenOutcome,
-    ConfigGenRequest,
-    ConfigGenResult,
-    ConfigGenValidation,
-    ConfigGenValidationError,
-    ConfigOp,
-    ConfigOpMode,
-    ValidationIssue,
-)
+from elle.rag.confgen.docker import DockerHandler
 
 # Domains
 from elle.rag.confgen.domains import (
@@ -56,8 +42,6 @@ from elle.rag.confgen.domains import (
     detect_file_type,
     get_handler,
 )
-from elle.rag.confgen.docker import DockerHandler
-from elle.rag.confgen.wireguard import WireguardHandler
 
 # Generator
 from elle.rag.confgen.generator import (
@@ -65,12 +49,20 @@ from elle.rag.confgen.generator import (
     get_generator,
     reset_generator,
 )
-
-# Validator
-from elle.rag.confgen.validator import (
-    ConfigValidator,
-    get_validator,
-    validate,
+from elle.rag.confgen.models import (
+    ConfigDomain,
+    ConfigFileType,
+    ConfigGenContext,
+    ConfigGenError,
+    ConfigGenLLMError,
+    ConfigGenOutcome,
+    ConfigGenRequest,
+    ConfigGenResult,
+    ConfigGenValidation,
+    ConfigGenValidationError,
+    ConfigOp,
+    ConfigOpMode,
+    ValidationIssue,
 )
 
 # Service
@@ -80,6 +72,14 @@ from elle.rag.confgen.service import (
     get_confgen_service,
     reset_confgen_service,
 )
+
+# Validator
+from elle.rag.confgen.validator import (
+    ConfigValidator,
+    get_validator,
+    validate,
+)
+from elle.rag.confgen.wireguard import WireguardHandler
 
 __all__ = [
     # Models

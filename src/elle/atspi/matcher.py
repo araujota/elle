@@ -10,9 +10,9 @@ from __future__ import annotations
 import logging
 import re
 from difflib import SequenceMatcher
-from typing import Any, Callable
+from typing import Any
 
-from elle.atspi.models import MatchMethod, MatchResult, UIElement
+from elle.atspi.models import MatchResult, UIElement
 
 logger = logging.getLogger(__name__)
 
@@ -665,7 +665,7 @@ class UIAdaptor:
             Explanation string.
         """
         if not result.found:
-            return f"Could not find element after trying all strategies"
+            return "Could not find element after trying all strategies"
 
         method = result.method
 

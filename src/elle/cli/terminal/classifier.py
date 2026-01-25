@@ -42,7 +42,7 @@ from elle.rag.constants import (
     SLM_TEMPERATURE,
     SLM_TIMEOUT,
 )
-from elle.rag.ollama_client import OllamaClient, OllamaConfig, OllamaError, get_client
+from elle.rag.ollama_client import OllamaClient, OllamaConfig, OllamaError
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 
 # Meta commands - exact match (case insensitive)
 META_COMMANDS = frozenset({
-    "help", "exit", "quit", "clear", "config", "about", "version",
+    "help", "exit", "quit", "clear", "config", "about", "version", "sponsor",
 })
 
 # Navigation commands - exact match
@@ -67,6 +67,12 @@ FIXIT_TRIGGERS = frozenset({
     "fix", "fix it", "fixit", "why did that fail", "what went wrong",
 })
 
+# Explain command triggers - exact match
+EXPLAIN_TRIGGERS = frozenset({
+    "explain", "what did that do", "what did it do",
+    "what happened", "explain that", "explain command",
+})
+
 # Prefix commands - explicit intent markers
 PREFIX_COMMANDS = {
     "/ask": Intent.SYSTEM_QUESTION,
@@ -75,6 +81,9 @@ PREFIX_COMMANDS = {
     "/sh": Intent.SHELL_PASSTHROUGH,
     "/run": Intent.SHELL_PASSTHROUGH,
     "/learn": Intent.NAVIGATION,  # GUI learning command
+    "/trace": Intent.SHELL_PASSTHROUGH,  # Execute with syscall tracing
+    "/explain": Intent.EXPLAIN_COMMAND,  # Explain last traced command
+    "/preflight": Intent.NAVIGATION,  # Pre-flight package validation
     "!": Intent.SHELL_PASSTHROUGH,  # Bang prefix for shell
 }
 
@@ -292,6 +301,7 @@ INTENTS (use exactly these values):
 - "system_task": user requests a system change in natural language
 - "shell_passthrough": user is entering a shell command to execute directly
 - "gui_task": user wants to interact with a GUI application (click, toggle, enable/disable in settings)
+- "explain_command": user wants to understand what a command did (what did that do, explain)
 
 RULES:
 - Known keyword (help, exit, status) -> meta/navigation, confidence >= 0.9
@@ -300,6 +310,7 @@ RULES:
 - Natural language action request -> system_task
 - GUI interaction (click X in app, toggle Y in settings) -> gui_task
 - Mentions previous failure or error -> fixit
+- "what did that do", "explain", "what happened" -> explain_command
 - Keep rationale to ONE short sentence
 - entities: extract command names, file paths, service names, port numbers, app names
 - If confidence < 0.55, set requires_clarification to true"""
@@ -507,6 +518,21 @@ class IntentClassifier:
                 return create_rule_result(
                     Intent.FIXIT,
                     "User requested fix (no previous command)",
+                    confidence=MEDIUM_CONFIDENCE,
+                )
+
+        # Explain command triggers - route to EXPLAIN_COMMAND
+        if lower in EXPLAIN_TRIGGERS:
+            if session.last_cmd:
+                return create_rule_result(
+                    Intent.EXPLAIN_COMMAND,
+                    "User wants to understand what the last command did",
+                    entities=[session.last_cmd],
+                )
+            else:
+                return create_rule_result(
+                    Intent.EXPLAIN_COMMAND,
+                    "User requested explanation (no previous command)",
                     confidence=MEDIUM_CONFIDENCE,
                 )
 

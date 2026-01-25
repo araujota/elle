@@ -5,10 +5,9 @@ guarantees, and execution results.
 """
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-
 
 # =============================================================================
 # Stack Definition Models

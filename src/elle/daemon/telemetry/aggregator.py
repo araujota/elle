@@ -6,8 +6,8 @@ and generate forecasts from telemetry data.
 
 import sqlite3
 from datetime import datetime, timedelta
-from typing import Any
 
+from elle.daemon.telemetry.schema import ensure_schema, get_connection
 from elle.daemon.telemetry.trends import (
     CRITICAL_THRESHOLDS,
     METRIC_THRESHOLDS,
@@ -18,11 +18,7 @@ from elle.daemon.telemetry.trends import (
     TrendConfig,
     TrendContext,
     TrendWindow,
-    ValidationWarning,
-    WindowStats,
 )
-from elle.daemon.telemetry.schema import ensure_schema, get_connection
-
 
 # =============================================================================
 # Schema for aggregations

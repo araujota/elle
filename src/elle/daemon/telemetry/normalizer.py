@@ -13,7 +13,6 @@ from typing import Any
 
 from elle.daemon.telemetry.models import TelemetryEvent, TelemetrySeverity
 
-
 # =============================================================================
 # Priority Mapping
 # =============================================================================
@@ -56,7 +55,17 @@ def priority_to_severity(priority: int | str | None) -> TelemetrySeverity:
 
 # Compiled regex patterns for category detection
 CATEGORY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    # OOM events (highest priority - check first)
+    # Kernel panic events (highest priority - check before OOM)
+    (re.compile(r"Kernel panic\s*-?\s*not syncing", re.I), "kernel_panic"),
+    (re.compile(r"\bBUG:\s|kernel BUG at", re.I), "kernel_panic"),
+    (re.compile(r"\bOops:\s*\[?#?\d", re.I), "kernel_panic"),
+    (re.compile(r"general protection fault:\s*\d", re.I), "kernel_panic"),
+    (re.compile(r"double fault:\s*\d", re.I), "kernel_panic"),
+    (re.compile(r"\bRIP:\s+\d{4}:", re.I), "kernel_panic"),
+    (re.compile(r"Call Trace:", re.I), "kernel_panic"),
+    (re.compile(r"Segmentation fault at\s+0x", re.I), "kernel_panic"),
+
+    # OOM events (high priority - check before disk)
     (re.compile(r"Out of memory|oom[-_]?kill|invoked oom-killer|Killed process", re.I), "oom"),
     (re.compile(r"cannot allocate memory|memory cgroup out of memory", re.I), "oom"),
 
@@ -140,6 +149,13 @@ def detect_category(message: str) -> str:
 
 # Entity extraction patterns
 ENTITY_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    # Kernel panic entities (check first for kernel events)
+    ("cpu", re.compile(r"CPU[#:\s]+(\d+)", re.I)),
+    ("cpu", re.compile(r"CPU:\s*(\d+)\s+PID:", re.I)),
+    ("module", re.compile(r"(\w+)\.ko[+\s]", re.I)),
+    ("module", re.compile(r"at\s+(\w+)\.ko\+0x", re.I)),
+    ("function", re.compile(r"RIP:\s+\d{4}:\s*(\w+)\+0x", re.I)),
+
     # Service units
     ("service", re.compile(r"([a-zA-Z0-9_@-]+)\.service", re.I)),
     ("service", re.compile(r"(?:unit|service)\s+([a-zA-Z0-9_@-]+)", re.I)),
@@ -221,6 +237,9 @@ def extract_entity(message: str, category: str, raw: dict[str, Any]) -> str | No
                 return f"port:{name}"
             if category == "net" and entity_type == "wg_interface":
                 return f"interface:{name}"
+            # Kernel panic entities (cpu, module, function)
+            if category == "kernel_panic" and entity_type in ("cpu", "module", "function"):
+                return f"{entity_type}:{name}"
             # Generic case - return first match
             if entity_type not in ("pid",):  # Skip PIDs as they're too transient
                 return f"{entity_type}:{name}"
@@ -346,6 +365,10 @@ class Normalizer:
 
         # Detect category
         category = detect_category(message)
+
+        # Kernel panics are always critical severity
+        if category == "kernel_panic":
+            severity = "critical"
 
         # Extract entity
         entity = extract_entity(message, category, raw)

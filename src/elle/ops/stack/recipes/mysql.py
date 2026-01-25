@@ -6,7 +6,6 @@ from elle.ops.stack.models import (
     StackVariable,
 )
 
-
 MYSQL_RECIPE = StackRecipe(
     name="mysql",
     display_name="MySQL Server",

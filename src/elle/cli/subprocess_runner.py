@@ -205,7 +205,7 @@ def check_denylist(command: str) -> tuple[bool, DenyReason | None, str | None]:
         Tuple of (is_denied, reason, explanation).
     """
     try:
-        from elle.policy import evaluate_command, PolicyEffect
+        from elle.policy import PolicyEffect, evaluate_command
 
         result = evaluate_command(command, audit=True)
 

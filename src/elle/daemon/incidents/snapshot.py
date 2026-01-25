@@ -14,7 +14,6 @@ from typing import Any
 
 from elle.daemon.incidents.models import Fingerprint, PackageState, SystemSnapshot
 
-
 # =============================================================================
 # Bedrock Packages
 # =============================================================================
