@@ -1,0 +1,30 @@
+title: ELLE
+description: Local-first system intelligence for Ubuntu
+url: "https://araujota.github.io"
+baseurl: "/elle"
+
+# Theme
+remote_theme: pages-themes/minimal@v0.2.0
+plugins:
+  - jekyll-remote-theme
+
+# Build settings
+markdown: kramdown
+highlighter: rouge
+
+# Exclude from build
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - README.md
+
+# Navigation
+nav:
+  - title: Home
+    url: /
+  - title: Install
+    url: /install
+  - title: Docs
+    url: /docs
+  - title: GitHub
+    url: https://github.com/araujota/elle

@@ -53,3 +53,9 @@ htmlcov/
 # Local development
 .env
 .env.local
+
+# Jekyll (docs)
+docs/_site/
+docs/.jekyll-cache/
+docs/Gemfile.lock
+docs/.sass-cache/
