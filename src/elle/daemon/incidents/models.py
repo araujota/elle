@@ -60,6 +60,27 @@ ActionKind = Literal[
 ]
 
 
+class PackageState(BaseModel):
+    """Installed package state at incident time.
+
+    Captures version information for bedrock and relevant packages
+    to support incident debugging and version tracking.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str = Field(description="Package name")
+    version: str = Field(description="Installed version string")
+    source: Literal["apt", "dpkg", "snap", "pip"] = Field(
+        default="apt",
+        description="Package source/manager",
+    )
+    is_bedrock: bool = Field(
+        default=False,
+        description="Whether this is a bedrock system package",
+    )
+
+
 class SystemSnapshot(BaseModel):
     """Point-in-time system state for comparison and replay.
 
@@ -123,6 +144,12 @@ class SystemSnapshot(BaseModel):
     smart: tuple[dict[str, Any], ...] = Field(
         default_factory=tuple,
         description="SMART info: dev, health, pct_used, media_errors",
+    )
+
+    # Package versions (bedrock + incident-relevant)
+    packages: tuple[PackageState, ...] = Field(
+        default_factory=tuple,
+        description="Bedrock and relevant package versions at snapshot time",
     )
 
     # Collected at timestamp

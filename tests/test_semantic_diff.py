@@ -14,12 +14,14 @@ from elle.daemon.incidents.models import (
     SemanticDiff,
     SystemSnapshot,
 )
+from elle.daemon.incidents.models import PackageState
 from elle.daemon.incidents.semantic_diff import (
     _config_significance,
     _diff_configs,
     _diff_docker,
     _diff_interfaces,
     _diff_kernel,
+    _diff_packages,
     _diff_services,
     build_config_state,
     compute_file_hash,
@@ -258,6 +260,99 @@ class TestDockerDiff:
         changes = _diff_docker(before, after)
         assert len(changes) == 1
         assert "exited" in changes[0].description
+
+
+class TestPackageDiff:
+    """Tests for package version diff detection."""
+
+    def test_package_upgrade_detected(self):
+        """Test package upgrade is detected."""
+        before = make_snapshot(
+            packages=(
+                PackageState(name="nginx", version="1.18.0", is_bedrock=False),
+            ),
+        )
+        after = make_snapshot(
+            packages=(
+                PackageState(name="nginx", version="1.20.0", is_bedrock=False),
+            ),
+        )
+        changes = _diff_packages(before, after)
+        assert len(changes) == 1
+        assert changes[0].category == "package"
+        assert "1.18.0" in changes[0].description
+        assert "1.20.0" in changes[0].description
+        assert "upgraded" in changes[0].description
+
+    def test_bedrock_package_upgrade_is_high_significance(self):
+        """Test bedrock package upgrade has high significance."""
+        before = make_snapshot(
+            packages=(
+                PackageState(name="systemd", version="253", is_bedrock=True),
+            ),
+        )
+        after = make_snapshot(
+            packages=(
+                PackageState(name="systemd", version="254", is_bedrock=True),
+            ),
+        )
+        changes = _diff_packages(before, after)
+        assert len(changes) == 1
+        assert changes[0].significance == "high"
+
+    def test_package_installed_detected(self):
+        """Test new package installation is detected."""
+        before = make_snapshot(packages=())
+        after = make_snapshot(
+            packages=(
+                PackageState(name="nginx", version="1.18.0", is_bedrock=False),
+            ),
+        )
+        changes = _diff_packages(before, after)
+        assert len(changes) == 1
+        assert "installed" in changes[0].description
+        assert "nginx" in changes[0].description
+
+    def test_package_removed_detected(self):
+        """Test package removal is detected."""
+        before = make_snapshot(
+            packages=(
+                PackageState(name="nginx", version="1.18.0", is_bedrock=False),
+            ),
+        )
+        after = make_snapshot(packages=())
+        changes = _diff_packages(before, after)
+        assert len(changes) == 1
+        assert "removed" in changes[0].description
+        assert "nginx" in changes[0].description
+
+    def test_no_change_no_diff(self):
+        """Test no changes produces no diff."""
+        packages = (PackageState(name="nginx", version="1.18.0"),)
+        before = make_snapshot(packages=packages)
+        after = make_snapshot(packages=packages)
+        changes = _diff_packages(before, after)
+        assert len(changes) == 0
+
+    def test_multiple_package_changes(self):
+        """Test multiple package changes are detected."""
+        before = make_snapshot(
+            packages=(
+                PackageState(name="nginx", version="1.18.0"),
+                PackageState(name="apache2", version="2.4.0"),
+            ),
+        )
+        after = make_snapshot(
+            packages=(
+                PackageState(name="nginx", version="1.20.0"),  # upgraded
+                # apache2 removed
+                PackageState(name="traefik", version="2.9.0"),  # installed
+            ),
+        )
+        changes = _diff_packages(before, after)
+        assert len(changes) == 3
+        categories = {c.description.split()[0] for c in changes}
+        assert "nginx" in categories or any("nginx" in c.description for c in changes)
 
 
 class TestConfigDiff:

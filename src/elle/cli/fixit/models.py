@@ -229,6 +229,7 @@ class FixitContext(BaseModel):
 
 # Error categories that the LLM can diagnose
 ErrorCategory = Literal[
+    # Original categories
     "command_not_found",
     "permission_denied",
     "file_not_found",
@@ -238,6 +239,35 @@ ErrorCategory = Literal[
     "resource_exhausted",
     "network_error",
     "configuration_error",
+    # Package manager categories
+    "apt_lock",
+    "dpkg_interrupted",
+    "broken_packages",
+    "held_packages",
+    "apt_hash_mismatch",
+    "apt_key_missing",
+    # Docker categories
+    "docker_not_running",
+    "container_not_found",
+    "image_not_found",
+    "port_in_use",
+    "container_runtime_error",
+    # Filesystem categories
+    "readonly_fs",
+    "device_busy",
+    "stale_nfs",
+    "fs_corrupt",
+    "io_error",
+    # Service/systemd categories
+    "service_start_failed",
+    "address_in_use",
+    "service_dep_failed",
+    "unit_not_found",
+    # Database categories
+    "db_locked",
+    "db_auth_failed",
+    "db_connection_refused",
+    # Catch-all
     "other",
 ]
 

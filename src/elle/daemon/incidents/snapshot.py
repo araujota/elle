@@ -6,22 +6,216 @@ precondition matching, and comparison.
 
 import os
 import platform
+import re
 import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from elle.daemon.incidents.models import Fingerprint, SystemSnapshot
+from elle.daemon.incidents.models import Fingerprint, PackageState, SystemSnapshot
 
 
-def collect_snapshot() -> SystemSnapshot:
+# =============================================================================
+# Bedrock Packages
+# =============================================================================
+
+# Core system packages always tracked (~15 packages)
+# These are fundamental to system operation and frequently relevant to incidents
+BEDROCK_PACKAGES: tuple[str, ...] = (
+    # Kernel and core runtime
+    "linux-image-generic",
+    "linux-headers-generic",
+    "systemd",
+    "libc6",
+    # Python runtime (ELLE itself)
+    "python3",
+    "python3-pip",
+    # Key infrastructure
+    "openssl",
+    "libssl3",
+    "ca-certificates",
+    "apt",
+    "dpkg",
+    # Networking
+    "netplan.io",
+    "systemd-resolved",
+    # Security
+    "polkitd",
+    "sudo",
+)
+
+
+# =============================================================================
+# Package Collection
+# =============================================================================
+
+
+def _get_package_version(name: str) -> str | None:
+    """Get installed version of a package via dpkg-query.
+
+    Args:
+        name: Package name to query.
+
+    Returns:
+        Version string if installed, None otherwise.
+    """
+    try:
+        result = subprocess.run(
+            ["dpkg-query", "-W", "-f=${Version}", name],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return None
+
+
+def _extract_relevant_packages(
+    command: str | None,
+    stderr: str | None,
+    entity: str | None,
+) -> set[str]:
+    """Extract package names from incident context.
+
+    Uses heuristics to identify packages that may be relevant
+    to the incident being tracked.
+
+    Args:
+        command: The command that was executed (if any).
+        stderr: Error output from the command (if any).
+        entity: Entity field from the incident (if any).
+
+    Returns:
+        Set of package names extracted from context.
+    """
+    packages: set[str] = set()
+
+    # From command: apt install X, dpkg -i X.deb, pip install X
+    if command:
+        # apt/apt-get install patterns
+        apt_match = re.search(r"apt(?:-get)?\s+install\s+(\S+)", command)
+        if apt_match:
+            packages.add(apt_match.group(1))
+
+        # dpkg -i pattern
+        dpkg_match = re.search(r"dpkg\s+-i\s+(\S+?)(?:_|\.deb)", command)
+        if dpkg_match:
+            packages.add(dpkg_match.group(1))
+
+        # pip install pattern
+        pip_match = re.search(r"pip3?\s+install\s+(\S+)", command)
+        if pip_match:
+            packages.add(pip_match.group(1))
+
+        # systemctl commands often reference service packages
+        systemctl_match = re.search(r"systemctl\s+\S+\s+(\S+)", command)
+        if systemctl_match:
+            packages.add(systemctl_match.group(1))
+
+    # From error: "Package 'X' not found", "Depends: X but..."
+    if stderr:
+        # Package mentions in error output
+        pkg_mentions = re.findall(
+            r"[Pp]ackage[:\s]+['\"]?(\w[\w\-\.]+)",
+            stderr,
+        )
+        packages.update(pkg_mentions[:5])  # Limit extraction
+
+        # Dependency mentions
+        dep_mentions = re.findall(
+            r"[Dd]epends:?\s+(\w[\w\-\.]+)",
+            stderr,
+        )
+        packages.update(dep_mentions[:3])
+
+    # From entity: service:nginx -> nginx
+    if entity and ":" in entity:
+        entity_name = entity.split(":", 1)[1]
+        # Clean up entity name to get potential package
+        pkg_name = entity_name.replace(".service", "").replace(".timer", "")
+        packages.add(pkg_name)
+
+    return packages
+
+
+def collect_package_state(
+    command: str | None = None,
+    stderr: str | None = None,
+    entity: str | None = None,
+) -> tuple[PackageState, ...]:
+    """Collect bedrock + relevant package versions.
+
+    Always captures bedrock packages. Optionally extracts
+    additional relevant packages from incident context.
+
+    Args:
+        command: Command that triggered the incident.
+        stderr: Error output from the command.
+        entity: Entity involved in the incident.
+
+    Returns:
+        Tuple of PackageState for installed packages.
+    """
+    states: list[PackageState] = []
+
+    # Always collect bedrock packages
+    for name in BEDROCK_PACKAGES:
+        version = _get_package_version(name)
+        if version:
+            states.append(
+                PackageState(
+                    name=name,
+                    version=version,
+                    source="apt",
+                    is_bedrock=True,
+                )
+            )
+
+    # Collect relevant packages (deduplicated against bedrock)
+    bedrock_names = set(BEDROCK_PACKAGES)
+    relevant = _extract_relevant_packages(command, stderr, entity)
+
+    for name in list(relevant)[:10]:  # Max 10 relevant packages
+        if name not in bedrock_names:
+            version = _get_package_version(name)
+            if version:
+                states.append(
+                    PackageState(
+                        name=name,
+                        version=version,
+                        source="apt",
+                        is_bedrock=False,
+                    )
+                )
+
+    return tuple(states)
+
+
+# =============================================================================
+# Snapshot Collection
+# =============================================================================
+
+
+def collect_snapshot(
+    command: str | None = None,
+    stderr: str | None = None,
+    entity: str | None = None,
+) -> SystemSnapshot:
     """Collect current system state.
 
     Gathers essential system metrics quickly and deterministically.
     All probes are designed to be fast and non-invasive.
 
+    Args:
+        command: Optional command that triggered snapshot collection.
+        stderr: Optional error output for package extraction.
+        entity: Optional entity name for package extraction.
+
     Returns:
-        SystemSnapshot with current system state.
+        SystemSnapshot with current system state including package versions.
     """
     return SystemSnapshot(
         os=_get_os_info(),
@@ -42,6 +236,7 @@ def collect_snapshot() -> SystemSnapshot:
         docker_containers=tuple(_get_docker_containers()),
         temps=tuple(_get_temps()),
         smart=tuple(_get_smart_info()),
+        packages=collect_package_state(command, stderr, entity),
         collected_at=datetime.utcnow(),
     )
 

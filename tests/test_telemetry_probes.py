@@ -202,6 +202,9 @@ class TestSmartProbe:
             {"device": "/dev/sda", "health": "FAILED", "pct_used": 0, "media_errors": 0}
         ]
 
+        # Force smartctl to be available for this test
+        probe._smartctl_available = True
+
         with patch.object(probe, "_get_smart_info", return_value=mock_disks):
             result = await probe.run()
 
@@ -209,6 +212,43 @@ class TestSmartProbe:
         assert len(result.events) > 0
         assert result.events[0].severity == "critical"
         assert result.events[0].category == "smart"
+
+    def test_check_smartctl_method_exists(self, probe):
+        """Test that _check_smartctl method exists."""
+        assert hasattr(probe, "_check_smartctl")
+        # Should return a boolean
+        result = probe._check_smartctl()
+        assert isinstance(result, bool)
+
+    @pytest.mark.asyncio
+    async def test_graceful_degradation_when_smartctl_missing(self, probe):
+        """Test probe returns success with error message when smartctl unavailable."""
+        # Force smartctl to be unavailable
+        probe._smartctl_available = False
+
+        result = await probe.run()
+
+        assert result.probe_name == "smart"
+        assert result.success is True  # Not a failure, just unavailable
+        assert result.data.get("available") is False
+        assert "error" in result.data or "smartctl" in str(result.data)
+        assert len(result.events) == 0  # No events generated
+
+    @pytest.mark.asyncio
+    async def test_available_flag_in_success_response(self, probe):
+        """Test that available flag is set to True when smartctl works."""
+        mock_disks = [
+            {"device": "/dev/sda", "health": "PASSED", "pct_used": 10, "media_errors": 0}
+        ]
+
+        # Force smartctl to be available
+        probe._smartctl_available = True
+
+        with patch.object(probe, "_get_smart_info", return_value=mock_disks):
+            result = await probe.run()
+
+        assert result.success is True
+        assert result.data.get("available") is True
 
 
 class TestCreateDefaultProbes:

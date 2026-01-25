@@ -415,11 +415,12 @@ class TestConfigStateStorage:
 class TestSchemaVersion:
     """Tests for schema versioning and migration."""
 
-    def test_schema_version_is_2(self, test_db):
-        """Test that schema version is 2."""
+    def test_schema_version_is_current(self, test_db):
+        """Test that schema version matches current SCHEMA_VERSION."""
         version = get_schema_version(test_db)
         assert version == SCHEMA_VERSION
-        assert version == 2
+        # Schema version increases as new features are added
+        assert version >= 2
 
     def test_new_tables_exist(self, test_db):
         """Test that v2 tables exist."""

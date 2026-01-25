@@ -496,20 +496,60 @@ class SmartProbe(BaseProbe):
     """Probe SMART disk health via smartctl.
 
     Runs smartctl on all block devices and checks health status.
+    Gracefully degrades when smartctl is not installed.
     """
 
     name = "smart"
     interval = 3600  # 1 hour
+
+    def __init__(self, thresholds: ThresholdConfig | None = None):
+        """Initialize the SMART probe.
+
+        Args:
+            thresholds: Threshold configuration.
+        """
+        super().__init__(thresholds)
+        self._smartctl_available: bool | None = None  # Lazy check
+
+    def _check_smartctl(self) -> bool:
+        """Check if smartctl is available on the system.
+
+        Returns:
+            True if smartctl is installed and accessible.
+        """
+        try:
+            result = subprocess.run(
+                ["which", "smartctl"],
+                capture_output=True,
+                timeout=2,
+            )
+            return result.returncode == 0
+        except Exception:
+            return False
 
     async def run(self) -> ProbeResult:
         """Check SMART health for all disks."""
         self._last_run = datetime.now(UTC)
         self._run_count += 1
 
+        # Lazy check for smartctl availability
+        if self._smartctl_available is None:
+            self._smartctl_available = self._check_smartctl()
+
+        # Graceful degradation when smartctl not installed
+        if not self._smartctl_available:
+            return ProbeResult(
+                probe_name=self.name,
+                ts=self._last_run,
+                success=True,  # Not a failure, just unavailable
+                data={"error": "smartctl not installed", "available": False},
+                events=(),
+            )
+
         try:
             disks = await self._get_smart_info()
             events = []
-            data = {"disks": disks}
+            data = {"disks": disks, "available": True}
 
             for disk in disks:
                 health = disk.get("health", "UNKNOWN")

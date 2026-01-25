@@ -69,6 +69,10 @@ def generate_semantic_diff(
     docker_changes = _diff_docker(before, after)
     changes.extend(docker_changes)
 
+    # Package changes
+    package_changes = _diff_packages(before, after)
+    changes.extend(package_changes)
+
     # Config file changes
     config_changes = _diff_configs(config_before, config_after)
     changes.extend(config_changes)
@@ -338,6 +342,67 @@ def _diff_docker(
             description=f"{diff} Docker container(s) exited",
             technical_detail=f"exited: {before.docker_exited} -> {after.docker_exited}",
             significance="medium",
+        ))
+
+    return changes
+
+
+def _diff_packages(
+    before: SystemSnapshot,
+    after: SystemSnapshot,
+) -> list[SemanticChange]:
+    """Detect package version changes between snapshots.
+
+    Compares package versions and detects upgrades, installations,
+    and removals.
+
+    Args:
+        before: System state before changes.
+        after: System state after changes.
+
+    Returns:
+        List of SemanticChange for package differences.
+    """
+    changes = []
+
+    # Build lookup dicts
+    pre_pkgs = {p.name: p.version for p in before.packages}
+    post_pkgs = {p.name: p.version for p in after.packages}
+
+    # Track bedrock status for significance
+    pre_bedrock = {p.name for p in before.packages if p.is_bedrock}
+    post_bedrock = {p.name for p in after.packages if p.is_bedrock}
+
+    # Upgrades / version changes
+    for name, post_ver in post_pkgs.items():
+        pre_ver = pre_pkgs.get(name)
+        if pre_ver and pre_ver != post_ver:
+            is_bedrock = name in pre_bedrock or name in post_bedrock
+            changes.append(SemanticChange(
+                category="package",
+                description=f"{name} upgraded: {pre_ver} → {post_ver}",
+                technical_detail=f"dpkg-query -W {name}",
+                significance="high" if is_bedrock else "medium",
+            ))
+
+    # New installations
+    for name in set(post_pkgs) - set(pre_pkgs):
+        is_bedrock = name in post_bedrock
+        changes.append(SemanticChange(
+            category="package",
+            description=f"{name} installed: {post_pkgs[name]}",
+            technical_detail=f"apt install {name}",
+            significance="high" if is_bedrock else "low",
+        ))
+
+    # Removals
+    for name in set(pre_pkgs) - set(post_pkgs):
+        is_bedrock = name in pre_bedrock
+        changes.append(SemanticChange(
+            category="package",
+            description=f"{name} removed (was {pre_pkgs[name]})",
+            technical_detail=f"apt remove {name}",
+            significance="high" if is_bedrock else "medium",
         ))
 
     return changes
