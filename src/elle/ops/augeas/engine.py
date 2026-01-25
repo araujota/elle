@@ -520,7 +520,7 @@ class AugeasEngine:
         """
         aug = self._ensure_open()
         path_str = str(file_path)
-        augeas_path = get_augeas_path(path_str)
+        _augeas_path = get_augeas_path(path_str)  # Available if needed for tree operations
 
         # Try to get the text representation
         # This requires the 'text' transform which may not always be available

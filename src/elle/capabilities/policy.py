@@ -61,9 +61,7 @@ def evaluate_capability(
     """
     try:
         from elle.policy import (
-            PolicyEffect,
             PolicyEvaluationRequest,
-            PolicyEvaluationResult,
             evaluate,
         )
 

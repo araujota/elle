@@ -203,7 +203,7 @@ class NarrativeBuilder:
 
         # Extract key entities and domains
         entities: set[str] = set()
-        domains: set[str] = set()
+        _domains: set[str] = set()  # Reserved for future domain-specific prompting
         for link in chain.links:
             # Extract entities from summaries
             entities.update(self._extract_entities_from_text(link.cause_summary))

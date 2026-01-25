@@ -113,7 +113,7 @@ def evaluate_expression(
     try:
         return op_func(actual_value, expected_value)
     except Exception as e:
-        raise PreconditionError(f"Error comparing values: {e}")
+        raise PreconditionError(f"Error comparing values: {e}") from e
 
 
 def evaluate_preconditions(

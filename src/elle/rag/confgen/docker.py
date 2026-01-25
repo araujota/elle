@@ -134,8 +134,6 @@ class DockerHandler(DomainHandler):
 
     def validate_content(self, content: str) -> ConfigGenValidation:
         """Validate Docker configuration content."""
-        issues: list[ValidationIssue] = []
-
         # Check if it looks like a Dockerfile
         # Dockerfile indicators: FROM, RUN, CMD, ENTRYPOINT at line starts
         dockerfile_patterns = ["FROM ", "RUN ", "CMD ", "ENTRYPOINT ", "COPY ", "WORKDIR "]

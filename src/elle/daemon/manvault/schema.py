@@ -186,9 +186,11 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
     Args:
         conn: SQLite connection.
     """
-    current = get_schema_version(conn) or 0
+    _current = get_schema_version(conn) or 0  # For future migration checks
 
     # Future migrations would go here
+    # if _current < 2:
+    #     _migrate_v1_to_v2(conn)
     # if current < 2:
     #     _migrate_v1_to_v2(conn)
 

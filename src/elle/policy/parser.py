@@ -55,7 +55,7 @@ class PolicyParser:
         try:
             content = path.read_text(encoding="utf-8")
         except OSError as e:
-            raise PolicyParseError(str(path), f"Cannot read file: {e}")
+            raise PolicyParseError(str(path), f"Cannot read file: {e}") from e
 
         return self.parse_string(content, str(path))
 
@@ -76,12 +76,12 @@ class PolicyParser:
             import yaml
 
             data = yaml.safe_load(content)
-        except ImportError:
-            raise PolicyParseError(source, "PyYAML is not installed")
+        except ImportError as e:
+            raise PolicyParseError(source, "PyYAML is not installed") from e
         except yaml.YAMLError as e:
             line = getattr(e, "problem_mark", None)
             line_num = line.line + 1 if line else None
-            raise PolicyParseError(source, f"Invalid YAML: {e}", line_num)
+            raise PolicyParseError(source, f"Invalid YAML: {e}", line_num) from e
 
         if not isinstance(data, dict):
             raise PolicyParseError(source, "Policy must be a YAML mapping")
@@ -120,12 +120,12 @@ class PolicyParser:
         default_effect_str = data.get("default_effect", "allow")
         try:
             default_effect = PolicyEffect(default_effect_str)
-        except ValueError:
+        except ValueError as e:
             raise PolicyParseError(
                 source,
                 f"Invalid default_effect: {default_effect_str}. "
-                f"Must be one of: {', '.join(e.value for e in PolicyEffect)}",
-            )
+                f"Must be one of: {', '.join(eff.value for eff in PolicyEffect)}",
+            ) from e
 
         # Parse rules
         rules_raw = data.get("rules", [])
@@ -138,7 +138,7 @@ class PolicyParser:
                 rule = self._parse_rule(rule_data, source, i)
                 rules.append(rule)
             except PolicyValidationError as e:
-                raise PolicyParseError(source, str(e))
+                raise PolicyParseError(source, str(e)) from e
 
         return PolicyDocument(
             version=version,
@@ -184,12 +184,12 @@ class PolicyParser:
             raise PolicyValidationError(rule_id, "Missing required field: effect")
         try:
             effect = PolicyEffect(effect_str)
-        except ValueError:
+        except ValueError as e:
             raise PolicyValidationError(
                 rule_id,
                 f"Invalid effect: {effect_str}. "
-                f"Must be one of: {', '.join(e.value for e in PolicyEffect)}",
-            )
+                f"Must be one of: {', '.join(eff.value for eff in PolicyEffect)}",
+            ) from e
 
         # Parse conditions
         conditions_raw = data.get("conditions", [])
@@ -271,24 +271,24 @@ class PolicyParser:
         match_type_str = data.get("match_type", "glob")
         try:
             match_type = MatchType(match_type_str)
-        except ValueError:
+        except ValueError as e:
             raise PolicyValidationError(
                 rule_id,
                 f"Invalid match_type: {match_type_str}. "
-                f"Must be one of: {', '.join(e.value for e in MatchType)}",
-            )
+                f"Must be one of: {', '.join(mt.value for mt in MatchType)}",
+            ) from e
 
         # Parse risk level
         risk_level = None
         if data.get("risk_level"):
             try:
                 risk_level = RiskLevel(data["risk_level"])
-            except ValueError:
+            except ValueError as e:
                 raise PolicyValidationError(
                     rule_id,
                     f"Invalid risk_level: {data['risk_level']}. "
-                    f"Must be one of: {', '.join(e.value for e in RiskLevel)}",
-                )
+                    f"Must be one of: {', '.join(rl.value for rl in RiskLevel)}",
+                ) from e
 
         # Parse requires_privilege
         requires_privilege = data.get("requires_privilege")
@@ -349,7 +349,7 @@ class PolicyParser:
             start = self._parse_time(start_str)
             end = self._parse_time(end_str)
         except ValueError as e:
-            raise PolicyValidationError(rule_id, f"Invalid time format: {e}")
+            raise PolicyValidationError(rule_id, f"Invalid time format: {e}") from e
 
         return TimeWindow(start=start, end=end)
 

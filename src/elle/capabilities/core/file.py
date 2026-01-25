@@ -369,9 +369,9 @@ class FileWriteCapability(BaseCapability):
             diff = f"+++ {input.path} (new file)\n{input.content[:500]}..."
 
         risk = _assess_path_risk(path)
-        requires_priv = not os.access(
+        _requires_priv = not os.access(
             path if path.exists() else path.parent, os.W_OK
-        )
+        )  # TODO: Use _requires_priv in DryRunResult when field is added
 
         return DryRunResult(
             would_execute=(),

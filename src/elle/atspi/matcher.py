@@ -519,7 +519,6 @@ class ElementMatcher:
         # Get all visible elements
         elements = self.client.get_tree(root, max_depth=10, include_invisible=False)
 
-        best_match = None
         best_score = 0.0
         best_element = None
 

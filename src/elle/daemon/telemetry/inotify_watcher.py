@@ -119,8 +119,8 @@ class InotifyWatcher:
         try:
             import inotify_simple
             from inotify_simple import flags as inotify_flags
-        except ImportError:
-            raise ImportError("inotify_simple package not available")
+        except ImportError as e:
+            raise ImportError("inotify_simple package not available") from e
 
         # Create inotify instance
         inotify = inotify_simple.INotify()

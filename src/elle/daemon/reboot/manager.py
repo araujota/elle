@@ -401,7 +401,7 @@ class RebootManager:
         self._last_diagnostics = diagnostics
 
         # Create or update incident with failure details
-        incident_id = await self._create_or_update_failure_incident(intent, diagnostics)
+        _incident_id = await self._create_or_update_failure_incident(intent, diagnostics)
 
         # Build detailed outcome message
         outcome_parts = []
@@ -466,9 +466,7 @@ class RebootManager:
             from elle.daemon.incidents.store import (
                 append_action,
                 create_incident_draft,
-                finalize_outcome,
                 get_incident,
-                update_incident,
             )
 
             # Build symptoms from diagnostics

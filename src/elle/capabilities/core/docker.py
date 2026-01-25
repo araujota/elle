@@ -858,7 +858,7 @@ class DockerInspectCapability(BaseCapability):
             memory_usage = None
             memory_limit = None
             if state.get("Running"):
-                stats_result = _run_docker_command([
+                _stats_result = _run_docker_command([
                     "stats",
                     "--no-stream",
                     "--format",
@@ -866,6 +866,7 @@ class DockerInspectCapability(BaseCapability):
                     input.container,
                 ])
                 # Memory stats parsing is complex, leaving as None for now
+                # TODO: Parse _stats_result to extract memory_usage and memory_limit
 
             return CapabilityResult(
                 success=True,

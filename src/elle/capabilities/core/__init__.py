@@ -13,6 +13,8 @@ Capabilities are organized by domain:
 - incident: Incident management
 """
 
+# ruff: noqa: E402  # Imports after function definitions for re-exporting
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

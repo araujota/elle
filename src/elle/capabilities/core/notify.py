@@ -186,7 +186,7 @@ class NotifySendCapability(BaseCapability):
         start_time = time.time()
 
         try:
-            from elle.daemon.notifications import NotificationResult, notify
+            from elle.daemon.notifications import notify
 
             # Map urgency to notification urgency
             urgency_map = {
@@ -196,7 +196,7 @@ class NotifySendCapability(BaseCapability):
             }
 
             # Send via notification service
-            result = notify(
+            _result = notify(  # Result available but notification_id extracted async
                 title=input.title,
                 body=input.body,
                 urgency=urgency_map.get(input.urgency, "normal"),

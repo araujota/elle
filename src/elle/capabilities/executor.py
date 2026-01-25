@@ -375,7 +375,6 @@ class CapabilityExecutor:
             result: The execution result.
         """
         try:
-            from elle.daemon.incidents.models import IncidentAction
             from elle.daemon.incidents.store import append_action
 
             spec = capability.spec

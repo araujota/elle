@@ -259,8 +259,8 @@ class EngineAdapter:
         # (In a real implementation, we might track commands executed
         # in the conversation and their results)
         history: list[str] = []
-        last_cmd: str | None = None
-        last_exit: int | None = None
+        _last_cmd: str | None = None  # TODO: Extract from conversation
+        _last_exit: int | None = None  # TODO: Extract from conversation
 
         for msg in messages:
             if msg.role == "assistant" and msg.content:

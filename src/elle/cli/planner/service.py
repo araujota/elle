@@ -9,6 +9,8 @@ Orchestrates the complete planning pipeline:
 6. Record incident outcome
 """
 
+# ruff: noqa: E402  # Imports after get_llm() wrapper for mocking
+
 from __future__ import annotations
 
 import logging

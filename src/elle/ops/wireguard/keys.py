@@ -78,13 +78,13 @@ def _run_wg_command(args: list[str], capture: bool = True) -> subprocess.Complet
             text=True,
             timeout=30,
         )
-    except FileNotFoundError:
+    except FileNotFoundError as e:
         raise WireGuardKeyError(
             "WireGuard tools not installed. "
             "Install with: apt install wireguard-tools"
-        )
-    except subprocess.TimeoutExpired:
-        raise WireGuardKeyError("WireGuard command timed out")
+        ) from e
+    except subprocess.TimeoutExpired as e:
+        raise WireGuardKeyError("WireGuard command timed out") from e
 
 
 def generate_keypair() -> tuple[str, str]:

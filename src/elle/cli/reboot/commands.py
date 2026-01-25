@@ -32,7 +32,6 @@ def handle_reboot_command(
     Returns:
         Tuple of (output_string, success).
     """
-    lower = user_input.lower().strip()
     parts = user_input.strip().split()
 
     # Parse subcommand

@@ -102,7 +102,7 @@ def _extract_ebpf_entity(raw: dict[str, Any], category: str) -> str | None:
     Returns:
         Entity string or None.
     """
-    event_type = raw.get("_EBPF_EVENT_TYPE", "")
+    _event_type = raw.get("_EBPF_EVENT_TYPE", "")  # Available for future type-specific handling
 
     # OOM events - entity is the killed process
     if category == "oom":

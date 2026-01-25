@@ -234,9 +234,6 @@ class DiffGenerator:
         lines.append(header)
         lines.append(separator)
 
-        left_line = ""
-        right_line = ""
-
         for line in diff:
             code = line[0]
             text = line[2:].rstrip("\n")

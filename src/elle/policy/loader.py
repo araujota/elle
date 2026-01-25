@@ -177,7 +177,7 @@ class PolicyLoader:
         try:
             return parse_file(path)
         except Exception as e:
-            raise PolicyLoadError(str(path), str(e))
+            raise PolicyLoadError(str(path), str(e)) from e
 
     def _merge_policies(
         self,

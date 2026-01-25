@@ -700,7 +700,6 @@ Validates package operations before execution to detect potential issues.
         import re
 
         lower = user_input.lower().strip()
-        parts = user_input.strip().split()
 
         # Parse the command
         # incident <id>
@@ -1111,7 +1110,6 @@ Validates package operations before execution to detect potential issues.
                 get_syscall_manager,
                 is_syscall_tracing_available,
             )
-            from elle.daemon.telemetry.ebpf.syscall_models import SyscallTrace
 
             if not is_syscall_tracing_available():
                 # Fall back to regular execution with a note

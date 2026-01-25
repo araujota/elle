@@ -110,7 +110,7 @@ def parse_docker_run(command: str) -> DockerRunConfig:
     try:
         tokens = shlex.split(command)
     except ValueError as e:
-        raise ValueError(f"Failed to parse command: {e}")
+        raise ValueError(f"Failed to parse command: {e}") from e
 
     if not tokens:
         raise ValueError("Empty docker run command")

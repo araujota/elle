@@ -609,7 +609,7 @@ def diagnose_connectivity(
         likely_cause = "Host not responding to ping"
 
     # Build failure summary
-    failed_checks = [c for c in checks if not c.passed]
+    _failed_checks = [c for c in checks if not c.passed]  # Available for detailed logging
     summary_parts = [f"Cannot reach {target}"]
     if port:
         summary_parts[0] += f":{port}"

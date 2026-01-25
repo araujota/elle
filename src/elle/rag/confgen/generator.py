@@ -309,7 +309,7 @@ class LLMConfigGenerator:
             }
 
             results = []
-            commands = domain_commands.get(domain, [])
+            _commands = domain_commands.get(domain, [])  # Reserved for command-specific search
 
             # Search for relevant documentation
             search_results = search(query, k=3)

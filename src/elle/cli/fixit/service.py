@@ -241,7 +241,7 @@ class FixitService:
             domain = correlator._detect_domain(failure.stderr)
 
             # Extract entities from error for better matching
-            entities = correlator._extract_entities(failure.stderr)
+            _entities = correlator._extract_entities(failure.stderr)  # TODO: Use for enhanced matching
 
             # Build search query from:
             # - Command name (most important)
@@ -417,10 +417,7 @@ class FixitService:
         """
         try:
             from elle.daemon.incidents.models import (
-                ConfidenceBreakdown,
                 DecisionRecord,
-                IncidentCitation,
-                ManPageCitation,
                 Provenance,
             )
             from elle.daemon.incidents.store import (
