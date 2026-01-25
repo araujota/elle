@@ -1,0 +1,218 @@
+.\" Man page for elled(8)
+.\" Generated for ELLE 0.1.0
+.TH ELLED 8 "January 2025" "ELLE 0.1.0" "System Administration"
+.SH NAME
+elled \- ELLE daemon for telemetry and privileged operations
+.SH SYNOPSIS
+.B elled
+[\fIOPTIONS\fR]
+.SH DESCRIPTION
+.B elled
+is the daemon component of ELLE, providing:
+.IP \(bu 2
+Telemetry ingestion from systemd journal, kernel, and probes
+.IP \(bu 2
+Man Vault indexing (SQLite+FTS5 search of man pages)
+.IP \(bu 2
+Incident Vault for decision memory and pattern matching
+.IP \(bu 2
+OpenAI-compatible REST API endpoint
+.IP \(bu 2
+Polkit helper for privilege escalation
+.IP \(bu 2
+eBPF telemetry collection (when capabilities permit)
+.PP
+The daemon runs as a systemd service under the \fBelle\fR user account
+with minimal privileges and strict security hardening.
+.SH OPTIONS
+.TP
+.BR \-\-config " " \fIFILE\fR
+Use specified configuration file instead of defaults.
+.TP
+.BR \-\-no\-journal
+Disable systemd journal monitoring.
+.TP
+.BR \-\-no\-api
+Disable REST API endpoint.
+.SH CONFIGURATION
+Configuration is loaded from (in order of precedence):
+.IP 1. 3
+Command-line options
+.IP 2.
+Environment variables (prefix: ELLE_)
+.IP 3.
+/etc/elle/elle.toml
+.IP 4.
+Built-in defaults
+.SS Key Configuration Options
+.TP
+.B daemon.db_path
+Path to main event database. Default: /var/lib/elle/elle.db
+.TP
+.B daemon.api.enabled
+Enable REST API. Default: true
+.TP
+.B daemon.api.host
+API bind address. Default: 127.0.0.1
+.TP
+.B daemon.api.port
+API port. Default: 8377
+.TP
+.B daemon.probes.memory_interval
+Memory probe interval in seconds. Default: 30
+.TP
+.B daemon.probes.disk_interval
+Disk probe interval in seconds. Default: 300
+.SH CAPABILITIES
+When running with eBPF telemetry enabled, the daemon requires:
+.TP
+.B CAP_BPF
+Load/unload BPF programs and create maps (kernel 5.8+).
+.TP
+.B CAP_PERFMON
+Attach to tracepoints and perf events (kernel 5.8+).
+.TP
+.B CAP_NET_ADMIN
+Network namespace access for network probes (optional).
+.PP
+These capabilities are granted through the systemd unit file using
+AmbientCapabilities.
+.SH FILES
+.TP
+.I /var/lib/elle/elle.db
+Main telemetry event database.
+.TP
+.I /var/lib/elle/manvault.db
+Man page full-text search index.
+.TP
+.I /var/lib/elle/incidents.db
+Incident vault for decision memory.
+.TP
+.I /var/lib/elle/reactive.db
+Reactive function definitions.
+.TP
+.I /var/lib/elle/policy.db
+Policy engine rules.
+.TP
+.I /var/lib/elle/backups/
+Configuration backup directory.
+.TP
+.I /etc/elle/elle.toml
+Main configuration file.
+.TP
+.I /etc/elle/environment
+Environment file for systemd.
+.TP
+.I /lib/systemd/system/elled.service
+Systemd unit file.
+.TP
+.I /usr/share/polkit-1/actions/com.elle.policy
+Polkit policy definitions.
+.SH SECURITY
+.B elled
+implements defense-in-depth security:
+.SS Privilege Separation
+.IP \(bu 2
+Runs as dedicated \fBelle\fR system user
+.IP \(bu 2
+No ambient root access
+.IP \(bu 2
+Polkit gates all privileged operations
+.SS Systemd Hardening
+.IP \(bu 2
+NoNewPrivileges=true
+.IP \(bu 2
+ProtectSystem=strict
+.IP \(bu 2
+ProtectHome=true
+.IP \(bu 2
+PrivateTmp=true
+.IP \(bu 2
+ProtectKernelTunables=true
+.IP \(bu 2
+ProtectKernelModules=true
+.IP \(bu 2
+ProtectControlGroups=true
+.IP \(bu 2
+ReadOnlyPaths=/etc /usr /boot
+.IP \(bu 2
+ReadWritePaths=/var/lib/elle only
+.SS Resource Limits
+.IP \(bu 2
+MemoryMax=512M
+.IP \(bu 2
+CPUWeight=50
+.SH API
+.B elled
+provides an OpenAI-compatible REST API on the configured port
+(default: 8377).
+.SS Endpoints
+.TP
+.B GET /v1/models
+List available models.
+.TP
+.B POST /v1/chat/completions
+Chat completion endpoint (streaming supported).
+.TP
+.B POST /v1/embeddings
+Generate embeddings via Ollama.
+.TP
+.B GET /health
+Health check endpoint.
+.TP
+.B GET /events
+Server-sent events for telemetry stream.
+.PP
+API is bound to localhost by default. Configure \fBdaemon.api.host\fR
+to change binding.
+.SH SIGNALS
+.TP
+.B SIGTERM
+Graceful shutdown.
+.TP
+.B SIGHUP
+Reload configuration.
+.SH EXAMPLES
+.TP
+Start manually:
+# elled
+.TP
+Start via systemd:
+# systemctl start elled
+.TP
+Check status:
+# systemctl status elled
+.TP
+View logs:
+# journalctl -u elled -f
+.SH DIAGNOSTICS
+.TP
+.B "Failed to connect to Ollama"
+Ensure Ollama is installed and running. Check OLLAMA_HOST configuration.
+.TP
+.B "Permission denied for BPF"
+Kernel capabilities not granted. Check systemd unit configuration.
+.TP
+.B "Database locked"
+Another elled instance may be running. Check for stale processes.
+.SH EXIT STATUS
+.TP
+.B 0
+Normal termination.
+.TP
+.B 1
+Startup failure (configuration error, missing dependencies).
+.TP
+.B 2
+Runtime error.
+.SH SEE ALSO
+.BR elle (1),
+.BR systemctl (1),
+.BR polkit (8),
+.BR ollama (1),
+.BR journalctl (1),
+.BR capabilities (7)
+.SH BUGS
+Report bugs at: https://github.com/elle-project/elle/issues
+.SH AUTHORS
+ELLE Contributors <elle@example.com>

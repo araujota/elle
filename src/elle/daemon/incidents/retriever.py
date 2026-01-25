@@ -28,14 +28,17 @@ from elle.daemon.incidents.store import (
 )
 
 
-# Outcome quality weights for ranking
-OUTCOME_WEIGHTS = {
+# Static outcome quality weights (fallback when no efficacy data available)
+STATIC_OUTCOME_WEIGHTS = {
     "improved": 1.0,
     "partial": 0.6,
     "no_change": 0.3,
     "unknown": 0.2,
     "worse": 0.0,
 }
+
+# For backwards compatibility
+OUTCOME_WEIGHTS = STATIC_OUTCOME_WEIGHTS
 
 # Severity match bonuses
 SEVERITY_ORDER = ["info", "warning", "error", "critical"]
@@ -106,6 +109,7 @@ def search(
             snapshot=snapshot,
             fingerprint=fingerprint,
             min_precondition_match=min_precondition_match,
+            conn=conn,
         )
 
         return ranked[:k]
@@ -513,6 +517,112 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
 
 
 # =============================================================================
+# Dynamic outcome weighting
+# =============================================================================
+
+
+def compute_dynamic_outcome_weight(
+    incident: IncidentReport,
+    current_fingerprint: Fingerprint | None = None,
+    conn: sqlite3.Connection | None = None,
+) -> float:
+    """Compute outcome weight using learned efficacy data.
+
+    Combines multiple efficacy signals to produce a dynamic weight
+    that reflects what actually works on THIS machine:
+
+    - Base outcome weight (40%): Static quality based on outcome
+    - Domain efficacy (20%): Learned success rate for this domain
+    - Entity efficacy (20%): Success rate for involved entities
+    - Approach match (20%): Success rate for similar approaches
+
+    Args:
+        incident: The candidate incident from search.
+        current_fingerprint: Current system fingerprint (for entity matching).
+        conn: SQLite connection.
+
+    Returns:
+        Dynamic outcome weight between 0.0 and 1.0.
+    """
+    from elle.daemon.incidents.efficacy import (
+        EFFICACY_WEIGHT_APPROACH,
+        EFFICACY_WEIGHT_BASE_OUTCOME,
+        EFFICACY_WEIGHT_DOMAIN,
+        EFFICACY_WEIGHT_ENTITY,
+        MIN_SAMPLES_FOR_CONFIDENCE,
+        PRIOR_SUCCESS_RATE,
+    )
+
+    # Base outcome weight (static)
+    base_weight = STATIC_OUTCOME_WEIGHTS.get(incident.outcome, 0.2)
+
+    # Try to get efficacy data
+    try:
+        from elle.daemon.incidents.efficacy_tracker import get_efficacy_context
+
+        # Determine entities to check
+        entities = incident.fingerprint.entities
+        if current_fingerprint:
+            # Intersection of current and incident entities for relevance
+            current_set = set(current_fingerprint.entities)
+            incident_set = set(incident.fingerprint.entities)
+            overlap = current_set & incident_set
+            if overlap:
+                entities = tuple(overlap)
+
+        ctx = get_efficacy_context(
+            domain=incident.domain,
+            entities=entities,
+            incident=incident,
+            conn=conn,
+        )
+
+        # Compute weighted combination
+        total_weight = 0.0
+        weighted_sum = 0.0
+
+        # Base outcome (always included)
+        weighted_sum += EFFICACY_WEIGHT_BASE_OUTCOME * base_weight
+        total_weight += EFFICACY_WEIGHT_BASE_OUTCOME
+
+        # Domain efficacy (if available with sufficient samples)
+        if ctx.domain_success_rate is not None:
+            confidence = min(1.0, ctx.domain_sample_size / MIN_SAMPLES_FOR_CONFIDENCE)
+            effective_rate = (
+                confidence * ctx.domain_success_rate
+                + (1 - confidence) * PRIOR_SUCCESS_RATE
+            )
+            weighted_sum += EFFICACY_WEIGHT_DOMAIN * effective_rate
+            total_weight += EFFICACY_WEIGHT_DOMAIN
+
+        # Entity efficacy (average of overlapping entities)
+        if ctx.entity_success_rates:
+            entity_rates = list(ctx.entity_success_rates.values())
+            avg_entity_rate = sum(entity_rates) / len(entity_rates)
+            weighted_sum += EFFICACY_WEIGHT_ENTITY * avg_entity_rate
+            total_weight += EFFICACY_WEIGHT_ENTITY
+
+        # Approach efficacy (if available with sufficient samples)
+        if ctx.approach_success_rate is not None:
+            confidence = min(1.0, ctx.approach_sample_size / MIN_SAMPLES_FOR_CONFIDENCE)
+            effective_rate = (
+                confidence * ctx.approach_success_rate
+                + (1 - confidence) * PRIOR_SUCCESS_RATE
+            )
+            weighted_sum += EFFICACY_WEIGHT_APPROACH * effective_rate
+            total_weight += EFFICACY_WEIGHT_APPROACH
+
+        # Normalize
+        if total_weight > 0:
+            return weighted_sum / total_weight
+        return base_weight
+
+    except Exception:
+        # Fall back to static weight if efficacy tracking unavailable
+        return base_weight
+
+
+# =============================================================================
 # Merge and rank
 # =============================================================================
 
@@ -544,11 +654,16 @@ def _merge_and_rank(
     snapshot: SystemSnapshot | None = None,
     fingerprint: Fingerprint | None = None,
     min_precondition_match: float = 0.5,
+    conn: sqlite3.Connection | None = None,
+    use_dynamic_weights: bool = True,
 ) -> list[IncidentSearchResult]:
     """Merge results from multiple search tiers and rank.
 
     Uses Reciprocal Rank Fusion (RRF) for combining scores,
     then adjusts by outcome quality, precondition match, and recency.
+
+    When use_dynamic_weights is True (default), outcome weights are computed
+    using learned efficacy data from this machine's history.
 
     Final score = RRF_score × outcome_weight × precondition_ratio × recency_weight
     """
@@ -585,8 +700,13 @@ def _merge_and_rank(
     for iid, data in incident_scores.items():
         incident = data["incident"]
 
-        # Outcome weight
-        outcome_weight = OUTCOME_WEIGHTS.get(incident.outcome, 0.2)
+        # Outcome weight (dynamic or static)
+        if use_dynamic_weights:
+            outcome_weight = compute_dynamic_outcome_weight(
+                incident, fingerprint, conn=conn
+            )
+        else:
+            outcome_weight = STATIC_OUTCOME_WEIGHTS.get(incident.outcome, 0.2)
 
         # Precondition match
         precond_ratio = 1.0

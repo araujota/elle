@@ -150,6 +150,12 @@ class CapabilitySpec(BaseModel):
         description="Name of the Pydantic model for outputs",
     )
 
+    # Dependencies
+    dependencies: tuple[str, ...] = Field(
+        default_factory=tuple,
+        description="Dependency names required by this capability (e.g., ('atspi', 'augeas'))",
+    )
+
 
 # =============================================================================
 # Capability Evidence
@@ -300,6 +306,12 @@ class DryRunResult(BaseModel):
     validation_errors: tuple[str, ...] = Field(
         default_factory=tuple,
         description="Errors preventing execution",
+    )
+
+    # Dependencies (populated by executor when checking)
+    missing_dependencies: tuple[str, ...] = Field(
+        default_factory=tuple,
+        description="Names of dependencies that are not available",
     )
 
 

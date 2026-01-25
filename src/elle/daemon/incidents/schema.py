@@ -15,7 +15,7 @@ import sqlite3
 from pathlib import Path
 
 # Schema version - increment when schema changes
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Database location
 DB_PATH = Path("/var/lib/elle/incidents.db")
@@ -155,6 +155,52 @@ CREATE TABLE IF NOT EXISTS config_states (
 )
 """
 
+# Domain efficacy tracking (v3)
+DOMAIN_EFFICACY_TABLE = """
+CREATE TABLE IF NOT EXISTS domain_efficacy (
+    domain TEXT PRIMARY KEY,
+    total_incidents INTEGER NOT NULL DEFAULT 0,
+    improved_count INTEGER NOT NULL DEFAULT 0,
+    partial_count INTEGER NOT NULL DEFAULT 0,
+    no_change_count INTEGER NOT NULL DEFAULT 0,
+    worse_count INTEGER NOT NULL DEFAULT 0,
+    success_rate REAL NOT NULL DEFAULT 0.5,
+    last_updated TEXT NOT NULL
+)
+"""
+
+# Entity efficacy tracking (v3)
+ENTITY_EFFICACY_TABLE = """
+CREATE TABLE IF NOT EXISTS entity_efficacy (
+    entity TEXT PRIMARY KEY,
+    total_incidents INTEGER NOT NULL DEFAULT 0,
+    improved_count INTEGER NOT NULL DEFAULT 0,
+    partial_count INTEGER NOT NULL DEFAULT 0,
+    no_change_count INTEGER NOT NULL DEFAULT 0,
+    worse_count INTEGER NOT NULL DEFAULT 0,
+    success_rate REAL NOT NULL DEFAULT 0.5,
+    last_updated TEXT NOT NULL
+)
+"""
+
+# Solution approach efficacy tracking (v3)
+SOLUTION_APPROACH_EFFICACY_TABLE = """
+CREATE TABLE IF NOT EXISTS solution_approach_efficacy (
+    approach_signature TEXT PRIMARY KEY,
+    domain TEXT NOT NULL,
+    precondition_summary TEXT NOT NULL DEFAULT '',
+    key_commands_json TEXT NOT NULL DEFAULT '[]',
+    total_uses INTEGER NOT NULL DEFAULT 0,
+    improved_count INTEGER NOT NULL DEFAULT 0,
+    partial_count INTEGER NOT NULL DEFAULT 0,
+    no_change_count INTEGER NOT NULL DEFAULT 0,
+    worse_count INTEGER NOT NULL DEFAULT 0,
+    success_rate REAL NOT NULL DEFAULT 0.5,
+    avg_time_to_resolve_sec INTEGER,
+    last_used TEXT NOT NULL
+)
+"""
+
 # Meta table for tracking state
 META_TABLE = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -225,6 +271,12 @@ INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_decision_records_incident ON decision_records(incident_id)",
     "CREATE INDEX IF NOT EXISTS idx_config_states_incident ON config_states(incident_id)",
     "CREATE INDEX IF NOT EXISTS idx_config_states_path ON config_states(path)",
+    # V3 indexes
+    "CREATE INDEX IF NOT EXISTS idx_domain_efficacy_success ON domain_efficacy(success_rate DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_entity_efficacy_success ON entity_efficacy(success_rate DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_entity_efficacy_total ON entity_efficacy(total_incidents DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_approach_efficacy_domain ON solution_approach_efficacy(domain)",
+    "CREATE INDEX IF NOT EXISTS idx_approach_efficacy_success ON solution_approach_efficacy(success_rate DESC)",
 ]
 
 
@@ -253,6 +305,11 @@ def init_incident_schema(conn: sqlite3.Connection) -> None:
     # V2 tables
     cursor.execute(DECISION_RECORDS_TABLE)
     cursor.execute(CONFIG_STATES_TABLE)
+
+    # V3 tables (efficacy tracking)
+    cursor.execute(DOMAIN_EFFICACY_TABLE)
+    cursor.execute(ENTITY_EFFICACY_TABLE)
+    cursor.execute(SOLUTION_APPROACH_EFFICACY_TABLE)
 
     # Create FTS table
     cursor.execute(INCIDENTS_FTS)
@@ -323,6 +380,10 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
     if current < 2:
         _migrate_v1_to_v2(conn)
 
+    # V2 -> V3: Add efficacy tracking tables
+    if current < 3:
+        _migrate_v2_to_v3(conn)
+
     # Update schema version
     cursor = conn.cursor()
     cursor.execute(
@@ -363,6 +424,46 @@ def _migrate_v1_to_v2(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _migrate_v2_to_v3(conn: sqlite3.Connection) -> None:
+    """Migrate from schema v2 to v3.
+
+    Adds efficacy tracking tables for machine-specific success learning.
+
+    Args:
+        conn: SQLite connection.
+    """
+    cursor = conn.cursor()
+
+    # Create efficacy tables
+    cursor.execute(DOMAIN_EFFICACY_TABLE)
+    cursor.execute(ENTITY_EFFICACY_TABLE)
+    cursor.execute(SOLUTION_APPROACH_EFFICACY_TABLE)
+
+    # Create indexes
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_domain_efficacy_success "
+        "ON domain_efficacy(success_rate DESC)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_entity_efficacy_success "
+        "ON entity_efficacy(success_rate DESC)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_entity_efficacy_total "
+        "ON entity_efficacy(total_incidents DESC)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_approach_efficacy_domain "
+        "ON solution_approach_efficacy(domain)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_approach_efficacy_success "
+        "ON solution_approach_efficacy(success_rate DESC)"
+    )
+
+    conn.commit()
+
+
 def drop_all_tables(conn: sqlite3.Connection) -> None:
     """Drop all Incident Vault tables.
 
@@ -389,6 +490,10 @@ def drop_all_tables(conn: sqlite3.Connection) -> None:
     # V2 tables
     cursor.execute("DROP TABLE IF EXISTS decision_records")
     cursor.execute("DROP TABLE IF EXISTS config_states")
+    # V3 tables
+    cursor.execute("DROP TABLE IF EXISTS domain_efficacy")
+    cursor.execute("DROP TABLE IF EXISTS entity_efficacy")
+    cursor.execute("DROP TABLE IF EXISTS solution_approach_efficacy")
     cursor.execute("DROP TABLE IF EXISTS incidents")
     cursor.execute("DROP TABLE IF EXISTS meta")
 

@@ -214,6 +214,7 @@ class GuiLearnCapability(Capability):
             idempotent=True,
             input_schema_name="GuiLearnInput",
             output_schema_name="GuiLearnOutput",
+            dependencies=("atspi",),
         )
 
     @classmethod
@@ -366,6 +367,7 @@ class GuiClickCapability(Capability):
             idempotent=False,
             input_schema_name="GuiClickInput",
             output_schema_name="GuiClickOutput",
+            dependencies=("atspi",),
         )
 
     @classmethod
@@ -521,6 +523,7 @@ class GuiTypeCapability(Capability):
             idempotent=False,
             input_schema_name="GuiTypeInput",
             output_schema_name="GuiTypeOutput",
+            dependencies=("atspi",),
         )
 
     @classmethod
@@ -660,6 +663,7 @@ class GuiNavigateCapability(Capability):
             idempotent=True,
             input_schema_name="GuiNavigateInput",
             output_schema_name="GuiNavigateOutput",
+            dependencies=("atspi",),
         )
 
     @classmethod
@@ -802,6 +806,7 @@ class GuiExecuteTaskCapability(Capability):
             idempotent=False,
             input_schema_name="GuiExecuteTaskInput",
             output_schema_name="GuiExecuteTaskOutput",
+            dependencies=("atspi",),
         )
 
     @classmethod

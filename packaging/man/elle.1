@@ -1,0 +1,177 @@
+.\" Man page for elle(1)
+.\" Generated for ELLE 0.1.0
+.TH ELLE 1 "January 2025" "ELLE 0.1.0" "User Commands"
+.SH NAME
+elle \- natural language interface for system administration
+.SH SYNOPSIS
+.B elle
+[\fIOPTIONS\fR] [\fICOMMAND\fR]
+.SH DESCRIPTION
+.B elle
+is a local-first, agentic system layer for Ubuntu that converts
+kernel-level telemetry into natural language insight and safe system
+operations. It provides both an interactive REPL and one-shot command
+execution.
+.PP
+All inputs are classified into intents before execution. System-mutating
+actions require explicit confirmation. Privileged operations are gated
+through Polkit authentication.
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Display help message and exit.
+.TP
+.BR \-v ", " \-\-version
+Display version information and exit.
+.TP
+.BR \-\-config " " \fIFILE\fR
+Use specified configuration file instead of defaults.
+.SH COMMANDS
+When run without arguments, elle enters interactive REPL mode. Commands
+can also be passed as arguments for one-shot execution.
+.SS Prefix Commands
+.TP
+.B /ask \fIQUESTION\fR
+Force classification as a system question (explanation/diagnosis).
+.TP
+.B /do \fITASK\fR
+Force classification as a system task (requested change).
+.TP
+.B /sh \fICOMMAND\fR
+Force shell passthrough (safe commands only).
+.TP
+.B /fix
+Diagnose and repair the last failed command.
+.SS Navigation Commands
+.TP
+.B status
+Display current system status overview.
+.TP
+.B events
+Show recent telemetry events from elled.
+.TP
+.B logs \fR[\fIFILTER\fR]
+Display filtered system logs.
+.SS Reactive Function Commands
+.TP
+.B /react create
+Create a new reactive function from natural language.
+.TP
+.B /react list
+List all reactive functions.
+.TP
+.B /react show \fIID\fR
+Show details of a reactive function.
+.TP
+.B /react enable \fIID\fR
+Enable a reactive function.
+.TP
+.B /react disable \fIID\fR
+Disable a reactive function.
+.TP
+.B /react delete \fIID\fR
+Delete a reactive function.
+.TP
+.B /react history \fR[\fIID\fR]
+Show execution history.
+.TP
+.B /react test \fIID\fR
+Test a reactive function with mock event.
+.SS GUI Automation Commands
+.TP
+.B /learn \fIAPPLICATION\fR
+Learn the UI structure of an application.
+.TP
+.B /learn list
+List learned applications.
+.TP
+.B /learn show \fIAPPLICATION\fR
+Show recipe for an application.
+.TP
+.B /learn rebuild \fIAPPLICATION\fR
+Rebuild recipe for an application.
+.TP
+.B /learn delete \fIAPPLICATION\fR
+Delete recipe for an application.
+.SS Meta Commands
+.TP
+.B help
+Display help information.
+.TP
+.B exit
+Exit the REPL.
+.TP
+.B config
+Display current configuration.
+.SH EXAMPLES
+.TP
+Check disk usage:
+$ elle "how much disk space is left?"
+.TP
+Execute a system task:
+$ elle "/do enable ufw with default deny incoming"
+.TP
+Run a shell command:
+$ elle "/sh df -h"
+.TP
+Fix a failed command:
+$ elle "/fix"
+.TP
+Interactive mode:
+$ elle
+.SH FILES
+.TP
+.I /etc/elle/elle.toml
+System-wide configuration file.
+.TP
+.I ~/.config/elle/elle.toml
+User configuration file (overrides system config).
+.TP
+.I /var/lib/elle/
+State directory containing databases:
+.RS
+.IP \(bu 2
+elle.db \- Event database
+.IP \(bu 2
+manvault.db \- Man page index
+.IP \(bu 2
+incidents.db \- Incident vault
+.IP \(bu 2
+reactive.db \- Reactive functions
+.IP \(bu 2
+recipes.db \- GUI automation recipes
+.RE
+.SH ENVIRONMENT
+.TP
+.B ELLE_LOG_LEVEL
+Log verbosity level (DEBUG, INFO, WARNING, ERROR). Default: INFO.
+.TP
+.B OLLAMA_HOST
+Ollama server address. Default: http://localhost:11434.
+.SH SECURITY
+.B elle
+enforces a strict denylist preventing execution of dangerous commands
+including: rm -rf /, mkfs, dd to disk devices, fork bombs, recursive
+chmod 777, curl|bash, sudo, and system shutdown commands.
+.PP
+System-mutating operations follow an Explain-Plan-Confirm-Apply workflow.
+Privileged actions require Polkit authentication.
+.SH EXIT STATUS
+.TP
+.B 0
+Successful completion.
+.TP
+.B 1
+General error.
+.TP
+.B 2
+Command blocked by denylist.
+.SH SEE ALSO
+.BR elled (8),
+.BR ollama (1),
+.BR polkit (8),
+.BR systemctl (1)
+.SH BUGS
+Report bugs at: https://github.com/elle-project/elle/issues
+.SH AUTHORS
+ELLE Contributors <elle@example.com>

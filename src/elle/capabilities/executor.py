@@ -38,6 +38,7 @@ from elle.capabilities.policy import (
 from elle.capabilities.registry import CapabilityRegistry, get_registry
 
 if TYPE_CHECKING:
+    from elle.capabilities.dependencies.checker import DependencyChecker
     from elle.capabilities.protocol import Capability
     from elle.daemon.incidents.store import IncidentStore
 
@@ -79,15 +80,26 @@ class CapabilityExecutor:
         self,
         registry: CapabilityRegistry | None = None,
         incident_store: "IncidentStore | None" = None,
+        dependency_checker: "DependencyChecker | None" = None,
     ) -> None:
         """Initialize the executor.
 
         Args:
             registry: Capability registry (uses default if None).
             incident_store: Incident store for recording (optional).
+            dependency_checker: Dependency checker (uses default if None).
         """
         self.registry = registry or get_registry()
         self.incident_store = incident_store
+        self._dependency_checker = dependency_checker
+
+    @property
+    def dependency_checker(self) -> "DependencyChecker":
+        """Get the dependency checker (lazy initialization)."""
+        if self._dependency_checker is None:
+            from elle.capabilities.dependencies.checker import get_checker
+            self._dependency_checker = get_checker()
+        return self._dependency_checker
 
     async def execute(
         self,
@@ -271,15 +283,18 @@ class CapabilityExecutor:
         self,
         capability_name: str,
         input: BaseModel,
+        *,
+        check_dependencies: bool = True,
     ) -> DryRunResult:
         """Run only the dry_run phase of a capability.
 
         Args:
             capability_name: Name of the capability.
             input: Typed input parameters.
+            check_dependencies: Whether to check for missing dependencies.
 
         Returns:
-            DryRunResult with preview information.
+            DryRunResult with preview information and missing dependencies.
 
         Raises:
             CapabilityNotFoundError: If capability not found.
@@ -288,7 +303,38 @@ class CapabilityExecutor:
         if not capability:
             raise CapabilityNotFoundError(capability_name)
 
-        return capability.dry_run(input)
+        spec = capability.spec
+
+        # Check dependencies if any are declared
+        missing_deps: tuple[str, ...] = ()
+        if check_dependencies and spec.dependencies:
+            missing_results = []
+            for dep_name in spec.dependencies:
+                result = self.dependency_checker.check(dep_name)
+                if not result.available:
+                    missing_results.append(dep_name)
+            missing_deps = tuple(missing_results)
+
+        # Run the capability's dry_run
+        result = capability.dry_run(input)
+
+        # If we have missing dependencies, update the result
+        if missing_deps:
+            return DryRunResult(
+                would_execute=result.would_execute,
+                would_modify=result.would_modify,
+                estimated_risk=result.estimated_risk,
+                requires_confirmation=result.requires_confirmation,
+                preview_text=result.preview_text,
+                diff=result.diff,
+                is_valid=False,  # Cannot proceed with missing deps
+                validation_errors=result.validation_errors + (
+                    f"Missing dependencies: {', '.join(missing_deps)}",
+                ),
+                missing_dependencies=missing_deps,
+            )
+
+        return result
 
     async def verify(
         self,

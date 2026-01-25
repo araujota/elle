@@ -1,0 +1,9 @@
+elle (0.1.0-1) noble; urgency=medium
+
+  * Initial release
+  * CLI for natural language system administration
+  * Daemon with telemetry, Man Vault, Incident Vault
+  * OpenAI-compatible API endpoint
+  * Polkit integration for privilege escalation
+
+ -- ELLE Contributors <elle@example.com>  Fri, 24 Jan 2025 12:00:00 +0000

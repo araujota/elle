@@ -1034,7 +1034,7 @@ def finalize_outcome(
     """Finalize an incident with outcome and verification results.
 
     Calculates time_to_mitigate_sec and time_to_resolve_sec based
-    on status transitions.
+    on status transitions. Also records the outcome for efficacy tracking.
 
     Args:
         incident_id: The incident UUID.
@@ -1078,7 +1078,7 @@ def finalize_outcome(
             time_to_resolve = incident.time_to_resolve_sec
             time_to_mitigate = incident.time_to_mitigate_sec
 
-        return update_incident(
+        updated_incident = update_incident(
             incident_id,
             status=new_status,
             outcome=outcome,
@@ -1088,6 +1088,17 @@ def finalize_outcome(
             time_to_resolve_sec=time_to_resolve,
             conn=conn,
         )
+
+        # Record outcome for efficacy tracking
+        if updated_incident and outcome in ("improved", "partial", "no_change", "worse"):
+            try:
+                from elle.daemon.incidents.efficacy_tracker import record_outcome
+                record_outcome(updated_incident, outcome, conn=conn)
+            except Exception:
+                # Don't fail finalization if efficacy tracking fails
+                pass
+
+        return updated_incident
 
     finally:
         if own_conn:

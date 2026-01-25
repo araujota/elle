@@ -1,16 +1,49 @@
 Source: elle
 Section: admin
 Priority: optional
-Maintainer: ELLE Contributors
-Build-Depends: debhelper-compat (= 13), python3, python3-pip, python3-venv
-Standards-Version: 4.6.0
+Maintainer: ELLE Contributors <elle@example.com>
+Build-Depends: debhelper-compat (= 13),
+               dh-python,
+               python3 (>= 3.11),
+               python3-setuptools,
+               python3-pip,
+               python3-venv
+Standards-Version: 4.6.2
 Homepage: https://github.com/elle-project/elle
+Rules-Requires-Root: no
 
 Package: elle
 Architecture: all
-Depends: ${misc:Depends}, ${python3:Depends}, python3 (>= 3.11), polkitd
-Recommends: ollama
+Depends: ${misc:Depends},
+         ${python3:Depends},
+         python3 (>= 3.11),
+         python3-pydantic,
+         python3-httpx,
+         python3-ruamel.yaml,
+         python3-rich,
+         python3-prompt-toolkit,
+         python3-toml,
+         libaugeas0,
+         augeas-tools,
+         polkitd,
+         systemd
+Recommends: ollama,
+            python3-fastapi,
+            python3-uvicorn
+Suggests: python3-bcc,
+          libgirepository1.0-dev,
+          gir1.2-atspi-2.0
 Description: Enabling Layer Learning Everything
  A local-first, agentic system layer for Ubuntu that converts
  kernel-level telemetry into natural language insight and safe
  system operations.
+ .
+ ELLE provides:
+  - Natural language interface for system administration
+  - Man Vault: searchable man page index with semantic search
+  - Incident Vault: decision memory for pattern matching
+  - Intent classification before any system mutation
+  - Polkit-gated privilege escalation
+ .
+ Requires Ollama for local LLM inference (recommended, not required
+ for package installation).

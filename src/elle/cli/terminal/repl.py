@@ -10,6 +10,7 @@ Features:
 - Rich panels for fixit, plans, incidents
 - Slash command completion
 - History search (Ctrl+R)
+- First-run setup wizard
 
 Usage:
     $ elle
@@ -22,6 +23,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from elle.cli.engine import Engine, EngineAction, get_engine
+from elle.cli.setup import is_first_run, run_setup_wizard
 from elle.cli.ui import (
     EllePrompt,
     Icons,
@@ -83,6 +85,13 @@ class REPL:
         # Print startup banner
         self._show_banner()
 
+        # Check for first run and show setup wizard
+        if is_first_run():
+            if not run_setup_wizard(self.prompt, reconfigure=False):
+                # User cancelled setup, but continue anyway
+                print_muted("Continuing with default settings...")
+                console.print()
+
         # Show reboot/incident status
         self._show_startup_notices()
 
@@ -93,6 +102,13 @@ class REPL:
                     user_input = self.prompt.prompt()
 
                     if not user_input.strip():
+                        continue
+
+                    # Handle REPL-only commands before engine
+                    stripped = user_input.strip().lower()
+                    if stripped in ("/reconfigure", "/policies", "/setup"):
+                        self._handle_reconfigure()
+                        self.prompt.set_state("success")
                         continue
 
                     # Process through engine
@@ -240,6 +256,10 @@ class REPL:
         """Get count of incidents since last session."""
         # TODO: Track last session time and query incidents
         return 0
+
+    def _handle_reconfigure(self) -> None:
+        """Run the setup wizard for reconfiguration."""
+        run_setup_wizard(self.prompt, reconfigure=True)
 
 
 def run() -> None:

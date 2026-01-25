@@ -1,0 +1,37 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    configure)
+        # Create elle system user if it doesn't exist
+        if ! getent passwd elle >/dev/null 2>&1; then
+            adduser --system --group --home /var/lib/elle \
+                    --no-create-home --shell /usr/sbin/nologin \
+                    --gecos "ELLE System Agent" elle
+        fi
+
+        # Create required directories
+        install -d -m 0750 -o elle -g elle /var/lib/elle
+        install -d -m 0750 -o elle -g elle /var/lib/elle/backups
+        install -d -m 0755 -o root -g root /etc/elle
+
+        # Install example config if none exists
+        if [ ! -f /etc/elle/elle.toml ]; then
+            if [ -f /usr/share/elle/elle.toml.example ]; then
+                install -m 0644 /usr/share/elle/elle.toml.example /etc/elle/elle.toml
+            fi
+        fi
+
+        # Enable and start daemon
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload
+            systemctl enable elled.service
+            # Don't auto-start - user needs to configure Ollama first
+            echo "ELLE installed. Configure Ollama, then run: systemctl start elled"
+        fi
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

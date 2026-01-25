@@ -64,6 +64,8 @@ SLASH_COMMANDS = [
     ("/fix", "Diagnose last failure"),
     ("/apply", "Apply pending changes"),
     ("/history", "Show command history"),
+    ("/reconfigure", "Open setup wizard"),
+    ("/policies", "Configure policies"),
     ("/clear", "Clear screen"),
     ("/exit", "Exit ELLE"),
 ]

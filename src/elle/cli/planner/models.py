@@ -187,6 +187,37 @@ class NetworkState(BaseModel):
     )
 
 
+class TrendContextRef(BaseModel):
+    """Reference to trend context for planning.
+
+    Lightweight model that references trend data without duplicating it.
+    Actual TrendContext is in elle.daemon.telemetry.trends.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    has_warnings: bool = Field(
+        default=False,
+        description="Whether any metrics have warnings",
+    )
+    warning_messages: tuple[str, ...] = Field(
+        default_factory=tuple,
+        description="Human-readable warning messages",
+    )
+    disk_usage_pct: dict[str, float] = Field(
+        default_factory=dict,
+        description="Disk usage by mount point",
+    )
+    memory_usage_pct: float | None = Field(
+        default=None,
+        description="Memory usage percentage",
+    )
+    active_anomalies: int = Field(
+        default=0,
+        description="Number of active anomalies",
+    )
+
+
 class PlanContext(BaseModel):
     """Complete context for task planning.
 
@@ -211,6 +242,10 @@ class PlanContext(BaseModel):
     network_state: NetworkState | None = Field(
         default=None,
         description="Network state (for network tasks)",
+    )
+    trend_context: TrendContextRef | None = Field(
+        default=None,
+        description="System trend context for pre-execution validation",
     )
 
     def has_vault_context(self) -> bool:

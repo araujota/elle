@@ -1,0 +1,22 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    purge)
+        # Remove state directories on purge
+        rm -rf /var/lib/elle
+        rm -rf /etc/elle
+
+        # Remove elle user
+        if getent passwd elle >/dev/null 2>&1; then
+            deluser --quiet --system elle || true
+        fi
+        if getent group elle >/dev/null 2>&1; then
+            delgroup --quiet --system elle || true
+        fi
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

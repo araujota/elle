@@ -58,6 +58,28 @@ class ApiConfig:
 
 
 @dataclass(frozen=True)
+class ApiAuthConfig:
+    """Configuration for API authentication.
+
+    Controls how the OpenAI-compatible API authenticates requests.
+    """
+
+    # Whether to allow anonymous (unauthenticated) requests
+    # Anonymous requests are limited to readonly mode
+    allow_anonymous: bool = True
+
+    # Path to the API keys database
+    # If None, API key authentication is disabled
+    api_keys_db_path: Path | None = field(
+        default_factory=lambda: Path("/var/lib/elle/api_keys.db")
+    )
+
+    # UID of the elle user (for UDS peer auth)
+    # Users with this UID get full access like root
+    elle_uid: int | None = None
+
+
+@dataclass(frozen=True)
 class CorrelationConfig:
     """Configuration for event correlation."""
 
@@ -105,6 +127,7 @@ class Config:
     probes: ProbeConfig = field(default_factory=ProbeConfig)
     thresholds: ThresholdConfig = field(default_factory=ThresholdConfig)
     api: ApiConfig = field(default_factory=ApiConfig)
+    api_auth: ApiAuthConfig = field(default_factory=ApiAuthConfig)
     correlation: CorrelationConfig = field(default_factory=CorrelationConfig)
     queues: QueueConfig = field(default_factory=QueueConfig)
     ebpf: EBPFConfig = field(default_factory=EBPFConfig)
@@ -260,6 +283,22 @@ def load_config(config_path: Path | None = None) -> Config:
         port=_get_env("API_PORT", api_section.get("port", 8377)),
     )
 
+    # API auth config
+    api_auth_section = _deep_get(data, "daemon", "api_auth", default={})
+    api_keys_db_path_str = api_auth_section.get(
+        "api_keys_db_path", "/var/lib/elle/api_keys.db"
+    )
+    api_auth = ApiAuthConfig(
+        allow_anonymous=_get_env(
+            "API_AUTH_ALLOW_ANONYMOUS",
+            api_auth_section.get("allow_anonymous", True),
+        ),
+        api_keys_db_path=(
+            Path(api_keys_db_path_str) if api_keys_db_path_str else None
+        ),
+        elle_uid=api_auth_section.get("elle_uid"),
+    )
+
     # Correlation config
     correlation_section = _deep_get(data, "daemon", "correlation", default={})
     correlation = CorrelationConfig(
@@ -347,6 +386,7 @@ def load_config(config_path: Path | None = None) -> Config:
         probes=probes,
         thresholds=thresholds,
         api=api,
+        api_auth=api_auth,
         correlation=correlation,
         queues=queues,
         journal_enabled=journal_enabled,
