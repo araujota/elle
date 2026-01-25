@@ -216,3 +216,85 @@ async def route_event(
         engine = get_engine()
 
     return await engine.process_event(event)
+
+
+# =============================================================================
+# Simple singleton router for daemon integration
+# =============================================================================
+
+
+class SimpleRouter:
+    """Simple router for direct event routing from daemon.
+
+    Provides a simpler interface than EventRouter for cases where
+    events are already available (e.g., from the processor loop).
+    """
+
+    def __init__(self) -> None:
+        """Initialize the simple router."""
+        self._engine: ReactiveEngine | None = None
+        self._stats = RouterStats()
+
+    def _get_engine(self) -> ReactiveEngine:
+        """Get or create the reactive engine."""
+        if self._engine is None:
+            from elle.reactive.engine import get_engine
+
+            self._engine = get_engine()
+        return self._engine
+
+    async def route(self, event: TelemetryEvent) -> list:
+        """Route a single event to reactive functions.
+
+        Args:
+            event: TelemetryEvent to route.
+
+        Returns:
+            List of ExecutionRecords from triggered functions.
+        """
+        self._stats.events_received += 1
+
+        try:
+            engine = self._get_engine()
+            records = await engine.process_event(event)
+            self._stats.events_processed += 1
+
+            for record in records:
+                if record.success:
+                    self._stats.functions_triggered += 1
+                else:
+                    self._stats.functions_failed += 1
+
+            return records
+
+        except Exception as e:
+            logger.debug(f"Error routing event: {e}")
+            self._stats.errors += 1
+            return []
+
+    @property
+    def stats(self) -> RouterStats:
+        """Get current routing statistics."""
+        return self._stats
+
+
+# Module-level simple router instance
+_simple_router: SimpleRouter | None = None
+
+
+def get_router() -> SimpleRouter:
+    """Get the shared simple router instance.
+
+    Returns:
+        SimpleRouter instance for routing events to reactive functions.
+    """
+    global _simple_router
+    if _simple_router is None:
+        _simple_router = SimpleRouter()
+    return _simple_router
+
+
+def reset_router() -> None:
+    """Reset the shared router (for testing)."""
+    global _simple_router
+    _simple_router = None

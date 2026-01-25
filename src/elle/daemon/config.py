@@ -115,6 +115,21 @@ class Config:
     probes_enabled: bool = True
     ebpf_enabled: bool = True
 
+    # New telemetry source flags
+    docker_enabled: bool = True  # Docker events watcher
+    inotify_enabled: bool = True  # File change monitoring via inotify
+    wireguard_enabled: bool = True  # WireGuard handshake monitoring
+    port_probe_enabled: bool = True  # Port listener detection probe
+
+    # Inotify configuration
+    inotify_watch_paths: tuple[str, ...] = (
+        "/root/.ssh/authorized_keys",
+        "/etc/ssh/sshd_config",
+    )
+
+    # Port probe configuration
+    port_probe_interval: int = 60  # seconds
+
 
 def _deep_get(d: dict[str, Any], *keys: str, default: Any = None) -> Any:
     """Get nested dictionary value safely."""
@@ -279,6 +294,40 @@ def load_config(config_path: Path | None = None) -> Config:
         daemon_section.get("ebpf_enabled", True),
     )
 
+    # New telemetry source flags
+    docker_enabled = _get_env(
+        "DOCKER_ENABLED",
+        daemon_section.get("docker_enabled", True),
+    )
+    inotify_enabled = _get_env(
+        "INOTIFY_ENABLED",
+        daemon_section.get("inotify_enabled", True),
+    )
+    wireguard_enabled = _get_env(
+        "WIREGUARD_ENABLED",
+        daemon_section.get("wireguard_enabled", True),
+    )
+    port_probe_enabled = _get_env(
+        "PORT_PROBE_ENABLED",
+        daemon_section.get("port_probe_enabled", True),
+    )
+
+    # Inotify watch paths
+    inotify_section = _deep_get(data, "daemon", "inotify", default={})
+    inotify_watch_paths = inotify_section.get("watch_paths", [
+        "/root/.ssh/authorized_keys",
+        "/etc/ssh/sshd_config",
+    ])
+    if isinstance(inotify_watch_paths, list):
+        inotify_watch_paths = tuple(inotify_watch_paths)
+
+    # Port probe interval
+    port_probe_section = _deep_get(data, "daemon", "port_probe", default={})
+    port_probe_interval = _get_env(
+        "PORT_PROBE_INTERVAL",
+        port_probe_section.get("interval", 60),
+    )
+
     # eBPF config
     ebpf_section = _deep_get(data, "daemon", "ebpf", default={})
     ebpf_programs = ebpf_section.get(
@@ -305,6 +354,12 @@ def load_config(config_path: Path | None = None) -> Config:
         probes_enabled=probes_enabled,
         ebpf=ebpf,
         ebpf_enabled=ebpf_enabled,
+        docker_enabled=docker_enabled,
+        inotify_enabled=inotify_enabled,
+        wireguard_enabled=wireguard_enabled,
+        port_probe_enabled=port_probe_enabled,
+        inotify_watch_paths=inotify_watch_paths,
+        port_probe_interval=port_probe_interval,
     )
 
 

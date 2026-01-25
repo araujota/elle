@@ -5,8 +5,10 @@ Provides a high-level wrapper around Ollama for general LLM interactions:
 - JSON generation with automatic retry on parse errors
 - Chat-style interactions with message history
 - Model availability checking with fallbacks
+- Keep-alive control for model warmth
+- Context window management with compaction
 
-Default model: Qwen2.5-7B-Instruct (qwen2.5:7b-instruct)
+Default model: Qwen2.5-7B-Instruct-Q8_0 (quantized for efficiency)
 
 Usage:
     from elle.rag.llm import LLM, get_llm
@@ -38,6 +40,22 @@ from typing import Any, Literal
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
+from elle.rag.constants import (
+    CHARS_PER_TOKEN,
+    CONTEXT_COMPACT_TARGET,
+    CONTEXT_COMPACT_THRESHOLD,
+    CONTEXT_MIN_MESSAGES,
+    JSON_MAX_RETRIES,
+    JSON_RETRY_TEMPERATURE,
+    LLM_FALLBACK_MODELS,
+    LLM_KEEP_ALIVE,
+    LLM_MAX_TOKENS,
+    LLM_MODEL,
+    LLM_NUM_CTX,
+    LLM_TEMPERATURE,
+    LLM_TIMEOUT,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,30 +63,34 @@ logger = logging.getLogger(__name__)
 # Configuration
 # =============================================================================
 
-# Default model for general LLM use
-DEFAULT_MODEL = "qwen2.5:7b-instruct"
+# Default model for general LLM use (Q8 quantized)
+DEFAULT_MODEL = LLM_MODEL
 
 # Fallback models in order of preference
-FALLBACK_MODELS = [
-    "qwen2.5:7b",
-    "llama3.1:8b-instruct-q4_0",
-    "llama3.1:8b",
-    "mistral:7b-instruct",
-    "gemma2:9b",
-]
+FALLBACK_MODELS = list(LLM_FALLBACK_MODELS)
 
 # Default settings for general-purpose generation
-DEFAULT_TIMEOUT = 120.0  # 2 minutes for complex generations
-DEFAULT_MAX_TOKENS = 2048  # Reasonable limit for most responses
-DEFAULT_TEMPERATURE = 0.7  # Balanced creativity/coherence
-
-# JSON mode settings
-JSON_RETRY_TEMPERATURE = 0.1  # Lower temperature for retry
-JSON_MAX_RETRIES = 1  # Retry once on parse failure
+DEFAULT_TIMEOUT = LLM_TIMEOUT
+DEFAULT_MAX_TOKENS = LLM_MAX_TOKENS
+DEFAULT_TEMPERATURE = LLM_TEMPERATURE
+DEFAULT_KEEP_ALIVE = LLM_KEEP_ALIVE
+DEFAULT_NUM_CTX = LLM_NUM_CTX
 
 
 class LLMConfig(BaseModel):
-    """Configuration for the LLM interface."""
+    """Configuration for the LLM interface.
+
+    Attributes:
+        host: Ollama API host URL.
+        model: Model name to use for generation.
+        timeout: Request timeout in seconds.
+        max_tokens: Maximum tokens to generate.
+        temperature: Sampling temperature (0.0-1.0).
+        keep_alive: Duration to keep model loaded after request.
+        num_ctx: Context window size in tokens.
+        json_retry_temperature: Temperature for JSON retry attempts.
+        json_max_retries: Maximum retries for JSON parsing.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -77,6 +99,8 @@ class LLMConfig(BaseModel):
     timeout: float = DEFAULT_TIMEOUT
     max_tokens: int = DEFAULT_MAX_TOKENS
     temperature: float = DEFAULT_TEMPERATURE
+    keep_alive: str = DEFAULT_KEEP_ALIVE
+    num_ctx: int = DEFAULT_NUM_CTX
 
     # JSON mode settings
     json_retry_temperature: float = JSON_RETRY_TEMPERATURE
@@ -114,6 +138,236 @@ class Message(BaseModel):
 
     role: Literal["system", "user", "assistant"]
     content: str
+
+
+# =============================================================================
+# Context Window Management
+# =============================================================================
+
+class ContextWindowManager:
+    """Manages context window for multi-turn LLM conversations.
+
+    Tracks token usage and triggers compaction when the context approaches
+    the configured threshold. Uses a sliding window strategy that preserves
+    the system message and recent turns while summarizing earlier context.
+
+    Usage:
+        manager = ContextWindowManager(max_tokens=8192)
+        manager.add_message("system", "You are a helpful assistant.")
+        manager.add_message("user", "Hello!")
+        manager.add_message("assistant", "Hi there!")
+
+        # Get messages for next request
+        messages = manager.get_messages()
+
+        # Check if compaction is needed
+        if manager.needs_compaction():
+            await manager.compact(llm)
+    """
+
+    def __init__(
+        self,
+        max_tokens: int = LLM_NUM_CTX,
+        compact_threshold: float = CONTEXT_COMPACT_THRESHOLD,
+        compact_target: float = CONTEXT_COMPACT_TARGET,
+        min_messages: int = CONTEXT_MIN_MESSAGES,
+    ) -> None:
+        """Initialize the context window manager.
+
+        Args:
+            max_tokens: Maximum context window size in tokens.
+            compact_threshold: Trigger compaction at this fraction of max (0.75 = 75%).
+            compact_target: Target fraction after compaction (0.50 = 50%).
+            min_messages: Minimum messages to keep after compaction.
+        """
+        self.max_tokens = max_tokens
+        self.compact_threshold = compact_threshold
+        self.compact_target = compact_target
+        self.min_messages = min_messages
+
+        self._messages: list[dict[str, str]] = []
+        self._token_count: int = 0
+        self._compaction_count: int = 0
+
+    def _estimate_tokens(self, content: str) -> int:
+        """Estimate token count from string length.
+
+        Uses a rough approximation of ~4 characters per token.
+        This is imprecise but sufficient for threshold detection.
+
+        Args:
+            content: Text content.
+
+        Returns:
+            Estimated token count.
+        """
+        return max(1, len(content) // CHARS_PER_TOKEN)
+
+    def add_message(self, role: str, content: str) -> None:
+        """Add a message to the conversation.
+
+        Args:
+            role: Message role ("system", "user", or "assistant").
+            content: Message content.
+        """
+        tokens = self._estimate_tokens(content)
+        self._messages.append({"role": role, "content": content})
+        self._token_count += tokens
+
+    def add_messages(self, messages: list[dict[str, str]]) -> None:
+        """Add multiple messages to the conversation.
+
+        Args:
+            messages: List of message dicts with "role" and "content".
+        """
+        for msg in messages:
+            self.add_message(msg["role"], msg["content"])
+
+    def get_messages(self) -> list[dict[str, str]]:
+        """Get all messages in the conversation.
+
+        Returns:
+            List of message dicts.
+        """
+        return list(self._messages)
+
+    @property
+    def token_count(self) -> int:
+        """Get estimated token count."""
+        return self._token_count
+
+    @property
+    def message_count(self) -> int:
+        """Get message count."""
+        return len(self._messages)
+
+    @property
+    def utilization(self) -> float:
+        """Get context utilization as a fraction (0.0-1.0)."""
+        return self._token_count / self.max_tokens if self.max_tokens > 0 else 0.0
+
+    @property
+    def compaction_count(self) -> int:
+        """Get number of times context has been compacted."""
+        return self._compaction_count
+
+    def needs_compaction(self) -> bool:
+        """Check if context needs compaction.
+
+        Returns:
+            True if token count exceeds compact_threshold * max_tokens.
+        """
+        threshold = int(self.max_tokens * self.compact_threshold)
+        return self._token_count > threshold
+
+    def clear(self) -> None:
+        """Clear all messages and reset token count."""
+        self._messages.clear()
+        self._token_count = 0
+
+    async def compact(self, llm: "LLM") -> str:
+        """Compact the context by summarizing earlier messages.
+
+        Preserves:
+        - System message (first message if role="system")
+        - Last N conversation turns (user + assistant pairs)
+        - Summary of earlier context
+
+        Args:
+            llm: LLM instance for generating summary.
+
+        Returns:
+            Summary of compacted content.
+        """
+        if len(self._messages) <= self.min_messages:
+            return ""
+
+        # Separate system message
+        system_msg = None
+        conversation = []
+        for msg in self._messages:
+            if msg["role"] == "system" and system_msg is None:
+                system_msg = msg
+            else:
+                conversation.append(msg)
+
+        # Calculate how many recent messages to keep
+        target_tokens = int(self.max_tokens * self.compact_target)
+        keep_count = min(self.min_messages - 1, len(conversation))  # -1 for system
+
+        # Estimate tokens in kept messages
+        kept_tokens = sum(
+            self._estimate_tokens(msg["content"])
+            for msg in conversation[-keep_count:]
+        )
+        if system_msg:
+            kept_tokens += self._estimate_tokens(system_msg["content"])
+
+        # Calculate space for summary
+        summary_budget = max(200, target_tokens - kept_tokens - 100)
+
+        # Messages to summarize
+        to_summarize = conversation[:-keep_count] if keep_count > 0 else conversation
+
+        if not to_summarize:
+            return ""
+
+        # Generate summary
+        summary_prompt = (
+            "Summarize the following conversation history in a concise paragraph. "
+            "Focus on key information, decisions made, and context needed for continuing "
+            f"the conversation. Keep it under {summary_budget // 4} words:\n\n"
+        )
+        for msg in to_summarize:
+            summary_prompt += f"{msg['role'].upper()}: {msg['content'][:500]}\n"
+
+        try:
+            response = llm.generate(
+                summary_prompt,
+                max_tokens=summary_budget,
+                temperature=0.3,
+            )
+            summary = response.content.strip()
+        except Exception as e:
+            logger.warning(f"Failed to generate summary: {e}")
+            # Fallback: truncate
+            summary = "Earlier conversation covered: " + ", ".join(
+                msg["content"][:50] for msg in to_summarize[:3]
+            )
+
+        # Rebuild messages
+        new_messages: list[dict[str, str]] = []
+        new_token_count = 0
+
+        if system_msg:
+            new_messages.append(system_msg)
+            new_token_count += self._estimate_tokens(system_msg["content"])
+
+        # Add summary as assistant context
+        summary_msg = {
+            "role": "assistant",
+            "content": f"[Context from earlier conversation: {summary}]",
+        }
+        new_messages.append(summary_msg)
+        new_token_count += self._estimate_tokens(summary_msg["content"])
+
+        # Add recent messages
+        for msg in conversation[-keep_count:]:
+            new_messages.append(msg)
+            new_token_count += self._estimate_tokens(msg["content"])
+
+        # Update state
+        self._messages = new_messages
+        self._token_count = new_token_count
+        self._compaction_count += 1
+
+        logger.info(
+            f"Context compacted: {len(to_summarize)} messages summarized, "
+            f"{len(new_messages)} messages remaining, "
+            f"~{new_token_count} tokens (was ~{self._token_count})"
+        )
+
+        return summary
 
 
 # =============================================================================
@@ -290,6 +544,8 @@ class LLM:
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
+        keep_alive: str | None = None,
+        num_ctx: int | None = None,
     ) -> LLMResponse:
         """Generate a text completion.
 
@@ -300,6 +556,8 @@ class LLM:
             max_tokens: Override default max tokens.
             temperature: Override default temperature.
             timeout: Override default timeout.
+            keep_alive: Override default keep_alive duration.
+            num_ctx: Override default context window size.
 
         Returns:
             LLMResponse with the generated content.
@@ -316,6 +574,8 @@ class LLM:
             max_tokens=max_tokens or self.config.max_tokens,
             temperature=temperature if temperature is not None else self.config.temperature,
             timeout=timeout or self.config.timeout,
+            keep_alive=keep_alive or self.config.keep_alive,
+            num_ctx=num_ctx or self.config.num_ctx,
             json_mode=False,
         )
 
@@ -328,6 +588,8 @@ class LLM:
         max_tokens: int,
         temperature: float,
         timeout: float,
+        keep_alive: str,
+        num_ctx: int,
         json_mode: bool,
     ) -> LLMResponse:
         """Internal generation method.
@@ -339,6 +601,8 @@ class LLM:
             max_tokens: Max tokens.
             temperature: Temperature.
             timeout: Timeout.
+            keep_alive: Keep-alive duration.
+            num_ctx: Context window size.
             json_mode: Whether to request JSON output.
 
         Returns:
@@ -348,9 +612,11 @@ class LLM:
             "model": model,
             "prompt": prompt,
             "stream": False,
+            "keep_alive": keep_alive,
             "options": {
                 "num_predict": max_tokens,
                 "temperature": temperature,
+                "num_ctx": num_ctx,
             },
         }
 
@@ -411,6 +677,8 @@ class LLM:
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
+        keep_alive: str | None = None,
+        num_ctx: int | None = None,
         retry_on_error: bool = True,
     ) -> dict[str, Any]:
         """Generate a JSON response with automatic parsing and retry.
@@ -426,6 +694,8 @@ class LLM:
             max_tokens: Override default max tokens.
             temperature: Override default temperature.
             timeout: Override default timeout.
+            keep_alive: Override default keep_alive duration.
+            num_ctx: Override default context window size.
             retry_on_error: Whether to retry on JSON parse error.
 
         Returns:
@@ -448,6 +718,9 @@ class LLM:
             json_system += "\n\n"
         json_system += "You must respond with valid JSON only. No explanations, no markdown, just JSON."
 
+        effective_keep_alive = keep_alive or self.config.keep_alive
+        effective_num_ctx = num_ctx or self.config.num_ctx
+
         response = self._generate(
             prompt=full_prompt,
             system=json_system,
@@ -455,6 +728,8 @@ class LLM:
             max_tokens=max_tokens or self.config.max_tokens,
             temperature=temperature if temperature is not None else self.config.temperature,
             timeout=timeout or self.config.timeout,
+            keep_alive=effective_keep_alive,
+            num_ctx=effective_num_ctx,
             json_mode=True,
         )
 
@@ -476,6 +751,8 @@ class LLM:
                 model=model or self.model,
                 max_tokens=max_tokens or self.config.max_tokens,
                 timeout=timeout or self.config.timeout,
+                keep_alive=effective_keep_alive,
+                num_ctx=effective_num_ctx,
             )
 
     def _parse_json(self, content: str) -> dict[str, Any]:
@@ -513,6 +790,8 @@ class LLM:
         model: str,
         max_tokens: int,
         timeout: float,
+        keep_alive: str,
+        num_ctx: int,
     ) -> dict[str, Any]:
         """Retry JSON generation after a parse failure.
 
@@ -525,6 +804,8 @@ class LLM:
             model: Model name.
             max_tokens: Max tokens.
             timeout: Timeout.
+            keep_alive: Keep-alive duration.
+            num_ctx: Context window size.
 
         Returns:
             Parsed JSON dictionary.
@@ -547,6 +828,8 @@ class LLM:
             max_tokens=max_tokens,
             temperature=self.config.json_retry_temperature,
             timeout=timeout,
+            keep_alive=keep_alive,
+            num_ctx=num_ctx,
             json_mode=True,
         )
 
@@ -570,6 +853,8 @@ class LLM:
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
+        keep_alive: str | None = None,
+        num_ctx: int | None = None,
     ) -> LLMResponse:
         """Chat-style generation with message history.
 
@@ -579,6 +864,8 @@ class LLM:
             max_tokens: Override default max tokens.
             temperature: Override default temperature.
             timeout: Override default timeout.
+            keep_alive: Override default keep_alive duration.
+            num_ctx: Override default context window size.
 
         Returns:
             LLMResponse with the assistant's reply.
@@ -610,9 +897,11 @@ class LLM:
             "model": model or self.model,
             "messages": chat_messages,
             "stream": False,
+            "keep_alive": keep_alive or self.config.keep_alive,
             "options": {
                 "num_predict": max_tokens or self.config.max_tokens,
                 "temperature": temperature if temperature is not None else self.config.temperature,
+                "num_ctx": num_ctx or self.config.num_ctx,
             },
         }
 
@@ -669,6 +958,8 @@ class LLM:
         max_tokens: int | None = None,
         temperature: float | None = None,
         timeout: float | None = None,
+        keep_alive: str | None = None,
+        num_ctx: int | None = None,
         retry_on_error: bool = True,
     ) -> dict[str, Any]:
         """Chat-style JSON generation with message history.
@@ -680,6 +971,8 @@ class LLM:
             max_tokens: Override default max tokens.
             temperature: Override default temperature.
             timeout: Override default timeout.
+            keep_alive: Override default keep_alive duration.
+            num_ctx: Override default context window size.
             retry_on_error: Whether to retry on JSON parse error.
 
         Returns:
@@ -718,6 +1011,8 @@ class LLM:
             max_tokens=max_tokens,
             temperature=temperature,
             timeout=timeout,
+            keep_alive=keep_alive,
+            num_ctx=num_ctx,
         )
 
         try:
@@ -747,6 +1042,8 @@ class LLM:
                 max_tokens=max_tokens,
                 temperature=self.config.json_retry_temperature,
                 timeout=timeout,
+                keep_alive=keep_alive,
+                num_ctx=num_ctx,
             )
 
             try:

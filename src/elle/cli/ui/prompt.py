@@ -396,3 +396,136 @@ class EllePrompt:
                 return default
             if response in valid_keys:
                 return response
+
+    def prompt_env_var(
+        self,
+        name: str,
+        *,
+        required: bool = False,
+        sensitive: bool = False,
+        default: str | None = None,
+        saved_value: str | None = None,
+        hint: str | None = None,
+    ) -> tuple[str, bool]:
+        """Prompt for a Docker environment variable value.
+
+        Args:
+            name: Variable name
+            required: Whether the variable is required
+            sensitive: Whether to mask input (for passwords)
+            default: Default value to use if empty input
+            saved_value: Previously saved value
+            hint: Additional hint text to display
+
+        Returns:
+            Tuple of (value, from_saved) where from_saved indicates
+            if the saved value was used.
+
+        Raises:
+            EOFError: On Ctrl+D
+            KeyboardInterrupt: On Ctrl+C
+        """
+        import getpass
+
+        # Build prompt label
+        parts = [name]
+        if required:
+            parts.append("(required)")
+        if sensitive:
+            parts.append("(sensitive)")
+        prompt_label = " ".join(parts) + ": "
+
+        # Show hint if provided
+        if hint:
+            # Use print since Rich console may not be available here
+            print(f"  {hint}")
+        elif saved_value:
+            masked = "********" if sensitive else saved_value
+            print(f"  [saved: {masked}, press Enter to use]")
+        elif default:
+            print(f"  [default: {default}]")
+
+        while True:
+            # Get input (masked for sensitive values)
+            if sensitive:
+                value = getpass.getpass(f"  {prompt_label}")
+            else:
+                value = self.session.prompt(
+                    FormattedText([("class:prompt", f"  {prompt_label}")]),
+                    bottom_toolbar=self._get_bottom_toolbar,
+                ).strip()
+
+            # Handle empty input
+            if not value:
+                if saved_value is not None:
+                    return saved_value, True
+                elif default is not None:
+                    return default, False
+                elif required:
+                    print("  This variable is required.")
+                    continue
+                else:
+                    return "", False
+
+            return value, False
+
+    def prompt_env_var_batch(
+        self,
+        specs: list[dict],
+        *,
+        saved_values: dict[str, str] | None = None,
+    ) -> dict[str, tuple[str, bool]]:
+        """Prompt for multiple environment variables.
+
+        Args:
+            specs: List of dicts with keys: name, required, sensitive, default, description
+            saved_values: Dict of previously saved values
+
+        Returns:
+            Dict mapping variable names to (value, from_saved) tuples.
+            Variables that were skipped are not included.
+        """
+        saved = saved_values or {}
+        results: dict[str, tuple[str, bool]] = {}
+
+        # Separate required and optional
+        required_specs = [s for s in specs if s.get("required", False)]
+        optional_specs = [s for s in specs if not s.get("required", False)]
+
+        # Prompt required first
+        for spec in required_specs:
+            name = spec["name"]
+            try:
+                value, from_saved = self.prompt_env_var(
+                    name,
+                    required=True,
+                    sensitive=spec.get("sensitive", False),
+                    default=spec.get("default"),
+                    saved_value=saved.get(name),
+                    hint=spec.get("description"),
+                )
+                if value:
+                    results[name] = (value, from_saved)
+            except (EOFError, KeyboardInterrupt):
+                break
+
+        # Then optional
+        if optional_specs:
+            print("\nOptional variables (press Enter to skip):")
+            for spec in optional_specs:
+                name = spec["name"]
+                try:
+                    value, from_saved = self.prompt_env_var(
+                        name,
+                        required=False,
+                        sensitive=spec.get("sensitive", False),
+                        default=spec.get("default"),
+                        saved_value=saved.get(name),
+                        hint=spec.get("description"),
+                    )
+                    if value:
+                        results[name] = (value, from_saved)
+                except (EOFError, KeyboardInterrupt):
+                    break
+
+        return results

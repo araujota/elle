@@ -1,6 +1,7 @@
 """Tests for the main daemon orchestrator."""
 
 import asyncio
+import sys
 import tempfile
 from dataclasses import replace
 from pathlib import Path
@@ -90,6 +91,7 @@ class TestElledDaemon:
         assert daemon.shutdown.is_set() is True
 
     @pytest.mark.asyncio
+    @pytest.mark.skipif(sys.platform != "linux", reason="Requires Linux-specific features (Docker, inotify)")
     async def test_daemon_status(self, daemon):
         """Daemon should report status correctly."""
         await daemon.start()

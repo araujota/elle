@@ -115,8 +115,8 @@ class TestDefaultSettings:
     """Tests for default settings."""
 
     def test_default_model(self):
-        """Test default model is Qwen2.5-7B-Instruct."""
-        assert DEFAULT_MODEL == "qwen2.5:7b-instruct"
+        """Test default model is Qwen2.5-7B-Instruct (Q8_0 quantization)."""
+        assert DEFAULT_MODEL == "qwen2.5:7b-instruct-q8_0"
 
     def test_default_timeout(self):
         """Test default timeout is 2 minutes."""
@@ -124,7 +124,7 @@ class TestDefaultSettings:
 
     def test_default_max_tokens(self):
         """Test default max tokens is reasonable for general use."""
-        assert DEFAULT_MAX_TOKENS == 2048
+        assert DEFAULT_MAX_TOKENS == 4096
 
     def test_default_temperature(self):
         """Test default temperature is balanced."""

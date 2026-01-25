@@ -24,6 +24,7 @@ IncidentDomain = Literal[
     "pkg",     # Package management issues
     "fs",      # Filesystem issues
     "service", # Systemd service issues
+    "gui",     # GUI automation
     "other",   # Uncategorized
 ]
 
@@ -55,6 +56,7 @@ ActionKind = Literal[
     "verify",     # Verification check
     "rollback",   # Rollback action
     "capability", # Capability execution
+    "gui",        # GUI automation action
 ]
 
 
@@ -349,7 +351,7 @@ class IncidentReport(BaseModel):
     )
 
     # Trigger source
-    trigger_source: Literal["telemetry", "command_failure", "user_task", "manual"] = Field(
+    trigger_source: Literal["telemetry", "command_failure", "user_task", "manual", "gui_automation"] = Field(
         default="manual",
         description="What created this incident",
     )

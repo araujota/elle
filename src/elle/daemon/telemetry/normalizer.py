@@ -97,6 +97,22 @@ CATEGORY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # Docker/container events
     (re.compile(r"docker|container|containerd|podman|runc", re.I), "docker"),
     (re.compile(r"container (started|stopped|died|killed)", re.I), "docker"),
+    (re.compile(r"Container .* (crashloop|oom|died)", re.I), "docker"),
+    (re.compile(r"crashlooping|restart.*times", re.I), "docker"),
+
+    # File monitoring events (auth-sensitive files)
+    (re.compile(r"authorized_keys|sshd_config|ssh key", re.I), "auth"),
+    (re.compile(r"/etc/passwd|/etc/shadow|/etc/sudoers", re.I), "auth"),
+    (re.compile(r"File modified:.*/(authorized_keys|sshd_config|sudoers)", re.I), "auth"),
+
+    # Port monitoring events
+    (re.compile(r"New listener on port|unauthorized.*port", re.I), "net"),
+    (re.compile(r"process.*listening on.*port", re.I), "net"),
+    (re.compile(r"port:\d+/(tcp|udp)", re.I), "net"),
+
+    # WireGuard events
+    (re.compile(r"wireguard|wg\d+|peer.*handshake.*stale", re.I), "net"),
+    (re.compile(r"wg-quick|wg show|handshake.*minutes ago", re.I), "net"),
 
     # Mount/filesystem events
     (re.compile(r"mount|umount|fstab|mounted|unmounted", re.I), "fs"),
@@ -148,6 +164,18 @@ ENTITY_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 
     # PIDs (for process events)
     ("pid", re.compile(r"(?:pid|process)\s*[=:\s]*(\d+)", re.I)),
+
+    # Ports (for network events)
+    ("port", re.compile(r"port[:\s]+(\d+)/(tcp|udp)", re.I)),
+    ("port", re.compile(r"port\s+(\d+)", re.I)),
+    ("port", re.compile(r"listening on.*:(\d+)", re.I)),
+
+    # Files (for file monitoring events)
+    ("file", re.compile(r"File (?:modified|created|deleted):\s*(.+?)(?:\s|$)", re.I)),
+    ("file", re.compile(r"authorized_keys|sshd_config|sudoers", re.I)),
+
+    # WireGuard interfaces
+    ("wg_interface", re.compile(r"\b(wg\d+)\b", re.I)),
 ]
 
 
@@ -187,6 +215,12 @@ def extract_entity(message: str, category: str, raw: dict[str, Any]) -> str | No
                 return f"container:{name[:12]}"
             if category == "auth" and entity_type == "user":
                 return f"user:{name}"
+            if category == "auth" and entity_type == "file":
+                return f"file:{name}"
+            if category == "net" and entity_type == "port":
+                return f"port:{name}"
+            if category == "net" and entity_type == "wg_interface":
+                return f"interface:{name}"
             # Generic case - return first match
             if entity_type not in ("pid",):  # Skip PIDs as they're too transient
                 return f"{entity_type}:{name}"

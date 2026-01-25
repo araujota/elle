@@ -6,6 +6,8 @@ Provides a wrapper around Ollama's HTTP API with:
 - Low temperature for deterministic outputs
 - JSON mode support for structured outputs
 - Retry logic for transient failures
+- Keep-alive control for model warmth
+- Context window size configuration
 """
 
 from __future__ import annotations
@@ -24,10 +26,21 @@ DEFAULT_HOST = "http://localhost:11434"
 DEFAULT_TIMEOUT = 30.0  # seconds
 DEFAULT_MAX_TOKENS = 150
 DEFAULT_TEMPERATURE = 0.1
+DEFAULT_KEEP_ALIVE = "5m"  # Duration models stay loaded (5 minutes)
+DEFAULT_NUM_CTX = 4096  # Context window size
 
 
 class OllamaConfig(BaseModel):
-    """Configuration for Ollama client."""
+    """Configuration for Ollama client.
+
+    Attributes:
+        host: Ollama API host URL.
+        timeout: Request timeout in seconds.
+        max_tokens: Maximum tokens to generate.
+        temperature: Sampling temperature (0.0-1.0).
+        keep_alive: Duration to keep model loaded ("5m", "1h", "-1" for indefinite).
+        num_ctx: Context window size in tokens.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -35,6 +48,8 @@ class OllamaConfig(BaseModel):
     timeout: float = DEFAULT_TIMEOUT
     max_tokens: int = DEFAULT_MAX_TOKENS
     temperature: float = DEFAULT_TEMPERATURE
+    keep_alive: str = DEFAULT_KEEP_ALIVE
+    num_ctx: int = DEFAULT_NUM_CTX
 
 
 class OllamaResponse(BaseModel):
@@ -156,6 +171,8 @@ class OllamaClient:
         json_mode: bool = False,
         max_tokens: int | None = None,
         temperature: float | None = None,
+        keep_alive: str | None = None,
+        num_ctx: int | None = None,
     ) -> OllamaResponse:
         """Generate a completion.
 
@@ -166,6 +183,8 @@ class OllamaClient:
             json_mode: If True, request JSON output format.
             max_tokens: Override default max tokens.
             temperature: Override default temperature.
+            keep_alive: Override default keep_alive duration.
+            num_ctx: Override default context window size.
 
         Returns:
             OllamaResponse with the generated content.
@@ -178,9 +197,11 @@ class OllamaClient:
             "model": model,
             "prompt": prompt,
             "stream": False,
+            "keep_alive": keep_alive or self.config.keep_alive,
             "options": {
                 "num_predict": max_tokens or self.config.max_tokens,
                 "temperature": temperature if temperature is not None else self.config.temperature,
+                "num_ctx": num_ctx or self.config.num_ctx,
             },
         }
 
@@ -225,6 +246,8 @@ class OllamaClient:
         system: str | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
+        keep_alive: str | None = None,
+        num_ctx: int | None = None,
         retry_on_parse_error: bool = True,
     ) -> dict[str, Any]:
         """Generate a JSON response with automatic parsing.
@@ -235,6 +258,8 @@ class OllamaClient:
             system: Optional system prompt.
             max_tokens: Override max tokens.
             temperature: Override temperature.
+            keep_alive: Override keep_alive duration.
+            num_ctx: Override context window size.
             retry_on_parse_error: If True, retry once on JSON parse failure.
 
         Returns:
@@ -250,6 +275,8 @@ class OllamaClient:
             json_mode=True,
             max_tokens=max_tokens,
             temperature=temperature,
+            keep_alive=keep_alive,
+            num_ctx=num_ctx,
         )
 
         try:
@@ -273,6 +300,8 @@ class OllamaClient:
                 json_mode=True,
                 max_tokens=max_tokens,
                 temperature=0.0,  # Even lower for retry
+                keep_alive=keep_alive,
+                num_ctx=num_ctx,
             )
 
             try:

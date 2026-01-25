@@ -884,6 +884,330 @@ class FileCopyCapability(BaseCapability):
 
 
 # =============================================================================
+# File Diff Capability
+# =============================================================================
+
+
+class FileDiffInput(BaseModel):
+    """Input for file diff operation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    path: str = Field(description="Path to the file to diff")
+    previous_content: str | None = Field(
+        default=None,
+        description="Previous content to compare against (uses snapshot if not provided)",
+    )
+    snapshot_id: str | None = Field(
+        default=None,
+        description="Snapshot ID to compare against",
+    )
+    context_lines: int = Field(
+        default=3,
+        ge=0,
+        le=10,
+        description="Number of context lines in diff",
+    )
+
+
+class FileDiffOutput(BaseModel):
+    """Output from file diff operation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    path: str = Field(description="File path")
+    has_changes: bool = Field(description="Whether file has changed")
+    diff: str = Field(default="", description="Unified diff output")
+    lines_added: int = Field(default=0, description="Lines added")
+    lines_removed: int = Field(default=0, description="Lines removed")
+    current_sha256: str = Field(default="", description="Current file hash")
+    previous_sha256: str = Field(default="", description="Previous file hash")
+
+
+class FileDiffCapability(BaseCapability):
+    """Generate unified diff for a file."""
+
+    @property
+    def spec(self) -> CapabilitySpec:
+        return CapabilitySpec(
+            name="file.diff",
+            summary="Generate unified diff between file states",
+            domain="file",
+            risk="none",
+            side_effects=(),
+            requires_privilege=False,
+            idempotent=True,
+            trust_level="core",
+            version="1.0.0",
+            input_schema_name="FileDiffInput",
+            output_schema_name="FileDiffOutput",
+        )
+
+    def dry_run(self, input: FileDiffInput) -> DryRunResult:
+        """Preview diff generation."""
+        path = Path(input.path)
+
+        if not path.exists():
+            return DryRunResult(
+                is_valid=False,
+                validation_errors=(f"File does not exist: {input.path}",),
+                preview_text="Cannot diff: file does not exist",
+            )
+
+        return DryRunResult(
+            would_execute=(),
+            would_modify=(),
+            estimated_risk="none",
+            requires_confirmation=False,
+            preview_text=f"Would generate diff for {input.path}",
+            is_valid=True,
+        )
+
+    def run(self, input: FileDiffInput) -> CapabilityResult:
+        """Generate the diff."""
+        import difflib
+
+        start_time = time.time()
+        path = Path(input.path)
+
+        if not path.exists():
+            return CapabilityResult(
+                success=False,
+                error=f"File does not exist: {input.path}",
+                execution_time_ms=int((time.time() - start_time) * 1000),
+            )
+
+        try:
+            current_content = path.read_text()
+            current_sha = hashlib.sha256(current_content.encode()).hexdigest()
+
+            # Get previous content
+            if input.previous_content is not None:
+                previous_content = input.previous_content
+            elif input.snapshot_id:
+                # Try to load from snapshot store
+                previous_content = self._get_snapshot_content(input.snapshot_id, input.path)
+                if previous_content is None:
+                    return CapabilityResult(
+                        success=False,
+                        error=f"Snapshot not found: {input.snapshot_id}",
+                        execution_time_ms=int((time.time() - start_time) * 1000),
+                    )
+            else:
+                # No previous content - show as all new
+                previous_content = ""
+
+            previous_sha = hashlib.sha256(previous_content.encode()).hexdigest()
+
+            # Check if changed
+            if current_sha == previous_sha:
+                return CapabilityResult(
+                    success=True,
+                    output=FileDiffOutput(
+                        path=input.path,
+                        has_changes=False,
+                        diff="",
+                        lines_added=0,
+                        lines_removed=0,
+                        current_sha256=current_sha,
+                        previous_sha256=previous_sha,
+                    ),
+                    execution_time_ms=int((time.time() - start_time) * 1000),
+                    evidence=CapabilityEvidence(
+                        rationale=f"No changes to {input.path}",
+                    ),
+                )
+
+            # Generate diff
+            previous_lines = previous_content.splitlines(keepends=True)
+            current_lines = current_content.splitlines(keepends=True)
+
+            diff = difflib.unified_diff(
+                previous_lines,
+                current_lines,
+                fromfile=f"a/{path.name}",
+                tofile=f"b/{path.name}",
+                n=input.context_lines,
+            )
+            diff_text = "".join(diff)
+
+            # Count changes
+            lines_added = sum(1 for line in diff_text.split("\n") if line.startswith("+") and not line.startswith("+++"))
+            lines_removed = sum(1 for line in diff_text.split("\n") if line.startswith("-") and not line.startswith("---"))
+
+            return CapabilityResult(
+                success=True,
+                output=FileDiffOutput(
+                    path=input.path,
+                    has_changes=True,
+                    diff=diff_text,
+                    lines_added=lines_added,
+                    lines_removed=lines_removed,
+                    current_sha256=current_sha,
+                    previous_sha256=previous_sha,
+                ),
+                execution_time_ms=int((time.time() - start_time) * 1000),
+                evidence=CapabilityEvidence(
+                    rationale=f"Generated diff for {input.path}: +{lines_added}/-{lines_removed}",
+                ),
+            )
+
+        except Exception as e:
+            return CapabilityResult(
+                success=False,
+                error=str(e),
+                execution_time_ms=int((time.time() - start_time) * 1000),
+            )
+
+    def _get_snapshot_content(self, snapshot_id: str, path: str) -> str | None:
+        """Load content from a snapshot.
+
+        Args:
+            snapshot_id: Snapshot identifier.
+            path: File path within snapshot.
+
+        Returns:
+            File content or None if not found.
+        """
+        # Try to load from file watch snapshot store
+        try:
+            from elle.capabilities.core.file import _snapshot_store
+            snapshot = _snapshot_store.get(snapshot_id)
+            if snapshot:
+                return snapshot.get("content")
+        except Exception:
+            pass
+        return None
+
+
+# =============================================================================
+# File Watch Snapshot Capability
+# =============================================================================
+
+# Simple in-memory snapshot store (could be backed by SQLite in production)
+_snapshot_store: dict[str, dict] = {}
+
+
+class FileWatchSnapshotInput(BaseModel):
+    """Input for file watch snapshot operation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    path: str = Field(description="Path to the file to snapshot")
+    snapshot_id: str | None = Field(
+        default=None,
+        description="Custom snapshot ID (auto-generated if not provided)",
+    )
+
+
+class FileWatchSnapshotOutput(BaseModel):
+    """Output from file watch snapshot operation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    path: str = Field(description="File path")
+    snapshot_id: str = Field(description="Snapshot identifier")
+    sha256: str = Field(description="File hash at snapshot time")
+    size_bytes: int = Field(description="File size at snapshot time")
+    timestamp: str = Field(description="Snapshot timestamp")
+
+
+class FileWatchSnapshotCapability(BaseCapability):
+    """Take a snapshot of a file for later comparison."""
+
+    @property
+    def spec(self) -> CapabilitySpec:
+        return CapabilitySpec(
+            name="file.watch_snapshot",
+            summary="Take a snapshot of a file for later diff comparison",
+            domain="file",
+            risk="none",
+            side_effects=(),
+            requires_privilege=False,
+            idempotent=True,
+            trust_level="core",
+            version="1.0.0",
+            input_schema_name="FileWatchSnapshotInput",
+            output_schema_name="FileWatchSnapshotOutput",
+        )
+
+    def dry_run(self, input: FileWatchSnapshotInput) -> DryRunResult:
+        """Preview snapshot."""
+        path = Path(input.path)
+
+        if not path.exists():
+            return DryRunResult(
+                is_valid=False,
+                validation_errors=(f"File does not exist: {input.path}",),
+                preview_text="Cannot snapshot: file does not exist",
+            )
+
+        return DryRunResult(
+            would_execute=(),
+            would_modify=(),
+            estimated_risk="none",
+            requires_confirmation=False,
+            preview_text=f"Would snapshot {input.path}",
+            is_valid=True,
+        )
+
+    def run(self, input: FileWatchSnapshotInput) -> CapabilityResult:
+        """Take the snapshot."""
+        from datetime import datetime
+        import uuid
+
+        start_time = time.time()
+        path = Path(input.path)
+
+        if not path.exists():
+            return CapabilityResult(
+                success=False,
+                error=f"File does not exist: {input.path}",
+                execution_time_ms=int((time.time() - start_time) * 1000),
+            )
+
+        try:
+            content = path.read_text()
+            sha = hashlib.sha256(content.encode()).hexdigest()
+            size = len(content.encode())
+            timestamp = datetime.utcnow().isoformat()
+
+            # Generate or use provided snapshot ID
+            snapshot_id = input.snapshot_id or f"{path.name}_{uuid.uuid4().hex[:8]}"
+
+            # Store snapshot
+            _snapshot_store[snapshot_id] = {
+                "path": input.path,
+                "content": content,
+                "sha256": sha,
+                "size_bytes": size,
+                "timestamp": timestamp,
+            }
+
+            return CapabilityResult(
+                success=True,
+                output=FileWatchSnapshotOutput(
+                    path=input.path,
+                    snapshot_id=snapshot_id,
+                    sha256=sha,
+                    size_bytes=size,
+                    timestamp=timestamp,
+                ),
+                execution_time_ms=int((time.time() - start_time) * 1000),
+                evidence=CapabilityEvidence(
+                    rationale=f"Created snapshot '{snapshot_id}' for {input.path}",
+                ),
+            )
+
+        except Exception as e:
+            return CapabilityResult(
+                success=False,
+                error=str(e),
+                execution_time_ms=int((time.time() - start_time) * 1000),
+            )
+
+
+# =============================================================================
 # Exports
 # =============================================================================
 
@@ -892,4 +1216,6 @@ FILE_CAPABILITIES = [
     FileWriteCapability,
     FileDeleteCapability,
     FileCopyCapability,
+    FileDiffCapability,
+    FileWatchSnapshotCapability,
 ]

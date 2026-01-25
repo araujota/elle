@@ -30,11 +30,15 @@ src/elle/
     terminal/              # REPL, classifier, executor, renderer, intent
     fixit/                 # Command failure diagnosis and repair
     planner/               # Multi-step task planning
-    docker/                # Container diagnostics, compose conversion
+    docker/                # Container diagnostics, compose conversion, env detection
     network/               # Connectivity diagnosis, firewall explanation
     reactive_commands.py   # /react REPL commands
+    learn_commands.py      # /learn REPL commands for GUI automation
   daemon/
     telemetry/             # Journal/kernel watchers, probes, eBPF
+      docker_watcher.py    # Container state change monitoring
+      inotify_watcher.py   # File system change monitoring
+      port_probe.py        # Network port status monitoring
     manvault/              # Man page indexing, search, embeddings
     incidents/             # Incident reports, snapshots, semantic_diff
     notifications/         # ntfy alerts
@@ -47,8 +51,20 @@ src/elle/
   rag/
     llm.py                 # High-level LLM interface
     ollama_client.py       # Low-level Ollama HTTP client
+    constants.py           # LLM model configuration constants
+    model_warmup.py        # Model preloading and warmup
     confgen/               # LLM-driven config generation (netplan, docker, wireguard)
+    prompts/               # Intent-specific prompt segments
+  atspi/                   # AT-SPI GUI automation
+    models.py              # UIElement, UIRecipe, UIAction, UITaskPlan
+    client.py              # AT-SPI bus connection and tree traversal
+    store.py               # Recipe CRUD operations (recipes.db)
+    learner.py             # Application UI learning
+    matcher.py             # Fuzzy element matching with self-healing
+    planner.py             # LLM-based task planning
+    executor.py            # UI action execution with incident integration
   capabilities/            # Typed operations with policy enforcement
+    core/gui.py            # GUI capabilities (gui.learn, gui.click, gui.type, etc.)
   policy/                  # Rule-based access control engine
   reactive/                # Event-driven automation system
   security/                # Polkit integration
@@ -76,6 +92,31 @@ mypy src/                 # Type check
 - **Explain → Plan → Confirm → Apply**: Never silently mutate the system
 - **Pydantic everywhere**: All data objects, inputs, outputs, API boundaries use Pydantic models
 
+## Self-Building Architecture
+
+ELLE is designed to **build itself** rather than accumulate discrete feature modules. New functionality should expand the core systems - not extend from them as separate arms.
+
+**The core systems that grow:**
+- **Capabilities Registry** - New operations become typed capabilities, not one-off scripts
+- **Reactive Functions** - Automations are user-defined and machine-learned, not hard-coded
+- **Man Vault** - Knowledge expands based on what the user asks about and uses
+- **Incident Vault** - Decision memory grows from experience, enabling pattern matching
+- **Policy Engine** - Rules evolve based on user preferences and risk tolerance
+
+**When adding functionality:**
+1. **Ask first:** Can this be a Capability? A Reactive Function? A Man Vault entry?
+2. **Expand the core:** Add to the registry/vault/engine rather than building a standalone module
+3. **Make it learnable:** New patterns should be discoverable and reusable by the system
+4. **User-specific:** The system should adapt to THIS user on THIS machine, not generic defaults
+
+**Anti-patterns to avoid:**
+- Building bespoke handlers that bypass the capabilities system
+- Hard-coding automations that could be reactive functions
+- Creating domain-specific modules when a generic capability would suffice
+- Adding features that don't integrate with the existing memory/learning systems
+
+**The goal:** Over time, ELLE learns from incidents, accumulates capabilities, builds reactive automations, and indexes knowledge - becoming increasingly capable through use rather than through code additions.
+
 ## Engine Architecture
 
 All input flows through shared `Engine.process()`:
@@ -102,8 +143,9 @@ Every input classified into exactly one intent before execution:
 | `shell_passthrough` | Safe shell command |
 | `system_question` | Explanation/diagnosis request |
 | `system_task` | Requested system change |
+| `gui_task` | GUI automation request (AT-SPI) |
 | `fixit` | Repair a failed command |
-| `navigation` | `status`, `events`, `logs` |
+| `navigation` | `status`, `events`, `logs`, `/learn` |
 | `meta` | `help`, `exit`, `config` |
 
 **Classification precedence:**
@@ -176,6 +218,8 @@ class CapabilitySpec(BaseModel):
 - Incident Vault: `/var/lib/elle/incidents.db`
 - Reactive Functions: `/var/lib/elle/reactive.db`
 - Policy Rules: `/var/lib/elle/policy.db`
+- UI Recipes: `/var/lib/elle/recipes.db`
+- Docker Env Store: `/var/lib/elle/docker_env.db`
 - Config backups: `/var/lib/elle/backups/<domain>/<timestamp>/`
 
 ## Module Responsibilities
@@ -244,7 +288,8 @@ Typed, policy-governed operations replacing raw shell commands.
 - `CapabilitySpec` - Name, domain, risk_level, side_effects, input/output schema
 - `CapabilityResult` - Success/failure, evidence, duration
 - `RiskLevel` - none, low, medium, high, critical
-- `CapabilityDomain` - service, file, config, network, package, docker, auth
+- `CapabilityDomain` - service, file, config, network, package, docker, auth, gui
+- `SideEffectKind` - includes `ui_interaction`, `window_focus` for GUI ops
 
 **Pattern:** Capabilities are registered in `CapabilityRegistry`, executed via `CapabilityExecutor` which enforces policy.
 
@@ -281,3 +326,85 @@ Event-driven automations from natural language.
 
 - `tests/intent_cases.jsonl` - ~200 intent classification cases
 - `tests/fixit_cases.jsonl` - Common failure patterns
+
+## AT-SPI GUI Automation (`atspi/`)
+
+GUI automation via Linux accessibility APIs (AT-SPI2).
+
+**Key models:**
+- `UIElement` - Single accessible UI component with path, role, name, states
+- `UIRecipe` - Versioned recipe for an application's UI structure
+- `UIAction` - Single action: click, type, toggle, scroll, wait
+- `UITaskPlan` - Sequence of actions for a user request
+- `ExecutionResult` - Outcome with adaptation notes
+
+**Matching strategies** (in order of preference):
+1. `direct_path` - Use recorded element path (fastest, 1.0 confidence)
+2. `exact_name` - Search by exact name match (0.95 confidence)
+3. `fuzzy_name` - Levenshtein distance matching (0.85 confidence)
+4. `sibling_context` - Find element near known siblings (0.85 confidence)
+5. `role_search` - Find by role and partial name (0.75 confidence)
+6. `tree_search` - Full tree traversal (0.65 confidence)
+
+**REPL commands:** `/learn <app>`, `/learn list`, `/learn show <app>`, `/learn rebuild <app>`, `/learn delete <app>`
+
+**GUI task patterns** (in classifier):
+- `(?:open|launch|start)\s+(\w+)\s+and\s+(.+)` → gui_task
+- `(?:click|press|toggle|enable|disable)\s+(.+)\s+in\s+(\w+)` → gui_task
+- `in\s+(\w+),?\s+(?:click|toggle|enable|disable)\s+(.+)` → gui_task
+
+## Prompt Segments (`rag/prompts/`)
+
+Intent-specific prompt augmentation system.
+
+**Key classes:**
+- `PromptSegment` - Atomic prompt content for a specific intent
+- `PromptComposer` - Combines base prompt + matching segments
+
+**Default segments:**
+- `reactive_function` - Reactive function creation guidance
+- `capability_discovery` - Capability system explanation
+- `config_generation` - Config editing guidelines
+- `docker_operations` - Docker best practices
+- `fixit` - Command repair guidance
+- `incident_analysis` - Incident investigation guidance
+- `network_diagnostics` - Network troubleshooting
+- `wireguard` - VPN configuration
+- `service_management` - Systemd services
+- `gui_automation` - AT-SPI GUI automation guidance
+
+**Usage:** Segments are auto-selected based on classified intent.
+
+## LLM Configuration (`rag/constants.py`)
+
+Centralized model configuration:
+
+**SLM (Classification):**
+- Model: `phi3.5:3.8b-mini-instruct-q8_0`
+- Keep-alive: `-1` (never unload)
+- Context: 2048 tokens
+- Temperature: 0.1
+
+**LLM (Generation):**
+- Model: `qwen2.5:7b-instruct-q8_0`
+- Keep-alive: `10m`
+- Context: 32768 tokens
+- Temperature: 0.7
+
+**Context management:**
+- Compact threshold: 80% of context window
+- Compact target: 60% of context window
+- Min messages: 8
+
+## Docker Environment Detection (`cli/docker/`)
+
+Smart environment variable detection for Docker containers.
+
+**Components:**
+- `env_detector.py` - Detects required env vars from image/CLI
+- `env_profiles.py` - Known profiles for common images (postgres, mysql, redis)
+- `env_prompt.py` - Interactive prompting for missing values
+- `env_store.py` - Secure storage of env configurations
+- `env_explainer.py` - LLM-powered env var explanation
+
+**Domains:** `IncidentDomain` includes `gui` for GUI automation incidents.

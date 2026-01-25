@@ -19,11 +19,14 @@ from __future__ import annotations
 
 import re
 import shlex
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field
 
 import yaml
+
+if TYPE_CHECKING:
+    from rich.console import Console
 
 
 class DockerRunConfig(BaseModel):
@@ -481,3 +484,156 @@ def docker_run_to_compose(
 
     # Generate YAML
     return yaml.dump(compose, default_flow_style=False, sort_keys=False)
+
+
+def docker_run_with_env_prompt(
+    command: str,
+    *,
+    console: "Console | None" = None,
+    skip_prompt: bool = False,
+    use_saved: bool = True,
+    save_values: bool = True,
+) -> DockerRunConfig:
+    """Parse a docker run command and prompt for missing environment variables.
+
+    Detects required environment variables from the image and prompts the
+    user to enter values for any that aren't already specified in the command.
+
+    Args:
+        command: The docker run command string.
+        console: Rich console for output (creates new if None).
+        skip_prompt: If True, skip prompting and return as-is.
+        use_saved: Whether to offer previously saved values.
+        save_values: Whether to save entered values for future use.
+
+    Returns:
+        DockerRunConfig with environment variables populated.
+
+    Raises:
+        ValueError: If the command is not a valid docker run command.
+
+    Example:
+        >>> config = docker_run_with_env_prompt("docker run postgres:15")
+        # User is prompted for POSTGRES_PASSWORD
+        >>> print(config.environment)
+        (('POSTGRES_PASSWORD', 'secret'),)
+    """
+    from elle.cli.docker.env_detector import DockerEnvDetector
+    from elle.cli.docker.env_prompt import prompt_env_vars
+    from elle.cli.docker.env_profiles import extract_image_family, get_profile
+
+    # Parse the command first
+    config = parse_docker_run(command)
+
+    if skip_prompt:
+        return config
+
+    # Detect environment variables
+    detector = DockerEnvDetector()
+    specs = detector.detect_from_image(config.image, existing_env=config.environment)
+
+    if not specs:
+        # No env vars to prompt for
+        return config
+
+    # Check if we have any required vars missing
+    has_missing_required = any(spec.required for spec in specs)
+
+    # Also check if the image has known required vars
+    family = extract_image_family(config.image)
+    profile = get_profile(family)
+    if profile and profile.has_required_vars():
+        has_missing_required = True
+
+    # Only prompt if there are required vars or this is a well-known image
+    if not has_missing_required and not profile:
+        return config
+
+    # Run the prompting session
+    result = prompt_env_vars(
+        specs=specs,
+        image=config.image,
+        console=console,
+        use_saved=use_saved,
+        save_values=save_values,
+    )
+
+    if result.cancelled:
+        # User cancelled - return original config
+        return config
+
+    if not result.values:
+        # No values entered
+        return config
+
+    # Merge the new values with existing environment
+    existing_env = dict(config.environment)
+    for env_value in result.values:
+        existing_env[env_value.name] = env_value.value
+
+    # Create new config with merged environment
+    return DockerRunConfig(
+        image=config.image,
+        name=config.name,
+        ports=config.ports,
+        volumes=config.volumes,
+        environment=tuple(existing_env.items()),
+        env_files=config.env_files,
+        networks=config.networks,
+        restart=config.restart,
+        detached=config.detached,
+        privileged=config.privileged,
+        user=config.user,
+        workdir=config.workdir,
+        entrypoint=config.entrypoint,
+        command=config.command,
+        labels=config.labels,
+        memory=config.memory,
+        cpus=config.cpus,
+        hostname=config.hostname,
+        depends_on=config.depends_on,
+        healthcheck=config.healthcheck,
+        cap_add=config.cap_add,
+        cap_drop=config.cap_drop,
+    )
+
+
+def needs_env_prompting(command: str) -> bool:
+    """Check if a docker run command needs environment variable prompting.
+
+    Args:
+        command: The docker run command string.
+
+    Returns:
+        True if prompting would be useful, False otherwise.
+    """
+    from elle.cli.docker.env_detector import DockerEnvDetector
+
+    try:
+        config = parse_docker_run(command)
+    except ValueError:
+        return False
+
+    detector = DockerEnvDetector()
+    return detector.needs_prompting(config.image, config.environment)
+
+
+def get_missing_env_vars(command: str) -> list[str]:
+    """Get a list of missing required environment variable names.
+
+    Args:
+        command: The docker run command string.
+
+    Returns:
+        List of variable names that are required but not set.
+    """
+    from elle.cli.docker.env_detector import DockerEnvDetector
+
+    try:
+        config = parse_docker_run(command)
+    except ValueError:
+        return []
+
+    detector = DockerEnvDetector()
+    specs = detector.get_missing_required(config.image, config.environment)
+    return [spec.name for spec in specs]

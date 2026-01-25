@@ -7,6 +7,11 @@ Hybrid classifier that uses:
 
 The classifier runs before any action is taken, ensuring every input
 is properly categorized and safety-checked.
+
+SLM Configuration:
+- Model: phi3.5:3.8b-mini-instruct-q8_0 (Q8 quantized for memory efficiency)
+- Keep-alive: Indefinite (-1) for instant classification response
+- Context: 2048 tokens (minimal for classification tasks)
 """
 
 from __future__ import annotations
@@ -28,7 +33,16 @@ from elle.cli.terminal.intent import (
     create_rule_result,
 )
 from elle.common.session import Session
-from elle.rag.ollama_client import OllamaClient, OllamaError, get_client
+from elle.rag.constants import (
+    SLM_FALLBACK_MODELS,
+    SLM_KEEP_ALIVE,
+    SLM_MAX_TOKENS,
+    SLM_MODEL,
+    SLM_NUM_CTX,
+    SLM_TEMPERATURE,
+    SLM_TIMEOUT,
+)
+from elle.rag.ollama_client import OllamaClient, OllamaConfig, OllamaError, get_client
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +74,7 @@ PREFIX_COMMANDS = {
     "/fix": Intent.FIXIT,
     "/sh": Intent.SHELL_PASSTHROUGH,
     "/run": Intent.SHELL_PASSTHROUGH,
+    "/learn": Intent.NAVIGATION,  # GUI learning command
     "!": Intent.SHELL_PASSTHROUGH,  # Bang prefix for shell
 }
 
@@ -236,6 +251,24 @@ NETWORK_PATTERNS = [
 _COMPILED_NETWORK_PATTERNS = [(re.compile(p, re.IGNORECASE), i, c) for p, i, c in NETWORK_PATTERNS]
 
 
+# GUI automation patterns (gui_task)
+GUI_TASK_PATTERNS = [
+    # Open app and do action
+    (r"(?:open|launch|start)\s+(\w+)\s+and\s+(.+)", "gui_task", 0.92),
+    # Click/toggle in app
+    (r"(?:click|press|toggle|enable|disable)\s+(.+)\s+in\s+(\w+)", "gui_task", 0.90),
+    (r"in\s+(\w+),?\s+(?:click|press|toggle|enable|disable)\s+(.+)", "gui_task", 0.90),
+    # Settings/preferences patterns
+    (r"(?:set|change|configure)\s+(.+)\s+in\s+(\w+)\s+to\s+(.+)", "gui_task", 0.88),
+    (r"(?:in\s+)?settings?,?\s+(?:disable|enable|toggle|change)\s+(.+)", "gui_task", 0.88),
+    # Common UI actions
+    (r"turn\s+(?:off|on)\s+(.+)\s+in\s+(?:the\s+)?(?:settings?|preferences?|control)", "gui_task", 0.90),
+    (r"(?:disable|enable)\s+(?:the\s+)?(.+)\s+(?:option|setting|toggle)", "gui_task", 0.85),
+]
+
+_COMPILED_GUI_PATTERNS = [(re.compile(p, re.IGNORECASE), i, c) for p, i, c in GUI_TASK_PATTERNS]
+
+
 # =============================================================================
 # SLM Prompt Template
 # =============================================================================
@@ -258,15 +291,17 @@ INTENTS (use exactly these values):
 - "system_question": user asks why/how/what about system state (not a command)
 - "system_task": user requests a system change in natural language
 - "shell_passthrough": user is entering a shell command to execute directly
+- "gui_task": user wants to interact with a GUI application (click, toggle, enable/disable in settings)
 
 RULES:
 - Known keyword (help, exit, status) -> meta/navigation, confidence >= 0.9
 - Shell command (starts with command name, has flags) -> shell_passthrough
 - Question (starts with why/how/what, ends with ?) -> system_question
 - Natural language action request -> system_task
+- GUI interaction (click X in app, toggle Y in settings) -> gui_task
 - Mentions previous failure or error -> fixit
 - Keep rationale to ONE short sentence
-- entities: extract command names, file paths, service names, port numbers
+- entities: extract command names, file paths, service names, port numbers, app names
 - If confidence < 0.55, set requires_clarification to true"""
 
 
@@ -308,14 +343,17 @@ class IntentClassifier:
     3. SLM classification via Ollama
     4. Post-processing (safety overrides, confidence floors)
 
+    The SLM is kept warm indefinitely (keep_alive=-1) for instant
+    classification response (<100ms when warm).
+
     Usage:
         classifier = IntentClassifier()
         result = classifier.classify("why is my disk full?", session)
     """
 
-    # Default model for classification (small and fast)
-    DEFAULT_MODEL = "gemma2:2b"
-    FALLBACK_MODELS = ["phi3.5", "phi3", "llama3.2:1b", "qwen2.5:1.5b"]
+    # Default model for classification (Q8 quantized for memory efficiency)
+    DEFAULT_MODEL = SLM_MODEL
+    FALLBACK_MODELS = list(SLM_FALLBACK_MODELS)
 
     def __init__(
         self,
@@ -336,11 +374,28 @@ class IntentClassifier:
         self._log_path = log_path or Path.home() / ".local" / "state" / "elle"
         self._log_file = self._log_path / "intent_log.jsonl"
 
+        # SLM inference settings (from constants)
+        self._keep_alive = SLM_KEEP_ALIVE
+        self._num_ctx = SLM_NUM_CTX
+        self._temperature = SLM_TEMPERATURE
+        self._max_tokens = SLM_MAX_TOKENS
+
     @property
     def client(self) -> OllamaClient:
-        """Get the Ollama client (lazy initialization)."""
+        """Get the Ollama client (lazy initialization).
+
+        The client is configured with SLM-optimized settings.
+        """
         if self._client is None:
-            self._client = get_client()
+            # Create client with SLM-optimized config
+            config = OllamaConfig(
+                timeout=SLM_TIMEOUT,
+                max_tokens=self._max_tokens,
+                temperature=self._temperature,
+                keep_alive=self._keep_alive,
+                num_ctx=self._num_ctx,
+            )
+            self._client = OllamaClient(config)
         return self._client
 
     @property
@@ -358,7 +413,7 @@ class IntentClassifier:
             for candidate in [self.DEFAULT_MODEL] + self.FALLBACK_MODELS:
                 if any(candidate in m for m in available):
                     self._detected_model = candidate
-                    logger.info(f"Using model: {candidate}")
+                    logger.info(f"Using SLM model: {candidate}")
                     return candidate
 
         # Fallback
@@ -519,6 +574,18 @@ class IntentClassifier:
                     classified_by="rule",
                 )
 
+        # GUI automation patterns (high confidence)
+        for pattern, intent_str, confidence in _COMPILED_GUI_PATTERNS:
+            if pattern.search(text):
+                intent = Intent.from_label(intent_str)
+                return IntentResult(
+                    intent=intent,
+                    confidence=confidence,
+                    rationale="GUI automation task detected",
+                    entities=["gui"],
+                    classified_by="rule",
+                )
+
         # Shell command patterns (highest priority for obvious commands)
         for pattern in _COMPILED_SHELL_PATTERNS:
             if pattern.search(text):
@@ -555,7 +622,11 @@ class IntentClassifier:
         return None
 
     def _classify_with_slm(self, text: str, session: Session) -> IntentResult:
-        """Classify using the SLM via Ollama."""
+        """Classify using the SLM via Ollama.
+
+        The SLM is configured with keep_alive=-1 to stay warm indefinitely,
+        enabling sub-100ms classification responses.
+        """
         if not self.client.is_available():
             logger.warning("Ollama not available, using fallback classification")
             return self._fallback_classification(text, session)
@@ -569,7 +640,7 @@ class IntentClassifier:
         )
 
         try:
-            # Call SLM with JSON mode
+            # Call SLM with JSON mode and optimized settings
             import time
             start = time.time()
 
@@ -577,8 +648,10 @@ class IntentClassifier:
                 self.model,
                 prompt,
                 system=CLASSIFIER_SYSTEM_PROMPT,
-                max_tokens=150,
-                temperature=0.1,
+                max_tokens=self._max_tokens,
+                temperature=self._temperature,
+                keep_alive=self._keep_alive,
+                num_ctx=self._num_ctx,
             )
 
             latency_ms = (time.time() - start) * 1000

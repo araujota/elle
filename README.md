@@ -30,8 +30,17 @@ A local-first, agentic system layer for Ubuntu 24.04 LTS that converts kernel-le
 - **WireGuard Config** - VPN tunnel configuration from natural language
 - **Network Diagnosis** - Connectivity testing, firewall explanation, lockdown suggestions
 
+### GUI Automation (AT-SPI)
+- **Application Learning** - `elle learn <appname>` captures UI structure via accessibility APIs
+- **Natural Language Control** - "disable bluetooth in settings" executed as UI actions
+- **Self-Healing** - Automatically adapts when UI elements move or change names
+- **Recipe Storage** - Versioned UI "recipes" stored locally for reliable automation
+
 ### Telemetry & Monitoring
 - **Journal/Kernel Watchers** - Real-time system event monitoring
+- **Docker Watcher** - Container state change monitoring
+- **Inotify Watcher** - File system change monitoring
+- **Port Probe** - Network port status monitoring
 - **eBPF Probes** - Kernel-level telemetry (OOM, disk I/O, network drops, thermal)
 - **Periodic Probes** - SMART, sensors, disk usage, network status
 - **Notifications** - ntfy integration for alerts
@@ -53,8 +62,9 @@ A local-first, agentic system layer for Ubuntu 24.04 LTS that converts kernel-le
 ```bash
 curl -fsSL https://ollama.ai/install.sh | sh
 
-# Pull the default model
-ollama pull qwen2.5:7b-instruct
+# Pull the default models (Q8_0 quantization for better efficiency)
+ollama pull qwen2.5:7b-instruct-q8_0   # LLM for generation
+ollama pull phi3.5:3.8b-mini-instruct-q8_0  # SLM for classification
 ```
 
 ### 2. Install ELLE
@@ -320,6 +330,42 @@ elle > lock postgres to localhost only
 # Suggests ufw rules for service isolation
 ```
 
+### GUI Automation
+
+Control desktop applications using natural language:
+
+```bash
+# Learn an application's UI structure
+elle > /learn gnome-control-center
+Learning 'gnome-control-center'...
+  Elements: 127
+  Navigation targets: 23
+  Recipe stored with ID: abc123...
+
+# Execute GUI tasks via natural language
+elle > disable bluetooth in settings
+Planning GUI task...
+  1. Navigate to Bluetooth panel
+  2. Click Bluetooth toggle
+  3. Verify state is "off"
+Execute? [y/n]: y
+✓ Bluetooth disabled
+
+# List learned applications
+elle > /learn list
+Learned applications:
+  gnome-control-center  v1 (100% conf, 5/5 success)
+  nautilus              v2 (95% conf, 18/19 success)
+
+# Show recipe details
+elle > /learn show gnome-control-center
+```
+
+**Note:** GUI automation requires AT-SPI accessibility to be enabled:
+```bash
+gsettings set org.gnome.desktop.interface toolkit-accessibility true
+```
+
 ### Reboot Management
 
 Track kernel updates and verify post-reboot:
@@ -353,9 +399,13 @@ User ──▶ elle (terminal / CLI)
          ├─▶ Capabilities (typed operations with policy)
          ├─▶ Reactive Engine (event-driven automations)
          ├─▶ Policy Engine (rule-based access control)
+         ├─▶ GUI Automation (AT-SPI application control)
          ├─▶ Ollama (local inference)
          └─▶ elled (telemetry + privileged ops)
                 ├─▶ Journal/Kernel Watchers
+                ├─▶ Docker Watcher (container state)
+                ├─▶ Inotify Watcher (file changes)
+                ├─▶ Port Probe (network ports)
                 ├─▶ eBPF Probes (OOM, I/O, network, thermal)
                 ├─▶ Periodic Probes (SMART, sensors, df)
                 ├─▶ Reactive Scheduler (cron triggers)
@@ -379,6 +429,7 @@ User ──▶ elle (terminal / CLI)
 | Policy Engine | Rule-based access control for capabilities |
 | Reactive Engine | Event-driven automation execution |
 | Augeas Controller | Safe config editing with preview/rollback |
+| GUI Automation | AT-SPI application control with self-healing |
 | eBPF Watcher | Kernel-level telemetry probes |
 | Reboot Manager | GRUB/kernel management with verification |
 

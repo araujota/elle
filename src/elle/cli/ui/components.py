@@ -548,3 +548,219 @@ def empty_state(message: str, *, suggestion: str | None = None) -> Panel:
         border_style="muted",
         padding=(1, 2),
     )
+
+
+# =============================================================================
+# Docker Environment Variable Components
+# =============================================================================
+
+
+def env_var_line(
+    name: str,
+    *,
+    required: bool = False,
+    sensitive: bool = False,
+    default: str | None = None,
+    description: str | None = None,
+    has_saved: bool = False,
+) -> Text:
+    """Format a single environment variable line.
+
+    Args:
+        name: Variable name
+        required: Whether the variable is required
+        sensitive: Whether it's a sensitive value (password, secret)
+        default: Default value if any
+        description: Variable description
+        has_saved: Whether there's a saved value
+
+    Returns:
+        Rich Text object
+    """
+    text = Text()
+    text.append(f"  {Icons.BULLET} ", style="muted")
+    text.append(name, style="bold")
+
+    # Annotations
+    annotations: list[str] = []
+    if required:
+        annotations.append("required")
+    if sensitive:
+        annotations.append("sensitive")
+    if default:
+        annotations.append(f"default: {default}")
+    if has_saved:
+        annotations.append("saved")
+
+    if annotations:
+        text.append(f" ({', '.join(annotations)})", style="dim")
+
+    if description:
+        text.append(f"\n    {description}", style="dim")
+
+    return text
+
+
+def env_var_panel(
+    image: str,
+    required_vars: list[tuple[str, str | None, bool]],
+    optional_vars: list[tuple[str, str | None, bool]] | None = None,
+    *,
+    saved_names: set[str] | None = None,
+) -> Panel:
+    """Create a panel showing Docker environment variables.
+
+    Args:
+        image: Docker image name
+        required_vars: List of (name, description, sensitive) tuples for required vars
+        optional_vars: List of (name, description, sensitive) tuples for optional vars
+        saved_names: Set of variable names that have saved values
+
+    Returns:
+        Rich Panel object
+    """
+    saved = saved_names or set()
+    content = Text()
+
+    if required_vars:
+        content.append("Required:\n", style="bold")
+        for name, description, sensitive in required_vars:
+            content.append_text(env_var_line(
+                name,
+                required=True,
+                sensitive=sensitive,
+                description=description,
+                has_saved=name in saved,
+            ))
+            content.append("\n")
+        content.append("\n")
+
+    if optional_vars:
+        content.append("Optional:\n", style="bold")
+        for name, description, sensitive in optional_vars:
+            content.append_text(env_var_line(
+                name,
+                required=False,
+                sensitive=sensitive,
+                description=description,
+                has_saved=name in saved,
+            ))
+            content.append("\n")
+
+    return Panel(
+        content,
+        title="[bold cyan]Docker Environment Variables[/bold cyan]",
+        subtitle=f"[dim]{image}[/dim]",
+        border_style="cyan",
+        padding=(1, 2),
+    )
+
+
+def env_var_summary_table(
+    values: list[tuple[str, str, bool, bool]],
+) -> Table:
+    """Create a summary table of entered environment variable values.
+
+    Args:
+        values: List of (name, value, sensitive, from_saved) tuples
+
+    Returns:
+        Rich Table object
+    """
+    table = Table(
+        show_header=True,
+        header_style="bold",
+        border_style="dim",
+        padding=(0, 1),
+    )
+    table.add_column("Variable", style="cyan")
+    table.add_column("Value")
+    table.add_column("Source", style="dim")
+
+    for name, value, sensitive, from_saved in values:
+        display_value = "********" if sensitive else value
+        source = "saved" if from_saved else "entered"
+        table.add_row(name, display_value, source)
+
+    return table
+
+
+def env_var_summary_panel(
+    values: list[tuple[str, str, bool, bool]],
+) -> Panel:
+    """Create a summary panel for environment variable values.
+
+    Args:
+        values: List of (name, value, sensitive, from_saved) tuples
+
+    Returns:
+        Rich Panel object
+    """
+    table = env_var_summary_table(values)
+
+    return Panel(
+        table,
+        title="[bold]Summary[/bold]",
+        border_style="green",
+        padding=(1, 2),
+    )
+
+
+def env_var_action_bar(
+    has_saved: bool = False,
+    show_confirm: bool = False,
+) -> Text:
+    """Create an action bar for environment variable prompting.
+
+    Args:
+        has_saved: Whether saved values are available
+        show_confirm: Whether to show confirm/edit options instead
+
+    Returns:
+        Rich Text object
+    """
+    text = Text()
+
+    if show_confirm:
+        text.append("[", style="dim")
+        text.append("c", style="cyan")
+        text.append("]", style="dim")
+        text.append(" Confirm  ")
+
+        text.append("[", style="dim")
+        text.append("e", style="cyan")
+        text.append("]", style="dim")
+        text.append(" Edit  ")
+
+        text.append("[", style="dim")
+        text.append("q", style="cyan")
+        text.append("]", style="dim")
+        text.append(" Cancel")
+    else:
+        if has_saved:
+            text.append("[", style="dim")
+            text.append("u", style="cyan")
+            text.append("]", style="dim")
+            text.append(" Use saved  ")
+
+        text.append("[", style="dim")
+        text.append("e", style="cyan")
+        text.append("]", style="dim")
+        text.append(" Enter  ")
+
+        text.append("[", style="dim")
+        text.append("s", style="cyan")
+        text.append("]", style="dim")
+        text.append(" Skip  ")
+
+        text.append("[", style="dim")
+        text.append("?", style="cyan")
+        text.append("]", style="dim")
+        text.append(" Explain  ")
+
+        text.append("[", style="dim")
+        text.append("q", style="cyan")
+        text.append("]", style="dim")
+        text.append(" Cancel")
+
+    return text

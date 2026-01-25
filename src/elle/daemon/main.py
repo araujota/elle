@@ -20,11 +20,14 @@ from pathlib import Path
 from typing import Any
 
 from elle.daemon.config import Config, get_config, load_config, set_config
+from elle.daemon.telemetry.docker_watcher import DockerEventsWatcher
 from elle.daemon.telemetry.ebpf.watcher import EBPFWatcher
+from elle.daemon.telemetry.inotify_watcher import InotifyWatcher
 from elle.daemon.telemetry.journal import JournalWatcher
 from elle.daemon.telemetry.kernel import KernelWatcher
-from elle.daemon.telemetry.models import DaemonStatus
+from elle.daemon.telemetry.models import DaemonStatus, TelemetryEvent
 from elle.daemon.telemetry.normalizer import Normalizer, get_normalizer
+from elle.daemon.telemetry.port_probe import PortListenerProbe
 from elle.daemon.telemetry.probes import ProbeRunner, create_default_probes
 from elle.daemon.telemetry.queue import TelemetryQueue, create_queues
 from elle.daemon.telemetry.schema import ensure_schema, get_connection
@@ -60,6 +63,11 @@ class ElledDaemon:
         self._ebpf_watcher: EBPFWatcher | None = None
         self._probe_runner: ProbeRunner | None = None
         self._normalizer: Normalizer | None = None
+
+        # New telemetry watchers
+        self._docker_watcher: DockerEventsWatcher | None = None
+        self._inotify_watcher: InotifyWatcher | None = None
+        self._port_probe: PortListenerProbe | None = None
 
         # Tasks
         self._tasks: list[asyncio.Task[Any]] = []
@@ -112,6 +120,15 @@ class ElledDaemon:
         if self.config.probes_enabled and self._probe_runner:
             if not self._probe_runner.running:
                 errors.append("Probe runner not running")
+        if self.config.docker_enabled and self._docker_watcher:
+            if not self._docker_watcher.is_running:
+                errors.append("Docker watcher not running")
+        if self.config.inotify_enabled and self._inotify_watcher:
+            if not self._inotify_watcher.is_running:
+                errors.append("Inotify watcher not running")
+        if self.config.port_probe_enabled and self._port_probe:
+            if not self._port_probe.is_running:
+                errors.append("Port probe not running")
 
         return DaemonStatus(
             started_at=self.started_at or datetime.now(UTC),
@@ -142,6 +159,9 @@ class ElledDaemon:
 
         # Initialize database
         self._init_database()
+
+        # Pre-warm LLM models for fast inference
+        await self._warmup_models()
 
         # Start notification service
         await self._start_notification_service()
@@ -207,6 +227,43 @@ class ElledDaemon:
                 )
             )
 
+        # Start Docker events watcher
+        if self.config.docker_enabled:
+            self._docker_watcher = DockerEventsWatcher(self.event_queue)
+            self._tasks.append(
+                asyncio.create_task(
+                    self._docker_watcher.start(),
+                    name="docker_watcher",
+                )
+            )
+
+        # Start inotify file watcher
+        if self.config.inotify_enabled:
+            watch_paths = list(self.config.inotify_watch_paths)
+            self._inotify_watcher = InotifyWatcher(
+                self.event_queue,
+                watch_paths=watch_paths,
+            )
+            self._tasks.append(
+                asyncio.create_task(
+                    self._inotify_watcher.start(),
+                    name="inotify_watcher",
+                )
+            )
+
+        # Start port listener probe
+        if self.config.port_probe_enabled:
+            self._port_probe = PortListenerProbe(
+                self.event_queue,
+                scan_interval_sec=self.config.port_probe_interval,
+            )
+            self._tasks.append(
+                asyncio.create_task(
+                    self._port_probe.start(),
+                    name="port_probe",
+                )
+            )
+
         # Start normalizer task
         self._tasks.append(
             asyncio.create_task(
@@ -238,6 +295,9 @@ class ElledDaemon:
             f"kernel={self.config.kernel_enabled}, "
             f"ebpf={self.config.ebpf_enabled}, "
             f"probes={self.config.probes_enabled}, "
+            f"docker={self.config.docker_enabled}, "
+            f"inotify={self.config.inotify_enabled}, "
+            f"port_probe={self.config.port_probe_enabled}, "
             f"api={self.config.api.enabled})"
         )
 
@@ -267,6 +327,12 @@ class ElledDaemon:
             await self._kernel_watcher.stop()
         if self._ebpf_watcher:
             await self._ebpf_watcher.stop()
+        if self._docker_watcher:
+            await self._docker_watcher.stop()
+        if self._inotify_watcher:
+            await self._inotify_watcher.stop()
+        if self._port_probe:
+            await self._port_probe.stop()
 
         # Stop notification service
         await self._stop_notification_service()
@@ -304,6 +370,50 @@ class ElledDaemon:
 
         except Exception as e:
             logger.error(f"Failed to initialize database: {e}")
+
+    async def _warmup_models(self) -> None:
+        """Pre-load LLM models into GPU memory for fast inference.
+
+        Warms the SLM (Small Language Model) unconditionally for instant
+        classification. Optionally warms the LLM if sufficient VRAM is
+        available.
+        """
+        try:
+            from elle.rag.model_warmup import ModelWarmupService
+
+            warmup = ModelWarmupService()
+
+            # Ensure models are pulled
+            slm_ready, llm_ready = await warmup.ensure_models_ready()
+
+            if not slm_ready:
+                logger.warning("SLM model not available, classification may be slow")
+            else:
+                # Always warm SLM for instant classification
+                slm_result = await warmup.warm_slm()
+                if slm_result.success:
+                    logger.info(f"SLM warmed: {slm_result.model} ({slm_result.duration_ms:.0f}ms)")
+                else:
+                    logger.warning(f"SLM warmup failed: {slm_result.error}")
+
+            if not llm_ready:
+                logger.warning("LLM model not available, generation will use fallbacks")
+            elif warmup.has_sufficient_vram():
+                # Warm LLM if we have enough VRAM for both models
+                llm_result = await warmup.warm_llm()
+                if llm_result.success:
+                    logger.info(f"LLM warmed: {llm_result.model} ({llm_result.duration_ms:.0f}ms)")
+                else:
+                    logger.warning(f"LLM warmup failed: {llm_result.error}")
+            else:
+                logger.info("Skipping LLM warmup due to limited VRAM (will load on-demand)")
+
+            await warmup.close()
+
+        except ImportError:
+            logger.debug("Model warmup service not available")
+        except Exception as e:
+            logger.warning(f"Model warmup failed: {e}")
 
     async def _start_notification_service(self) -> None:
         """Start the notification service."""
@@ -459,6 +569,12 @@ class ElledDaemon:
                 except Exception as e:
                     logger.error(f"Failed to correlate events: {e}")
 
+                # Route events to reactive functions
+                try:
+                    await self._route_to_reactive(events)
+                except Exception as e:
+                    logger.error(f"Failed to route events: {e}")
+
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -508,6 +624,25 @@ class ElledDaemon:
                         )
                 except Exception as e:
                     logger.debug(f"Correlation failed: {e}")
+
+    async def _route_to_reactive(self, events: list[TelemetryEvent]) -> None:
+        """Route events to reactive function engine.
+
+        Args:
+            events: List of TelemetryEvents to route.
+        """
+        try:
+            from elle.reactive.router import get_router
+
+            router = get_router()
+            for event in events:
+                try:
+                    await router.route(event)
+                except Exception as e:
+                    logger.debug(f"Failed to route event to reactive: {e}")
+        except ImportError:
+            # Reactive module not available
+            pass
 
     async def _notify_incident(
         self,

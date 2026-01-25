@@ -20,13 +20,16 @@ RiskLevel = Literal["none", "low", "medium", "high", "critical"]
 
 # Domain categories for capabilities
 CapabilityDomain = Literal[
-    "service",   # Systemd service management
-    "file",      # File operations
-    "config",    # Configuration editing
-    "network",   # Network configuration
-    "package",   # Package management
-    "docker",    # Container operations
-    "auth",      # Authentication/authorization
+    "service",       # Systemd service management
+    "file",          # File operations
+    "config",        # Configuration editing
+    "network",       # Network configuration
+    "package",       # Package management
+    "docker",        # Container operations
+    "auth",          # Authentication/authorization
+    "notification",  # Desktop/push notifications
+    "incident",      # Incident management
+    "gui",           # GUI automation via AT-SPI
 ]
 
 # Types of side effects capabilities can have
@@ -38,6 +41,10 @@ SideEffectKind = Literal[
     "privilege_escalation", # Requires elevated privileges
     "package_change",       # Installs/removes packages
     "container_change",     # Container state change
+    "notification_sent",    # Sends a notification
+    "incident_created",     # Creates/updates an incident
+    "ui_interaction",       # Interacts with UI via AT-SPI
+    "window_focus",         # Changes window focus
 ]
 
 # Trust level for capabilities

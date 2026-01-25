@@ -1,5 +1,6 @@
 """Tests for system snapshot collection."""
 
+import sys
 from datetime import datetime
 
 import pytest
@@ -31,6 +32,7 @@ class TestSnapshotCollection:
         assert len(snapshot.cpu_load) == 3
         assert all(isinstance(x, float) for x in snapshot.cpu_load)
 
+    @pytest.mark.skipif(sys.platform != "linux", reason="Memory reporting differs on non-Linux platforms")
     def test_snapshot_has_memory(self):
         """Test that snapshot includes memory info."""
         snapshot = collect_snapshot()
