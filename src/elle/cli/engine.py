@@ -468,6 +468,10 @@ class Engine:
             return self._handle_preflight_command(user_input, session)
         elif lower.startswith("/map"):
             return self._handle_map_command(user_input, session)
+        elif lower.startswith("/mobile"):
+            return self._handle_mobile_command(user_input, session)
+        elif lower.startswith("/react"):
+            return self._handle_reactive_command(user_input, session)
         elif self._is_incident_command(lower):
             return self._handle_incidents(user_input, session)
         elif self._is_reboot_command(lower):
@@ -554,6 +558,62 @@ class Engine:
             logger.exception("Failed to handle map command")
             return EngineResult(
                 output=f"{Colors.RED}Error handling map command: {e}{Colors.RESET}",
+                session=session,
+                success=False,
+            )
+
+    def _handle_mobile_command(self, user_input: str, session: Session) -> EngineResult:
+        """Handle /mobile command for mobile gateway management.
+
+        Args:
+            user_input: The mobile command.
+            session: Current session state.
+
+        Returns:
+            EngineResult for the mobile action.
+        """
+        try:
+            from elle.cli.mobile_commands import handle_mobile_command
+
+            output, success = handle_mobile_command(user_input, session)
+            return EngineResult(
+                output=output,
+                session=session,
+                success=success,
+            )
+
+        except Exception as e:
+            logger.exception("Failed to handle mobile command")
+            return EngineResult(
+                output=f"{Colors.RED}Error handling mobile command: {e}{Colors.RESET}",
+                session=session,
+                success=False,
+            )
+
+    def _handle_reactive_command(self, user_input: str, session: Session) -> EngineResult:
+        """Handle /react command for reactive functions.
+
+        Args:
+            user_input: The reactive command.
+            session: Current session state.
+
+        Returns:
+            EngineResult for the reactive action.
+        """
+        try:
+            from elle.cli.reactive_commands import handle_reactive_command
+
+            output, success = handle_reactive_command(user_input, session)
+            return EngineResult(
+                output=output,
+                session=session,
+                success=success,
+            )
+
+        except Exception as e:
+            logger.exception("Failed to handle reactive command")
+            return EngineResult(
+                output=f"{Colors.RED}Error handling reactive command: {e}{Colors.RESET}",
                 session=session,
                 success=False,
             )

@@ -35,6 +35,7 @@ src/elle/
     reactive_commands.py   # /react REPL commands
     map_commands.py        # /map REPL commands for GUI automation (renamed from learn)
     package_learn_commands.py  # /learn REPL commands for package capability generation
+    mobile_commands.py     # /mobile REPL commands for gateway management
     setup/                 # Setup wizard (models.py, wizard.py)
   daemon/
     telemetry/             # Journal/kernel watchers, probes, eBPF
@@ -87,6 +88,21 @@ src/elle/
   reactive/                # Event-driven automation system
   security/                # Polkit integration
   common/                  # Session, models, db utilities
+  mobile/                  # Mobile Gateway for remote access
+    __init__.py            # Public API exports
+    models.py              # MobileRole, PairedDevice, Elevation, QRPayload, etc.
+    config.py              # MobileGatewayConfig dataclass
+    store.py               # SQLite storage for devices/elevations/tokens
+    crypto.py              # TLS cert generation, mTLS verification
+    pairing.py             # QR code generation, token validation
+    auth.py                # MobileAuthContext, MobileAuthenticator
+    roles.py               # Role enforcement (readonly/operator)
+    elevation.py           # TTL-based privilege promotion
+    audit.py               # Mobile audit logging
+    proxy.py               # Request forwarding to internal API
+    gateway.py             # FastAPI app factory
+    server.py              # Gateway process management (start/stop)
+    config_manager.py      # Remote configuration read/write
 tests/                     # pytest test suite
 ```
 
@@ -237,7 +253,7 @@ Every input classified into exactly one intent before execution:
 
 **Classification precedence:**
 1. Hard keyword routes (exact matches)
-2. Prefix commands (`/ask`, `/do`, `/sh`, `/fix`, `/learn`, `/map`, `!`)
+2. Prefix commands (`/ask`, `/do`, `/sh`, `/fix`, `/learn`, `/map`, `/mobile`, `/react`, `!`)
 3. Pattern matching (regex)
 4. SLM classification (Ollama fallback)
 5. Safety overrides (reduce confidence for dangerous commands)
@@ -310,6 +326,11 @@ class CapabilitySpec(BaseModel):
 - Bootstrap State: `/var/lib/elle/bootstrap_state.json`
 - Docker Env Store: `/var/lib/elle/docker_env.db`
 - Config backups: `/var/lib/elle/backups/<domain>/<timestamp>/`
+- Mobile Gateway DB: `/var/lib/elle/mobile.db`
+- Mobile Audit DB: `/var/lib/elle/mobile_audit.db`
+- Mobile Certificates: `/var/lib/elle/mobile/` (ca.crt, ca.key, server.crt, server.key)
+- Gateway PID: `/var/run/elle/mobile_gateway.pid`
+- Gateway State: `/var/lib/elle/mobile_gateway_state.json`
 
 ## Module Responsibilities
 
@@ -360,6 +381,70 @@ LLM-driven config changes:
 - Edit mode (modify) vs Create mode (new file)
 - Pre-apply validation (path safety, syntax, injection)
 - Man Vault grounding for correct syntax
+
+### Mobile Gateway (`mobile/`)
+
+Secure remote access for mobile devices via QR pairing and mTLS.
+
+**Architecture:**
+```
+Mobile Device
+     │
+     │ mTLS + Client Certificate
+     ▼
+┌─────────────────────────────────────────┐
+│        Mobile Gateway (:8378)           │
+│  • TLS termination (self-signed CA)     │
+│  • QR pairing (90s one-time token)      │
+│  • Device allowlist + roles             │
+│  • Elevation TTL                        │
+│  • Audit logging                        │
+│  • Config management                    │
+└─────────────────────────────────────────┘
+     │
+     │ HTTP (loopback only)
+     ▼
+┌─────────────────────────────────────────┐
+│   Internal API (127.0.0.1:8377)         │
+└─────────────────────────────────────────┘
+```
+
+**Key models:**
+- `MobileRole` - `MOBILE_READONLY` (queries only), `MOBILE_OPERATOR` (can execute)
+- `PairedDevice` - Device record with cert fingerprint, role, status
+- `Elevation` - Temporary privilege promotion with TTL
+- `PairingToken` - One-time 90s token from QR code
+- `QRPayload` - Host, port, token, server fingerprint for pairing
+- `MobileAuthContext` - Per-request auth state with effective role
+
+**Security layers:**
+1. **mTLS** - Client certs signed by auto-generated CA
+2. **Certificate pinning** - Mobile app pins server fingerprint from QR
+3. **One-time tokens** - 90s TTL, single use
+4. **Role enforcement** - Readonly by default, operator requires elevation
+5. **Elevation TTL** - Max 1 hour, granted from local machine only
+6. **Audit logging** - All operations logged with device ID, IP, action
+
+**Gateway endpoints:**
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `POST /pair` | None (token) | Complete pairing with valid token |
+| `POST /v1/chat/completions` | mTLS | Proxy to internal API |
+| `GET /v1/models` | mTLS | List models (filtered by role) |
+| `GET /v1/config` | mTLS (operator) | Get current configuration |
+| `PUT /v1/config` | mTLS (operator) | Update configuration |
+| `GET /health` | None | Health check |
+| `GET /devices` | Localhost | List paired devices |
+| `DELETE /devices/{id}` | Localhost | Revoke device |
+| `POST /devices/{id}/elevate` | Localhost | Grant elevation |
+| `GET /audit` | Localhost | View audit log |
+
+**CLI commands:** `/mobile up|down|status|devices|revoke|approve|audit`
+
+**Config manager restrictions:**
+- Readonly fields: `db_path`, `api.host`, `api_auth.*`
+- Restart-required: `api.port`, `mobile.bind_port`, `ebpf.*`
+- Validation: Log levels, port ranges, TTL bounds, role names
 
 ## LLM Interface
 

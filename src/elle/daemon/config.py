@@ -112,6 +112,21 @@ class EBPFConfig:
 
 
 @dataclass(frozen=True)
+class MobileConfig:
+    """Configuration for the Mobile Gateway."""
+
+    enabled: bool = False
+    bind_host: str = "0.0.0.0"
+    bind_port: int = 8378
+    overlay_host: str | None = None
+    pairing_token_ttl_seconds: int = 90
+    max_paired_devices: int = 10
+    default_elevation_ttl_seconds: int = 600  # 10 minutes
+    max_elevation_ttl_seconds: int = 3600  # 1 hour
+    default_role: str = "mobile_readonly"
+
+
+@dataclass(frozen=True)
 class Config:
     """Complete daemon configuration."""
 
@@ -131,6 +146,7 @@ class Config:
     correlation: CorrelationConfig = field(default_factory=CorrelationConfig)
     queues: QueueConfig = field(default_factory=QueueConfig)
     ebpf: EBPFConfig = field(default_factory=EBPFConfig)
+    mobile: MobileConfig = field(default_factory=MobileConfig)
 
     # Feature flags
     journal_enabled: bool = True
@@ -400,6 +416,20 @@ def load_config(config_path: Path | None = None) -> Config:
         programs=tuple(ebpf_programs),
     )
 
+    # Mobile gateway config
+    mobile_section = _deep_get(data, "mobile", default={})
+    mobile = MobileConfig(
+        enabled=_get_env("MOBILE_ENABLED", mobile_section.get("enabled", False)),
+        bind_host=_get_env("MOBILE_BIND_HOST", mobile_section.get("bind_host", "0.0.0.0")),
+        bind_port=_get_env("MOBILE_BIND_PORT", mobile_section.get("bind_port", 8378)),
+        overlay_host=mobile_section.get("overlay_host"),
+        pairing_token_ttl_seconds=mobile_section.get("pairing_token_ttl_seconds", 90),
+        max_paired_devices=mobile_section.get("max_paired_devices", 10),
+        default_elevation_ttl_seconds=mobile_section.get("default_elevation_ttl_seconds", 600),
+        max_elevation_ttl_seconds=mobile_section.get("max_elevation_ttl_seconds", 3600),
+        default_role=mobile_section.get("default_role", "mobile_readonly"),
+    )
+
     return Config(
         db_path=db_path,
         incidents_db_path=incidents_db_path,
@@ -416,6 +446,7 @@ def load_config(config_path: Path | None = None) -> Config:
         probes_enabled=probes_enabled,
         ebpf=ebpf,
         ebpf_enabled=ebpf_enabled,
+        mobile=mobile,
         docker_enabled=docker_enabled,
         inotify_enabled=inotify_enabled,
         wireguard_enabled=wireguard_enabled,

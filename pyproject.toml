@@ -46,6 +46,11 @@ api = [
 ebpf = [
     "bcc>=0.28.0",
 ]
+mobile = [
+    "cryptography>=41.0.0",
+    "qrcode[pil]>=7.4.2",
+    "aiohttp>=3.9.0",
+]
 
 [project.scripts]
 elle = "elle.cli.oneshot:main"

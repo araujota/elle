@@ -55,6 +55,14 @@ A local-first, agentic system layer for Ubuntu 24.04 LTS that converts kernel-le
 - **Periodic Probes** - SMART, sensors, disk usage, network status
 - **Notifications** - ntfy integration for alerts
 
+### Mobile Gateway
+- **QR Code Pairing** - Scan to pair mobile devices securely
+- **mTLS Authentication** - Mutual TLS with auto-generated certificates
+- **Role-Based Access** - Read-only and operator modes with temporary elevation
+- **Remote Configuration** - Manage ELLE settings from your mobile device
+- **Multi-Device Support** - Connect multiple devices across different machines
+- **Audit Logging** - Full audit trail of all mobile operations
+
 ### System Management
 - **Reboot Tracking** - GRUB/kernel management with pre/post verification
 - **Polkit Integration** - Secure privileged operations
@@ -438,6 +446,96 @@ schedule_reboot(
 )
 ```
 
+### Mobile Gateway
+
+Access ELLE remotely from your mobile device with secure QR code pairing.
+
+#### Starting the Gateway
+
+```bash
+# Start the mobile gateway and display QR code
+elle > /mobile up
+Mobile Gateway starting on 0.0.0.0:8378...
+Certificates generated.
+
+Scan this QR code with the ELLE mobile app:
+██████████████████████████████████
+██ ▄▄▄▄▄ █▀▀▄█▀▄▀▀█▄██ ▄▄▄▄▄ ██
+██ █   █ █▄ ▄▀█▄▀▄██▀█ █   █ ██
+...
+
+Token expires in 90 seconds.
+
+# Check gateway status
+elle > /mobile status
+Mobile Gateway: Running
+  PID: 12345
+  Address: 0.0.0.0:8378
+  Paired devices: 2
+  Active elevations: 0
+  Uptime: 2h 15m
+
+# Stop the gateway
+elle > /mobile down
+```
+
+#### Device Management
+
+```bash
+# List all paired devices
+elle > /mobile devices
+Paired Devices:
+  iphone-tyler    mobile_readonly  paired   Last seen: 2m ago
+  ipad-work       mobile_operator  elevated Last seen: 5m ago (elevated: 8m left)
+
+# Revoke a device's access
+elle > /mobile revoke iphone-tyler
+Device 'iphone-tyler' revoked.
+
+# Grant temporary elevation (allows write operations)
+elle > /mobile approve ipad-work --ttl 30m
+Device 'ipad-work' elevated to mobile_operator for 30 minutes.
+
+# View audit log
+elle > /mobile audit
+Recent mobile operations:
+  2024-01-15 10:30:22  ipad-work  REQUEST  /v1/chat/completions  success
+  2024-01-15 10:28:15  ipad-work  ELEVATE  -                     success
+  2024-01-15 10:25:00  iphone-tyler PAIR   -                     success
+```
+
+#### Mobile Roles
+
+| Role | Capabilities |
+|------|-------------|
+| `mobile_readonly` | Query system status, ask questions, view logs |
+| `mobile_operator` | Execute tasks, modify configuration (requires elevation) |
+
+Elevation is temporary (default 10 minutes, max 1 hour) and must be granted from the local machine via `/mobile approve`.
+
+#### Configuration
+
+Configure the mobile gateway in `~/.config/elle/elle.toml`:
+
+```toml
+[mobile]
+enabled = true
+bind_host = "0.0.0.0"      # Listen on all interfaces
+bind_port = 8378           # Gateway port
+overlay_host = "10.0.0.1"  # Optional: WireGuard/Tailscale IP
+max_paired_devices = 10    # Maximum paired devices
+default_role = "mobile_readonly"
+```
+
+#### Security
+
+- **mTLS Required**: All connections use mutual TLS with auto-generated certificates
+- **QR Pairing**: One-time tokens expire in 90 seconds
+- **Certificate Pinning**: Mobile app pins to server certificate fingerprint
+- **Local Elevation**: Write access requires approval from local machine
+- **Full Audit Trail**: All operations logged with device ID, IP, and timestamp
+- **Device Revocation**: Instantly revoke any device's access
+
 ## Architecture
 
 ```
@@ -466,6 +564,15 @@ User ──▶ elle (terminal / CLI)
                 ├─▶ Capability Bootstrap (first-run learning)
                 ├─▶ Reboot Manager (GRUB, verification)
                 └─▶ Notifications (ntfy)
+
+Mobile ──▶ Mobile Gateway (separate process, :8378)
+           ├─▶ QR Pairing (90s one-time tokens)
+           ├─▶ mTLS Authentication (auto-generated certs)
+           ├─▶ Role Enforcement (readonly/operator)
+           ├─▶ Elevation Manager (TTL-based privileges)
+           ├─▶ Request Proxy (→ internal API :8377)
+           ├─▶ Config Manager (remote config read/write)
+           └─▶ Audit Store (all operations logged)
 ```
 
 ### Request Lifecycle
@@ -623,6 +730,7 @@ Every natural language message follows this flow through ELLE's processing pipel
 | Package Probe | Monitor package installs/upgrades, trigger auto-learning |
 | eBPF Watcher | Kernel-level telemetry probes |
 | Reboot Manager | GRUB/kernel management with verification |
+| Mobile Gateway | Secure remote access via mTLS, QR pairing, role-based access |
 
 ## Development
 

@@ -43,6 +43,7 @@ from elle.rag.constants import (
     SLM_TIMEOUT,
 )
 from elle.rag.ollama_client import OllamaClient, OllamaConfig, OllamaError
+from elle.rag.sanitizer import sanitize_for_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,8 @@ PREFIX_COMMANDS = {
     "/trace": Intent.SHELL_PASSTHROUGH,  # Execute with syscall tracing
     "/explain": Intent.EXPLAIN_COMMAND,  # Explain last traced command
     "/preflight": Intent.NAVIGATION,  # Pre-flight package validation
+    "/mobile": Intent.NAVIGATION,  # Mobile gateway management
+    "/react": Intent.NAVIGATION,  # Reactive functions management
     "!": Intent.SHELL_PASSTHROUGH,  # Bang prefix for shell
 }
 
@@ -692,12 +695,15 @@ class IntentClassifier:
             logger.warning("Ollama not available, using fallback classification")
             return self._fallback_classification(text, session)
 
+        # Sanitize user input before embedding in prompt
+        sanitized_text = sanitize_for_prompt(text, context="user_input")
+
         # Build prompt
         prompt = CLASSIFIER_PROMPT_TEMPLATE.format(
             cwd=session.cwd.name or str(session.cwd),
             last_cmd=session.last_cmd or "(none)",
             last_exit=session.last_exit if session.last_exit is not None else "(none)",
-            text=text,
+            text=sanitized_text,
         )
 
         try:
