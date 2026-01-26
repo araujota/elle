@@ -17,10 +17,11 @@ Example:
 
 from __future__ import annotations
 
+import io
 import shlex
 from typing import TYPE_CHECKING, Any
 
-import yaml
+from ruamel.yaml import YAML
 from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
@@ -467,7 +468,11 @@ def docker_run_to_compose(
             compose["networks"][net] = {"external": True}
 
     # Generate YAML
-    return yaml.dump(compose, default_flow_style=False, sort_keys=False)
+    yml = YAML()
+    yml.default_flow_style = False
+    stream = io.StringIO()
+    yml.dump(compose, stream)
+    return stream.getvalue()
 
 
 def docker_run_with_env_prompt(
