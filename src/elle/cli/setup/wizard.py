@@ -30,7 +30,6 @@ from elle.cli.ui import (
     bulleted_list,
     console,
     numbered_list,
-    option_list,
     print_muted,
     print_success,
     print_warning,
@@ -531,14 +530,19 @@ class SetupWizard:
 
         # Check Ollama
         ollama_status = self._check_ollama()
-        if ollama_status["available"]:
+        if ollama_status["running"]:
             checks.append(f"{Icons.SUCCESS} Ollama is running")
             if ollama_status["models"]:
                 model_list = ", ".join(ollama_status["models"][:3])
+                if len(ollama_status["models"]) > 3:
+                    model_list += f" (+{len(ollama_status['models']) - 3} more)"
                 checks.append(f"  {Icons.BULLET} Models: {model_list}")
             self.prefs.ollama_verified = True
+        elif ollama_status["installed"]:
+            checks.append(f"{Icons.WARNING} Ollama is installed but not running")
+            self.prefs.ollama_verified = False
         else:
-            checks.append(f"{Icons.WARNING} Ollama not detected")
+            checks.append(f"{Icons.WARNING} Ollama is not installed")
             self.prefs.ollama_verified = False
 
         for check in checks:
@@ -546,11 +550,25 @@ class SetupWizard:
 
         console.print()
 
-        if not ollama_status["available"]:
-            print_warning("ELLE requires Ollama for AI features. Install it from ollama.ai")
+        if not ollama_status["running"]:
+            if ollama_status["installed"]:
+                # Ollama is installed but not running
+                print_warning("Ollama is installed but the server isn't running.")
+                console.print()
+                console.print(
+                    Text.from_markup(
+                        "[bold]To start Ollama:[/bold]\n"
+                        "  [cyan]ollama serve[/cyan]  (run in a terminal)\n"
+                        "  [dim]or[/dim]\n"
+                        "  [cyan]systemctl --user start ollama[/cyan]  (if installed as service)"
+                    )
+                )
+            else:
+                # Ollama is not installed
+                print_warning("ELLE requires Ollama for AI features. Install it from ollama.ai")
             console.print()
             print_muted(
-                "You can continue setup, but AI features won't work until Ollama is installed."
+                "You can continue setup, but AI features won't work until Ollama is running."
             )
             console.print()
 
@@ -560,18 +578,68 @@ class SetupWizard:
         return True
 
     def _check_ollama(self) -> dict:
-        """Check if Ollama is available and list models."""
+        """Check if Ollama is available and list models.
+
+        Returns:
+            Dict with keys:
+                - installed: bool - whether ollama binary exists
+                - running: bool - whether ollama server is responding
+                - available: bool - alias for running (backwards compat)
+                - models: list[str] - available model names
+        """
+        import shutil
+        import subprocess
+
+        result = {
+            "installed": False,
+            "running": False,
+            "available": False,
+            "models": [],
+        }
+
+        # Check if ollama binary is installed
+        ollama_path = shutil.which("ollama")
+        if ollama_path:
+            result["installed"] = True
+        else:
+            # Check common installation paths
+            common_paths = [
+                "/usr/local/bin/ollama",
+                "/usr/bin/ollama",
+                Path.home() / ".local" / "bin" / "ollama",
+            ]
+            for path in common_paths:
+                if Path(path).exists():
+                    result["installed"] = True
+                    break
+
+        # If not found via path, try running ollama --version
+        if not result["installed"]:
+            try:
+                subprocess.run(
+                    ["ollama", "--version"],
+                    capture_output=True,
+                    timeout=2,
+                    check=False,
+                )
+                result["installed"] = True
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                pass
+
+        # Check if ollama server is running
         try:
             import httpx
 
             response = httpx.get("http://localhost:11434/api/tags", timeout=2.0)
             if response.status_code == 200:
                 data = response.json()
-                models = [m["name"] for m in data.get("models", [])]
-                return {"available": True, "models": models}
+                result["models"] = [m["name"] for m in data.get("models", [])]
+                result["running"] = True
+                result["available"] = True
         except Exception:
             pass
-        return {"available": False, "models": []}
+
+        return result
 
     def _configure_safety(self) -> bool:
         """Configure safety level and confirmation preferences."""
@@ -588,70 +656,43 @@ class SetupWizard:
         )
         console.print()
 
-        # Safety level selection
-        console.print("[bold]Safety Level:[/bold]")
-        console.print()
-
+        # Safety level selection - arrow key navigation
         options = []
-        for level in SafetyLevel:
+        default_idx = 0
+        for i, level in enumerate(SafetyLevel):
             info = SAFETY_LEVEL_INFO[level]
-            options.append((level.value, info["name"]))
+            options.append((level.value, info["name"], info["description"]))
+            if level == self.prefs.safety_level:
+                default_idx = i
 
-        console.print(option_list(options))
-        console.print()
+        choice = self.prompt.prompt_select(
+            "Safety Level:",
+            options,
+            default_index=default_idx,
+        )
 
-        # Show descriptions
-        for level in SafetyLevel:
-            info = SAFETY_LEVEL_INFO[level]
-            console.print(f"  [cyan]{level.value}[/cyan]: {info['description']}")
-            console.print()
-
-        default_level = self.prefs.safety_level.value
-        while True:
-            choice = (
-                self.prompt.session.prompt(f"Choose safety level [{default_level}]: ")
-                .strip()
-                .lower()
-            )
-
-            if not choice:
-                choice = default_level
-
-            try:
-                self.prefs.safety_level = SafetyLevel(choice)
-                break
-            except ValueError:
-                print_warning(f"Invalid choice: {choice}")
+        if choice:
+            self.prefs.safety_level = SafetyLevel(choice)
 
         console.print()
 
-        # Confirmation preference
-        console.print("[bold]Confirmation Prompts:[/bold]")
-        console.print()
-
-        for pref in ConfirmationPreference:
+        # Confirmation preference - arrow key navigation
+        conf_options = []
+        conf_default_idx = 0
+        for i, pref in enumerate(ConfirmationPreference):
             info = CONFIRMATION_INFO[pref]
-            marker = Icons.CHEVRON if pref == self.prefs.confirmation_preference else "  "
-            console.print(f"  {marker} [cyan]{pref.value}[/cyan]: {info['description']}")
+            conf_options.append((pref.value, info["name"], info["description"]))
+            if pref == self.prefs.confirmation_preference:
+                conf_default_idx = i
 
-        console.print()
+        conf_choice = self.prompt.prompt_select(
+            "Confirmation Prompts:",
+            conf_options,
+            default_index=conf_default_idx,
+        )
 
-        default_conf = self.prefs.confirmation_preference.value
-        while True:
-            choice = (
-                self.prompt.session.prompt(f"Choose confirmation preference [{default_conf}]: ")
-                .strip()
-                .lower()
-            )
-
-            if not choice:
-                choice = default_conf
-
-            try:
-                self.prefs.confirmation_preference = ConfirmationPreference(choice)
-                break
-            except ValueError:
-                print_warning(f"Invalid choice: {choice}")
+        if conf_choice:
+            self.prefs.confirmation_preference = ConfirmationPreference(conf_choice)
 
         console.print()
 
@@ -669,51 +710,51 @@ class SetupWizard:
         console.print(section_rule("Telemetry Sources"))
         console.print()
 
-        console.print(
-            Text.from_markup(
-                "[bold]What should ELLE monitor?[/bold]\n\n"
-                "ELLE can watch various system sources for issues.\n"
-                "All monitoring is local - no data leaves your machine."
-            )
-        )
-        console.print()
+        # Build multi-select options
+        telemetry_options = [
+            (
+                "journal",
+                TELEMETRY_INFO["journal"]["name"],
+                TELEMETRY_INFO["journal"]["description"],
+                self.prefs.journal_enabled,
+            ),
+            (
+                "kernel",
+                TELEMETRY_INFO["kernel"]["name"],
+                TELEMETRY_INFO["kernel"]["description"],
+                self.prefs.kernel_enabled,
+            ),
+            (
+                "probes",
+                TELEMETRY_INFO["probes"]["name"],
+                TELEMETRY_INFO["probes"]["description"],
+                self.prefs.probes_enabled,
+            ),
+            (
+                "docker",
+                TELEMETRY_INFO["docker"]["name"],
+                TELEMETRY_INFO["docker"]["description"],
+                self.prefs.docker_enabled,
+            ),
+            (
+                "ebpf",
+                TELEMETRY_INFO["ebpf"]["name"] + " (advanced)",
+                TELEMETRY_INFO["ebpf"]["description"],
+                self.prefs.ebpf_enabled,
+            ),
+        ]
 
-        # Journal
-        info = TELEMETRY_INFO["journal"]
-        self.prefs.journal_enabled = self.prompt.prompt_confirm(
-            f"{info['name']}: {info['description']}",
-            default=self.prefs.journal_enabled,
+        selected = self.prompt.prompt_multi_select(
+            "What should ELLE monitor? (Space to toggle, Enter to confirm)",
+            telemetry_options,
         )
 
-        # Kernel
-        info = TELEMETRY_INFO["kernel"]
-        self.prefs.kernel_enabled = self.prompt.prompt_confirm(
-            f"{info['name']}: {info['description']}",
-            default=self.prefs.kernel_enabled,
-        )
-
-        # Probes
-        info = TELEMETRY_INFO["probes"]
-        self.prefs.probes_enabled = self.prompt.prompt_confirm(
-            f"{info['name']}: {info['description']}",
-            default=self.prefs.probes_enabled,
-        )
-
-        # Docker
-        info = TELEMETRY_INFO["docker"]
-        self.prefs.docker_enabled = self.prompt.prompt_confirm(
-            f"{info['name']}: {info['description']}",
-            default=self.prefs.docker_enabled,
-        )
-
-        # eBPF (advanced)
-        console.print()
-        info = TELEMETRY_INFO["ebpf"]
-        console.print(f"  [dim]{info['description']}[/dim]")
-        self.prefs.ebpf_enabled = self.prompt.prompt_confirm(
-            f"{info['name']} (advanced)",
-            default=self.prefs.ebpf_enabled,
-        )
+        if selected is not None:
+            self.prefs.journal_enabled = "journal" in selected
+            self.prefs.kernel_enabled = "kernel" in selected
+            self.prefs.probes_enabled = "probes" in selected
+            self.prefs.docker_enabled = "docker" in selected
+            self.prefs.ebpf_enabled = "ebpf" in selected
 
         console.print()
         return True
@@ -723,33 +764,37 @@ class SetupWizard:
         console.print(section_rule("Optional Features"))
         console.print()
 
-        # REST API
-        info = FEATURE_INFO["api"]
-        console.print(f"  [dim]{info['description']}[/dim]")
-        self.prefs.api_enabled = self.prompt.prompt_confirm(
-            f"Enable {info['name']}?",
-            default=self.prefs.api_enabled,
+        # Build multi-select options for features
+        feature_options = [
+            (
+                "api",
+                FEATURE_INFO["api"]["name"],
+                FEATURE_INFO["api"]["description"],
+                self.prefs.api_enabled,
+            ),
+            (
+                "gui_automation",
+                FEATURE_INFO["gui_automation"]["name"],
+                FEATURE_INFO["gui_automation"]["description"],
+                self.prefs.gui_automation_enabled,
+            ),
+            (
+                "auto_learn_packages",
+                FEATURE_INFO["auto_learn_packages"]["name"],
+                FEATURE_INFO["auto_learn_packages"]["description"],
+                self.prefs.auto_learn_packages,
+            ),
+        ]
+
+        selected = self.prompt.prompt_multi_select(
+            "Which features should be enabled? (Space to toggle, Enter to confirm)",
+            feature_options,
         )
 
-        console.print()
-
-        # GUI Automation
-        info = FEATURE_INFO["gui_automation"]
-        console.print(f"  [dim]{info['description']}[/dim]")
-        self.prefs.gui_automation_enabled = self.prompt.prompt_confirm(
-            f"Enable {info['name']}?",
-            default=self.prefs.gui_automation_enabled,
-        )
-
-        console.print()
-
-        # Auto-learn packages
-        info = FEATURE_INFO["auto_learn_packages"]
-        console.print(f"  [dim]{info['description']}[/dim]")
-        self.prefs.auto_learn_packages = self.prompt.prompt_confirm(
-            f"Enable {info['name']}?",
-            default=self.prefs.auto_learn_packages,
-        )
+        if selected is not None:
+            self.prefs.api_enabled = "api" in selected
+            self.prefs.gui_automation_enabled = "gui_automation" in selected
+            self.prefs.auto_learn_packages = "auto_learn_packages" in selected
 
         console.print()
         return True
@@ -769,41 +814,26 @@ class SetupWizard:
         )
         console.print()
 
-        # Show options
-        console.print("[bold]Privilege Level:[/bold]")
-        console.print()
-
-        for level in PrivilegeLevel:
+        # Privilege level selection - arrow key navigation
+        priv_options = []
+        priv_default_idx = 0
+        for i, level in enumerate(PrivilegeLevel):
             info = PRIVILEGE_LEVEL_INFO[level]
-            marker = Icons.CHEVRON if level == self.prefs.privilege_level else "  "
-            console.print(f"  {marker} [cyan]{level.value}[/cyan]: {info['name']}")
-
-        console.print()
-
-        # Show descriptions
-        for level in PrivilegeLevel:
-            info = PRIVILEGE_LEVEL_INFO[level]
-            console.print(f"  [cyan]{level.value}[/cyan]: {info['description']}")
+            desc = info["description"]
             if "warning" in info:
-                console.print(f"    [yellow]{Icons.WARNING} {info['warning']}[/yellow]")
-            console.print()
+                desc += f" {Icons.WARNING} {info['warning']}"
+            priv_options.append((level.value, info["name"], desc))
+            if level == self.prefs.privilege_level:
+                priv_default_idx = i
 
-        default_level = self.prefs.privilege_level.value
-        while True:
-            choice = (
-                self.prompt.session.prompt(f"Choose privilege level [{default_level}]: ")
-                .strip()
-                .lower()
-            )
+        priv_choice = self.prompt.prompt_select(
+            "Privilege Level:",
+            priv_options,
+            default_index=priv_default_idx,
+        )
 
-            if not choice:
-                choice = default_level
-
-            try:
-                self.prefs.privilege_level = PrivilegeLevel(choice)
-                break
-            except ValueError:
-                print_warning(f"Invalid choice: {choice}")
+        if priv_choice:
+            self.prefs.privilege_level = PrivilegeLevel(priv_choice)
 
         console.print()
 
@@ -958,7 +988,15 @@ class SetupWizard:
         console.print()
 
         if not self.prefs.ollama_verified:
-            console.print(tip("Install Ollama from ollama.ai to enable AI features"))
+            # Re-check ollama status for accurate tip
+            ollama_status = self._check_ollama()
+            if ollama_status["running"]:
+                # User started it during setup
+                console.print(tip("Ollama is now running. You're ready to go!"))
+            elif ollama_status["installed"]:
+                console.print(tip("Start Ollama with: ollama serve"))
+            else:
+                console.print(tip("Install Ollama from ollama.ai to enable AI features"))
             console.print()
 
         if self.prefs.privilege_level == PrivilegeLevel.CONVENIENT and self.prefs.polkit_configured:

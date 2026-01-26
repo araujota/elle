@@ -3,6 +3,13 @@ set -e
 
 case "$1" in
     configure)
+        # Install Python dependencies that require newer versions than apt provides
+        # Ubuntu's python3-pydantic is v1.x but we need v2.x
+        if command -v pip3 >/dev/null 2>&1; then
+            pip3 install --quiet --break-system-packages "pydantic>=2.0" 2>/dev/null || \
+            pip3 install --quiet "pydantic>=2.0" 2>/dev/null || true
+        fi
+
         # Create elle system user if it doesn't exist
         if ! getent passwd elle >/dev/null 2>&1; then
             adduser --system --group --home /var/lib/elle \

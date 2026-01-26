@@ -9,11 +9,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 
 from prompt_toolkit import PromptSession
+from prompt_toolkit.application import Application
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.completion import Completer, WordCompleter
 from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.layout import Layout
+from prompt_toolkit.layout.containers import HSplit, Window
+from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.styles import Style
 
 from elle.cli.ui.theme import Icons
@@ -25,33 +29,32 @@ if TYPE_CHECKING:
 
 
 # ELLE prompt style
-PROMPT_STYLE = Style.from_dict({
-    # Prompt components
-    "prompt": "ansicyan bold",
-    "prompt.success": "ansigreen",
-    "prompt.warning": "ansiyellow",
-    "prompt.error": "ansired",
-    "prompt.chevron": "ansicyan",
-
-    # Status bar
-    "status": "bg:ansibrightblack ansiwhite",
-    "status.key": "ansicyan",
-    "status.value": "ansiwhite",
-    "status.separator": "ansibrightblack",
-    "status.warning": "ansiyellow",
-    "status.error": "ansired",
-
-    # Input
-    "": "",  # Default
-    "command": "ansiwhite bold",
-
-    # Completion menu
-    "completion-menu": "bg:ansibrightblack ansiwhite",
-    "completion-menu.completion": "",
-    "completion-menu.completion.current": "bg:ansicyan ansiblack",
-    "scrollbar.background": "bg:ansibrightblack",
-    "scrollbar.button": "bg:ansicyan",
-})
+PROMPT_STYLE = Style.from_dict(
+    {
+        # Prompt components
+        "prompt": "ansicyan bold",
+        "prompt.success": "ansigreen",
+        "prompt.warning": "ansiyellow",
+        "prompt.error": "ansired",
+        "prompt.chevron": "ansicyan",
+        # Status bar
+        "status": "bg:ansibrightblack ansiwhite",
+        "status.key": "ansicyan",
+        "status.value": "ansiwhite",
+        "status.separator": "ansibrightblack",
+        "status.warning": "ansiyellow",
+        "status.error": "ansired",
+        # Input
+        "": "",  # Default
+        "command": "ansiwhite bold",
+        # Completion menu
+        "completion-menu": "bg:ansibrightblack ansiwhite",
+        "completion-menu.completion": "",
+        "completion-menu.completion.current": "bg:ansicyan ansiblack",
+        "scrollbar.background": "bg:ansibrightblack",
+        "scrollbar.button": "bg:ansicyan",
+    }
+)
 
 
 # Slash commands for completion
@@ -77,7 +80,7 @@ class ElleCompleter(Completer):
     def __init__(self) -> None:
         self.slash_completer = WordCompleter(
             [cmd for cmd, _ in SLASH_COMMANDS],
-            meta_dict={cmd: desc for cmd, desc in SLASH_COMMANDS},
+            meta_dict=dict(SLASH_COMMANDS),
             sentence=True,
         )
 
@@ -124,10 +127,12 @@ def get_prompt_text(
 
     icon, style = indicator_map.get(state, indicator_map["idle"])
 
-    return FormattedText([
-        ("class:prompt", f"{prefix} "),
-        (style, f"{icon} "),
-    ])
+    return FormattedText(
+        [
+            ("class:prompt", f"{prefix} "),
+            (style, f"{icon} "),
+        ]
+    )
 
 
 def get_status_bar(
@@ -351,10 +356,14 @@ class EllePrompt:
         suffix = " [Y/n] " if default else " [y/N] "
 
         while True:
-            response = self.session.prompt(
-                FormattedText([("class:prompt", message + suffix)]),
-                bottom_toolbar=self._get_bottom_toolbar,
-            ).strip().lower()
+            response = (
+                self.session.prompt(
+                    FormattedText([("class:prompt", message + suffix)]),
+                    bottom_toolbar=self._get_bottom_toolbar,
+                )
+                .strip()
+                .lower()
+            )
 
             if not response:
                 return default
@@ -385,14 +394,20 @@ class EllePrompt:
         valid_keys = {key.lower() for key, _ in choices}
 
         while True:
-            response = self.session.prompt(
-                FormattedText([
-                    ("class:prompt", message + "\n"),
-                    ("class:prompt.chevron", choice_display + "\n"),
-                    ("class:prompt", "> "),
-                ]),
-                bottom_toolbar=self._get_bottom_toolbar,
-            ).strip().lower()
+            response = (
+                self.session.prompt(
+                    FormattedText(
+                        [
+                            ("class:prompt", message + "\n"),
+                            ("class:prompt.chevron", choice_display + "\n"),
+                            ("class:prompt", "> "),
+                        ]
+                    ),
+                    bottom_toolbar=self._get_bottom_toolbar,
+                )
+                .strip()
+                .lower()
+            )
 
             if not response and default:
                 return default
@@ -531,3 +546,198 @@ class EllePrompt:
                     break
 
         return results
+
+    def prompt_select(
+        self,
+        message: str,
+        options: list[tuple[str, str, str]],
+        *,
+        default_index: int = 0,
+    ) -> str | None:
+        """Display an arrow-key navigable selection menu.
+
+        Args:
+            message: Header message to display
+            options: List of (value, label, description) tuples
+            default_index: Index of initially selected option
+
+        Returns:
+            Selected value, or None if cancelled (Ctrl+C/Escape)
+        """
+        if not options:
+            return None
+
+        selected_index = default_index
+
+        # Key bindings for navigation
+        bindings = KeyBindings()
+
+        @bindings.add("up")
+        @bindings.add("k")  # Vim-style
+        def move_up(event):
+            nonlocal selected_index
+            selected_index = (selected_index - 1) % len(options)
+
+        @bindings.add("down")
+        @bindings.add("j")  # Vim-style
+        def move_down(event):
+            nonlocal selected_index
+            selected_index = (selected_index + 1) % len(options)
+
+        @bindings.add("enter")
+        def select(event):
+            event.app.exit(result=options[selected_index][0])
+
+        @bindings.add("escape")
+        @bindings.add("c-c")
+        def cancel(event):
+            event.app.exit(result=None)
+
+        def get_formatted_text():
+            """Generate the menu display."""
+            lines = []
+
+            # Header
+            lines.append(("class:prompt", message + "\n"))
+            lines.append(("", "\n"))
+
+            # Options
+            for i, (_value, label, description) in enumerate(options):
+                if i == selected_index:
+                    # Selected item
+                    style = "class:completion-menu.completion.current"
+                    lines.append((style, f"  {Icons.CHEVRON} "))
+                    lines.append((style, f"{label}\n"))
+                    if description:
+                        lines.append(("class:status.value", f"      {description}\n"))
+                else:
+                    # Unselected item
+                    lines.append(("", "    "))
+                    lines.append(("class:prompt", f"{label}\n"))
+
+            # Footer hint
+            lines.append(("", "\n"))
+            lines.append(("class:status", "  ↑/↓ or j/k to move, Enter to select, Esc to cancel"))
+
+            return FormattedText(lines)
+
+        # Create the application
+        layout = Layout(
+            HSplit(
+                [
+                    Window(
+                        content=FormattedTextControl(get_formatted_text),
+                        dont_extend_height=True,
+                    ),
+                ]
+            )
+        )
+
+        app: Application[str | None] = Application(
+            layout=layout,
+            key_bindings=bindings,
+            style=PROMPT_STYLE,
+            full_screen=False,
+            mouse_support=False,
+        )
+
+        try:
+            return app.run()
+        except (EOFError, KeyboardInterrupt):
+            return None
+
+    def prompt_multi_select(
+        self,
+        message: str,
+        options: list[tuple[str, str, str, bool]],
+    ) -> list[str] | None:
+        """Display a multi-select menu with checkboxes.
+
+        Args:
+            message: Header message to display
+            options: List of (value, label, description, default_selected) tuples
+
+        Returns:
+            List of selected values, or None if cancelled
+        """
+        if not options:
+            return None
+
+        selected_index = 0
+        checked = [opt[3] for opt in options]  # Start with default selections
+
+        # Key bindings
+        bindings = KeyBindings()
+
+        @bindings.add("up")
+        @bindings.add("k")
+        def move_up(event):
+            nonlocal selected_index
+            selected_index = (selected_index - 1) % len(options)
+
+        @bindings.add("down")
+        @bindings.add("j")
+        def move_down(event):
+            nonlocal selected_index
+            selected_index = (selected_index + 1) % len(options)
+
+        @bindings.add("space")
+        def toggle(event):
+            checked[selected_index] = not checked[selected_index]
+
+        @bindings.add("enter")
+        def confirm(event):
+            result = [opt[0] for i, opt in enumerate(options) if checked[i]]
+            event.app.exit(result=result)
+
+        @bindings.add("escape")
+        @bindings.add("c-c")
+        def cancel(event):
+            event.app.exit(result=None)
+
+        def get_formatted_text():
+            lines = []
+            lines.append(("class:prompt", message + "\n"))
+            lines.append(("", "\n"))
+
+            for i, (_value, label, description, _) in enumerate(options):
+                checkbox = "[x]" if checked[i] else "[ ]"
+
+                if i == selected_index:
+                    style = "class:completion-menu.completion.current"
+                    lines.append((style, f"  {Icons.CHEVRON} {checkbox} "))
+                    lines.append((style, f"{label}\n"))
+                    if description:
+                        lines.append(("class:status.value", f"        {description}\n"))
+                else:
+                    lines.append(("", f"    {checkbox} "))
+                    lines.append(("class:prompt", f"{label}\n"))
+
+            lines.append(("", "\n"))
+            lines.append(("class:status", "  ↑/↓ move, Space toggle, Enter confirm, Esc cancel"))
+
+            return FormattedText(lines)
+
+        layout = Layout(
+            HSplit(
+                [
+                    Window(
+                        content=FormattedTextControl(get_formatted_text),
+                        dont_extend_height=True,
+                    ),
+                ]
+            )
+        )
+
+        app: Application[list[str] | None] = Application(
+            layout=layout,
+            key_bindings=bindings,
+            style=PROMPT_STYLE,
+            full_screen=False,
+            mouse_support=False,
+        )
+
+        try:
+            return app.run()
+        except (EOFError, KeyboardInterrupt):
+            return None
