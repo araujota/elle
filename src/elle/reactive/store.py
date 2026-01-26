@@ -97,9 +97,7 @@ def create_function(
                 _json_dumps(safe_model_dump(func.condition)) if func.condition else None,
                 _json_dumps([safe_model_dump(a) for a in func.actions]),
                 _json_dumps(safe_model_dump(func.policy)),
-                _json_dumps({k: safe_model_dump(v) for k, v in func.state.items()})
-                if func.state
-                else None,
+                _json_dumps({k: safe_model_dump(v) for k, v in func.state.items()}) if func.state else None,
                 _json_dumps(list(func.tags)) if func.tags else None,
                 func.source_prompt,
             ),

@@ -117,6 +117,7 @@ class PolicyAuditLogger:
                 json_str = entry.model_dump_json()
             except AttributeError:
                 import json
+
                 json_str = json.dumps(entry.dict())
             self._file.write(json_str + "\n")
             self._file.flush()
@@ -273,16 +274,10 @@ class PolicyAuditLogger:
                         entry = safe_model_validate(PolicyAuditEntry, data)
 
                         # Apply filters
-                        if command and (
-                            entry.request.command is None
-                            or command not in entry.request.command
-                        ):
+                        if command and (entry.request.command is None or command not in entry.request.command):
                             continue
 
-                        if path and (
-                            entry.request.path is None
-                            or path not in entry.request.path
-                        ):
+                        if path and (entry.request.path is None or path not in entry.request.path):
                             continue
 
                         if effect and entry.result.effect.value != effect:

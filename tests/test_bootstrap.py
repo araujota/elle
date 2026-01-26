@@ -3,9 +3,10 @@
 Tests automatic capability generation for core packages.
 """
 
-import pytest
-from unittest.mock import MagicMock, patch
 from datetime import datetime
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from elle.capabilities.autogen.bootstrap import (
     CORE_SYSTEM_PACKAGES,
@@ -16,7 +17,6 @@ from elle.capabilities.autogen.bootstrap import (
     get_bootstrap_packages,
     get_bootstrap_state,
     get_elle_dependencies,
-    get_installed_optional_packages,
     is_package_installed,
     should_run_bootstrap,
 )
@@ -127,6 +127,7 @@ class TestPackageDetection:
     def test_is_package_installed_timeout(self, mock_run):
         """Test handling timeout."""
         import subprocess
+
         mock_run.side_effect = subprocess.TimeoutExpired("cmd", 5)
 
         assert is_package_installed("any-package") is False
@@ -273,15 +274,17 @@ class TestLearnBootstrapCommand:
         """Test bootstrap status command."""
         from elle.cli.package_learn_commands import _handle_bootstrap_status
 
-        with patch(
-            "elle.capabilities.autogen.bootstrap.get_bootstrap_state",
-            return_value={"completed": False},
-        ):
-            with patch(
+        with (
+            patch(
+                "elle.capabilities.autogen.bootstrap.get_bootstrap_state",
+                return_value={"completed": False},
+            ),
+            patch(
                 "elle.capabilities.autogen.bootstrap.get_bootstrap_packages",
                 return_value=[("pkg1", "system")],
-            ):
-                result = await _handle_bootstrap_status("")
+            ),
+        ):
+            result = await _handle_bootstrap_status("")
 
-                assert "Bootstrap Status" in result
-                assert "Not completed" in result
+            assert "Bootstrap Status" in result
+            assert "Not completed" in result

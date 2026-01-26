@@ -179,16 +179,12 @@ def verify_plan(plan: CommandPlan) -> PlanVerification:
     needs_rollback = _requires_rollback(plan)
     if needs_rollback and not plan.has_rollback:
         rollback_required = True
-        errors.append(
-            "Rollback required for config changes (netplan/ufw/fstab/crontab) but not provided"
-        )
+        errors.append("Rollback required for config changes (netplan/ufw/fstab/crontab) but not provided")
 
     # Check if validation checks are required
     if plan.overall_risk in ("medium", "high") and not plan.has_checks:
         checks_required = True
-        warnings.append(
-            f"Validation checks recommended for {plan.overall_risk}-risk operations"
-        )
+        warnings.append(f"Validation checks recommended for {plan.overall_risk}-risk operations")
 
     # Verify rollback steps if present
     if plan.has_rollback:
@@ -246,15 +242,66 @@ def _is_builtin(name: str) -> bool:
         True if it's a builtin.
     """
     builtins = {
-        "cd", "echo", "export", "source", ".", "alias", "unalias",
-        "read", "set", "unset", "eval", "exec", "exit", "return",
-        "trap", "wait", "jobs", "fg", "bg", "kill", "test", "[",
-        "true", "false", ":", "pwd", "type", "hash", "help",
-        "history", "fc", "bind", "builtin", "command", "declare",
-        "typeset", "local", "readonly", "shift", "shopt", "getopts",
-        "printf", "pushd", "popd", "dirs", "enable", "let", "mapfile",
-        "readarray", "suspend", "times", "ulimit", "umask", "complete",
-        "compgen", "compopt", "caller", "logout", "disown", "coproc",
+        "cd",
+        "echo",
+        "export",
+        "source",
+        ".",
+        "alias",
+        "unalias",
+        "read",
+        "set",
+        "unset",
+        "eval",
+        "exec",
+        "exit",
+        "return",
+        "trap",
+        "wait",
+        "jobs",
+        "fg",
+        "bg",
+        "kill",
+        "test",
+        "[",
+        "true",
+        "false",
+        ":",
+        "pwd",
+        "type",
+        "hash",
+        "help",
+        "history",
+        "fc",
+        "bind",
+        "builtin",
+        "command",
+        "declare",
+        "typeset",
+        "local",
+        "readonly",
+        "shift",
+        "shopt",
+        "getopts",
+        "printf",
+        "pushd",
+        "popd",
+        "dirs",
+        "enable",
+        "let",
+        "mapfile",
+        "readarray",
+        "suspend",
+        "times",
+        "ulimit",
+        "umask",
+        "complete",
+        "compgen",
+        "compopt",
+        "caller",
+        "logout",
+        "disown",
+        "coproc",
     }
     return name in builtins
 

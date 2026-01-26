@@ -1,7 +1,5 @@
 """Tests for fixit verifier."""
 
-import pytest
-
 from elle.cli.fixit.models import (
     FixCommand,
     FixitAnalysis,

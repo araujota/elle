@@ -38,24 +38,28 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 # Paths that should never be modified
-FORBIDDEN_PATHS = frozenset({
-    "/etc/passwd",
-    "/etc/shadow",
-    "/etc/sudoers",
-    "/etc/gshadow",
-    "/boot",
-    "/boot/grub",
-    "/boot/efi",
-})
+FORBIDDEN_PATHS = frozenset(
+    {
+        "/etc/passwd",
+        "/etc/shadow",
+        "/etc/sudoers",
+        "/etc/gshadow",
+        "/boot",
+        "/boot/grub",
+        "/boot/efi",
+    }
+)
 
 # Paths that require extra confirmation
-SENSITIVE_PATHS = frozenset({
-    "/etc",
-    "/usr",
-    "/var",
-    "/root",
-    "/home",
-})
+SENSITIVE_PATHS = frozenset(
+    {
+        "/etc",
+        "/usr",
+        "/var",
+        "/root",
+        "/home",
+    }
+)
 
 
 def _is_forbidden_path(path: Path) -> bool:
@@ -256,9 +260,7 @@ class FileReadCapability(BaseCapability):
         if size > input.max_size_bytes:
             return DryRunResult(
                 is_valid=False,
-                validation_errors=(
-                    f"File too large: {size} bytes (max: {input.max_size_bytes})",
-                ),
+                validation_errors=(f"File too large: {size} bytes (max: {input.max_size_bytes})",),
                 preview_text="Cannot read: file too large",
             )
 
@@ -696,9 +698,7 @@ class FileDeleteCapability(BaseCapability):
             return RollbackResult(
                 success=True,
                 rolled_back=(input.path,),
-                commands_executed=(
-                    f"cp {result.output.backup_path} {input.path}",
-                ),
+                commands_executed=(f"cp {result.output.backup_path} {input.path}",),
             )
         except Exception as e:
             return RollbackResult(
@@ -754,9 +754,7 @@ class FileCopyCapability(BaseCapability):
         if dst.exists() and not input.overwrite:
             return DryRunResult(
                 is_valid=False,
-                validation_errors=(
-                    f"Destination exists and overwrite=False: {input.destination}",
-                ),
+                validation_errors=(f"Destination exists and overwrite=False: {input.destination}",),
                 preview_text="Cannot copy: destination exists",
             )
 
@@ -1032,8 +1030,12 @@ class FileDiffCapability(BaseCapability):
             diff_text = "".join(diff)
 
             # Count changes
-            lines_added = sum(1 for line in diff_text.split("\n") if line.startswith("+") and not line.startswith("+++"))
-            lines_removed = sum(1 for line in diff_text.split("\n") if line.startswith("-") and not line.startswith("---"))
+            lines_added = sum(
+                1 for line in diff_text.split("\n") if line.startswith("+") and not line.startswith("+++")
+            )
+            lines_removed = sum(
+                1 for line in diff_text.split("\n") if line.startswith("-") and not line.startswith("---")
+            )
 
             return CapabilityResult(
                 success=True,
@@ -1072,6 +1074,7 @@ class FileDiffCapability(BaseCapability):
         # Try to load from file watch snapshot store
         try:
             from elle.capabilities.core.file import _snapshot_store
+
             snapshot = _snapshot_store.get(snapshot_id)
             if snapshot:
                 return snapshot.get("content")

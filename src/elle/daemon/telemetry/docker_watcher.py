@@ -10,6 +10,7 @@ Events detected:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import subprocess
@@ -117,9 +118,12 @@ class DockerEventsWatcher:
             try:
                 # Start docker events process
                 cmd = [
-                    "docker", "events",
-                    "--format", "json",
-                    "--filter", "type=container",
+                    "docker",
+                    "events",
+                    "--format",
+                    "json",
+                    "--filter",
+                    "type=container",
                 ]
 
                 if self._container_filter:
@@ -218,9 +222,7 @@ class DockerEventsWatcher:
             category="docker",
             message=message,
             entity=f"container:{container_name}",
-            fingerprint=TelemetryEvent.compute_fingerprint(
-                "docker", f"container:{container_name}", message
-            ),
+            fingerprint=TelemetryEvent.compute_fingerprint("docker", f"container:{container_name}", message),
             raw=raw,
         )
 
@@ -267,7 +269,9 @@ class DockerEventsWatcher:
             raw["_DOCKER_EVENT"] = "crashloop"
             raw["_DOCKER_RESTART_COUNT"] = len(history)
             raw["PRIORITY"] = "2"  # Critical
-            raw["MESSAGE"] = f"Container {container_name} is crashlooping ({len(history)} restarts in {CRASHLOOP_WINDOW_SEC}s)"
+            raw["MESSAGE"] = (
+                f"Container {container_name} is crashlooping ({len(history)} restarts in {CRASHLOOP_WINDOW_SEC}s)"
+            )
 
             event = TelemetryEvent(
                 ts=datetime.now(UTC),
@@ -276,9 +280,7 @@ class DockerEventsWatcher:
                 category="docker",
                 message=raw["MESSAGE"],
                 entity=f"container:{container_name}",
-                fingerprint=TelemetryEvent.compute_fingerprint(
-                    "docker", f"container:{container_name}", "crashloop"
-                ),
+                fingerprint=TelemetryEvent.compute_fingerprint("docker", f"container:{container_name}", "crashloop"),
                 raw=raw,
             )
 
@@ -391,10 +393,8 @@ class DockerEventsWatcher:
     async def _cleanup(self) -> None:
         """Clean up resources."""
         if self._process and self._process.returncode is None:
-            try:
+            with contextlib.suppress(Exception):
                 self._process.terminate()
-            except Exception:
-                pass
 
     @property
     def is_running(self) -> bool:

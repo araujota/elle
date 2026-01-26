@@ -167,7 +167,7 @@ def _format_man_context(context: PlanContext) -> str:
         return "DOCUMENTATION CONTEXT:\nNo relevant documentation found."
 
     lines = ["DOCUMENTATION CONTEXT:"]
-    for i, doc in enumerate(context.man_docs[:4], 1):
+    for _i, doc in enumerate(context.man_docs[:4], 1):
         lines.append(f"\n--- {doc.name}({doc.section}) ---")
         # Truncate snippet to reasonable length
         text = doc.snippet[:1000]

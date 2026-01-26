@@ -272,22 +272,21 @@ def parse_options(text: str) -> list[ParsedFlag]:
         description = match.group(4).strip()
 
         # Extract name from long form or short form
-        if long:
-            name = long.lstrip("-").replace("-", "_")
-        else:
-            name = short.lstrip("-")
+        name = long.lstrip("-").replace("-", "_") if long else short.lstrip("-")
 
         flag_type = infer_flag_type(description, metavar)
 
-        flags.append(ParsedFlag(
-            name=name,
-            short=short,
-            long=long,
-            flag_type=flag_type,
-            description=description[:200],  # Truncate
-            required=False,
-            metavar=metavar,
-        ))
+        flags.append(
+            ParsedFlag(
+                name=name,
+                short=short,
+                long=long,
+                flag_type=flag_type,
+                description=description[:200],  # Truncate
+                required=False,
+                metavar=metavar,
+            )
+        )
 
     # Then find long-only options not already found
     existing_longs = {f.long for f in flags if f.long}
@@ -302,15 +301,17 @@ def parse_options(text: str) -> list[ParsedFlag]:
 
         flag_type = infer_flag_type(description, metavar)
 
-        flags.append(ParsedFlag(
-            name=name,
-            short=None,
-            long=long,
-            flag_type=flag_type,
-            description=description[:200],
-            required=False,
-            metavar=metavar,
-        ))
+        flags.append(
+            ParsedFlag(
+                name=name,
+                short=None,
+                long=long,
+                flag_type=flag_type,
+                description=description[:200],
+                required=False,
+                metavar=metavar,
+            )
+        )
 
     return flags
 
@@ -364,10 +365,12 @@ def parse_examples(text: str) -> list[ParsedExample]:
                     break
 
             if command:
-                examples.append(ParsedExample(
-                    command=command,
-                    description=description.strip()[:200],
-                ))
+                examples.append(
+                    ParsedExample(
+                        command=command,
+                        description=description.strip()[:200],
+                    )
+                )
         else:
             i += 1
 
@@ -390,10 +393,7 @@ def parse_man_page(command: str, man_path: str | None = None) -> ParsedManPage |
         ParsedManPage or None if parsing fails.
     """
     # Read man page
-    if man_path:
-        text = read_man_file(man_path)
-    else:
-        text = read_man_page(command)
+    text = read_man_file(man_path) if man_path else read_man_page(command)
 
     if not text:
         return None
@@ -421,10 +421,7 @@ def parse_man_page(command: str, man_path: str | None = None) -> ParsedManPage |
         desc_text = sections["DESCRIPTION"]
         # Take first paragraph (up to double newline or ~500 chars)
         para_end = desc_text.find("\n\n")
-        if para_end > 0:
-            description = desc_text[:para_end]
-        else:
-            description = desc_text[:500]
+        description = desc_text[:para_end] if para_end > 0 else desc_text[:500]
         description = re.sub(r"\s+", " ", description).strip()
 
     # Parse OPTIONS

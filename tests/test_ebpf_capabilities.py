@@ -1,9 +1,6 @@
 """Tests for eBPF capability checking."""
 
-import os
 from unittest.mock import MagicMock, mock_open, patch
-
-import pytest
 
 from elle.daemon.telemetry.ebpf.capabilities import (
     CAP_BPF,
@@ -38,10 +35,9 @@ class TestKernelVersion:
         mock_uname = MagicMock()
         mock_uname.release = "5.15.0-generic"
 
-        with patch("builtins.open", side_effect=FileNotFoundError):
-            with patch("os.uname", return_value=mock_uname):
-                version = _get_kernel_version()
-                assert version == (5, 15, 0)
+        with patch("builtins.open", side_effect=FileNotFoundError), patch("os.uname", return_value=mock_uname):
+            version = _get_kernel_version()
+            assert version == (5, 15, 0)
 
     def test_kernel_version_string(self):
         """Test kernel version string formatting."""
@@ -84,13 +80,12 @@ class TestCapabilityChecks:
 
     def test_bpf_fs_available_when_mounted(self):
         """Test BPF filesystem detection when mounted."""
-        with patch("pathlib.Path.exists", return_value=True):
-            with patch("pathlib.Path.is_dir", return_value=True):
-                with patch(
-                    "builtins.open",
-                    mock_open(read_data="bpf /sys/fs/bpf bpf rw 0 0\n"),
-                ):
-                    assert _bpf_fs_available() is True
+        with patch("pathlib.Path.exists", return_value=True), patch("pathlib.Path.is_dir", return_value=True):
+            with patch(
+                "builtins.open",
+                mock_open(read_data="bpf /sys/fs/bpf bpf rw 0 0\n"),
+            ):
+                assert _bpf_fs_available() is True
 
     def test_bpf_fs_not_available(self):
         """Test BPF filesystem detection when not available."""
@@ -103,22 +98,24 @@ class TestCheckCapabilities:
 
     def test_available_when_root(self):
         """Test capabilities check when running as root."""
-        with patch("os.geteuid", return_value=0):
-            with patch(
+        with (
+            patch("os.geteuid", return_value=0),
+            patch(
                 "elle.daemon.telemetry.ebpf.capabilities._get_kernel_version",
                 return_value=(6, 8, 0),
-            ):
-                with patch(
-                    "elle.daemon.telemetry.ebpf.capabilities._bpf_fs_available",
-                    return_value=True,
-                ):
-                    with patch(
-                        "elle.daemon.telemetry.ebpf.capabilities._bcc_available",
-                        return_value=True,
-                    ):
-                        check = check_capabilities()
-                        assert check.available is True
-                        assert "root" in check.reason.lower()
+            ),
+            patch(
+                "elle.daemon.telemetry.ebpf.capabilities._bpf_fs_available",
+                return_value=True,
+            ),
+            patch(
+                "elle.daemon.telemetry.ebpf.capabilities._bcc_available",
+                return_value=True,
+            ),
+        ):
+            check = check_capabilities()
+            assert check.available is True
+            assert "root" in check.reason.lower()
 
     def test_not_available_kernel_too_old(self):
         """Test when kernel is too old."""
@@ -132,22 +129,24 @@ class TestCheckCapabilities:
 
     def test_not_available_missing_bcc(self):
         """Test when BCC is not installed."""
-        with patch("os.geteuid", return_value=0):
-            with patch(
+        with (
+            patch("os.geteuid", return_value=0),
+            patch(
                 "elle.daemon.telemetry.ebpf.capabilities._get_kernel_version",
                 return_value=(6, 8, 0),
-            ):
-                with patch(
-                    "elle.daemon.telemetry.ebpf.capabilities._bpf_fs_available",
-                    return_value=True,
-                ):
-                    with patch(
-                        "elle.daemon.telemetry.ebpf.capabilities._bcc_available",
-                        return_value=False,
-                    ):
-                        check = check_capabilities()
-                        assert check.available is False
-                        assert "bcc" in check.reason.lower()
+            ),
+            patch(
+                "elle.daemon.telemetry.ebpf.capabilities._bpf_fs_available",
+                return_value=True,
+            ),
+            patch(
+                "elle.daemon.telemetry.ebpf.capabilities._bcc_available",
+                return_value=False,
+            ),
+        ):
+            check = check_capabilities()
+            assert check.available is False
+            assert "bcc" in check.reason.lower()
 
 
 class TestConvenienceFunctions:

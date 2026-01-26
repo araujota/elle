@@ -228,7 +228,7 @@ def match_domain(pattern: str, domain: str) -> bool:
     if len(parts_pattern) != len(parts_domain):
         return False
 
-    for p, d in zip(parts_pattern, parts_domain):
+    for p, d in zip(parts_pattern, parts_domain, strict=False):
         if p == "*":
             continue  # Single * matches any single part
         elif p != d:
@@ -333,9 +333,7 @@ def _match_condition_inner(
             return False
         # Match if request risk is >= condition risk
         risk_order = {"low": 0, "medium": 1, "high": 2}
-        if risk_order.get(request.risk_level.value, 0) < risk_order.get(
-            condition.risk_level.value, 0
-        ):
+        if risk_order.get(request.risk_level.value, 0) < risk_order.get(condition.risk_level.value, 0):
             return False
 
     # Privilege matching

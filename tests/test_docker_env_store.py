@@ -1,16 +1,17 @@
 """Tests for Docker environment variable store."""
 
-import pytest
 import tempfile
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
+import pytest
+
+from elle.cli.docker.env_models import EnvVarValue
 from elle.cli.docker.env_store import (
     DockerEnvStore,
-    init_schema,
     get_connection,
+    init_schema,
 )
-from elle.cli.docker.env_models import EnvVarValue
 
 
 class TestDockerEnvStore:
@@ -191,9 +192,7 @@ class TestSchemaInitialization:
 
         # Verify table exists
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='docker_env_values'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='docker_env_values'")
         assert cursor.fetchone() is not None
 
         conn.close()

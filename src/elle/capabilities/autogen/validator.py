@@ -307,10 +307,7 @@ def validate_package_coherence(
         and intel.primary_binary
         and spec.source_command != intel.primary_binary
     ):
-        warnings.append(
-            f"source_command '{spec.source_command}' "
-            f"not in package binaries: {binaries[:5]}"
-        )
+        warnings.append(f"source_command '{spec.source_command}' not in package binaries: {binaries[:5]}")
 
     # Check subcommand coherence
     if intel.subcommands:

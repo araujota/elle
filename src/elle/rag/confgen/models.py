@@ -47,9 +47,7 @@ class ConfigGenRequest(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    request: str = Field(
-        description="Natural language request describing the configuration change"
-    )
+    request: str = Field(description="Natural language request describing the configuration change")
     mode: ConfigOpMode = Field(
         default="edit",
         description="Operation mode: edit (modify existing), create (new file), or patch",
@@ -90,12 +88,8 @@ class ConfigOp(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    kind: Literal["set", "rm", "ins", "mv", "append", "replace"] = Field(
-        description="Operation type"
-    )
-    path: str = Field(
-        description="Augeas path or dot-notation path to the setting"
-    )
+    kind: Literal["set", "rm", "ins", "mv", "append", "replace"] = Field(description="Operation type")
+    path: str = Field(description="Augeas path or dot-notation path to the setting")
     value: str | None = Field(
         default=None,
         description="New value (for set, ins, append operations)",
@@ -124,12 +118,8 @@ class ConfigGenResult(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    title: str = Field(
-        description="Short title describing the configuration change"
-    )
-    explanation: str = Field(
-        description="Detailed explanation of what the configuration does"
-    )
+    title: str = Field(description="Short title describing the configuration change")
+    explanation: str = Field(description="Detailed explanation of what the configuration does")
     operations: tuple[ConfigOp, ...] = Field(
         default_factory=tuple,
         description="Configuration operations (for edit/patch mode)",
@@ -138,9 +128,7 @@ class ConfigGenResult(BaseModel):
         default=None,
         description="Generated file content (for create mode)",
     )
-    target_path: str = Field(
-        description="Target file path for the configuration"
-    )
+    target_path: str = Field(description="Target file path for the configuration")
     file_type: ConfigFileType = Field(
         default="text",
         description="Type of configuration file",
@@ -185,12 +173,8 @@ class ValidationIssue(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    severity: Literal["error", "warning", "info"] = Field(
-        description="Issue severity"
-    )
-    message: str = Field(
-        description="Description of the issue"
-    )
+    severity: Literal["error", "warning", "info"] = Field(description="Issue severity")
+    message: str = Field(description="Description of the issue")
     path: str | None = Field(
         default=None,
         description="Path in the configuration where the issue was found",
@@ -206,9 +190,7 @@ class ConfigGenValidation(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    valid: bool = Field(
-        description="Whether the configuration is valid"
-    )
+    valid: bool = Field(description="Whether the configuration is valid")
     issues: tuple[ValidationIssue, ...] = Field(
         default_factory=tuple,
         description="Validation issues found",
@@ -251,9 +233,7 @@ class ConfigGenContext(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    request: ConfigGenRequest = Field(
-        description="The original request"
-    )
+    request: ConfigGenRequest = Field(description="The original request")
     current_content: str | None = Field(
         default=None,
         description="Current file content (for edit mode)",
@@ -293,9 +273,7 @@ class ConfigGenOutcome(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    request: ConfigGenRequest = Field(
-        description="The original request"
-    )
+    request: ConfigGenRequest = Field(description="The original request")
     result: ConfigGenResult | None = Field(
         default=None,
         description="Generation result (None if generation failed)",

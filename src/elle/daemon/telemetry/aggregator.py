@@ -324,15 +324,11 @@ class TrendAggregator:
                     # Check for warnings
                     threshold = METRIC_THRESHOLDS.get(metric, 90.0)
                     if current_value >= threshold:
-                        warnings.append(
-                            f"{metric}: {current_value:.1f}% (threshold: {threshold}%)"
-                        )
+                        warnings.append(f"{metric}: {current_value:.1f}% (threshold: {threshold}%)")
 
                     if forecast.will_cross_threshold:
                         hours = forecast.time_to_threshold_hours or 0
-                        warnings.append(
-                            f"{metric}: Will reach {forecast.threshold}% in ~{hours:.0f} hours"
-                        )
+                        warnings.append(f"{metric}: Will reach {forecast.threshold}% in ~{hours:.0f} hours")
 
                 # Check for anomalies
                 anomaly = self._check_anomaly(metric, current_value, now, conn)
@@ -555,8 +551,7 @@ class TrendAggregator:
             diff = current_value - existing.baseline_mean
             new_samples = existing.samples + 1
             new_stddev = (
-                (existing.baseline_stddev ** 2 * (new_samples - 1) + diff * (current_value - new_mean))
-                / new_samples
+                (existing.baseline_stddev**2 * (new_samples - 1) + diff * (current_value - new_mean)) / new_samples
             ) ** 0.5
 
             cursor.execute(

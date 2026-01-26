@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -14,7 +13,6 @@ from elle.rag.confgen.generator import (
     reset_generator,
 )
 from elle.rag.confgen.models import (
-    ConfigGenContext,
     ConfigGenLLMError,
     ConfigGenRequest,
 )

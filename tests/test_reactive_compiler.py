@@ -243,9 +243,7 @@ class TestSuggestions:
             name="test",
             description="Test",
             trigger={"type": "manual"},
-            actions=tuple(
-                {"capability": f"action.{i}"} for i in range(6)
-            ),
+            actions=tuple({"capability": f"action.{i}"} for i in range(6)),
         )
         suggestions = compiler.suggest_improvements(func)
         assert any("split" in s.lower() for s in suggestions)

@@ -214,10 +214,7 @@ def discover_man_pages(
             # /usr/share/man/fr/man1 -> fr
             relative = man_dir.relative_to(base_path)
             parts = relative.parts
-            if len(parts) == 1:
-                lang = "en"
-            else:
-                lang = parts[0]
+            lang = "en" if len(parts) == 1 else parts[0]
 
             # Find all man pages in this directory
             for man_file in man_dir.iterdir():

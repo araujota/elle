@@ -44,6 +44,7 @@ def normalize_ebpf_event(raw: dict[str, Any]) -> TelemetryEvent | None:
 
     # Get severity from priority
     from elle.daemon.telemetry.normalizer import priority_to_severity
+
     priority = raw.get("PRIORITY", "6")
     severity = priority_to_severity(priority)
 
@@ -51,6 +52,7 @@ def normalize_ebpf_event(raw: dict[str, Any]) -> TelemetryEvent | None:
     category = raw.get("_EBPF_CATEGORY", "other")
     if category == "other":
         from elle.daemon.telemetry.normalizer import detect_category
+
         category = detect_category(message)
 
     # Extract entity with eBPF-specific logic
@@ -58,6 +60,7 @@ def normalize_ebpf_event(raw: dict[str, Any]) -> TelemetryEvent | None:
 
     # Generate fingerprint
     from elle.daemon.telemetry.normalizer import generate_fingerprint
+
     fingerprint = generate_fingerprint(category, entity, message)
 
     return TelemetryEvent(

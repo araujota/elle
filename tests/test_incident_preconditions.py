@@ -347,7 +347,7 @@ class TestPreconditionEvaluation:
         )
 
         # 2 out of 3 required preconditions matched
-        assert ratio == pytest.approx(2/3, 0.01)
+        assert ratio == pytest.approx(2 / 3, 0.01)
         assert len(results) == 3
 
     def test_optional_precondition(self, sample_fingerprint):

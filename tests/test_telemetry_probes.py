@@ -1,16 +1,17 @@
 """Tests for telemetry probes."""
 
-import pytest
-from unittest.mock import patch, AsyncMock
 from datetime import UTC, datetime
+from unittest.mock import patch
+
+import pytest
 
 from elle.daemon.config import ThresholdConfig
 from elle.daemon.telemetry.probes import (
-    MemoryProbe,
     DiskProbe,
+    MemoryProbe,
     NetworkProbe,
-    ThermalProbe,
     SmartProbe,
+    ThermalProbe,
     create_default_probes,
 )
 
@@ -88,9 +89,7 @@ class TestDiskProbe:
     @pytest.mark.asyncio
     async def test_high_disk_generates_event(self, probe):
         """High disk usage should generate warning event."""
-        mock_mounts = [
-            {"mount": "/", "device": "/dev/sda1", "used_pct": 95, "free_gb": 5}
-        ]
+        mock_mounts = [{"mount": "/", "device": "/dev/sda1", "used_pct": 95, "free_gb": 5}]
 
         with patch.object(probe, "_get_mounts", return_value=mock_mounts):
             result = await probe.run()
@@ -118,9 +117,7 @@ class TestNetworkProbe:
     @pytest.mark.asyncio
     async def test_link_down_generates_event(self, probe):
         """Link down should generate warning event."""
-        mock_interfaces = [
-            {"name": "eth0", "state": "down", "rx_errors": 0, "tx_errors": 0}
-        ]
+        mock_interfaces = [{"name": "eth0", "state": "down", "rx_errors": 0, "tx_errors": 0}]
 
         with patch.object(probe, "_get_interfaces", return_value=mock_interfaces):
             result = await probe.run()
@@ -132,9 +129,7 @@ class TestNetworkProbe:
     @pytest.mark.asyncio
     async def test_error_increase_generates_event(self, probe):
         """New errors should generate warning event."""
-        mock_interfaces = [
-            {"name": "eth0", "state": "up", "rx_errors": 100, "tx_errors": 50}
-        ]
+        mock_interfaces = [{"name": "eth0", "state": "up", "rx_errors": 100, "tx_errors": 50}]
 
         # First run to establish baseline
         with patch.object(probe, "_get_interfaces", return_value=mock_interfaces):
@@ -167,9 +162,7 @@ class TestThermalProbe:
     @pytest.mark.asyncio
     async def test_high_temp_generates_event(self, probe):
         """High temperature should generate warning event."""
-        mock_temps = [
-            {"zone": "thermal_zone0", "type": "x86_pkg_temp", "celsius": 95}
-        ]
+        mock_temps = [{"zone": "thermal_zone0", "type": "x86_pkg_temp", "celsius": 95}]
 
         with patch.object(probe, "_get_temps", return_value=mock_temps):
             result = await probe.run()
@@ -198,9 +191,7 @@ class TestSmartProbe:
     @pytest.mark.asyncio
     async def test_smart_failure_generates_critical_event(self, probe):
         """SMART failure should generate critical event."""
-        mock_disks = [
-            {"device": "/dev/sda", "health": "FAILED", "pct_used": 0, "media_errors": 0}
-        ]
+        mock_disks = [{"device": "/dev/sda", "health": "FAILED", "pct_used": 0, "media_errors": 0}]
 
         # Force smartctl to be available for this test
         probe._smartctl_available = True
@@ -237,9 +228,7 @@ class TestSmartProbe:
     @pytest.mark.asyncio
     async def test_available_flag_in_success_response(self, probe):
         """Test that available flag is set to True when smartctl works."""
-        mock_disks = [
-            {"device": "/dev/sda", "health": "PASSED", "pct_used": 10, "media_errors": 0}
-        ]
+        mock_disks = [{"device": "/dev/sda", "health": "PASSED", "pct_used": 10, "media_errors": 0}]
 
         # Force smartctl to be available
         probe._smartctl_available = True

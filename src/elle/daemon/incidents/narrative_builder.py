@@ -50,12 +50,14 @@ def _ensure_narrative_schema(conn: sqlite3.Connection) -> None:
 def _json_dumps(obj: Any) -> str:
     """Serialize to JSON."""
     import json
+
     return json.dumps(obj, default=str)
 
 
 def _json_loads(s: str | None) -> Any:
     """Parse JSON."""
     import json
+
     if not s:
         return []
     return json.loads(s)
@@ -200,7 +202,7 @@ class NarrativeBuilder:
         timeline: list[str],
     ) -> str:
         """Build prompt for LLM narrative generation."""
-        timeline_text = "\n".join(f"  {i+1}. {t}" for i, t in enumerate(timeline))
+        timeline_text = "\n".join(f"  {i + 1}. {t}" for i, t in enumerate(timeline))
 
         # Extract key entities and domains
         entities: set[str] = set()
@@ -216,7 +218,7 @@ Timeline:
 {timeline_text}
 
 Overall confidence in this chain: {chain.overall_confidence:.0%}
-Entities involved: {', '.join(entities) if entities else 'Unknown'}
+Entities involved: {", ".join(entities) if entities else "Unknown"}
 
 Write your response in two parts:
 
@@ -343,11 +345,11 @@ Focus on:
         keywords: set[str] = set()
 
         patterns = [
-            r'\b(failed|error|timeout|refused|denied|full|exhausted)\b',
-            r'\b(nginx|apache|mysql|postgres|redis|docker|systemd)\b',
-            r'\b(disk|memory|cpu|network|socket|port)\b',
-            r'\b(service|process|container|mount|partition)\b',
-            r'\b(OOM|SMART|I/O|DNS|SSH|HTTP)\b',
+            r"\b(failed|error|timeout|refused|denied|full|exhausted)\b",
+            r"\b(nginx|apache|mysql|postgres|redis|docker|systemd)\b",
+            r"\b(disk|memory|cpu|network|socket|port)\b",
+            r"\b(service|process|container|mount|partition)\b",
+            r"\b(OOM|SMART|I/O|DNS|SSH|HTTP)\b",
         ]
 
         for pattern in patterns:
@@ -361,10 +363,10 @@ Focus on:
         entities: set[str] = set()
 
         patterns = [
-            r'([a-zA-Z0-9_-]+)\.service',
-            r'(eth\d+|wlan\d+|enp\d+s\d+|ens\d+)',
-            r'(/dev/\w+)',
-            r'(/[a-zA-Z0-9/_-]+)',
+            r"([a-zA-Z0-9_-]+)\.service",
+            r"(eth\d+|wlan\d+|enp\d+s\d+|ens\d+)",
+            r"(/dev/\w+)",
+            r"(/[a-zA-Z0-9/_-]+)",
         ]
 
         for pattern in patterns:
@@ -484,8 +486,12 @@ def get_narrative(
             final_symptom=chain_data.get("final_symptom", ""),
             overall_confidence=chain_data.get("overall_confidence", 0.0),
             search_iterations=chain_data.get("search_iterations", 0),
-            earliest_timestamp=datetime.fromisoformat(chain_data["earliest_timestamp"]) if chain_data.get("earliest_timestamp") else None,
-            latest_timestamp=datetime.fromisoformat(chain_data["latest_timestamp"]) if chain_data.get("latest_timestamp") else None,
+            earliest_timestamp=datetime.fromisoformat(chain_data["earliest_timestamp"])
+            if chain_data.get("earliest_timestamp")
+            else None,
+            latest_timestamp=datetime.fromisoformat(chain_data["latest_timestamp"])
+            if chain_data.get("latest_timestamp")
+            else None,
         )
 
         return Narrative(

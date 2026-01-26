@@ -389,6 +389,7 @@ async def run_disk_space_check(
             min_mb = 100
 
         import shutil
+
         stat = shutil.disk_usage(path)
         free_mb = stat.free // (1024 * 1024)
 
@@ -542,18 +543,14 @@ async def run_all_verifications(
             else:
                 required_failed += 1
                 logger.warning(
-                    f"Required verification failed: {verification.check_type} "
-                    f"'{verification.check_command}'"
+                    f"Required verification failed: {verification.check_type} '{verification.check_command}'"
                 )
         else:
             if result["passed"]:
                 optional_passed += 1
             else:
                 optional_failed += 1
-                logger.info(
-                    f"Optional verification failed: {verification.check_type} "
-                    f"'{verification.check_command}'"
-                )
+                logger.info(f"Optional verification failed: {verification.check_type} '{verification.check_command}'")
 
     # All required checks must pass
     passed = required_failed == 0
@@ -598,19 +595,21 @@ async def check_critical_services() -> VerificationResult:
             # Neither worked
             passed = False
 
-        results.append({
-            "verification_id": None,
-            "step_index": CRITICAL_SERVICES.index(service),
-            "check_type": "service_active",
-            "check_command": service,
-            "required": True,
-            "passed": passed,
-            "exit_code": exit_code,
-            "stdout": stdout[:256],
-            "stderr": stderr[:256],
-            "duration_ms": 0,
-            "executed_at": datetime.utcnow(),
-        })
+        results.append(
+            {
+                "verification_id": None,
+                "step_index": CRITICAL_SERVICES.index(service),
+                "check_type": "service_active",
+                "check_command": service,
+                "required": True,
+                "passed": passed,
+                "exit_code": exit_code,
+                "stdout": stdout[:256],
+                "stderr": stderr[:256],
+                "duration_ms": 0,
+                "executed_at": datetime.utcnow(),
+            }
+        )
 
         if not passed:
             failed_services.append(service)
@@ -673,7 +672,12 @@ async def check_network_connectivity(
     # Ping gateway
     try:
         proc = await asyncio.create_subprocess_exec(
-            "ping", "-c", "1", "-W", "5", gateway,
+            "ping",
+            "-c",
+            "1",
+            "-W",
+            "5",
+            gateway,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
         )
@@ -726,9 +730,7 @@ async def run_verification_with_retry(
         if on_attempt:
             on_attempt(attempt + 1, MAX_VERIFICATION_ATTEMPTS)
 
-        logger.info(
-            f"Running verification attempt {attempt + 1}/{MAX_VERIFICATION_ATTEMPTS}"
-        )
+        logger.info(f"Running verification attempt {attempt + 1}/{MAX_VERIFICATION_ATTEMPTS}")
 
         # First check critical services
         critical_result = await check_critical_services()
@@ -748,14 +750,11 @@ async def run_verification_with_retry(
             final_result = result
 
             if result.passed:
-                logger.info(
-                    f"Verification passed: {result.required_passed} required checks OK"
-                )
+                logger.info(f"Verification passed: {result.required_passed} required checks OK")
                 return (True, result)
             else:
                 logger.warning(
-                    f"Verification attempt {attempt + 1} failed: "
-                    f"{result.required_failed} required checks failed"
+                    f"Verification attempt {attempt + 1} failed: {result.required_failed} required checks failed"
                 )
         else:
             # No custom verifications, just critical services + network
@@ -1456,6 +1455,7 @@ async def _check_disk_space_issues() -> list[str]:
     issues = []
     try:
         import shutil
+
         for path, min_mb in DISK_SPACE_REQUIREMENTS:
             if Path(path).exists():
                 stat = shutil.disk_usage(path)
@@ -1597,33 +1597,40 @@ def _analyze_likely_causes(
 
     # Read-only filesystem is critical
     if read_only_mounts:
-        causes.append(f"CRITICAL: Filesystem(s) mounted read-only: {', '.join(read_only_mounts)}. "
-                      "This usually indicates disk errors, failed fsck, or fstab misconfiguration.")
+        causes.append(
+            f"CRITICAL: Filesystem(s) mounted read-only: {', '.join(read_only_mounts)}. "
+            "This usually indicates disk errors, failed fsck, or fstab misconfiguration."
+        )
 
     # Missing mounts
     if missing_mounts:
-        causes.append(f"Missing mount points: {', '.join(missing_mounts)}. "
-                      "Check /etc/fstab for errors or missing devices.")
+        causes.append(
+            f"Missing mount points: {', '.join(missing_mounts)}. Check /etc/fstab for errors or missing devices."
+        )
 
     # Disk space
     if disk_space_issues:
-        causes.append(f"Low disk space: {'; '.join(disk_space_issues)}. "
-                      "System may fail to write logs or temp files.")
+        causes.append(f"Low disk space: {'; '.join(disk_space_issues)}. System may fail to write logs or temp files.")
 
     # Network issues
     if interfaces_down:
-        causes.append(f"Network interfaces down: {', '.join(interfaces_down)}. "
-                      "Check network configuration and drivers.")
+        causes.append(
+            f"Network interfaces down: {', '.join(interfaces_down)}. Check network configuration and drivers."
+        )
 
     # Missing modules
     if missing_modules:
-        causes.append(f"Expected kernel modules not loaded: {', '.join(missing_modules)}. "
-                      "Driver may have failed to build for new kernel.")
+        causes.append(
+            f"Expected kernel modules not loaded: {', '.join(missing_modules)}. "
+            "Driver may have failed to build for new kernel."
+        )
 
     # Failed services
     if failed_services:
-        causes.append(f"Failed systemd services: {', '.join(failed_services[:5])}. "
-                      "Check 'systemctl status <service>' for details.")
+        causes.append(
+            f"Failed systemd services: {', '.join(failed_services[:5])}. "
+            "Check 'systemctl status <service>' for details."
+        )
 
     # Kernel errors
     kernel_patterns = {

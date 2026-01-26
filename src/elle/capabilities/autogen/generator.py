@@ -217,23 +217,27 @@ class CapabilityGenerator:
             # Build input fields
             input_fields = []
             for field_data in data.get("input_fields", []):
-                input_fields.append(InputFieldSpec(
-                    name=field_data["name"],
-                    field_type=field_data.get("field_type", "str"),
-                    description=field_data.get("description", ""),
-                    required=field_data.get("required", True),
-                    default=field_data.get("default"),
-                    constraints=field_data.get("constraints", {}),
-                ))
+                input_fields.append(
+                    InputFieldSpec(
+                        name=field_data["name"],
+                        field_type=field_data.get("field_type", "str"),
+                        description=field_data.get("description", ""),
+                        required=field_data.get("required", True),
+                        default=field_data.get("default"),
+                        constraints=field_data.get("constraints", {}),
+                    )
+                )
 
             # Build output fields (use defaults if not provided)
             output_fields = []
             for field_data in data.get("output_fields", []):
-                output_fields.append(OutputFieldSpec(
-                    name=field_data["name"],
-                    field_type=field_data.get("field_type", "str"),
-                    description=field_data.get("description", ""),
-                ))
+                output_fields.append(
+                    OutputFieldSpec(
+                        name=field_data["name"],
+                        field_type=field_data.get("field_type", "str"),
+                        description=field_data.get("description", ""),
+                    )
+                )
             if not output_fields:
                 output_fields = list(DEFAULT_OUTPUT_FIELDS)
 
@@ -309,12 +313,14 @@ def generate_basic_spec(man_page: ParsedManPage) -> GeneratedCapabilitySpec:
     input_fields = []
     if man_page.synopsis and man_page.synopsis.positional_args:
         for arg in man_page.synopsis.positional_args[:3]:
-            input_fields.append(InputFieldSpec(
-                name=arg.replace("-", "_"),
-                field_type="str",
-                description=f"{arg} argument",
-                required=True,
-            ))
+            input_fields.append(
+                InputFieldSpec(
+                    name=arg.replace("-", "_"),
+                    field_type="str",
+                    description=f"{arg} argument",
+                    required=True,
+                )
+            )
 
     return GeneratedCapabilitySpec(
         name=f"{man_page.name}.default",
@@ -325,9 +331,7 @@ def generate_basic_spec(man_page: ParsedManPage) -> GeneratedCapabilitySpec:
         side_effects=(),
         input_fields=tuple(input_fields),
         output_fields=DEFAULT_OUTPUT_FIELDS,
-        command_template=man_page.name + " " + " ".join(
-            f"{{{f.name}}}" for f in input_fields
-        ),
+        command_template=man_page.name + " " + " ".join(f"{{{f.name}}}" for f in input_fields),
         source_command=man_page.name,
         source_man_section=man_page.section,
         confidence_score=0.3,

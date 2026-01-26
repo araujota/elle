@@ -426,7 +426,8 @@ class DockerPruneCapability(BaseCapability):
                 "docker container prune -f",
                 "docker image prune -f" + (" -a" if input.all_images else ""),
                 "docker network prune -f",
-            ) + (("docker volume prune -f",) if input.volumes else ()),
+            )
+            + (("docker volume prune -f",) if input.volumes else ()),
             would_modify=("docker-system",),
             estimated_risk="medium",
             requires_confirmation=True,
@@ -461,7 +462,13 @@ class DockerPruneCapability(BaseCapability):
                 # Parse output for count
                 for line in result.stdout.split("\n"):
                     if "Deleted Containers:" in line:
-                        containers_deleted = len([l for l in result.stdout.split("\n") if l.strip() and not l.startswith("Deleted") and not l.startswith("Total")])
+                        containers_deleted = len(
+                            [
+                                l
+                                for l in result.stdout.split("\n")
+                                if l.strip() and not l.startswith("Deleted") and not l.startswith("Total")
+                            ]
+                        )
                     if "Total reclaimed space:" in line:
                         details_parts.append(f"Containers: {line}")
 
@@ -571,12 +578,14 @@ class DockerStopCapability(BaseCapability):
             )
 
         # Check if container exists and is running
-        result = _run_docker_command([
-            "inspect",
-            "--format",
-            "{{.State.Running}}",
-            input.container,
-        ])
+        result = _run_docker_command(
+            [
+                "inspect",
+                "--format",
+                "{{.State.Running}}",
+                input.container,
+            ]
+        )
 
         if result.returncode != 0:
             return DryRunResult(
@@ -618,12 +627,14 @@ class DockerStopCapability(BaseCapability):
             )
 
         # Get container ID first
-        id_result = _run_docker_command([
-            "inspect",
-            "--format",
-            "{{.Id}}",
-            input.container,
-        ])
+        id_result = _run_docker_command(
+            [
+                "inspect",
+                "--format",
+                "{{.Id}}",
+                input.container,
+            ]
+        )
 
         if id_result.returncode != 0:
             return CapabilityResult(
@@ -635,12 +646,14 @@ class DockerStopCapability(BaseCapability):
         container_id = id_result.stdout.strip()
 
         # Check if running
-        running_result = _run_docker_command([
-            "inspect",
-            "--format",
-            "{{.State.Running}}",
-            input.container,
-        ])
+        running_result = _run_docker_command(
+            [
+                "inspect",
+                "--format",
+                "{{.State.Running}}",
+                input.container,
+            ]
+        )
         was_running = running_result.stdout.strip() == "true"
 
         if not was_running:
@@ -696,12 +709,14 @@ class DockerStopCapability(BaseCapability):
 
     def verify(self, input: DockerStopInput) -> VerificationResult:
         """Verify container was stopped."""
-        result = _run_docker_command([
-            "inspect",
-            "--format",
-            "{{.State.Running}}",
-            input.container,
-        ])
+        result = _run_docker_command(
+            [
+                "inspect",
+                "--format",
+                "{{.State.Running}}",
+                input.container,
+            ]
+        )
 
         if result.returncode != 0:
             return VerificationResult(
@@ -782,12 +797,14 @@ class DockerInspectCapability(BaseCapability):
             )
 
         # Check if container exists
-        result = _run_docker_command([
-            "inspect",
-            "--format",
-            "{{.Name}}",
-            input.container,
-        ])
+        result = _run_docker_command(
+            [
+                "inspect",
+                "--format",
+                "{{.Name}}",
+                input.container,
+            ]
+        )
 
         if result.returncode != 0:
             return DryRunResult(
@@ -845,12 +862,14 @@ class DockerInspectCapability(BaseCapability):
             # Get logs if requested
             logs_excerpt = ""
             if input.include_logs:
-                logs_result = _run_docker_command([
-                    "logs",
-                    "--tail",
-                    str(input.log_lines),
-                    input.container,
-                ])
+                logs_result = _run_docker_command(
+                    [
+                        "logs",
+                        "--tail",
+                        str(input.log_lines),
+                        input.container,
+                    ]
+                )
                 if logs_result.returncode == 0:
                     logs_excerpt = (logs_result.stdout + logs_result.stderr)[-2000:]
 
@@ -858,13 +877,15 @@ class DockerInspectCapability(BaseCapability):
             memory_usage = None
             memory_limit = None
             if state.get("Running"):
-                _stats_result = _run_docker_command([
-                    "stats",
-                    "--no-stream",
-                    "--format",
-                    "{{.MemUsage}}",
-                    input.container,
-                ])
+                _stats_result = _run_docker_command(
+                    [
+                        "stats",
+                        "--no-stream",
+                        "--format",
+                        "{{.MemUsage}}",
+                        input.container,
+                    ]
+                )
                 # Memory stats parsing is complex, leaving as None for now
                 # TODO: Parse _stats_result to extract memory_usage and memory_limit
 
@@ -1094,7 +1115,7 @@ class DockerRollbackCapability(BaseCapability):
                 ),
                 execution_time_ms=int((time.time() - start_time) * 1000),
                 evidence=CapabilityEvidence(
-                    commands_executed=tuple(["docker " + " ".join(run_args)]),
+                    commands_executed=("docker " + " ".join(run_args),),
                     rationale=f"Rolled back container '{name}' to {previous_image}",
                 ),
             )
@@ -1189,14 +1210,16 @@ class DockerListCapability(BaseCapability):
                 continue
             try:
                 data = json.loads(line)
-                containers.append(ContainerInfo(
-                    id=data.get("ID", "")[:12],
-                    name=data.get("Names", ""),
-                    image=data.get("Image", ""),
-                    status=data.get("Status", ""),
-                    state=data.get("State", ""),
-                    created=data.get("CreatedAt", ""),
-                ))
+                containers.append(
+                    ContainerInfo(
+                        id=data.get("ID", "")[:12],
+                        name=data.get("Names", ""),
+                        image=data.get("Image", ""),
+                        status=data.get("Status", ""),
+                        state=data.get("State", ""),
+                        created=data.get("CreatedAt", ""),
+                    )
+                )
             except json.JSONDecodeError:
                 continue
 
@@ -1248,12 +1271,14 @@ class DockerDiagnoseCapability(BaseCapability):
             )
 
         # Check if container exists
-        result = _run_docker_command([
-            "inspect",
-            "--format",
-            "{{.Name}}",
-            input.container,
-        ])
+        result = _run_docker_command(
+            [
+                "inspect",
+                "--format",
+                "{{.Name}}",
+                input.container,
+            ]
+        )
 
         if result.returncode != 0:
             return DryRunResult(
@@ -1413,9 +1438,7 @@ class DockerConfigureEnvCapability(BaseCapability):
             sensitive_count = sum(1 for v in input.env_vars if v.is_sensitive)
 
             return DryRunResult(
-                would_execute=(
-                    f"save {len(var_names)} env vars for {image_family}",
-                ),
+                would_execute=(f"save {len(var_names)} env vars for {image_family}",),
                 would_modify=("/var/lib/elle/docker_env.db",),
                 estimated_risk="low",
                 requires_confirmation=sensitive_count > 0,
@@ -1479,7 +1502,9 @@ class DockerConfigureEnvCapability(BaseCapability):
                         reversible=True,
                         description=f"Saved {len(input.env_vars)} env vars for {image_family}",
                     ),
-                ) if input.persist else (),
+                )
+                if input.persist
+                else (),
                 execution_time_ms=int((time.time() - start_time) * 1000),
                 evidence=CapabilityEvidence(
                     rationale=f"Configured {len(input.env_vars)} env vars for {image_family}",

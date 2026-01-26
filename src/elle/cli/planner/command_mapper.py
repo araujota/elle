@@ -75,7 +75,6 @@ COMMAND_PATTERNS: list[tuple[re.Pattern, CapabilityMapping]] = [
         re.compile(r"^sudo\s+service\s+(\S+)\s+stop$"),
         CapabilityMapping("service.stop", None, "extract_service_legacy"),
     ),
-
     # Package management
     (
         re.compile(r"^sudo\s+apt(?:-get)?\s+install\s+(?:-y\s+)?(.+)$"),
@@ -101,7 +100,6 @@ COMMAND_PATTERNS: list[tuple[re.Pattern, CapabilityMapping]] = [
         re.compile(r"^apt(?:-get)?\s+update$"),
         CapabilityMapping("package.update", {"packages": []}, None),
     ),
-
     # Docker operations
     (
         re.compile(r"^docker\s+stop\s+(\S+)$"),
@@ -127,7 +125,6 @@ COMMAND_PATTERNS: list[tuple[re.Pattern, CapabilityMapping]] = [
         re.compile(r"^docker\s+inspect\s+(\S+)$"),
         CapabilityMapping("docker.inspect", None, "extract_container"),
     ),
-
     # WireGuard
     (
         re.compile(r"^sudo\s+wg-quick\s+down\s+(\S+)\s*&&\s*sudo\s+wg-quick\s+up\s+\1$"),

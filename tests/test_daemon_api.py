@@ -1,8 +1,6 @@
 """Tests for daemon REST API endpoints."""
 
-import tempfile
 from datetime import UTC, datetime
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,7 +11,6 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from elle.daemon.api.app import create_app
-from elle.daemon.api.routes import set_daemon
 from elle.daemon.config import ApiConfig, Config
 from elle.daemon.main import ElledDaemon
 from elle.daemon.telemetry.models import DaemonStatus, QueueStats

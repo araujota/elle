@@ -104,9 +104,11 @@ class JournalWatcher:
         # Start journalctl process
         cmd = [
             "journalctl",
-            "-f",           # Follow
-            "-o", "json",   # JSON output
-            "--since", "now",  # Only new entries
+            "-f",  # Follow
+            "-o",
+            "json",  # JSON output
+            "--since",
+            "now",  # Only new entries
         ]
 
         self._process = await asyncio.create_subprocess_exec(
@@ -187,8 +189,10 @@ class JournalBatchReader:
         """
         cmd = [
             "journalctl",
-            "-o", "json",
-            "-n", str(limit),
+            "-o",
+            "json",
+            "-n",
+            str(limit),
         ]
 
         if self._since:

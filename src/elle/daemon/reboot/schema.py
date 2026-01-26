@@ -131,7 +131,6 @@ INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_intents_updated ON reboot_intents(updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_intents_boot_id ON reboot_intents(boot_id)",
     "CREATE INDEX IF NOT EXISTS idx_intents_incident ON reboot_intents(incident_id)",
-
     # Verifications indexes
     "CREATE INDEX IF NOT EXISTS idx_verifications_intent ON pending_verifications(reboot_intent_id)",
     "CREATE INDEX IF NOT EXISTS idx_verifications_passed ON pending_verifications(passed)",
@@ -282,12 +281,8 @@ def _migrate_v1_to_v2(conn: sqlite3.Connection) -> None:
     cursor.execute("ALTER TABLE pending_verifications_v2 RENAME TO pending_verifications")
 
     # Recreate indexes
-    cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_verifications_intent ON pending_verifications(reboot_intent_id)"
-    )
-    cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_verifications_passed ON pending_verifications(passed)"
-    )
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_verifications_intent ON pending_verifications(reboot_intent_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_verifications_passed ON pending_verifications(passed)")
 
     conn.commit()
 

@@ -111,6 +111,7 @@ class LLMConfig(BaseModel):
 # Response Models
 # =============================================================================
 
+
 class LLMResponse(BaseModel):
     """Response from an LLM generation."""
 
@@ -143,6 +144,7 @@ class Message(BaseModel):
 # =============================================================================
 # Context Window Management
 # =============================================================================
+
 
 class ContextWindowManager:
     """Manages context window for multi-turn LLM conversations.
@@ -296,10 +298,7 @@ class ContextWindowManager:
         keep_count = min(self.min_messages - 1, len(conversation))  # -1 for system
 
         # Estimate tokens in kept messages
-        kept_tokens = sum(
-            self._estimate_tokens(msg["content"])
-            for msg in conversation[-keep_count:]
-        )
+        kept_tokens = sum(self._estimate_tokens(msg["content"]) for msg in conversation[-keep_count:])
         if system_msg:
             kept_tokens += self._estimate_tokens(system_msg["content"])
 
@@ -331,9 +330,7 @@ class ContextWindowManager:
         except Exception as e:
             logger.warning(f"Failed to generate summary: {e}")
             # Fallback: truncate
-            summary = "Earlier conversation covered: " + ", ".join(
-                msg["content"][:50] for msg in to_summarize[:3]
-            )
+            summary = "Earlier conversation covered: " + ", ".join(msg["content"][:50] for msg in to_summarize[:3])
 
         # Rebuild messages
         new_messages: list[dict[str, str]] = []
@@ -374,6 +371,7 @@ class ContextWindowManager:
 # Exceptions
 # =============================================================================
 
+
 class LLMError(Exception):
     """Base exception for LLM errors."""
 
@@ -385,11 +383,13 @@ class LLMError(Exception):
 
 class LLMUnavailableError(LLMError):
     """LLM service is not available."""
+
     pass
 
 
 class LLMTimeoutError(LLMError):
     """LLM request timed out."""
+
     pass
 
 
@@ -404,6 +404,7 @@ class LLMJSONError(LLMError):
 # =============================================================================
 # LLM Interface
 # =============================================================================
+
 
 class LLM:
     """General-purpose LLM interface for ELLE.
@@ -650,9 +651,7 @@ class LLM:
 
         except httpx.ConnectError as e:
             self._available = False
-            raise LLMUnavailableError(
-                "Cannot connect to Ollama. Is it running? Start with: ollama serve"
-            ) from e
+            raise LLMUnavailableError("Cannot connect to Ollama. Is it running? Start with: ollama serve") from e
         except httpx.TimeoutException as e:
             raise LLMTimeoutError(
                 f"Request timed out after {timeout}s. Try increasing timeout or reducing max_tokens."
@@ -907,9 +906,7 @@ class LLM:
 
         if system_content:
             # Prepend system message
-            payload["messages"] = [
-                {"role": "system", "content": system_content}
-            ] + chat_messages
+            payload["messages"] = [{"role": "system", "content": system_content}] + chat_messages
 
         start_time = time.time()
 
@@ -936,13 +933,9 @@ class LLM:
 
         except httpx.ConnectError as e:
             self._available = False
-            raise LLMUnavailableError(
-                "Cannot connect to Ollama. Is it running? Start with: ollama serve"
-            ) from e
+            raise LLMUnavailableError("Cannot connect to Ollama. Is it running? Start with: ollama serve") from e
         except httpx.TimeoutException as e:
-            raise LLMTimeoutError(
-                f"Chat request timed out after {timeout or self.config.timeout}s"
-            ) from e
+            raise LLMTimeoutError(f"Chat request timed out after {timeout or self.config.timeout}s") from e
         except httpx.HTTPStatusError as e:
             raise LLMError(
                 f"Ollama chat API error: {e.response.text}",
@@ -1028,13 +1021,15 @@ class LLM:
 
             # Add correction message and retry
             msg_list.append({"role": "assistant", "content": response.content})
-            msg_list.append({
-                "role": "user",
-                "content": (
-                    "That was not valid JSON. Please respond with ONLY valid JSON. "
-                    "No explanations, no markdown code blocks, just raw JSON."
-                ),
-            })
+            msg_list.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "That was not valid JSON. Please respond with ONLY valid JSON. "
+                        "No explanations, no markdown code blocks, just raw JSON."
+                    ),
+                }
+            )
 
             retry_response = self.chat(
                 msg_list,

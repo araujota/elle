@@ -227,9 +227,7 @@ class OllamaClient:
 
         except httpx.ConnectError as e:
             self._available = False
-            raise OllamaUnavailableError(
-                "Cannot connect to Ollama. Is it running? Start with: ollama serve"
-            ) from e
+            raise OllamaUnavailableError("Cannot connect to Ollama. Is it running? Start with: ollama serve") from e
         except httpx.TimeoutException as e:
             raise OllamaError(f"Request timed out after {self.config.timeout}s") from e
         except httpx.HTTPStatusError as e:
@@ -307,9 +305,7 @@ class OllamaClient:
             try:
                 return json.loads(response.content)
             except json.JSONDecodeError as e2:
-                raise OllamaError(
-                    f"Failed to parse JSON after retry: {response.content[:200]}"
-                ) from e2
+                raise OllamaError(f"Failed to parse JSON after retry: {response.content[:200]}") from e2
 
     def generate_embedding(
         self,
@@ -340,9 +336,7 @@ class OllamaClient:
 
         except httpx.ConnectError as e:
             self._available = False
-            raise OllamaUnavailableError(
-                "Cannot connect to Ollama. Is it running? Start with: ollama serve"
-            ) from e
+            raise OllamaUnavailableError("Cannot connect to Ollama. Is it running? Start with: ollama serve") from e
         except httpx.TimeoutException as e:
             raise OllamaError(f"Embedding request timed out after {self.config.timeout}s") from e
         except httpx.HTTPStatusError as e:

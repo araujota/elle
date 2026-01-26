@@ -97,9 +97,7 @@ class DependencyInstaller:
             # For now, we don't support pip packages
             logger.warning("Pip packages not yet supported, ignoring")
 
-        logger.info(
-            f"Installing dependency '{request.dependency}': {request.apt_packages}"
-        )
+        logger.info(f"Installing dependency '{request.dependency}': {request.apt_packages}")
 
         # Run apt install
         success, error_message = await self._run_apt_install(request.apt_packages)

@@ -135,8 +135,7 @@ TELEMETRY_INFO = {
     "ebpf": {
         "name": "eBPF Tracing",
         "description": (
-            "Advanced kernel tracing for detailed diagnostics. "
-            "Requires kernel 5.8+ and additional capabilities."
+            "Advanced kernel tracing for detailed diagnostics. Requires kernel 5.8+ and additional capabilities."
         ),
         "default": False,
     },
@@ -158,10 +157,7 @@ FEATURE_INFO = {
     },
     "api": {
         "name": "REST API",
-        "description": (
-            "OpenAI-compatible API endpoint for external integrations. "
-            "Bound to localhost by default."
-        ),
+        "description": ("OpenAI-compatible API endpoint for external integrations. Bound to localhost by default."),
         "default": True,
     },
     "auto_learn_packages": {
@@ -179,8 +175,7 @@ PRIVILEGE_LEVEL_INFO = {
     PrivilegeLevel.SECURE: {
         "name": "Secure (Recommended)",
         "description": (
-            "Always require password for privileged operations. "
-            "Polkit caches authentication for 5 minutes per session."
+            "Always require password for privileged operations. Polkit caches authentication for 5 minutes per session."
         ),
     },
     PrivilegeLevel.CONVENIENT: {
@@ -196,9 +191,6 @@ PRIVILEGE_LEVEL_INFO = {
             "No password required for any ELLE privileged operation. "
             "Only use on single-user systems or development machines."
         ),
-        "warning": (
-            "This allows ANY process running as your user to perform "
-            "privileged system operations via ELLE."
-        ),
+        "warning": ("This allows ANY process running as your user to perform privileged system operations via ELLE."),
     },
 }

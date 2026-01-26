@@ -113,7 +113,7 @@ def _check_dns(target: str) -> ConnectivityCheck:
     try:
         # Resolve hostname
         infos = socket.getaddrinfo(target, None, socket.AF_UNSPEC)
-        ips = list(set(info[4][0] for info in infos))
+        ips = list({info[4][0] for info in infos})
 
         if ips:
             return ConnectivityCheck(

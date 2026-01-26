@@ -1,7 +1,8 @@
 """Tests for planner models."""
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 from elle.cli.planner.models import (
     CheckResult,
@@ -164,9 +165,7 @@ class TestCommandPlan:
         plan = CommandPlan(
             title="Test",
             explanation="Test",
-            steps=(
-                PlanStep(command="ls", explanation="List", risk_level="low"),
-            ),
+            steps=(PlanStep(command="ls", explanation="List", risk_level="low"),),
         )
         assert plan.overall_risk == "low"
 
@@ -238,9 +237,7 @@ class TestPlanVerification:
         """Test valid plan verification."""
         result = PlanVerification(
             is_valid=True,
-            step_results=(
-                StepVerification(step_index=0, command="ls", is_valid=True),
-            ),
+            step_results=(StepVerification(step_index=0, command="ls", is_valid=True),),
         )
         assert result.is_valid is True
 
@@ -360,11 +357,7 @@ class TestPlanResult:
         )
         verification = PlanVerification(is_valid=True)
 
-        result = (
-            PlanResult(context=context)
-            .with_plan(plan)
-            .with_verification(verification)
-        )
+        result = PlanResult(context=context).with_plan(plan).with_verification(verification)
         assert result.is_executable is True
 
     def test_step_counts(self):

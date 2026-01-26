@@ -19,7 +19,6 @@ from elle.daemon.api.openai_models import (
 )
 
 if TYPE_CHECKING:
-
     from elle.daemon.api.auth import AuthContext
     from elle.daemon.api.engine_adapter import EngineAdapter
 

@@ -443,7 +443,9 @@ class NotifyAlertCapability(BaseCapability):
                     reversible=False,
                     description=f"Sent alert: {input.title}",
                 ),
-            ) if success else (),
+            )
+            if success
+            else (),
             execution_time_ms=int((time.time() - start_time) * 1000),
             evidence=CapabilityEvidence(
                 rationale=f"Sent {input.severity} alert: {input.title}",
@@ -469,6 +471,7 @@ class NotifyAlertCapability(BaseCapability):
             # Try to get from config
             try:
                 from elle.daemon.config import get_config
+
                 config = get_config()
                 topic = getattr(config, "ntfy_topic", None)
             except Exception:
@@ -516,10 +519,7 @@ class NotifyAlertCapability(BaseCapability):
 
         # Add actions if any
         if input.actions:
-            payload["actions"] = [
-                {"action": "view", "label": action}
-                for action in input.actions
-            ]
+            payload["actions"] = [{"action": "view", "label": action} for action in input.actions]
 
         try:
             data = json.dumps(payload).encode("utf-8")

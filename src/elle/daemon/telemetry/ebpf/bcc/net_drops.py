@@ -62,13 +62,13 @@ class NetDropEvent(ctypes.Structure):
     """C struct for network drop events from ring buffer."""
 
     _fields_ = [
-        ("ts_ns", ctypes.c_uint64),       # Kernel timestamp
-        ("protocol", ctypes.c_uint16),     # Network protocol
-        ("reason", ctypes.c_uint32),       # Drop reason
-        ("ifindex", ctypes.c_uint32),      # Interface index
-        ("len", ctypes.c_uint32),          # Packet length
-        ("pid", ctypes.c_uint32),          # Process ID (if available)
-        ("comm", ctypes.c_char * 16),      # Process name
+        ("ts_ns", ctypes.c_uint64),  # Kernel timestamp
+        ("protocol", ctypes.c_uint16),  # Network protocol
+        ("reason", ctypes.c_uint32),  # Drop reason
+        ("ifindex", ctypes.c_uint32),  # Interface index
+        ("len", ctypes.c_uint32),  # Packet length
+        ("pid", ctypes.c_uint32),  # Process ID (if available)
+        ("comm", ctypes.c_char * 16),  # Process name
     ]
 
 
@@ -158,9 +158,7 @@ TRACEPOINT_PROBE(skb, kfree_skb) {
 }
 """
 
-    def _parse_event(
-        self, cpu: int, data: ctypes.Structure, size: int
-    ) -> EBPFRawEvent | None:
+    def _parse_event(self, cpu: int, data: ctypes.Structure, size: int) -> EBPFRawEvent | None:
         """Parse network drop event from ring buffer.
 
         Args:

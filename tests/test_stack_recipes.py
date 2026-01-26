@@ -2,22 +2,16 @@
 
 import pytest
 
-from elle.ops.stack.models import StackGuarantee, StackRecipe, StackVariable
+from elle.ops.stack.models import StackRecipe
 from elle.ops.stack.recipes import (
     APACHE_RECIPE,
     ELASTICSEARCH_RECIPE,
-    FAIL2BAN_RECIPE,
     GRAFANA_RECIPE,
-    LEMP_RECIPE,
     LOKI_RECIPE,
     MONGODB_RECIPE,
     MYSQL_RECIPE,
     NGINX_RECIPE,
-    NODEJS_RECIPE,
-    POSTGRES_RECIPE,
-    PROMETHEUS_GRAFANA_RECIPE,
     RABBITMQ_RECIPE,
-    REDIS_RECIPE,
     TRAEFIK_RECIPE,
     get_all_recipes,
     get_recipe_by_name,

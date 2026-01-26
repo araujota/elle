@@ -56,7 +56,7 @@ def create_app(daemon: "ElledDaemon") -> FastAPI:
 
     # Get session token from daemon's token manager
     session_token = None
-    if hasattr(daemon, '_session_token_manager') and daemon._session_token_manager is not None:
+    if hasattr(daemon, "_session_token_manager") and daemon._session_token_manager is not None:
         session_token = daemon._session_token_manager.token
 
     # Set up authentication middleware with session token
@@ -79,10 +79,12 @@ def create_app(daemon: "ElledDaemon") -> FastAPI:
         except Exception as e:
             # Re-raise auth errors to reject unauthenticated requests
             from fastapi import HTTPException
+
             if isinstance(e, HTTPException):
                 raise
             # Other errors - let request proceed but log
             import logging
+
             logging.getLogger(__name__).debug(f"Auth middleware error: {e}")
 
         return await call_next(request)
@@ -91,11 +93,11 @@ def create_app(daemon: "ElledDaemon") -> FastAPI:
     set_daemon(daemon)
 
     # Set up state cache for state routes
-    if hasattr(daemon, '_state_cache') and daemon._state_cache is not None:
+    if hasattr(daemon, "_state_cache") and daemon._state_cache is not None:
         set_state_cache(daemon._state_cache)
 
     # Set up Man Vault service for vault routes
-    if hasattr(daemon, '_manvault_service') and daemon._manvault_service is not None:
+    if hasattr(daemon, "_manvault_service") and daemon._manvault_service is not None:
         set_manvault_service(daemon._manvault_service)
 
     # Set up engine adapter for OpenAI routes

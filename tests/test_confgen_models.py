@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from elle.rag.confgen.models import (
-    ConfigDomain,
-    ConfigFileType,
     ConfigGenContext,
     ConfigGenError,
     ConfigGenLLMError,
@@ -19,7 +16,6 @@ from elle.rag.confgen.models import (
     ConfigGenValidation,
     ConfigGenValidationError,
     ConfigOp,
-    ConfigOpMode,
     ValidationIssue,
 )
 
@@ -274,9 +270,7 @@ class TestConfigGenOutcome:
         )
         validation = ConfigGenValidation(
             valid=False,
-            issues=(
-                ValidationIssue(severity="error", message="Invalid"),
-            ),
+            issues=(ValidationIssue(severity="error", message="Invalid"),),
         )
 
         outcome = ConfigGenOutcome(
@@ -332,9 +326,7 @@ class TestConfigGenExceptions:
         """Test ConfigGenValidationError."""
         validation = ConfigGenValidation(
             valid=False,
-            issues=(
-                ValidationIssue(severity="error", message="Test error"),
-            ),
+            issues=(ValidationIssue(severity="error", message="Test error"),),
         )
 
         error = ConfigGenValidationError("Validation failed", validation)
@@ -366,8 +358,15 @@ class TestTypeAliases:
     def test_config_domain_values(self) -> None:
         """Test ConfigDomain accepts valid values."""
         domains = (
-            "network", "filesystem", "ssh", "firewall",
-            "service", "cron", "package", "hosts", "general",
+            "network",
+            "filesystem",
+            "ssh",
+            "firewall",
+            "service",
+            "cron",
+            "package",
+            "hosts",
+            "general",
         )
         for domain in domains:
             result = ConfigGenResult(

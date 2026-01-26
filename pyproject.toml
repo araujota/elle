@@ -65,11 +65,28 @@ packages = ["src/elle"]
 
 [tool.ruff]
 target-version = "py311"
-line-length = 100
+line-length = 120
 src = ["src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
+ignore = [
+    "E501",   # Line too long - handled by formatter
+    "B007",   # Unused loop variable - sometimes intentional
+    "B008",   # Function call in default argument - often intentional
+    "B017",   # pytest.raises(Exception) - acceptable in tests
+    "E741",   # Ambiguous variable name (l, O, I) - context-dependent
+    "SIM102", # Nested if - sometimes clearer than combined
+    "SIM105", # contextlib.suppress - try/except often clearer
+    "SIM108", # Ternary operator - sometimes less readable
+    "SIM110", # Use any() - for loop often clearer
+    "SIM115", # Context manager for files - sometimes impractical
+    "SIM117", # Nested with - sometimes clearer than combined
+    "N806",   # Variable in function should be lowercase - sometimes intentional
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B017", "B018"]  # Allow broader exception handling in tests
 
 [tool.mypy]
 python_version = "3.11"

@@ -1,14 +1,13 @@
 """Tests for AT-SPI recipe store operations."""
 
-import pytest
-import sqlite3
 import tempfile
 from pathlib import Path
-from datetime import datetime
 
-from elle.atspi.models import UIElement, UIRecipe, UIAction
-from elle.atspi.schema import get_connection, ensure_schema
+import pytest
+
 from elle.atspi import store
+from elle.atspi.models import UIAction, UIElement
+from elle.atspi.schema import ensure_schema, get_connection
 
 
 @pytest.fixture

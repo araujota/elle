@@ -79,10 +79,7 @@ def _run_wg_command(args: list[str], capture: bool = True) -> subprocess.Complet
             timeout=30,
         )
     except FileNotFoundError as e:
-        raise WireGuardKeyError(
-            "WireGuard tools not installed. "
-            "Install with: apt install wireguard-tools"
-        ) from e
+        raise WireGuardKeyError("WireGuard tools not installed. Install with: apt install wireguard-tools") from e
     except subprocess.TimeoutExpired as e:
         raise WireGuardKeyError("WireGuard command timed out") from e
 
@@ -283,6 +280,7 @@ def rotate_keys_safely(
 
         # Update config with new private key
         import re
+
         new_config = re.sub(
             r"(PrivateKey\s*=\s*)\S+",
             f"\\1{new_private_key}",
@@ -331,9 +329,7 @@ def rotate_keys_safely(
             )
         steps_completed.append(f"Restarted interface {interface}")
 
-        logger.info(
-            f"Rotated keys for {interface}: {old_public_key[:8]}... -> {new_public_key[:8]}..."
-        )
+        logger.info(f"Rotated keys for {interface}: {old_public_key[:8]}... -> {new_public_key[:8]}...")
 
         return KeyRotationResult(
             success=True,

@@ -77,36 +77,42 @@ def validate_plan_against_trends(
         checks.append("disk_space_for_packages")
         for mount, trend in trend_context.disk_trends.items():
             if trend.current >= 90:
-                warnings.append(ValidationWarning(
-                    severity="critical" if trend.current >= 95 else "warning",
-                    message=f"Disk {mount} is at {trend.current:.1f}% - package install may fail",
-                    metric=f"disk.{mount}.used_pct",
-                    suggestion="Free up disk space before installing packages",
-                ))
+                warnings.append(
+                    ValidationWarning(
+                        severity="critical" if trend.current >= 95 else "warning",
+                        message=f"Disk {mount} is at {trend.current:.1f}% - package install may fail",
+                        metric=f"disk.{mount}.used_pct",
+                        suggestion="Free up disk space before installing packages",
+                    )
+                )
                 success_probability -= 0.3
 
     # Check memory for service starts
     if _plan_involves_services(plan):
         checks.append("memory_for_services")
         if trend_context.memory_trend and trend_context.memory_trend.current >= 90:
-            warnings.append(ValidationWarning(
-                severity="warning",
-                message=f"Memory usage is {trend_context.memory_trend.current:.1f}% - service start may fail",
-                metric="mem.used_pct",
-                suggestion="Consider stopping unused services first",
-            ))
+            warnings.append(
+                ValidationWarning(
+                    severity="warning",
+                    message=f"Memory usage is {trend_context.memory_trend.current:.1f}% - service start may fail",
+                    metric="mem.used_pct",
+                    suggestion="Consider stopping unused services first",
+                )
+            )
             success_probability -= 0.2
 
     # Check for active anomalies
     if trend_context.anomalies:
         checks.append("active_anomalies")
         for anomaly in trend_context.anomalies:
-            warnings.append(ValidationWarning(
-                severity="info",
-                message=f"Anomaly detected in {anomaly.metric}: {anomaly.current_value:.1f} "
-                        f"(expected ~{anomaly.baseline_mean:.1f})",
-                metric=anomaly.metric,
-            ))
+            warnings.append(
+                ValidationWarning(
+                    severity="info",
+                    message=f"Anomaly detected in {anomaly.metric}: {anomaly.current_value:.1f} "
+                    f"(expected ~{anomaly.baseline_mean:.1f})",
+                    metric=anomaly.metric,
+                )
+            )
             success_probability -= 0.05
 
     # Check for forecasted threshold crossings during execution
@@ -115,12 +121,14 @@ def validate_plan_against_trends(
             checks.append(f"forecast_{metric}")
             hours = forecast.time_to_threshold_hours or 0
             if hours < 24:
-                warnings.append(ValidationWarning(
-                    severity="warning",
-                    message=f"{metric} will reach critical threshold in ~{hours:.0f} hours",
-                    metric=metric,
-                    suggestion="Consider addressing disk space before proceeding",
-                ))
+                warnings.append(
+                    ValidationWarning(
+                        severity="warning",
+                        message=f"{metric} will reach critical threshold in ~{hours:.0f} hours",
+                        metric=metric,
+                        suggestion="Consider addressing disk space before proceeding",
+                    )
+                )
                 success_probability -= 0.1
 
     # Check drift from prior successful execution
@@ -133,10 +141,12 @@ def validate_plan_against_trends(
             drift_detected = True
             drift_details = drift_result
             for warning in drift_result.get("warnings", []):
-                warnings.append(ValidationWarning(
-                    severity="info",
-                    message=warning,
-                ))
+                warnings.append(
+                    ValidationWarning(
+                        severity="info",
+                        message=warning,
+                    )
+                )
                 success_probability -= 0.05
 
     # Clamp probability
@@ -205,22 +215,15 @@ def _check_fingerprint_drift(
     )
     disk_delta = current_disk - prior_disk
     if disk_delta > 0.2:
-        warnings.append(
-            f"Disk pressure increased {disk_delta*100:.0f}% since similar task succeeded"
-        )
+        warnings.append(f"Disk pressure increased {disk_delta * 100:.0f}% since similar task succeeded")
         details["disk_pressure_delta"] = disk_delta
 
     # Compare memory pressure
     prior_mem = prior_fingerprint.get("mem_pressure", 0.0)
-    current_mem = (
-        trend_context.memory_trend.current / 100
-        if trend_context.memory_trend else 0.0
-    )
+    current_mem = trend_context.memory_trend.current / 100 if trend_context.memory_trend else 0.0
     mem_delta = current_mem - prior_mem
     if mem_delta > 0.2:
-        warnings.append(
-            f"Memory pressure increased {mem_delta*100:.0f}% since similar task succeeded"
-        )
+        warnings.append(f"Memory pressure increased {mem_delta * 100:.0f}% since similar task succeeded")
         details["mem_pressure_delta"] = mem_delta
 
     if warnings:
@@ -255,7 +258,12 @@ def get_trend_warnings_for_plan(
     if trend_ref.warning_messages:
         for msg in trend_ref.warning_messages:
             # Check if warning is relevant to plan
-            if _plan_involves_packages(plan) and "disk" in msg.lower() or _plan_involves_services(plan) and "mem" in msg.lower():
+            if (
+                _plan_involves_packages(plan)
+                and "disk" in msg.lower()
+                or _plan_involves_services(plan)
+                and "mem" in msg.lower()
+            ):
                 warnings.append(msg)
 
     return warnings
@@ -295,10 +303,7 @@ def estimate_success_likelihood(
 
     # Boost for prior art
     if context.prior_plans:
-        successful = sum(
-            1 for p in context.prior_plans
-            if p.outcome in ("improved", "partial", "success")
-        )
+        successful = sum(1 for p in context.prior_plans if p.outcome in ("improved", "partial", "success"))
         if successful:
             base += 0.1
 

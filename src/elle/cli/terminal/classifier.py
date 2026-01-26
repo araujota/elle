@@ -53,26 +53,55 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 # Meta commands - exact match (case insensitive)
-META_COMMANDS = frozenset({
-    "help", "exit", "quit", "clear", "config", "about", "version", "sponsor",
-})
+META_COMMANDS = frozenset(
+    {
+        "help",
+        "exit",
+        "quit",
+        "clear",
+        "config",
+        "about",
+        "version",
+        "sponsor",
+    }
+)
 
 # Navigation commands - exact match
-NAVIGATION_COMMANDS = frozenset({
-    "status", "events", "logs", "man", "search", "history",
-    "incidents", "incident",  # Incident vault navigation
-})
+NAVIGATION_COMMANDS = frozenset(
+    {
+        "status",
+        "events",
+        "logs",
+        "man",
+        "search",
+        "history",
+        "incidents",
+        "incident",  # Incident vault navigation
+    }
+)
 
 # Fixit triggers - exact match or prefix
-FIXIT_TRIGGERS = frozenset({
-    "fix", "fix it", "fixit", "why did that fail", "what went wrong",
-})
+FIXIT_TRIGGERS = frozenset(
+    {
+        "fix",
+        "fix it",
+        "fixit",
+        "why did that fail",
+        "what went wrong",
+    }
+)
 
 # Explain command triggers - exact match
-EXPLAIN_TRIGGERS = frozenset({
-    "explain", "what did that do", "what did it do",
-    "what happened", "explain that", "explain command",
-})
+EXPLAIN_TRIGGERS = frozenset(
+    {
+        "explain",
+        "what did that do",
+        "what did it do",
+        "what happened",
+        "explain that",
+        "explain command",
+    }
+)
 
 # Prefix commands - explicit intent markers
 PREFIX_COMMANDS = {
@@ -285,7 +314,11 @@ _COMPILED_GUI_PATTERNS = [(re.compile(p, re.IGNORECASE), i, c) for p, i, c in GU
 # Package learning patterns (learn_package)
 PACKAGE_LEARN_PATTERNS = [
     # Explicit learning requests
-    (r"^(?:learn|figure\s+out|understand)\s+(?:how\s+to\s+(?:use|work\s+with)\s+)?(\w[\w\-\.]+)$", "learn_package", 0.92),
+    (
+        r"^(?:learn|figure\s+out|understand)\s+(?:how\s+to\s+(?:use|work\s+with)\s+)?(\w[\w\-\.]+)$",
+        "learn_package",
+        0.92,
+    ),
     (r"^(?:what\s+can|how\s+do\s+I\s+use)\s+(\w[\w\-\.]+)", "learn_package", 0.88),
     (r"^teach\s+me\s+(?:about\s+)?(\w[\w\-\.]+)$", "learn_package", 0.90),
     # Discovery requests
@@ -350,6 +383,7 @@ USER INPUT:
 # =============================================================================
 # Classifier Implementation
 # =============================================================================
+
 
 class ClassificationLog(BaseModel):
     """Log entry for a classification decision."""
@@ -565,7 +599,7 @@ class IntentClassifier:
         for prefix, intent in PREFIX_COMMANDS.items():
             if text.startswith(prefix):
                 # Extract the actual content after prefix
-                content = text[len(prefix):].strip()
+                content = text[len(prefix) :].strip()
                 return create_rule_result(
                     intent,
                     f"Explicit prefix command: {prefix}",
@@ -710,6 +744,7 @@ class IntentClassifier:
         try:
             # Call SLM with JSON mode and optimized settings
             import time
+
             start = time.time()
 
             response_data = self.client.generate_json(
@@ -848,6 +883,7 @@ class IntentClassifier:
                 json_str = log_entry.model_dump_json()
             except AttributeError:
                 import json
+
                 json_str = json.dumps(log_entry.dict())
             with open(self._log_file, "a") as f:
                 f.write(json_str + "\n")

@@ -42,166 +42,124 @@ ERROR_PATTERNS: list[tuple[re.Pattern, ErrorCategory, str]] = [
     # ==========================================================================
     # SPECIFIC PATTERNS FIRST (before generic patterns that might mask them)
     # ==========================================================================
-
     # Database errors (must come before generic "authentication failed" and "Connection refused")
     # NOTE: Patterns are specific to database errors (PostgreSQL, MySQL)
-    (re.compile(r"password authentication failed for user", re.I), "db_auth_failed",
-     "Database authentication failed."),
-    (re.compile(r"Access denied for user.*@", re.I), "db_auth_failed",
-     "Database authentication failed."),
-    (re.compile(r"FATAL:\s+password authentication failed", re.I), "db_auth_failed",
-     "Database authentication failed."),
-    (re.compile(r"Connection refused.*(5432|3306|27017)", re.I), "db_connection_refused",
-     "Database server is not accepting connections."),
-    (re.compile(r"database is locked", re.I), "db_locked",
-     "Database file is locked by another process."),
-
+    (re.compile(r"password authentication failed for user", re.I), "db_auth_failed", "Database authentication failed."),
+    (re.compile(r"Access denied for user.*@", re.I), "db_auth_failed", "Database authentication failed."),
+    (re.compile(r"FATAL:\s+password authentication failed", re.I), "db_auth_failed", "Database authentication failed."),
+    (
+        re.compile(r"Connection refused.*(5432|3306|27017)", re.I),
+        "db_connection_refused",
+        "Database server is not accepting connections.",
+    ),
+    (re.compile(r"database is locked", re.I), "db_locked", "Database file is locked by another process."),
     # Service/systemd errors (must come before generic "not found")
     # NOTE: dependency failed must come before "Job for .+\.service failed"
-    (re.compile(r"dependency failed", re.I), "service_dep_failed",
-     "Service dependency failed to start."),
-    (re.compile(r"Failed to start.*\.service", re.I), "service_start_failed",
-     "Systemd service failed to start."),
-    (re.compile(r"Job for .+\.service failed", re.I), "service_start_failed",
-     "Systemd service failed to start."),
-    (re.compile(r"Address already in use", re.I), "address_in_use",
-     "Network address/port is already bound."),
-    (re.compile(r"Unit .+\.service.* not found", re.I), "unit_not_found",
-     "Systemd unit file does not exist."),
-
+    (re.compile(r"dependency failed", re.I), "service_dep_failed", "Service dependency failed to start."),
+    (re.compile(r"Failed to start.*\.service", re.I), "service_start_failed", "Systemd service failed to start."),
+    (re.compile(r"Job for .+\.service failed", re.I), "service_start_failed", "Systemd service failed to start."),
+    (re.compile(r"Address already in use", re.I), "address_in_use", "Network address/port is already bound."),
+    (re.compile(r"Unit .+\.service.* not found", re.I), "unit_not_found", "Systemd unit file does not exist."),
     # Docker/container errors (must come before generic "not found")
-    (re.compile(r"Cannot connect to the Docker daemon", re.I), "docker_not_running",
-     "Docker daemon is not running."),
-    (re.compile(r"No such container", re.I), "container_not_found",
-     "Container does not exist."),
-    (re.compile(r"manifest.+not found", re.I), "image_not_found",
-     "Docker image not found in registry."),
-    (re.compile(r"port is already allocated", re.I), "port_in_use",
-     "Port is already in use by another container or process."),
-    (re.compile(r"OCI runtime.*failed", re.I), "container_runtime_error",
-     "Container runtime failed to start."),
-
+    (re.compile(r"Cannot connect to the Docker daemon", re.I), "docker_not_running", "Docker daemon is not running."),
+    (re.compile(r"No such container", re.I), "container_not_found", "Container does not exist."),
+    (re.compile(r"manifest.+not found", re.I), "image_not_found", "Docker image not found in registry."),
+    (
+        re.compile(r"port is already allocated", re.I),
+        "port_in_use",
+        "Port is already in use by another container or process.",
+    ),
+    (re.compile(r"OCI runtime.*failed", re.I), "container_runtime_error", "Container runtime failed to start."),
     # Package manager errors (must come before generic patterns)
-    (re.compile(r"E: Could not get lock", re.I), "apt_lock",
-     "APT package manager is locked by another process."),
-    (re.compile(r"dpkg was interrupted", re.I), "dpkg_interrupted",
-     "Previous dpkg operation was interrupted."),
-    (re.compile(r"held broken packages", re.I), "held_packages",
-     "Held packages are preventing installation."),
-    (re.compile(r"[Bb]roken packages", re.I), "broken_packages",
-     "Package dependencies are broken."),
-    (re.compile(r"Hash Sum mismatch", re.I), "apt_hash_mismatch",
-     "Package file corruption detected."),
-    (re.compile(r"NO_PUBKEY", re.I), "apt_key_missing",
-     "Repository signing key is missing."),
-
+    (re.compile(r"E: Could not get lock", re.I), "apt_lock", "APT package manager is locked by another process."),
+    (re.compile(r"dpkg was interrupted", re.I), "dpkg_interrupted", "Previous dpkg operation was interrupted."),
+    (re.compile(r"held broken packages", re.I), "held_packages", "Held packages are preventing installation."),
+    (re.compile(r"[Bb]roken packages", re.I), "broken_packages", "Package dependencies are broken."),
+    (re.compile(r"Hash Sum mismatch", re.I), "apt_hash_mismatch", "Package file corruption detected."),
+    (re.compile(r"NO_PUBKEY", re.I), "apt_key_missing", "Repository signing key is missing."),
     # Filesystem errors
-    (re.compile(r"Read-only file system", re.I), "readonly_fs",
-     "Filesystem is mounted read-only."),
-    (re.compile(r"Device or resource busy", re.I), "device_busy",
-     "Device is busy and cannot be unmounted/modified."),
-    (re.compile(r"Stale file handle", re.I), "stale_nfs",
-     "NFS mount has become stale."),
-    (re.compile(r"Structure needs cleaning", re.I), "fs_corrupt",
-     "Filesystem has corruption and needs fsck."),
-    (re.compile(r"Input/output error", re.I), "io_error",
-     "Disk I/O error, possible hardware failure."),
-
+    (re.compile(r"Read-only file system", re.I), "readonly_fs", "Filesystem is mounted read-only."),
+    (re.compile(r"Device or resource busy", re.I), "device_busy", "Device is busy and cannot be unmounted/modified."),
+    (re.compile(r"Stale file handle", re.I), "stale_nfs", "NFS mount has become stale."),
+    (re.compile(r"Structure needs cleaning", re.I), "fs_corrupt", "Filesystem has corruption and needs fsck."),
+    (re.compile(r"Input/output error", re.I), "io_error", "Disk I/O error, possible hardware failure."),
     # ==========================================================================
     # GENERIC PATTERNS (after specific patterns)
     # ==========================================================================
-
     # Command not found
-    (re.compile(r"command not found", re.I), "command_not_found",
-     "The command was not found in your PATH."),
-    (re.compile(r"No such file or directory.*executable", re.I), "command_not_found",
-     "The executable file does not exist."),
-
+    (re.compile(r"command not found", re.I), "command_not_found", "The command was not found in your PATH."),
+    (
+        re.compile(r"No such file or directory.*executable", re.I),
+        "command_not_found",
+        "The executable file does not exist.",
+    ),
     # Permission denied
-    (re.compile(r"permission denied", re.I), "permission_denied",
-     "You don't have permission to perform this operation."),
-    (re.compile(r"access denied", re.I), "permission_denied",
-     "Access to the resource was denied."),
-    (re.compile(r"Operation not permitted", re.I), "permission_denied",
-     "The operation is not permitted for your user."),
-    (re.compile(r"Authentication failed", re.I), "permission_denied",
-     "Authentication failed - check your credentials."),
-
+    (
+        re.compile(r"permission denied", re.I),
+        "permission_denied",
+        "You don't have permission to perform this operation.",
+    ),
+    (re.compile(r"access denied", re.I), "permission_denied", "Access to the resource was denied."),
+    (
+        re.compile(r"Operation not permitted", re.I),
+        "permission_denied",
+        "The operation is not permitted for your user.",
+    ),
+    (
+        re.compile(r"Authentication failed", re.I),
+        "permission_denied",
+        "Authentication failed - check your credentials.",
+    ),
     # File not found
-    (re.compile(r"No such file or directory", re.I), "file_not_found",
-     "The specified file or directory does not exist."),
-    (re.compile(r"cannot stat", re.I), "file_not_found",
-     "Unable to access the file or directory."),
-    (re.compile(r"does not exist", re.I), "file_not_found",
-     "The specified path does not exist."),
-    (re.compile(r"ENOENT", re.I), "file_not_found",
-     "The file or directory was not found (ENOENT)."),
-
+    (
+        re.compile(r"No such file or directory", re.I),
+        "file_not_found",
+        "The specified file or directory does not exist.",
+    ),
+    (re.compile(r"cannot stat", re.I), "file_not_found", "Unable to access the file or directory."),
+    (re.compile(r"does not exist", re.I), "file_not_found", "The specified path does not exist."),
+    (re.compile(r"ENOENT", re.I), "file_not_found", "The file or directory was not found (ENOENT)."),
     # Syntax errors
-    (re.compile(r"syntax error", re.I), "syntax_error",
-     "There is a syntax error in the command."),
-    (re.compile(r"unexpected token", re.I), "syntax_error",
-     "Unexpected token in the command syntax."),
-    (re.compile(r"parse error", re.I), "syntax_error",
-     "The command could not be parsed."),
-
+    (re.compile(r"syntax error", re.I), "syntax_error", "There is a syntax error in the command."),
+    (re.compile(r"unexpected token", re.I), "syntax_error", "Unexpected token in the command syntax."),
+    (re.compile(r"parse error", re.I), "syntax_error", "The command could not be parsed."),
     # Argument errors
-    (re.compile(r"invalid option", re.I), "argument_error",
-     "An invalid option or flag was provided."),
-    (re.compile(r"unrecognized option", re.I), "argument_error",
-     "The command does not recognize this option."),
-    (re.compile(r"missing argument", re.I), "argument_error",
-     "A required argument is missing."),
-    (re.compile(r"requires an argument", re.I), "argument_error",
-     "An option requires an argument that was not provided."),
-    (re.compile(r"too many arguments", re.I), "argument_error",
-     "Too many arguments were provided."),
-
+    (re.compile(r"invalid option", re.I), "argument_error", "An invalid option or flag was provided."),
+    (re.compile(r"unrecognized option", re.I), "argument_error", "The command does not recognize this option."),
+    (re.compile(r"missing argument", re.I), "argument_error", "A required argument is missing."),
+    (
+        re.compile(r"requires an argument", re.I),
+        "argument_error",
+        "An option requires an argument that was not provided.",
+    ),
+    (re.compile(r"too many arguments", re.I), "argument_error", "Too many arguments were provided."),
     # Dependency missing
-    (re.compile(r"Unable to locate package", re.I), "dependency_missing",
-     "The package could not be found in the repository."),
-    (re.compile(r"Package .* is not available", re.I), "dependency_missing",
-     "The requested package is not available."),
-    (re.compile(r"unmet dependencies", re.I), "dependency_missing",
-     "There are unmet package dependencies."),
-    (re.compile(r"Depends:.*but it is not", re.I), "dependency_missing",
-     "A required dependency is missing."),
-
+    (
+        re.compile(r"Unable to locate package", re.I),
+        "dependency_missing",
+        "The package could not be found in the repository.",
+    ),
+    (re.compile(r"Package .* is not available", re.I), "dependency_missing", "The requested package is not available."),
+    (re.compile(r"unmet dependencies", re.I), "dependency_missing", "There are unmet package dependencies."),
+    (re.compile(r"Depends:.*but it is not", re.I), "dependency_missing", "A required dependency is missing."),
     # Resource exhausted
-    (re.compile(r"No space left on device", re.I), "resource_exhausted",
-     "The disk is full."),
-    (re.compile(r"Cannot allocate memory", re.I), "resource_exhausted",
-     "Not enough memory available."),
-    (re.compile(r"Too many open files", re.I), "resource_exhausted",
-     "File descriptor limit reached."),
-    (re.compile(r"quota exceeded", re.I), "resource_exhausted",
-     "Disk quota has been exceeded."),
-
+    (re.compile(r"No space left on device", re.I), "resource_exhausted", "The disk is full."),
+    (re.compile(r"Cannot allocate memory", re.I), "resource_exhausted", "Not enough memory available."),
+    (re.compile(r"Too many open files", re.I), "resource_exhausted", "File descriptor limit reached."),
+    (re.compile(r"quota exceeded", re.I), "resource_exhausted", "Disk quota has been exceeded."),
     # Network errors (generic - after specific db_connection_refused)
-    (re.compile(r"Connection refused", re.I), "network_error",
-     "The connection was refused by the remote host."),
-    (re.compile(r"Connection timed out", re.I), "network_error",
-     "The connection attempt timed out."),
-    (re.compile(r"Network is unreachable", re.I), "network_error",
-     "The network is not reachable."),
-    (re.compile(r"Name or service not known", re.I), "network_error",
-     "DNS resolution failed for the hostname."),
-    (re.compile(r"Could not resolve host", re.I), "network_error",
-     "Unable to resolve the hostname."),
-    (re.compile(r"Temporary failure in name resolution", re.I), "network_error",
-     "DNS lookup temporarily failed."),
-
+    (re.compile(r"Connection refused", re.I), "network_error", "The connection was refused by the remote host."),
+    (re.compile(r"Connection timed out", re.I), "network_error", "The connection attempt timed out."),
+    (re.compile(r"Network is unreachable", re.I), "network_error", "The network is not reachable."),
+    (re.compile(r"Name or service not known", re.I), "network_error", "DNS resolution failed for the hostname."),
+    (re.compile(r"Could not resolve host", re.I), "network_error", "Unable to resolve the hostname."),
+    (re.compile(r"Temporary failure in name resolution", re.I), "network_error", "DNS lookup temporarily failed."),
     # Configuration errors
-    (re.compile(r"Invalid configuration", re.I), "configuration_error",
-     "The configuration is invalid."),
-    (re.compile(r"configuration error", re.I), "configuration_error",
-     "There is an error in the configuration."),
-    (re.compile(r"Failed to parse", re.I), "configuration_error",
-     "Failed to parse configuration file."),
-
+    (re.compile(r"Invalid configuration", re.I), "configuration_error", "The configuration is invalid."),
+    (re.compile(r"configuration error", re.I), "configuration_error", "There is an error in the configuration."),
+    (re.compile(r"Failed to parse", re.I), "configuration_error", "Failed to parse configuration file."),
     # Generic "not found" MUST be last - it matches too broadly
-    (re.compile(r"not found", re.I), "command_not_found",
-     "The command or executable was not found."),
+    (re.compile(r"not found", re.I), "command_not_found", "The command or executable was not found."),
 ]
 
 
@@ -363,7 +321,6 @@ CATEGORY_FIXES: dict[ErrorCategory, list[dict]] = {
             "risk_level": "safe",
         },
     ],
-
     # ==========================================================================
     # Package manager fixes
     # ==========================================================================
@@ -438,7 +395,6 @@ CATEGORY_FIXES: dict[ErrorCategory, list[dict]] = {
             "risk_level": "safe",
         },
     ],
-
     # ==========================================================================
     # Docker fixes
     # ==========================================================================
@@ -508,7 +464,6 @@ CATEGORY_FIXES: dict[ErrorCategory, list[dict]] = {
             "risk_level": "safe",
         },
     ],
-
     # ==========================================================================
     # Filesystem fixes
     # ==========================================================================
@@ -572,7 +527,6 @@ CATEGORY_FIXES: dict[ErrorCategory, list[dict]] = {
             "risk_level": "safe",
         },
     ],
-
     # ==========================================================================
     # Service/systemd fixes
     # ==========================================================================
@@ -624,7 +578,6 @@ CATEGORY_FIXES: dict[ErrorCategory, list[dict]] = {
             "risk_level": "safe",
         },
     ],
-
     # ==========================================================================
     # Database fixes
     # ==========================================================================

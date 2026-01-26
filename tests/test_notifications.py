@@ -1,7 +1,5 @@
 """Tests for the notification module."""
 
-import pytest
-
 from elle.daemon.notifications.models import (
     CATEGORY_ICONS,
     CATEGORY_URGENCY,

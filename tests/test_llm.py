@@ -1,7 +1,6 @@
 """Tests for the general-purpose LLM interface."""
 
 import json
-from unittest.mock import MagicMock, patch
 
 import pytest
 

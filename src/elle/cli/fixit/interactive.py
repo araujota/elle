@@ -47,10 +47,10 @@ BOX_T_RIGHT = "┤"
 class InteractiveState(Enum):
     """States for the interactive UI."""
 
-    LIST = auto()      # Main list view
-    DETAIL = auto()    # Single fix detail view
-    CONFIRM = auto()   # Confirmation before apply
-    OUTCOME = auto()   # Asking about outcome
+    LIST = auto()  # Main list view
+    DETAIL = auto()  # Single fix detail view
+    CONFIRM = auto()  # Confirmation before apply
+    OUTCOME = auto()  # Asking about outcome
 
 
 class FixitInteractive:
@@ -71,9 +71,7 @@ class FixitInteractive:
         self.result = result
         self.state = InteractiveState.LIST
         self.selected_index: int | None = None
-        self._safe_suggestions = [
-            s for s in result.verified_suggestions if s.is_safe
-        ]
+        self._safe_suggestions = [s for s in result.verified_suggestions if s.is_safe]
 
     @property
     def safe_suggestions(self) -> list[VerifiedFixCommand]:
@@ -143,11 +141,13 @@ class FixitInteractive:
         if self.result.analysis:
             diag = self.result.analysis.diagnosis
             conf = f"{diag.confidence * 100:.0f}%"
-            lines.append(self._box_line(
-                f"{Colors.BOLD}Diagnosis:{Colors.RESET} "
-                f"{diag.error_category.replace('_', ' ')} "
-                f"{Colors.DIM}(confidence: {conf}){Colors.RESET}"
-            ))
+            lines.append(
+                self._box_line(
+                    f"{Colors.BOLD}Diagnosis:{Colors.RESET} "
+                    f"{diag.error_category.replace('_', ' ')} "
+                    f"{Colors.DIM}(confidence: {conf}){Colors.RESET}"
+                )
+            )
             lines.append(self._box_line(diag.summary))
 
         # Separator
@@ -159,9 +159,7 @@ class FixitInteractive:
 
         # Suggestion list
         if not self.safe_suggestions:
-            lines.append(self._box_line(
-                f"  {Colors.DIM}No verified fixes available.{Colors.RESET}"
-            ))
+            lines.append(self._box_line(f"  {Colors.DIM}No verified fixes available.{Colors.RESET}"))
         else:
             for i, verified in enumerate(self.safe_suggestions, 1):
                 fix = verified.fix
@@ -171,12 +169,8 @@ class FixitInteractive:
                     "high": Colors.RED,
                 }.get(fix.risk_level, "")
 
-                lines.append(self._box_line(
-                    f"  {Colors.BOLD}[{i}]{Colors.RESET} {fix.explanation[:45]}"
-                ))
-                lines.append(self._box_line(
-                    f"      {Colors.CYAN}{fix.command[:50]}{Colors.RESET}"
-                ))
+                lines.append(self._box_line(f"  {Colors.BOLD}[{i}]{Colors.RESET} {fix.explanation[:45]}"))
+                lines.append(self._box_line(f"      {Colors.CYAN}{fix.command[:50]}{Colors.RESET}"))
 
                 extras = [f"{risk_color}Risk: {fix.risk_level}{Colors.RESET}"]
                 if fix.requires_privilege:
@@ -197,9 +191,7 @@ class FixitInteractive:
         lines.append(self._box_line(controls))
 
         # Bottom border
-        lines.append(
-            f"{BOX_BOTTOM_LEFT}{BOX_HORIZONTAL * (self.WIDTH - 2)}{BOX_BOTTOM_RIGHT}"
-        )
+        lines.append(f"{BOX_BOTTOM_LEFT}{BOX_HORIZONTAL * (self.WIDTH - 2)}{BOX_BOTTOM_RIGHT}")
 
         return "\n".join(lines)
 
@@ -256,16 +248,15 @@ class FixitInteractive:
             "moderate": Colors.YELLOW,
             "high": Colors.RED,
         }.get(fix.risk_level, "")
-        lines.append(self._box_line(
-            f"{Colors.BOLD}Risk:{Colors.RESET} {risk_color}{fix.risk_level}{Colors.RESET}"
-        ))
+        lines.append(self._box_line(f"{Colors.BOLD}Risk:{Colors.RESET} {risk_color}{fix.risk_level}{Colors.RESET}"))
 
         # Privilege
         if fix.requires_privilege:
-            lines.append(self._box_line(
-                f"{Colors.BOLD}Privilege:{Colors.RESET} "
-                f"{Colors.YELLOW}Required (Polkit elevation){Colors.RESET}"
-            ))
+            lines.append(
+                self._box_line(
+                    f"{Colors.BOLD}Privilege:{Colors.RESET} {Colors.YELLOW}Required (Polkit elevation){Colors.RESET}"
+                )
+            )
         lines.append(self._box_line(""))
 
         # Explanation
@@ -278,9 +269,7 @@ class FixitInteractive:
         # Verification
         if fix.verification:
             lines.append(self._box_line(f"{Colors.BOLD}Verify with:{Colors.RESET}"))
-            lines.append(self._box_line(
-                f"  {Colors.DIM}{fix.verification}{Colors.RESET}"
-            ))
+            lines.append(self._box_line(f"  {Colors.DIM}{fix.verification}{Colors.RESET}"))
             lines.append(self._box_line(""))
 
         # Warnings
@@ -292,12 +281,8 @@ class FixitInteractive:
 
         # Controls
         lines.append(self._box_separator())
-        lines.append(self._box_line(
-            "[Enter] Apply this fix  [b] Back to list  [q] Skip all"
-        ))
-        lines.append(
-            f"{BOX_BOTTOM_LEFT}{BOX_HORIZONTAL * (self.WIDTH - 2)}{BOX_BOTTOM_RIGHT}"
-        )
+        lines.append(self._box_line("[Enter] Apply this fix  [b] Back to list  [q] Skip all"))
+        lines.append(f"{BOX_BOTTOM_LEFT}{BOX_HORIZONTAL * (self.WIDTH - 2)}{BOX_BOTTOM_RIGHT}")
 
         return "\n".join(lines)
 
@@ -408,6 +393,7 @@ class FixitInteractive:
         """Create a line within the box."""
         # Strip ANSI codes for length calculation
         import re
+
         plain = re.sub(r"\033\[[0-9;]*m", "", content)
         padding = self.WIDTH - len(plain) - 4
         if padding < 0:
@@ -492,6 +478,7 @@ def run_interactive_fixit(
     safe_suggestions = [s for s in result.verified_suggestions if s.is_safe]
     if not safe_suggestions:
         from elle.cli.fixit.renderer import render_fixit_result
+
         print(render_fixit_result(result))
         return result
 
@@ -500,6 +487,7 @@ def run_interactive_fixit(
     # Get execute callback
     if execute_callback is None:
         from elle.cli.fixit.service import get_fixit_service
+
         service = get_fixit_service()
         execute_callback = service.execute_fix
 
@@ -546,6 +534,7 @@ def run_interactive_fixit(
     if result.incident_id:
         try:
             from elle.cli.fixit.service import get_fixit_service
+
             service = get_fixit_service()
             service.finalize_incident(result.incident_id, result)
         except Exception:

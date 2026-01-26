@@ -137,10 +137,7 @@ async def _handle_map(args: str) -> str:
         recipe = await learn_application(app_name, mode=mode)
 
         if not recipe:
-            return (
-                f"Could not find application '{app_name}'.\n"
-                "Make sure the application is running and accessible."
-            )
+            return f"Could not find application '{app_name}'.\nMake sure the application is running and accessible."
 
         return (
             f"Mapped '{recipe.app_name}':\n"
@@ -181,10 +178,7 @@ async def _handle_list(args: str) -> str:
                 if recipe.success_count + recipe.failure_count > 0
                 else "n/a"
             )
-            lines.append(
-                f"  {recipe.app_name:30} v{recipe.version} "
-                f"({confidence_str} conf, {success_rate} success)"
-            )
+            lines.append(f"  {recipe.app_name:30} v{recipe.version} ({confidence_str} conf, {success_rate} success)")
 
         return "\n".join(lines)
 
@@ -254,9 +248,7 @@ async def _handle_show(args: str) -> str:
         lines.append(f"Created: {recipe.created_at.strftime('%Y-%m-%d %H:%M')}")
         lines.append(f"Updated: {recipe.updated_at.strftime('%Y-%m-%d %H:%M')}")
         if recipe.last_success_at:
-            lines.append(
-                f"Last success: {recipe.last_success_at.strftime('%Y-%m-%d %H:%M')}"
-            )
+            lines.append(f"Last success: {recipe.last_success_at.strftime('%Y-%m-%d %H:%M')}")
 
         return "\n".join(lines)
 
@@ -383,9 +375,7 @@ async def _handle_export(args: str) -> str:
                 }
                 for e in recipe.elements
             ],
-            "navigation_paths": {
-                k: list(v) for k, v in recipe.navigation_paths.items()
-            },
+            "navigation_paths": {k: list(v) for k, v in recipe.navigation_paths.items()},
             "exported_at": datetime.utcnow().isoformat(),
         }
 
@@ -437,9 +427,7 @@ async def _handle_import(args: str) -> str:
         ]
 
         # Convert navigation paths
-        nav_paths = {
-            k: tuple(v) for k, v in data.get("navigation_paths", {}).items()
-        }
+        nav_paths = {k: tuple(v) for k, v in data.get("navigation_paths", {}).items()}
 
         recipe = create_recipe(
             app_name=data.get("app_name", "imported"),

@@ -23,41 +23,45 @@ logger = logging.getLogger(__name__)
 
 
 # Roles that are typically interactive
-ACTIONABLE_ROLES = frozenset({
-    "push button",
-    "toggle button",
-    "check box",
-    "radio button",
-    "menu item",
-    "check menu item",
-    "radio menu item",
-    "combo box",
-    "text",  # Editable text fields
-    "entry",
-    "password text",
-    "spin button",
-    "slider",
-    "link",
-    "switch",  # GTK4 switch
-})
+ACTIONABLE_ROLES = frozenset(
+    {
+        "push button",
+        "toggle button",
+        "check box",
+        "radio button",
+        "menu item",
+        "check menu item",
+        "radio menu item",
+        "combo box",
+        "text",  # Editable text fields
+        "entry",
+        "password text",
+        "spin button",
+        "slider",
+        "link",
+        "switch",  # GTK4 switch
+    }
+)
 
 # Roles that indicate container/section boundaries
-CONTAINER_ROLES = frozenset({
-    "panel",
-    "frame",
-    "scroll pane",
-    "viewport",
-    "page tab",
-    "split pane",
-    "tool bar",
-    "menu bar",
-    "popup menu",
-    "dialog",
-    "alert",
-    "list",
-    "tree",
-    "table",
-})
+CONTAINER_ROLES = frozenset(
+    {
+        "panel",
+        "frame",
+        "scroll pane",
+        "viewport",
+        "page tab",
+        "split pane",
+        "tool bar",
+        "menu bar",
+        "popup menu",
+        "dialog",
+        "alert",
+        "list",
+        "tree",
+        "table",
+    }
+)
 
 
 def _is_actionable(element: UIElement) -> bool:
@@ -78,10 +82,7 @@ def _is_actionable(element: UIElement) -> bool:
         return True
 
     # Is enabled and has a meaningful name
-    if "enabled" in element.states and element.name and len(element.name) > 1:
-        return True
-
-    return False
+    return bool("enabled" in element.states and element.name and len(element.name) > 1)
 
 
 def _normalize_target_name(name: str) -> str:
@@ -286,9 +287,7 @@ class RecipeLearner:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
-        return loop.run_until_complete(
-            self.learn_application(app_name, mode, update_existing)
-        )
+        return loop.run_until_complete(self.learn_application(app_name, mode, update_existing))
 
     async def rebuild_recipe(
         self,

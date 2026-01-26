@@ -187,8 +187,7 @@ class PolicyParser:
         except ValueError as e:
             raise PolicyValidationError(
                 rule_id,
-                f"Invalid effect: {effect_str}. "
-                f"Must be one of: {', '.join(eff.value for eff in PolicyEffect)}",
+                f"Invalid effect: {effect_str}. Must be one of: {', '.join(eff.value for eff in PolicyEffect)}",
             ) from e
 
         # Parse conditions
@@ -255,11 +254,13 @@ class PolicyParser:
 
         # At least one pattern must be specified
         has_pattern = any([command, path, domain, intent])
-        has_attribute = any([
-            data.get("risk_level"),
-            data.get("requires_privilege") is not None,
-            data.get("allowed_hours"),
-        ])
+        has_attribute = any(
+            [
+                data.get("risk_level"),
+                data.get("requires_privilege") is not None,
+                data.get("allowed_hours"),
+            ]
+        )
 
         if not has_pattern and not has_attribute:
             raise PolicyValidationError(
@@ -274,8 +275,7 @@ class PolicyParser:
         except ValueError as e:
             raise PolicyValidationError(
                 rule_id,
-                f"Invalid match_type: {match_type_str}. "
-                f"Must be one of: {', '.join(mt.value for mt in MatchType)}",
+                f"Invalid match_type: {match_type_str}. Must be one of: {', '.join(mt.value for mt in MatchType)}",
             ) from e
 
         # Parse risk level

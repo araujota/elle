@@ -1,9 +1,6 @@
 """Tests for stack orchestration models and recipes."""
 
-import pytest
-
 from elle.ops.stack.models import (
-    DeploymentStatus,
     GuaranteeResult,
     PhaseResult,
     PrerequisiteCheck,
@@ -19,14 +16,14 @@ from elle.ops.stack.models import (
     StepResult,
 )
 from elle.ops.stack.recipes import (
-    get_all_recipes,
-    get_recipe_by_name,
     FAIL2BAN_RECIPE,
     LEMP_RECIPE,
     NODEJS_RECIPE,
     POSTGRES_RECIPE,
     PROMETHEUS_GRAFANA_RECIPE,
     REDIS_RECIPE,
+    get_all_recipes,
+    get_recipe_by_name,
 )
 
 
@@ -505,7 +502,7 @@ class TestRecipes:
     def test_all_recipes_have_valid_structure(self):
         """Test that all recipes have valid structure."""
         for recipe in get_all_recipes():
-            assert recipe.name, f"Recipe missing name"
+            assert recipe.name, "Recipe missing name"
             assert recipe.display_name, f"{recipe.name} missing display_name"
             assert recipe.description, f"{recipe.name} missing description"
             assert recipe.category, f"{recipe.name} missing category"

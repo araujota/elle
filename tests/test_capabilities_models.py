@@ -1,19 +1,14 @@
 """Tests for capabilities models."""
 
 import pytest
-from datetime import datetime
 
 from elle.capabilities.models import (
-    CapabilityDomain,
     CapabilityEvidence,
     CapabilityResult,
     CapabilitySpec,
     DryRunResult,
-    RiskLevel,
     RollbackResult,
     SideEffect,
-    SideEffectKind,
-    TrustLevel,
     VerificationResult,
 )
 
@@ -133,9 +128,7 @@ class TestCapabilityResult:
             output={"status": "active"},
             error=None,
             warnings=(),
-            side_effects_applied=(
-                SideEffect(kind="service_change", target="nginx"),
-            ),
+            side_effects_applied=(SideEffect(kind="service_change", target="nginx"),),
             execution_time_ms=150,
             evidence=CapabilityEvidence(
                 verification_passed=True,

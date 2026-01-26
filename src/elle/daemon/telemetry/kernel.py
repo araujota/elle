@@ -104,10 +104,12 @@ class KernelWatcher:
         # Start journalctl process for kernel messages
         cmd = [
             "journalctl",
-            "-k",           # Kernel messages only
-            "-f",           # Follow
-            "-o", "json",   # JSON output
-            "--since", "now",  # Only new entries
+            "-k",  # Kernel messages only
+            "-f",  # Follow
+            "-o",
+            "json",  # JSON output
+            "--since",
+            "now",  # Only new entries
         ]
 
         self._process = await asyncio.create_subprocess_exec(
@@ -187,9 +189,11 @@ class KernelBatchReader:
         """
         cmd = [
             "journalctl",
-            "-k",           # Kernel messages only
-            "-o", "json",   # JSON output
-            "-n", str(limit),
+            "-k",  # Kernel messages only
+            "-o",
+            "json",  # JSON output
+            "-n",
+            str(limit),
         ]
 
         if self._since:

@@ -1,9 +1,5 @@
 """Tests for trend aggregation and forecasting."""
 
-from datetime import datetime, timedelta
-
-import pytest
-
 from elle.daemon.telemetry.trends import (
     AnomalyResult,
     Forecast,

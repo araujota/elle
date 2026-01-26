@@ -7,7 +7,6 @@ import pytest
 from elle.ops.augeas.controller import (
     EditController,
     get_controller,
-    preview_edit,
 )
 from elle.ops.augeas.models import (
     AugeasEditRequest,
@@ -106,9 +105,7 @@ class TestEditRequest:
         """Request should accept operations."""
         request = AugeasEditRequest(
             file_path="/etc/hosts",
-            operations=(
-                AugeasOp(kind="set", path="/files/etc/hosts/1/ipaddr", value="10.0.0.1"),
-            ),
+            operations=(AugeasOp(kind="set", path="/files/etc/hosts/1/ipaddr", value="10.0.0.1"),),
             description="Update IP",
         )
 
@@ -295,10 +292,12 @@ class TestRequiresPrivilege:
         controller = EditController()
 
         from pathlib import Path
+
         requires = controller._requires_privilege(Path("/etc/fstab"))
 
         # /etc/fstab typically requires root
         # (unless running as root)
         import os
+
         if os.geteuid() != 0:
             assert requires is True

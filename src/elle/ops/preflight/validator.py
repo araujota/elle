@@ -70,9 +70,7 @@ class PreflightValidator:
     def nspawn_validator(self) -> NspawnValidator:
         """Get the nspawn validator (lazy initialization)."""
         if self._nspawn_validator is None:
-            self._nspawn_validator = create_nspawn_validator(
-                config=self._config.nspawn
-            )
+            self._nspawn_validator = create_nspawn_validator(config=self._config.nspawn)
         return self._nspawn_validator
 
     def validate(self, test: PreflightTest) -> PreflightResult:
@@ -124,11 +122,7 @@ class PreflightValidator:
         )
 
         # Skip validation for low-risk if configured
-        if (
-            self._config.skip_low_risk
-            and risk.level in (RiskLevel.NONE, RiskLevel.LOW)
-            and tier == 1
-        ):
+        if self._config.skip_low_risk and risk.level in (RiskLevel.NONE, RiskLevel.LOW) and tier == 1:
             return PreflightResult(
                 status=PreflightStatus.SKIPPED,
                 tier_used=0,
@@ -242,10 +236,7 @@ class PreflightValidator:
             all_issues = list(apt_result.issues) + list(nspawn_result.issues)
 
             # Determine combined status
-            has_errors = any(
-                i.severity in (IssueSeverity.ERROR, IssueSeverity.CRITICAL)
-                for i in all_issues
-            )
+            has_errors = any(i.severity in (IssueSeverity.ERROR, IssueSeverity.CRITICAL) for i in all_issues)
 
             if has_errors:
                 status = PreflightStatus.BLOCKED

@@ -38,9 +38,7 @@ class MobileAuthContext(BaseModel):
     device_name: str = Field(..., description="Device name")
     role: MobileRole = Field(..., description="Base role")
     effective_role: MobileRole = Field(..., description="Effective role")
-    elevation_expires_at: datetime | None = Field(
-        default=None, description="Elevation expiration"
-    )
+    elevation_expires_at: datetime | None = Field(default=None, description="Elevation expiration")
     client_ip: str = Field(..., description="Client IP address")
     cert_fingerprint: str = Field(..., description="Certificate fingerprint")
 
@@ -83,9 +81,7 @@ class MobileAuthenticator:
         self.store = store or MobileStore(self.config)
         self.crypto = crypto or MobileCrypto(self.config)
 
-    def authenticate(
-        self, client_cert_pem: bytes | None, client_ip: str
-    ) -> MobileAuthContext:
+    def authenticate(self, client_cert_pem: bytes | None, client_ip: str) -> MobileAuthContext:
         """Authenticate a request using client certificate.
 
         Args:
@@ -222,9 +218,7 @@ def create_auth_dependency(
                         from cryptography.hazmat.primitives import serialization
 
                         cert = x509.load_der_x509_certificate(peer_cert)
-                        client_cert_pem = cert.public_bytes(
-                            serialization.Encoding.PEM
-                        )
+                        client_cert_pem = cert.public_bytes(serialization.Encoding.PEM)
 
         # Get client IP
         client_ip = "unknown"

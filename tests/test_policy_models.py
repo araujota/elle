@@ -2,8 +2,6 @@
 
 from datetime import datetime, time
 
-import pytest
-
 from elle.policy.models import (
     Condition,
     MatchType,
@@ -12,7 +10,6 @@ from elle.policy.models import (
     PolicyEvaluationRequest,
     PolicyEvaluationResult,
     PolicyRule,
-    RiskLevel,
     TimeWindow,
 )
 
@@ -74,9 +71,7 @@ class TestCondition:
 
     def test_time_windowed_condition(self):
         """Test condition with time windows."""
-        windows = (
-            TimeWindow(start=time(2, 0), end=time(5, 0)),
-        )
+        windows = (TimeWindow(start=time(2, 0), end=time(5, 0)),)
         cond = Condition(
             requires_privilege=True,
             allowed_hours=windows,
@@ -94,9 +89,7 @@ class TestPolicyRule:
         rule = PolicyRule(
             id="test-rule",
             name="Test Rule",
-            conditions=(
-                Condition(command="test", match_type=MatchType.EXACT),
-            ),
+            conditions=(Condition(command="test", match_type=MatchType.EXACT),),
             effect=PolicyEffect.DENY,
             message="Test message",
         )
@@ -112,9 +105,7 @@ class TestPolicyRule:
         rule = PolicyRule(
             id="justify-rule",
             name="Justify Rule",
-            conditions=(
-                Condition(domain="network.*"),
-            ),
+            conditions=(Condition(domain="network.*"),),
             effect=PolicyEffect.REQUIRE_JUSTIFICATION,
             justification_prompt="Why are you changing network settings?",
         )

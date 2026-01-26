@@ -11,21 +11,15 @@ POSTGRES_RECIPE = StackRecipe(
     display_name="PostgreSQL Database Server",
     description="Standalone PostgreSQL with localhost-only access and secure defaults",
     category="data",
-
     packages=(
         "postgresql",
         "postgresql-contrib",
     ),
-
-    services=(
-        "postgresql",
-    ),
-
+    services=("postgresql",),
     config_templates={
         # pg_hba.conf for localhost-only access
         # Actual path will be determined at deploy time
     },
-
     guarantees=(
         StackGuarantee(
             name="localhost_only",
@@ -60,7 +54,6 @@ POSTGRES_RECIPE = StackRecipe(
             remediation_hint="Service not running. Start with: systemctl start postgresql",
         ),
     ),
-
     variables=(
         StackVariable(
             name="superuser_password",
@@ -81,7 +74,6 @@ POSTGRES_RECIPE = StackRecipe(
             required=False,
         ),
     ),
-
     presets={
         "dev": {
             "max_connections": "20",
@@ -92,11 +84,9 @@ POSTGRES_RECIPE = StackRecipe(
             "listen_addresses": "localhost",
         },
     },
-
     min_ram_mb=256,
     min_disk_gb=1,
     ports_required=(5432,),
-
     version="1.0.0",
     tags=("database", "sql", "postgresql", "data"),
 )

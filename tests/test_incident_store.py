@@ -1,13 +1,12 @@
 """Tests for Incident Vault store operations."""
 
 import tempfile
-from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from elle.daemon.incidents.models import Fingerprint, Precondition, SystemSnapshot
-from elle.daemon.incidents.schema import drop_all_tables, ensure_schema, get_connection
+from elle.daemon.incidents.schema import ensure_schema, get_connection
 from elle.daemon.incidents.store import (
     append_action,
     attach_snapshot,
@@ -233,7 +232,7 @@ class TestActions:
         conn, _ = temp_db
         incident = create_incident_draft(title="Payload test", conn=conn)
 
-        action = append_action(
+        append_action(
             incident.incident_id,
             kind="edit",
             payload={"file": "/etc/hosts", "content": "new line"},
@@ -300,14 +299,22 @@ class TestSnapshots:
         incident = create_incident_draft(title="All snapshots", conn=conn)
 
         pre = SystemSnapshot(
-            os="Ubuntu", kernel="6.8", uptime_sec=100,
-            cpu_load=(1.0, 1.0, 1.0), mem_total_mb=1000,
-            mem_free_mb=100, mem_available_mb=200,
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=100,
+            cpu_load=(1.0, 1.0, 1.0),
+            mem_total_mb=1000,
+            mem_free_mb=100,
+            mem_available_mb=200,
         )
         post = SystemSnapshot(
-            os="Ubuntu", kernel="6.8", uptime_sec=200,
-            cpu_load=(0.5, 0.5, 0.5), mem_total_mb=1000,
-            mem_free_mb=500, mem_available_mb=600,
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=200,
+            cpu_load=(0.5, 0.5, 0.5),
+            mem_total_mb=1000,
+            mem_free_mb=500,
+            mem_available_mb=600,
         )
 
         attach_snapshot(incident.incident_id, "pre", pre, conn=conn)

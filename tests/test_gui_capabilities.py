@@ -1,27 +1,24 @@
 """Tests for GUI automation capabilities."""
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from elle.capabilities.core.gui import (
-    GuiLearnCapability,
-    GuiLearnInput,
-    GuiLearnOutput,
+    GUI_CAPABILITIES,
     GuiClickCapability,
     GuiClickInput,
-    GuiClickOutput,
-    GuiTypeCapability,
-    GuiTypeInput,
-    GuiTypeOutput,
-    GuiNavigateCapability,
-    GuiNavigateInput,
-    GuiNavigateOutput,
     GuiExecuteTaskCapability,
     GuiExecuteTaskInput,
     GuiExecuteTaskOutput,
-    GUI_CAPABILITIES,
+    GuiLearnCapability,
+    GuiLearnInput,
+    GuiLearnOutput,
+    GuiNavigateCapability,
+    GuiNavigateInput,
+    GuiTypeCapability,
+    GuiTypeInput,
 )
-from elle.capabilities.models import CapabilitySpec
 
 
 class TestCapabilitySpecs:

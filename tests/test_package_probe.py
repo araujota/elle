@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import tempfile
-from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -156,7 +153,7 @@ class TestPackageProbe:
             f.flush()
             probe.DPKG_STATUS_PATH = Path(f.name)
 
-            result = await probe.run()
+            await probe.run()
 
             # Should not track removed package
             assert "removed-package" not in probe._package_versions
@@ -298,9 +295,7 @@ class TestPackageProbeNewPackageDetection:
         assert probe_with_detection._new_package_callback is callback
 
     @pytest.mark.asyncio
-    async def test_run_establishes_baseline_all_packages(
-        self, probe_with_detection
-    ):
+    async def test_run_establishes_baseline_all_packages(self, probe_with_detection):
         """Test first run with detection enabled tracks all packages."""
         status_content = """Package: nginx
 Status: install ok installed
@@ -382,9 +377,7 @@ Version: 24.0.5-1ubuntu1
 
     def test_create_new_package_event(self, probe_with_detection):
         """Test _create_new_package_event method."""
-        event = probe_with_detection._create_new_package_event(
-            "docker.io", "24.0.5-1ubuntu1"
-        )
+        event = probe_with_detection._create_new_package_event("docker.io", "24.0.5-1ubuntu1")
 
         assert event.source == "probe"
         assert event.severity == "info"

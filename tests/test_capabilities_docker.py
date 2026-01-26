@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import MagicMock, patch
 
 from elle.capabilities.core.docker import (
@@ -179,21 +178,17 @@ class TestDockerInspectCapability:
 
         # Mock inspect output - must be valid JSON
         import json
-        inspect_data = [{
-            "Id": "abc123def456",
-            "Name": "/nginx",
-            "State": {
-                "Status": "running",
-                "Running": True,
-                "ExitCode": 0,
-                "StartedAt": "2024-01-01T00:00:00Z"
-            },
-            "Config": {
-                "Image": "nginx:latest"
-            },
-            "RestartCount": 0,
-            "Created": "2024-01-01T00:00:00Z"
-        }]
+
+        inspect_data = [
+            {
+                "Id": "abc123def456",
+                "Name": "/nginx",
+                "State": {"Status": "running", "Running": True, "ExitCode": 0, "StartedAt": "2024-01-01T00:00:00Z"},
+                "Config": {"Image": "nginx:latest"},
+                "RestartCount": 0,
+                "Created": "2024-01-01T00:00:00Z",
+            }
+        ]
         inspect_json = json.dumps(inspect_data)
 
         mock_run.side_effect = [

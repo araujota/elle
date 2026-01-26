@@ -115,32 +115,34 @@ CORE_DEPENDENCIES: tuple[DependencySpec, ...] = (
 
 # CRITICAL: Only packages in this set can ever be installed by the dependency system.
 # This prevents arbitrary package installation via prompt injection or other attacks.
-ALLOWED_PACKAGES: frozenset[str] = frozenset({
-    # AT-SPI for GUI automation
-    "python3-pyatspi",
-    "at-spi2-core",
-    # Augeas for config editing
-    "augeas-tools",
-    "python3-augeas",
-    "libaugeas0",
-    # Docker for container management
-    "docker.io",
-    "docker-compose",
-    "docker-compose-v2",
-    # WireGuard for VPN
-    "wireguard",
-    "wireguard-tools",
-    # Network utilities
-    "net-tools",
-    "iproute2",
-    "dnsutils",
-    "iputils-ping",
-    # System monitoring
-    "smartmontools",
-    "lm-sensors",
-    "htop",
-    "iotop",
-    # Python GObject introspection (needed for AT-SPI)
-    "gir1.2-atspi-2.0",
-    "python3-gi",
-})
+ALLOWED_PACKAGES: frozenset[str] = frozenset(
+    {
+        # AT-SPI for GUI automation
+        "python3-pyatspi",
+        "at-spi2-core",
+        # Augeas for config editing
+        "augeas-tools",
+        "python3-augeas",
+        "libaugeas0",
+        # Docker for container management
+        "docker.io",
+        "docker-compose",
+        "docker-compose-v2",
+        # WireGuard for VPN
+        "wireguard",
+        "wireguard-tools",
+        # Network utilities
+        "net-tools",
+        "iproute2",
+        "dnsutils",
+        "iputils-ping",
+        # System monitoring
+        "smartmontools",
+        "lm-sensors",
+        "htop",
+        "iotop",
+        # Python GObject introspection (needed for AT-SPI)
+        "gir1.2-atspi-2.0",
+        "python3-gi",
+    }
+)

@@ -144,9 +144,7 @@ class PolicyEngine:
             log_evaluation(request, result)
 
         logger.debug(
-            f"Policy evaluation: effect={effect.value}, "
-            f"matched={len(matched_rules)} rules, "
-            f"time={elapsed_ms:.2f}ms"
+            f"Policy evaluation: effect={effect.value}, matched={len(matched_rules)} rules, time={elapsed_ms:.2f}ms"
         )
 
         return result
@@ -219,10 +217,7 @@ class PolicyEngine:
         if not rule.conditions:
             return False
 
-        results = [
-            match_condition(cond, request)
-            for cond in rule.conditions
-        ]
+        results = [match_condition(cond, request) for cond in rule.conditions]
 
         if rule.match_all:
             return all(results)
@@ -256,10 +251,7 @@ class PolicyEngine:
             result: The evaluation result that required confirmation.
             confirmed: Whether user confirmed.
         """
-        logger.info(
-            f"Confirmation {'granted' if confirmed else 'denied'} "
-            f"for rules {result.matched_rules}"
-        )
+        logger.info(f"Confirmation {'granted' if confirmed else 'denied'} for rules {result.matched_rules}")
 
 
 # =============================================================================

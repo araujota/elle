@@ -99,7 +99,6 @@ SEED_PATTERNS: tuple[IncidentPatternSeed, ...] = (
         ),
         capability_refs=("service.status", "service.restart"),
     ),
-
     # ==========================================================================
     # Service/Systemd Errors
     # ==========================================================================
@@ -150,7 +149,6 @@ SEED_PATTERNS: tuple[IncidentPatternSeed, ...] = (
         ),
         capability_refs=("network.listeners",),
     ),
-
     # ==========================================================================
     # Docker Errors
     # ==========================================================================
@@ -165,8 +163,7 @@ SEED_PATTERNS: tuple[IncidentPatternSeed, ...] = (
             "docker.sock: connect: no such file",
         ),
         diagnosis=(
-            "The Docker daemon is not running or not accessible. "
-            "This prevents any Docker operations from working."
+            "The Docker daemon is not running or not accessible. This prevents any Docker operations from working."
         ),
         suggested_fixes=(
             "Start Docker: systemctl start docker",
@@ -200,7 +197,6 @@ SEED_PATTERNS: tuple[IncidentPatternSeed, ...] = (
         ),
         capability_refs=("docker.list",),
     ),
-
     # ==========================================================================
     # Package Manager Errors
     # ==========================================================================
@@ -251,7 +247,6 @@ SEED_PATTERNS: tuple[IncidentPatternSeed, ...] = (
         ),
         capability_refs=("package.update",),
     ),
-
     # ==========================================================================
     # Permission Errors
     # ==========================================================================
@@ -280,7 +275,6 @@ SEED_PATTERNS: tuple[IncidentPatternSeed, ...] = (
         ),
         capability_refs=(),
     ),
-
     # ==========================================================================
     # Filesystem Errors
     # ==========================================================================
@@ -331,7 +325,6 @@ SEED_PATTERNS: tuple[IncidentPatternSeed, ...] = (
         ),
         capability_refs=(),
     ),
-
     # ==========================================================================
     # Network Errors
     # ==========================================================================
@@ -345,10 +338,7 @@ SEED_PATTERNS: tuple[IncidentPatternSeed, ...] = (
             "connect: Connection refused",
             "ECONNREFUSED",
         ),
-        diagnosis=(
-            "No service is listening on the target address/port, or a "
-            "firewall is blocking the connection."
-        ),
+        diagnosis=("No service is listening on the target address/port, or a firewall is blocking the connection."),
         suggested_fixes=(
             "Check if service is running: systemctl status <service>",
             "Check if port is listening: ss -tlnp | grep <port>",
@@ -382,7 +372,6 @@ SEED_PATTERNS: tuple[IncidentPatternSeed, ...] = (
         ),
         capability_refs=(),
     ),
-
     # ==========================================================================
     # Command Errors
     # ==========================================================================
@@ -396,9 +385,7 @@ SEED_PATTERNS: tuple[IncidentPatternSeed, ...] = (
             "not found",
             "No such file or directory",
         ),
-        diagnosis=(
-            "The command is not installed or not in the system PATH."
-        ),
+        diagnosis=("The command is not installed or not in the system PATH."),
         suggested_fixes=(
             "Install the package: sudo apt install <package>",
             "Use full path if installed elsewhere",

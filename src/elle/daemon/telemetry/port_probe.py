@@ -51,6 +51,7 @@ TRUSTED_PROCESSES = {
 
 class Listener(NamedTuple):
     """Information about a listening socket."""
+
     port: int
     proto: str
     address: str
@@ -172,10 +173,7 @@ class PortListenerProbe:
         """Perform initial scan and establish baseline."""
         listeners = await self._get_all_listeners()
 
-        self._baseline = {
-            (l.port, l.proto, l.address): l
-            for l in listeners
-        }
+        self._baseline = {(l.port, l.proto, l.address): l for l in listeners}
 
         logger.info(f"Established baseline with {len(self._baseline)} listeners")
 
@@ -184,10 +182,7 @@ class PortListenerProbe:
         self._stats["scans_completed"] += 1
 
         listeners = await self._get_all_listeners()
-        current = {
-            (l.port, l.proto, l.address): l
-            for l in listeners
-        }
+        current = {(l.port, l.proto, l.address): l for l in listeners}
 
         # Check for new listeners
         for key, listener in current.items():
@@ -285,14 +280,16 @@ class PortListenerProbe:
                 inode = parts[9]
                 pid, comm = await self._get_process_for_inode(inode)
 
-                listeners.append(Listener(
-                    port=port,
-                    proto=proto,
-                    address=address,
-                    pid=pid,
-                    comm=comm,
-                    is_wildcard=is_wildcard,
-                ))
+                listeners.append(
+                    Listener(
+                        port=port,
+                        proto=proto,
+                        address=address,
+                        pid=pid,
+                        comm=comm,
+                        is_wildcard=is_wildcard,
+                    )
+                )
 
         except Exception as e:
             logger.debug(f"Error scanning {path}: {e}")
@@ -303,7 +300,7 @@ class PortListenerProbe:
         """Convert hex address to IP string."""
         if len(hex_str) == 8:
             # IPv4
-            octets = [str(int(hex_str[i:i+2], 16)) for i in range(0, 8, 2)]
+            octets = [str(int(hex_str[i : i + 2], 16)) for i in range(0, 8, 2)]
             return ".".join(reversed(octets))
         elif len(hex_str) == 32:
             # IPv6
@@ -478,7 +475,4 @@ class PortListenerProbe:
         Returns:
             List of Listener objects on sensitive ports.
         """
-        return [
-            l for l in self._baseline.values()
-            if l.port in SENSITIVE_PORTS
-        ]
+        return [l for l in self._baseline.values() if l.port in SENSITIVE_PORTS]

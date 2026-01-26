@@ -192,14 +192,22 @@ class TestSnapshotDiff:
     def test_diff_uptime(self):
         """Test diffing uptime."""
         before = SystemSnapshot(
-            os="Ubuntu", kernel="6.8", uptime_sec=1000,
-            cpu_load=(0.5, 0.5, 0.5), mem_total_mb=8192,
-            mem_free_mb=4096, mem_available_mb=6144,
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=1000,
+            cpu_load=(0.5, 0.5, 0.5),
+            mem_total_mb=8192,
+            mem_free_mb=4096,
+            mem_available_mb=6144,
         )
         after = SystemSnapshot(
-            os="Ubuntu", kernel="6.8", uptime_sec=1100,
-            cpu_load=(0.6, 0.5, 0.5), mem_total_mb=8192,
-            mem_free_mb=4096, mem_available_mb=6144,
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=1100,
+            cpu_load=(0.6, 0.5, 0.5),
+            mem_total_mb=8192,
+            mem_free_mb=4096,
+            mem_available_mb=6144,
         )
 
         diff = diff_snapshots(before, after)
@@ -209,14 +217,22 @@ class TestSnapshotDiff:
     def test_diff_memory(self):
         """Test diffing memory."""
         before = SystemSnapshot(
-            os="Ubuntu", kernel="6.8", uptime_sec=1000,
-            cpu_load=(0.5, 0.5, 0.5), mem_total_mb=8192,
-            mem_free_mb=4096, mem_available_mb=6144,
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=1000,
+            cpu_load=(0.5, 0.5, 0.5),
+            mem_total_mb=8192,
+            mem_free_mb=4096,
+            mem_available_mb=6144,
         )
         after = SystemSnapshot(
-            os="Ubuntu", kernel="6.8", uptime_sec=1000,
-            cpu_load=(0.5, 0.5, 0.5), mem_total_mb=8192,
-            mem_free_mb=5096, mem_available_mb=7144,
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=1000,
+            cpu_load=(0.5, 0.5, 0.5),
+            mem_total_mb=8192,
+            mem_free_mb=5096,
+            mem_available_mb=7144,
         )
 
         diff = diff_snapshots(before, after)
@@ -227,15 +243,23 @@ class TestSnapshotDiff:
     def test_diff_disk_changes(self):
         """Test diffing disk usage."""
         before = SystemSnapshot(
-            os="Ubuntu", kernel="6.8", uptime_sec=1000,
-            cpu_load=(0.5, 0.5, 0.5), mem_total_mb=8192,
-            mem_free_mb=4096, mem_available_mb=6144,
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=1000,
+            cpu_load=(0.5, 0.5, 0.5),
+            mem_total_mb=8192,
+            mem_free_mb=4096,
+            mem_available_mb=6144,
             disks=({"mount": "/", "used_pct": 80},),
         )
         after = SystemSnapshot(
-            os="Ubuntu", kernel="6.8", uptime_sec=1000,
-            cpu_load=(0.5, 0.5, 0.5), mem_total_mb=8192,
-            mem_free_mb=4096, mem_available_mb=6144,
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=1000,
+            cpu_load=(0.5, 0.5, 0.5),
+            mem_total_mb=8192,
+            mem_free_mb=4096,
+            mem_available_mb=6144,
             disks=({"mount": "/", "used_pct": 70},),
         )
 
@@ -248,15 +272,23 @@ class TestSnapshotDiff:
     def test_diff_interface_changes(self):
         """Test diffing interface state."""
         before = SystemSnapshot(
-            os="Ubuntu", kernel="6.8", uptime_sec=1000,
-            cpu_load=(0.5, 0.5, 0.5), mem_total_mb=8192,
-            mem_free_mb=4096, mem_available_mb=6144,
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=1000,
+            cpu_load=(0.5, 0.5, 0.5),
+            mem_total_mb=8192,
+            mem_free_mb=4096,
+            mem_available_mb=6144,
             interfaces=({"name": "eth0", "state": "DOWN"},),
         )
         after = SystemSnapshot(
-            os="Ubuntu", kernel="6.8", uptime_sec=1000,
-            cpu_load=(0.5, 0.5, 0.5), mem_total_mb=8192,
-            mem_free_mb=4096, mem_available_mb=6144,
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=1000,
+            cpu_load=(0.5, 0.5, 0.5),
+            mem_total_mb=8192,
+            mem_free_mb=4096,
+            mem_available_mb=6144,
             interfaces=({"name": "eth0", "state": "UP"},),
         )
 
@@ -270,16 +302,26 @@ class TestSnapshotDiff:
     def test_diff_docker(self):
         """Test diffing docker containers."""
         before = SystemSnapshot(
-            os="Ubuntu", kernel="6.8", uptime_sec=1000,
-            cpu_load=(0.5, 0.5, 0.5), mem_total_mb=8192,
-            mem_free_mb=4096, mem_available_mb=6144,
-            docker_running=3, docker_exited=1,
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=1000,
+            cpu_load=(0.5, 0.5, 0.5),
+            mem_total_mb=8192,
+            mem_free_mb=4096,
+            mem_available_mb=6144,
+            docker_running=3,
+            docker_exited=1,
         )
         after = SystemSnapshot(
-            os="Ubuntu", kernel="6.8", uptime_sec=1000,
-            cpu_load=(0.5, 0.5, 0.5), mem_total_mb=8192,
-            mem_free_mb=4096, mem_available_mb=6144,
-            docker_running=2, docker_exited=2,
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=1000,
+            cpu_load=(0.5, 0.5, 0.5),
+            mem_total_mb=8192,
+            mem_free_mb=4096,
+            mem_available_mb=6144,
+            docker_running=2,
+            docker_exited=2,
         )
 
         diff = diff_snapshots(before, after)

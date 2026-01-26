@@ -307,9 +307,7 @@ class TestExecuteFix:
         )
 
         result = service.run_full_pipeline(session_with_failure)
-        new_result, action = service.execute_fix(
-            result, "apt install foo", session_with_failure
-        )
+        new_result, action = service.execute_fix(result, "apt install foo", session_with_failure)
 
         # Core assertion: failed fixes are properly reported
         assert action.success is False

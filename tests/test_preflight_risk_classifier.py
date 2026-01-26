@@ -3,17 +3,15 @@
 import pytest
 
 from elle.ops.preflight.risk_classifier import (
-    RiskLevel,
-    RiskAssessment,
-    classify_risk,
-    is_high_risk,
-    can_use_container_validation,
-    get_risk_summary,
     CRITICAL_PACKAGES,
     HIGH_RISK_PACKAGES,
-    MEDIUM_RISK_PACKAGES,
-    LOW_RISK_PACKAGES,
     NO_CONTAINER_PACKAGES,
+    RiskAssessment,
+    RiskLevel,
+    can_use_container_validation,
+    classify_risk,
+    get_risk_summary,
+    is_high_risk,
 )
 
 

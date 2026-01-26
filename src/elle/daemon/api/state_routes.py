@@ -84,15 +84,11 @@ class DockerStateResponse(BaseModel):
     running_containers: list[ContainerResponse] = Field(
         default_factory=list, description="Currently running containers"
     )
-    all_containers: list[ContainerResponse] = Field(
-        default_factory=list, description="All containers"
-    )
+    all_containers: list[ContainerResponse] = Field(default_factory=list, description="All containers")
     images: list[str] = Field(default_factory=list, description="Available images")
     networks: list[str] = Field(default_factory=list, description="Docker networks")
     volumes: list[str] = Field(default_factory=list, description="Docker volumes")
-    compose_services: list[str] = Field(
-        default_factory=list, description="Compose-managed services"
-    )
+    compose_services: list[str] = Field(default_factory=list, description="Compose-managed services")
     swarm_active: bool = Field(default=False, description="Is swarm mode active")
     collected_at: datetime = Field(description="When state was collected")
 
@@ -131,9 +127,7 @@ class FirewallStateResponse(BaseModel):
     backend: str = Field(description="Backend (ufw/iptables/nftables)")
     default_incoming: str = Field(description="Default incoming policy")
     default_outgoing: str = Field(description="Default outgoing policy")
-    rules: list[FirewallRuleResponse] = Field(
-        default_factory=list, description="Firewall rules"
-    )
+    rules: list[FirewallRuleResponse] = Field(default_factory=list, description="Firewall rules")
     collected_at: datetime = Field(description="When state was collected")
 
 
@@ -142,18 +136,12 @@ class NetworkStateResponse(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    interfaces: list[InterfaceResponse] = Field(
-        default_factory=list, description="Network interfaces"
-    )
+    interfaces: list[InterfaceResponse] = Field(default_factory=list, description="Network interfaces")
     default_gateway: str | None = Field(default=None, description="Default gateway IP")
-    default_interface: str | None = Field(
-        default=None, description="Default interface name"
-    )
+    default_interface: str | None = Field(default=None, description="Default interface name")
     dns_servers: list[str] = Field(default_factory=list, description="DNS servers")
     hostname: str = Field(default="", description="System hostname")
-    wireguard_interfaces: list[str] = Field(
-        default_factory=list, description="WireGuard interfaces"
-    )
+    wireguard_interfaces: list[str] = Field(default_factory=list, description="WireGuard interfaces")
     firewall_active: bool = Field(default=False, description="Is firewall active")
     firewall_backend: str = Field(default="unknown", description="Firewall backend")
     collected_at: datetime = Field(description="When state was collected")
@@ -177,9 +165,7 @@ class ListenersResponse(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    listeners: list[ListenerResponse] = Field(
-        default_factory=list, description="Network listeners"
-    )
+    listeners: list[ListenerResponse] = Field(default_factory=list, description="Network listeners")
     total: int = Field(ge=0, description="Total listener count")
     collected_at: datetime = Field(description="When state was collected")
 
@@ -191,9 +177,7 @@ class SystemStateResponse(BaseModel):
 
     docker: DockerStateResponse = Field(description="Docker state")
     network: NetworkStateResponse = Field(description="Network state")
-    listeners: list[ListenerResponse] = Field(
-        default_factory=list, description="Network listeners"
-    )
+    listeners: list[ListenerResponse] = Field(default_factory=list, description="Network listeners")
     collected_at: datetime = Field(description="When state was collected")
 
 

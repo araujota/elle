@@ -52,10 +52,7 @@ def get_manvault_service() -> ManVaultService:
         The ManVaultService instance.
     """
     if _manvault_service is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Man Vault service not initialized"
-        )
+        raise HTTPException(status_code=503, detail="Man Vault service not initialized")
     return _manvault_service
 
 

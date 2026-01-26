@@ -218,10 +218,7 @@ DENY_SUDO_RULE = PolicyRule(
         ),
     ),
     effect=PolicyEffect.DENY,
-    message=(
-        "ELLE does not execute commands with sudo. "
-        "Privileged operations go through Polkit authorization."
-    ),
+    message=("ELLE does not execute commands with sudo. Privileged operations go through Polkit authorization."),
     priority=100,
 )
 

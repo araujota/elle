@@ -126,11 +126,16 @@ def demo_lists() -> None:
     console.print(numbered_list(["Step one", "Step two", "Step three"]))
 
     console.print("\nOption list:")
-    console.print(option_list([
-        ("a", "Option A - Do something"),
-        ("b", "Option B - Do something else"),
-        ("c", "Option C - Cancel"),
-    ], selected=1))
+    console.print(
+        option_list(
+            [
+                ("a", "Option A - Do something"),
+                ("b", "Option B - Do something else"),
+                ("c", "Option C - Cancel"),
+            ],
+            selected=1,
+        )
+    )
     console.print()
 
 
@@ -143,12 +148,17 @@ def demo_key_value() -> None:
     console.print(key_value("Exit Code", "1", value_style="error"))
     console.print()
 
-    console.print(key_value_table([
-        ("OS", "Ubuntu 24.04 LTS"),
-        ("Kernel", "6.8.0-40-generic"),
-        ("Uptime", "3d 14h 22m"),
-        ("Load", "0.42 0.38 0.35"),
-    ], title="System Info"))
+    console.print(
+        key_value_table(
+            [
+                ("OS", "Ubuntu 24.04 LTS"),
+                ("Kernel", "6.8.0-40-generic"),
+                ("Uptime", "3d 14h 22m"),
+                ("Load", "0.42 0.38 0.35"),
+            ],
+            title="System Info",
+        )
+    )
     console.print()
 
 
@@ -435,9 +445,27 @@ def demo_event_table() -> None:
     console.print()
 
     events = [
-        {"ts": datetime.now() - timedelta(minutes=5), "source": "journal", "severity": "error", "category": "oom", "message": "Out of memory: Killed process 12345 (nginx)"},
-        {"ts": datetime.now() - timedelta(minutes=15), "source": "kernel", "severity": "warning", "category": "disk", "message": "EXT4-fs warning: mounting fs with errors"},
-        {"ts": datetime.now() - timedelta(hours=1), "source": "probe", "severity": "info", "category": "network", "message": "Interface eth0 link up at 1000 Mbps"},
+        {
+            "ts": datetime.now() - timedelta(minutes=5),
+            "source": "journal",
+            "severity": "error",
+            "category": "oom",
+            "message": "Out of memory: Killed process 12345 (nginx)",
+        },
+        {
+            "ts": datetime.now() - timedelta(minutes=15),
+            "source": "kernel",
+            "severity": "warning",
+            "category": "disk",
+            "message": "EXT4-fs warning: mounting fs with errors",
+        },
+        {
+            "ts": datetime.now() - timedelta(hours=1),
+            "source": "probe",
+            "severity": "info",
+            "category": "network",
+            "message": "Interface eth0 link up at 1000 Mbps",
+        },
     ]
 
     table = event_table(events, title="Recent Events")

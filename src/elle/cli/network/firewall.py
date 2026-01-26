@@ -19,6 +19,7 @@ Example:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
 import subprocess
@@ -56,12 +57,8 @@ class FirewallRule(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    action: Literal["allow", "deny", "reject", "limit"] = Field(
-        description="Rule action"
-    )
-    direction: Literal["in", "out", "both"] = Field(
-        description="Traffic direction"
-    )
+    action: Literal["allow", "deny", "reject", "limit"] = Field(description="Rule action")
+    direction: Literal["in", "out", "both"] = Field(description="Traffic direction")
     port: int | None = Field(default=None, description="Port number")
     protocol: str | None = Field(default=None, description="Protocol (tcp/udp)")
     from_addr: str | None = Field(default=None, description="Source address")
@@ -168,10 +165,8 @@ def _parse_ufw_rule(line: str) -> FirewallRule | None:
 
     if "/" in port_spec:
         port_str, protocol = port_spec.split("/", 1)
-        try:
+        with contextlib.suppress(ValueError):
             port = int(port_str)
-        except ValueError:
-            pass
     else:
         try:
             port = int(port_spec)
@@ -313,13 +308,9 @@ def explain_firewall_rules() -> FirewallExplanation:
             if rule.port == 22 and not rule.from_addr and rule.action == "allow":
                 pass  # SSH from anywhere is common
             elif rule.port in (3306, 5432, 6379, 27017) and not rule.from_addr:
-                service = next(
-                    (n for n, p in SERVICE_PORTS.items() if p == rule.port),
-                    str(rule.port)
-                )
+                service = next((n for n, p in SERVICE_PORTS.items() if p == rule.port), str(rule.port))
                 warnings.append(
-                    f"{service.upper()} (port {rule.port}) is open to the world - "
-                    "consider restricting to specific IPs"
+                    f"{service.upper()} (port {rule.port}) is open to the world - consider restricting to specific IPs"
                 )
 
         # Build summary
@@ -364,10 +355,7 @@ def explain_firewall_rules() -> FirewallExplanation:
                 "(UFW provides easier management: apt install ufw)"
             )
         else:
-            summary = (
-                "Using iptables with permissive rules.\n"
-                "Consider using UFW for easier firewall management."
-            )
+            summary = "Using iptables with permissive rules.\nConsider using UFW for easier firewall management."
             warnings.append("iptables appears permissive - verify rules manually")
 
         return FirewallExplanation(
@@ -459,10 +447,7 @@ def suggest_lockdown(
 
     # Determine port
     port = None
-    if service.isdigit():
-        port = int(service)
-    else:
-        port = SERVICE_PORTS.get(service.lower())
+    port = int(service) if service.isdigit() else SERVICE_PORTS.get(service.lower())
 
     if not port:
         return [f"# Unknown service: {service}"]
@@ -531,13 +516,15 @@ def generate_lockdown_plan(
         else:
             commands.append(f"# Unknown service: {service}")
 
-    commands.extend([
-        "",
-        "# Enable firewall",
-        "ufw --force enable",
-        "",
-        "# Show status",
-        "ufw status verbose",
-    ])
+    commands.extend(
+        [
+            "",
+            "# Enable firewall",
+            "ufw --force enable",
+            "",
+            "# Show status",
+            "ufw status verbose",
+        ]
+    )
 
     return commands

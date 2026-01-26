@@ -1,31 +1,30 @@
 """Tests for incident rendering utilities."""
 
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from elle.cli.terminal.incident_renderer import (
-    render_incident_list,
+    _format_duration,
+    _time_ago,
+    _truncate,
     render_incident_detail,
+    render_incident_list,
     render_incident_markdown,
     render_search_results,
     render_snapshot_diff,
-    _truncate,
-    _time_ago,
-    _format_duration,
 )
 from elle.daemon.incidents.models import (
-    IncidentReport,
-    IncidentAction,
-    IncidentSnapshot,
-    SystemSnapshot,
     Fingerprint,
+    IncidentAction,
+    IncidentReport,
+    SystemSnapshot,
 )
-
 
 # =============================================================================
 # Helper Function Tests
 # =============================================================================
+
 
 class TestTruncate:
     """Tests for text truncation."""
@@ -91,6 +90,7 @@ class TestFormatDuration:
 # Incident List Rendering Tests
 # =============================================================================
 
+
 class TestRenderIncidentList:
     """Tests for incident list rendering."""
 
@@ -149,6 +149,7 @@ class TestRenderIncidentList:
 # =============================================================================
 # Incident Detail Rendering Tests
 # =============================================================================
+
 
 class TestRenderIncidentDetail:
     """Tests for incident detail rendering."""
@@ -251,6 +252,7 @@ class TestRenderIncidentDetail:
 # Markdown Export Tests
 # =============================================================================
 
+
 class TestRenderIncidentMarkdown:
     """Tests for markdown export."""
 
@@ -307,6 +309,7 @@ class TestRenderIncidentMarkdown:
 # Snapshot Diff Tests
 # =============================================================================
 
+
 class TestRenderSnapshotDiff:
     """Tests for snapshot diff rendering."""
 
@@ -326,12 +329,8 @@ class TestRenderSnapshotDiff:
                 {"mount": "/", "used_pct": 85, "avail_gb": 15},
                 {"mount": "/home", "used_pct": 70, "avail_gb": 100},
             ),
-            interfaces=(
-                {"name": "eth0", "state": "down", "errors": 0},
-            ),
-            services=(
-                {"name": "nginx", "active": False, "failed": True},
-            ),
+            interfaces=({"name": "eth0", "state": "down", "errors": 0},),
+            services=({"name": "nginx", "active": False, "failed": True},),
             docker_running=0,
             docker_exited=2,
             temps=(),
@@ -354,12 +353,8 @@ class TestRenderSnapshotDiff:
                 {"mount": "/", "used_pct": 75, "avail_gb": 25},
                 {"mount": "/home", "used_pct": 70, "avail_gb": 100},
             ),
-            interfaces=(
-                {"name": "eth0", "state": "up", "errors": 0},
-            ),
-            services=(
-                {"name": "nginx", "active": True, "failed": False},
-            ),
+            interfaces=({"name": "eth0", "state": "up", "errors": 0},),
+            services=({"name": "nginx", "active": True, "failed": False},),
             docker_running=2,
             docker_exited=0,
             temps=(),
@@ -413,6 +408,7 @@ class TestRenderSnapshotDiff:
 # =============================================================================
 # Search Results Tests
 # =============================================================================
+
 
 class TestRenderSearchResults:
     """Tests for search results rendering."""

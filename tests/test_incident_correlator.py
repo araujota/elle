@@ -109,9 +109,7 @@ class TestEntityExtraction:
 
     def test_extract_multiple_entities(self, correlator):
         """Test extracting multiple entities."""
-        entities = correlator._extract_entities(
-            "nginx.service failed on eth0 with /dev/sda error"
-        )
+        entities = correlator._extract_entities("nginx.service failed on eth0 with /dev/sda error")
         assert len(entities) >= 2
 
 
@@ -155,7 +153,7 @@ class TestEventProcessing:
             "message": "Disk usage high",
         }
 
-        incident_id = correlator_strict.process_event(event, conn=conn)
+        correlator_strict.process_event(event, conn=conn)
         # May or may not create depending on implementation
         # This test just ensures no crash
 

@@ -1,13 +1,13 @@
 """Tests for engine incident handling."""
 
-from datetime import datetime, UTC
-from unittest.mock import patch, MagicMock
+from datetime import UTC, datetime
+from unittest.mock import patch
 
 import pytest
 
 from elle.cli.engine import Engine, EngineResult
 from elle.common.session import create_session
-from elle.daemon.incidents.models import IncidentReport, Fingerprint
+from elle.daemon.incidents.models import IncidentReport
 
 
 class TestEngineIncidentCommands:
@@ -118,7 +118,7 @@ class TestEngineIncidentCommands:
         """Test that 'incidents' routes to list."""
         with patch.object(engine, "_list_incidents") as mock_list:
             mock_list.return_value = EngineResult(output="test", session=session)
-            result = engine._handle_incidents("incidents", session)
+            engine._handle_incidents("incidents", session)
 
         mock_list.assert_called_once()
 
@@ -126,7 +126,7 @@ class TestEngineIncidentCommands:
         """Test that 'incident <id>' routes to detail."""
         with patch.object(engine, "_show_incident_detail") as mock_detail:
             mock_detail.return_value = EngineResult(output="test", session=session)
-            result = engine._handle_incidents("incident abc123", session)
+            engine._handle_incidents("incident abc123", session)
 
         mock_detail.assert_called_once()
         # Check that the incident ID was extracted
@@ -137,7 +137,7 @@ class TestEngineIncidentCommands:
         """Test that 'incidents search <term>' routes to search."""
         with patch.object(engine, "_search_incidents") as mock_search:
             mock_search.return_value = EngineResult(output="test", session=session)
-            result = engine._handle_incidents("incidents search disk full", session)
+            engine._handle_incidents("incidents search disk full", session)
 
         mock_search.assert_called_once()
         args = mock_search.call_args

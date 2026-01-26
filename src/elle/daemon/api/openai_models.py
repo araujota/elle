@@ -65,9 +65,7 @@ class ChatMessage(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    role: Literal["system", "user", "assistant", "tool"] = Field(
-        description="Role of the message sender"
-    )
+    role: Literal["system", "user", "assistant", "tool"] = Field(description="Role of the message sender")
     content: str | None = Field(
         default=None,
         description="Text content of the message",
@@ -96,9 +94,7 @@ class ChatCompletionRequest(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    model: ModelName = Field(
-        description="Model ID determining execution mode"
-    )
+    model: ModelName = Field(description="Model ID determining execution mode")
     messages: tuple[ChatMessage, ...] = Field(
         description="Conversation history (at least one message required)",
     )
@@ -110,6 +106,7 @@ class ChatCompletionRequest(BaseModel):
         if not v:
             raise ValueError("At least one message is required")
         return v
+
     stream: bool = Field(
         default=False,
         description="Whether to stream the response via SSE",
@@ -195,6 +192,7 @@ class ChatCompletionResponse(BaseModel):
         if not v:
             raise ValueError("At least one choice is required")
         return v
+
     usage: UsageStats = Field(description="Token usage statistics")
 
     # ELLE extensions

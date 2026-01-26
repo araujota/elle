@@ -216,10 +216,7 @@ def format_memory_issue(
 
     if available_mb is not None and total_mb is not None:
         pct_used = ((total_mb - available_mb) / total_mb) * 100
-        parts.append(
-            f"Memory at {pct_used:.0f}%: {format_mb(available_mb)} available "
-            f"of {format_mb(total_mb)}"
-        )
+        parts.append(f"Memory at {pct_used:.0f}%: {format_mb(available_mb)} available of {format_mb(total_mb)}")
     elif available_mb is not None:
         parts.append(f"Only {format_mb(available_mb)} memory available")
 

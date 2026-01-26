@@ -123,11 +123,7 @@ class DpkgMetadataExtractor(BaseExtractor):
             homepage = lines[5] if len(lines) > 5 and lines[5] else None
 
             # Parse dependencies
-            depends = tuple(
-                dep.split()[0].strip()
-                for dep in depends_str.split(",")
-                if dep.strip()
-            )
+            depends = tuple(dep.split()[0].strip() for dep in depends_str.split(",") if dep.strip())
 
             metadata = PackageMetadata(
                 name=name,
@@ -171,13 +167,15 @@ class FileManifestExtractor(BaseExtractor):
     priority = 20
 
     # Patterns for categorization
-    BINARY_DIRS = frozenset({
-        "/usr/bin/",
-        "/bin/",
-        "/usr/sbin/",
-        "/sbin/",
-        "/usr/local/bin/",
-    })
+    BINARY_DIRS = frozenset(
+        {
+            "/usr/bin/",
+            "/bin/",
+            "/usr/sbin/",
+            "/sbin/",
+            "/usr/local/bin/",
+        }
+    )
     MAN_PATTERN = re.compile(r"/man/man\d/.*\.\d")
     SYSTEMD_PATTERN = re.compile(r"/systemd/.*\.(service|socket|timer|target|path)$")
     POLKIT_PATTERN = re.compile(r"/polkit.*\.policy$")
@@ -312,10 +310,7 @@ class BashCompletionExtractor(BaseExtractor):
             # Try standard locations
             completion_files = self._find_completion_files(package_name)
         else:
-            completion_files = [
-                f for f in manifest.completions
-                if "bash" in f.lower()
-            ]
+            completion_files = [f for f in manifest.completions if "bash" in f.lower()]
 
         if not completion_files:
             return ExtractionResult(
@@ -387,27 +382,31 @@ class BashCompletionExtractor(BaseExtractor):
             for word in words:
                 if word.startswith("-") and word not in seen:
                     seen.add(word)
-                    flags.append(ExtractedFlag(
-                        flag=word,
-                        long_form=None if word.startswith("--") else None,
-                        description="",
-                        takes_value=False,
-                        source="bash_completion",
-                        confidence=0.9,
-                    ))
+                    flags.append(
+                        ExtractedFlag(
+                            flag=word,
+                            long_form=None if word.startswith("--") else None,
+                            description="",
+                            takes_value=False,
+                            source="bash_completion",
+                            confidence=0.9,
+                        )
+                    )
 
         # Extract from case patterns
         for match in self.CASE_PATTERN.finditer(content):
             flag = match.group(1)
             if flag not in seen:
                 seen.add(flag)
-                flags.append(ExtractedFlag(
-                    flag=flag,
-                    description="",
-                    takes_value=False,
-                    source="bash_completion",
-                    confidence=0.85,
-                ))
+                flags.append(
+                    ExtractedFlag(
+                        flag=flag,
+                        description="",
+                        takes_value=False,
+                        source="bash_completion",
+                        confidence=0.85,
+                    )
+                )
 
         # Extract from opts variable patterns
         for match in self.OPTS_VAR_PATTERN.finditer(content):
@@ -415,13 +414,15 @@ class BashCompletionExtractor(BaseExtractor):
             for word in words:
                 if word.startswith("-") and word not in seen:
                     seen.add(word)
-                    flags.append(ExtractedFlag(
-                        flag=word,
-                        description="",
-                        takes_value=False,
-                        source="bash_completion",
-                        confidence=0.85,
-                    ))
+                    flags.append(
+                        ExtractedFlag(
+                            flag=word,
+                            description="",
+                            takes_value=False,
+                            source="bash_completion",
+                            confidence=0.85,
+                        )
+                    )
 
         return flags
 
@@ -435,11 +436,13 @@ class BashCompletionExtractor(BaseExtractor):
             words = match.group(1).split()
             for word in words:
                 if word and not word.startswith("-"):
-                    subcommands.append(ExtractedSubcommand(
-                        name=word,
-                        description="",
-                        source="bash_completion",
-                    ))
+                    subcommands.append(
+                        ExtractedSubcommand(
+                            name=word,
+                            description="",
+                            source="bash_completion",
+                        )
+                    )
 
         return subcommands
 
@@ -481,10 +484,7 @@ class ZshCompletionExtractor(BaseExtractor):
         if not manifest or not manifest.completions:
             completion_files = self._find_completion_files(package_name)
         else:
-            completion_files = [
-                f for f in manifest.completions
-                if "zsh" in f.lower() or f.startswith("_")
-            ]
+            completion_files = [f for f in manifest.completions if "zsh" in f.lower() or f.startswith("_")]
 
         if not completion_files:
             return ExtractionResult(
@@ -561,13 +561,15 @@ class ZshCompletionExtractor(BaseExtractor):
                     # Check if takes value
                     takes_value = ":" in arg_spec and "::" not in arg_spec
 
-                    flags.append(ExtractedFlag(
-                        flag=flag,
-                        description=description,
-                        takes_value=takes_value,
-                        source="zsh_completion",
-                        confidence=0.92,  # Zsh has good descriptions
-                    ))
+                    flags.append(
+                        ExtractedFlag(
+                            flag=flag,
+                            description=description,
+                            takes_value=takes_value,
+                            source="zsh_completion",
+                            confidence=0.92,  # Zsh has good descriptions
+                        )
+                    )
 
         return flags
 
@@ -622,15 +624,17 @@ class ManPageExtractor(BaseExtractor):
             for pf in man_page.flags:
                 flag_str = pf.long or pf.short or pf.name
                 if flag_str:
-                    flags.append(ExtractedFlag(
-                        flag=flag_str,
-                        long_form=pf.long,
-                        description=pf.description,
-                        takes_value=pf.flag_type.value != "bool",
-                        value_type=pf.metavar,
-                        source="man_page",
-                        confidence=0.8,
-                    ))
+                    flags.append(
+                        ExtractedFlag(
+                            flag=flag_str,
+                            long_form=pf.long,
+                            description=pf.description,
+                            takes_value=pf.flag_type.value != "bool",
+                            value_type=pf.metavar,
+                            source="man_page",
+                            confidence=0.8,
+                        )
+                    )
 
             return ExtractionResult(
                 source_name=self.name,
@@ -697,14 +701,16 @@ class SystemdUnitExtractor(BaseExtractor):
                 env_lines = self._get_all_values(content, "Environment")
                 requires = self._get_all_values(content, "Requires")
 
-                units.append(SystemdUnitInfo(
-                    unit_name=unit_name,
-                    unit_type=unit_type,
-                    description=description,
-                    exec_start=exec_start,
-                    environment=tuple(env_lines),
-                    requires=tuple(requires),
-                ))
+                units.append(
+                    SystemdUnitInfo(
+                        unit_name=unit_name,
+                        unit_type=unit_type,
+                        description=description,
+                        exec_start=exec_start,
+                        environment=tuple(env_lines),
+                        requires=tuple(requires),
+                    )
+                )
 
             except Exception as e:
                 logger.debug(f"Failed to parse {unit_path}: {e}")
@@ -850,15 +856,17 @@ class HelpOutputExtractor(BaseExtractor):
             flag = long or short
             if flag and flag not in seen:
                 seen.add(flag)
-                flags.append(ExtractedFlag(
-                    flag=flag,
-                    long_form=long,
-                    description=desc.strip(),
-                    takes_value=bool(arg),
-                    value_type=arg,
-                    source="help_output",
-                    confidence=0.7,  # Lower confidence for help parsing
-                ))
+                flags.append(
+                    ExtractedFlag(
+                        flag=flag,
+                        long_form=long,
+                        description=desc.strip(),
+                        takes_value=bool(arg),
+                        value_type=arg,
+                        source="help_output",
+                        confidence=0.7,  # Lower confidence for help parsing
+                    )
+                )
 
         # Parse long-only patterns
         for match in self.LONG_ONLY_PATTERN.finditer(help_text):
@@ -866,14 +874,16 @@ class HelpOutputExtractor(BaseExtractor):
 
             if long and long not in seen:
                 seen.add(long)
-                flags.append(ExtractedFlag(
-                    flag=long,
-                    description=desc.strip(),
-                    takes_value=bool(arg),
-                    value_type=arg,
-                    source="help_output",
-                    confidence=0.7,
-                ))
+                flags.append(
+                    ExtractedFlag(
+                        flag=long,
+                        description=desc.strip(),
+                        takes_value=bool(arg),
+                        value_type=arg,
+                        source="help_output",
+                        confidence=0.7,
+                    )
+                )
 
         return flags
 

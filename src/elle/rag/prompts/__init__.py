@@ -147,10 +147,7 @@ class PromptComposer:
         context = context or {}
 
         # Find matching, enabled segments
-        matching = [
-            s for s in self._segments.values()
-            if s.intent == intent and s.enabled
-        ]
+        matching = [s for s in self._segments.values() if s.intent == intent and s.enabled]
 
         # Sort by priority (lower first)
         matching.sort(key=lambda s: s.priority)
@@ -161,10 +158,7 @@ class PromptComposer:
             # Apply context substitution if needed
             if segment.requires_context:
                 try:
-                    substitutions = {
-                        k: context.get(k, "")
-                        for k in segment.requires_context
-                    }
+                    substitutions = {k: context.get(k, "") for k in segment.requires_context}
                     content = content.format(**substitutions)
                 except KeyError as e:
                     logger.warning(f"Missing context key for segment {segment.id}: {e}")
@@ -206,10 +200,7 @@ class PromptComposer:
 
             if segment.requires_context:
                 try:
-                    substitutions = {
-                        k: context.get(k, "")
-                        for k in segment.requires_context
-                    }
+                    substitutions = {k: context.get(k, "") for k in segment.requires_context}
                     content = content.format(**substitutions)
                 except Exception as e:
                     logger.warning(f"Failed to format segment {segment_id}: {e}")

@@ -17,6 +17,7 @@ Usage:
 """
 
 import asyncio
+import contextlib
 import logging
 import os
 import shutil
@@ -70,8 +71,10 @@ _notify_initialized = False
 
 try:
     import gi
-    gi.require_version('Notify', '0.7')
+
+    gi.require_version("Notify", "0.7")
     from gi.repository import GLib, Notify
+
     _gi_available = True
 except (ImportError, ValueError) as e:
     logger.debug(f"PyGObject/libnotify not available: {e}")
@@ -168,7 +171,7 @@ def _send_via_libnotify(notification: Notification) -> NotificationResult:
 
         return NotificationResult(
             success=success,
-            notification_id=n.props.id if hasattr(n.props, 'id') else None,
+            notification_id=n.props.id if hasattr(n.props, "id") else None,
             method="libnotify",
         )
 
@@ -241,9 +244,12 @@ def _send_via_notify_send(notification: Notification) -> NotificationResult:
     try:
         cmd = [
             notify_send,
-            "--app-name", APP_NAME,
-            "--icon", notification.get_icon(),
-            "--urgency", notification.get_urgency().value,
+            "--app-name",
+            APP_NAME,
+            "--icon",
+            notification.get_icon(),
+            "--urgency",
+            notification.get_urgency().value,
         ]
 
         # Add timeout
@@ -627,9 +633,7 @@ def notify_health(
     Returns:
         NotificationResult with status.
     """
-    notification = health_notification(
-        severity, component, message, severity, metrics=metrics
-    )
+    notification = health_notification(severity, component, message, severity, metrics=metrics)
     return send(notification)
 
 
@@ -718,10 +722,8 @@ class NotificationService:
         self._running = False
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
         logger.info("Notification service stopped")
 
     async def _process_queue(self) -> None:
@@ -757,7 +759,7 @@ class NotificationService:
         """Add notification to history."""
         self._history.append((notification, result))
         if len(self._history) > self._max_history:
-            self._history = self._history[-self._max_history:]
+            self._history = self._history[-self._max_history :]
 
     def get_history(
         self,

@@ -1,9 +1,5 @@
 """Tests for policy engine."""
 
-import pytest
-import tempfile
-from pathlib import Path
-
 from elle.policy.defaults import get_default_policy, get_default_rules
 from elle.policy.engine import PolicyEngine, evaluate_command
 from elle.policy.models import (
@@ -35,9 +31,7 @@ class TestPolicyEngine:
         rule = PolicyRule(
             id="deny-test",
             name="Deny Test",
-            conditions=(
-                Condition(command="sudo *", match_type=MatchType.GLOB),
-            ),
+            conditions=(Condition(command="sudo *", match_type=MatchType.GLOB),),
             effect=PolicyEffect.DENY,
             message="Sudo not allowed",
         )
@@ -56,9 +50,7 @@ class TestPolicyEngine:
         rule = PolicyRule(
             id="allow-ls",
             name="Allow ls",
-            conditions=(
-                Condition(command="ls *", match_type=MatchType.GLOB),
-            ),
+            conditions=(Condition(command="ls *", match_type=MatchType.GLOB),),
             effect=PolicyEffect.ALLOW,
         )
         policy = PolicyDocument(
@@ -103,9 +95,7 @@ class TestPolicyEngine:
         rule = PolicyRule(
             id="confirm-reboot",
             name="Confirm Reboot",
-            conditions=(
-                Condition(command="reboot", match_type=MatchType.EXACT),
-            ),
+            conditions=(Condition(command="reboot", match_type=MatchType.EXACT),),
             effect=PolicyEffect.REQUIRE_CONFIRMATION,
             message="This will reboot the system",
         )
@@ -123,9 +113,7 @@ class TestPolicyEngine:
         rule = PolicyRule(
             id="justify-network",
             name="Justify Network Changes",
-            conditions=(
-                Condition(domain="network.*"),
-            ),
+            conditions=(Condition(domain="network.*"),),
             effect=PolicyEffect.REQUIRE_JUSTIFICATION,
             justification_prompt="Why are you changing network settings?",
         )
@@ -146,9 +134,7 @@ class TestPolicyEngine:
         rule = PolicyRule(
             id="deny-etc",
             name="Deny /etc modifications",
-            conditions=(
-                Condition(path="/etc/**", match_type=MatchType.GLOB),
-            ),
+            conditions=(Condition(path="/etc/**", match_type=MatchType.GLOB),),
             effect=PolicyEffect.DENY,
             message="Cannot modify /etc files",
         )

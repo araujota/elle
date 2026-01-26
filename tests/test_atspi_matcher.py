@@ -1,14 +1,12 @@
 """Tests for AT-SPI element matching."""
 
-import pytest
-
 from elle.atspi.matcher import (
-    levenshtein_distance,
-    similarity_ratio,
-    fuzzy_match,
-    pattern_match,
     ElementMatcher,
     UIAdaptor,
+    fuzzy_match,
+    levenshtein_distance,
+    pattern_match,
+    similarity_ratio,
 )
 from elle.atspi.models import UIElement
 

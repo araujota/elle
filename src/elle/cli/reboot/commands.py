@@ -35,10 +35,7 @@ def handle_reboot_command(
     parts = user_input.strip().split()
 
     # Parse subcommand
-    if len(parts) < 2:
-        subcommand = "status"
-    else:
-        subcommand = parts[1].lower()
+    subcommand = "status" if len(parts) < 2 else parts[1].lower()
 
     match subcommand:
         case "status":
@@ -109,41 +106,49 @@ def render_reboot_status() -> str:
         # Active intent (if any)
         if active:
             status_color = _status_color(active.status)
-            lines.extend([
-                f"{Colors.YELLOW}Active Reboot Intent:{Colors.RESET}",
-                f"  ID:      {active.id[:12]}...",
-                f"  Goal:    {active.goal}",
-                f"  Status:  {status_color}{active.status.upper()}{Colors.RESET}",
-                f"  Reason:  {active.reason}",
-                f"  Started: {_format_datetime(active.created_at)}",
-                "",
-            ])
+            lines.extend(
+                [
+                    f"{Colors.YELLOW}Active Reboot Intent:{Colors.RESET}",
+                    f"  ID:      {active.id[:12]}...",
+                    f"  Goal:    {active.goal}",
+                    f"  Status:  {status_color}{active.status.upper()}{Colors.RESET}",
+                    f"  Reason:  {active.reason}",
+                    f"  Started: {_format_datetime(active.created_at)}",
+                    "",
+                ]
+            )
 
             if active.status == "verifying":
-                lines.extend([
-                    f"  {Colors.CYAN}Verification in progress...{Colors.RESET}",
-                    f"  Attempts: {active.verification_attempts}/3",
-                    "",
-                ])
+                lines.extend(
+                    [
+                        f"  {Colors.CYAN}Verification in progress...{Colors.RESET}",
+                        f"  Attempts: {active.verification_attempts}/3",
+                        "",
+                    ]
+                )
             elif active.status == "failed":
-                lines.extend([
-                    f"  {Colors.RED}Verification failed!{Colors.RESET}",
-                    f"  {Colors.YELLOW}Auto-rollback pending - use 'reboot cancel' to intervene{Colors.RESET}",
-                    "",
-                ])
+                lines.extend(
+                    [
+                        f"  {Colors.RED}Verification failed!{Colors.RESET}",
+                        f"  {Colors.YELLOW}Auto-rollback pending - use 'reboot cancel' to intervene{Colors.RESET}",
+                        "",
+                    ]
+                )
         else:
             lines.append(f"{Colors.GREEN}No active reboot operations.{Colors.RESET}")
             lines.append("")
 
         # Summary counts
-        lines.extend([
-            f"{Colors.BOLD}Summary:{Colors.RESET}",
-            f"  Total intents: {status.total_intents}",
-            f"  Completed:     {status.completed_count}",
-            f"  Failed:        {status.failed_count}",
-            f"  Rolled back:   {status.rolled_back_count}",
-            "",
-        ])
+        lines.extend(
+            [
+                f"{Colors.BOLD}Summary:{Colors.RESET}",
+                f"  Total intents: {status.total_intents}",
+                f"  Completed:     {status.completed_count}",
+                f"  Failed:        {status.failed_count}",
+                f"  Rolled back:   {status.rolled_back_count}",
+                "",
+            ]
+        )
 
         # Recent intents
         if status.recent_intents:
@@ -187,18 +192,10 @@ def render_reboot_history(limit: int = 20) -> str:
             status_color = _status_color(intent.status)
             outcome_str = _outcome_str(intent.outcome)
 
+            lines.append(f"  {Colors.CYAN}{intent.id[:12]}{Colors.RESET} {_format_datetime(intent.created_at)}")
+            lines.append(f"    [{status_color}{intent.status.upper()}{Colors.RESET}] {intent.goal}")
             lines.append(
-                f"  {Colors.CYAN}{intent.id[:12]}{Colors.RESET} "
-                f"{_format_datetime(intent.created_at)}"
-            )
-            lines.append(
-                f"    [{status_color}{intent.status.upper()}{Colors.RESET}] "
-                f"{intent.goal}"
-            )
-            lines.append(
-                f"    Reason: {intent.reason} | "
-                f"Outcome: {outcome_str} | "
-                f"Attempts: {intent.verification_attempts}"
+                f"    Reason: {intent.reason} | Outcome: {outcome_str} | Attempts: {intent.verification_attempts}"
             )
             if intent.outcome_detail:
                 detail = intent.outcome_detail[:60]
@@ -238,9 +235,8 @@ def render_intent_detail(intent_id: str) -> str:
             if len(matches) == 1:
                 intent = matches[0]
             elif len(matches) > 1:
-                return (
-                    f"{Colors.YELLOW}Multiple intents match '{intent_id}':{Colors.RESET}\n"
-                    + "\n".join(f"  - {i.id[:12]} {i.goal}" for i in matches[:5])
+                return f"{Colors.YELLOW}Multiple intents match '{intent_id}':{Colors.RESET}\n" + "\n".join(
+                    f"  - {i.id[:12]} {i.goal}" for i in matches[:5]
                 )
 
         if intent is None:
@@ -310,9 +306,7 @@ def render_intent_detail(intent_id: str) -> str:
                     check_status = f"{Colors.RED}FAIL{Colors.RESET}"
 
                 req_str = "*" if v.required else ""
-                lines.append(
-                    f"    [{check_status}] {v.check_type}: {v.check_command}{req_str}"
-                )
+                lines.append(f"    [{check_status}] {v.check_type}: {v.check_command}{req_str}")
         lines.append("")
 
         # Outcome detail
@@ -471,21 +465,19 @@ def render_recent_reboots_summary() -> str | None:
         # Active reboot warning
         if active:
             status_color = _status_color(active.status)
-            lines.extend([
-                f"{Colors.YELLOW}Active reboot operation:{Colors.RESET}",
-                f"  [{status_color}{active.status.upper()}{Colors.RESET}] {active.goal}",
-            ])
+            lines.extend(
+                [
+                    f"{Colors.YELLOW}Active reboot operation:{Colors.RESET}",
+                    f"  [{status_color}{active.status.upper()}{Colors.RESET}] {active.goal}",
+                ]
+            )
             if active.status == "failed":
-                lines.append(
-                    f"  {Colors.RED}Verification failed - "
-                    f"use 'reboot status' for details{Colors.RESET}"
-                )
+                lines.append(f"  {Colors.RED}Verification failed - use 'reboot status' for details{Colors.RESET}")
             lines.append("")
 
         # Recent completed/failed
         notable = [
-            i for i in recent
-            if i.outcome in ("failed", "rolled_back") and i.id != (active.id if active else "")
+            i for i in recent if i.outcome in ("failed", "rolled_back") and i.id != (active.id if active else "")
         ]
         if notable:
             lines.append(f"{Colors.DIM}Recent reboot issues:{Colors.RESET}")

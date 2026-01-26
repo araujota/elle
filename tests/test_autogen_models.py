@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-from datetime import datetime
 
 from elle.capabilities.autogen.models import (
     CORE_COMMANDS,
@@ -14,7 +13,6 @@ from elle.capabilities.autogen.models import (
     InputFieldSpec,
     InstalledBinary,
     OutputFieldSpec,
-    ParsedExample,
     ParsedFlag,
     ParsedManPage,
     ParsedSynopsis,
@@ -58,9 +56,7 @@ class TestDiscoveryResult:
     def test_create(self):
         """Test creating discovery result."""
         result = DiscoveryResult(
-            binaries=(
-                InstalledBinary(name="ls", path="/usr/bin/ls"),
-            ),
+            binaries=(InstalledBinary(name="ls", path="/usr/bin/ls"),),
             total_scanned=100,
             with_man_pages=50,
         )
@@ -126,9 +122,7 @@ class TestParsedManPage:
             name="systemctl",
             section=1,
             description="Control the systemd system and service manager",
-            flags=(
-                ParsedFlag(name="help", short="-h", long="--help", flag_type=FlagType.BOOL),
-            ),
+            flags=(ParsedFlag(name="help", short="-h", long="--help", flag_type=FlagType.BOOL),),
         )
 
         assert man_page.name == "systemctl"
@@ -148,12 +142,8 @@ class TestGeneratedCapabilitySpec:
             domain="service",
             risk_level="medium",
             side_effects=("service_change",),
-            input_fields=(
-                InputFieldSpec(name="unit", field_type="str", description="Unit name"),
-            ),
-            output_fields=(
-                OutputFieldSpec(name="success", field_type="bool", description="Success"),
-            ),
+            input_fields=(InputFieldSpec(name="unit", field_type="str", description="Unit name"),),
+            output_fields=(OutputFieldSpec(name="success", field_type="bool", description="Success"),),
             command_template="systemctl restart {unit}",
             source_command="systemctl",
             confidence_score=0.85,

@@ -237,7 +237,7 @@ def _semantic_search(
         seen_docs.add(doc_key)
 
         # Use chunk text as snippet basis, expand with context
-        snippet = _expand_chunk_snippet(row["chunk_text"] if "chunk_text" in row.keys() else row["text"], row["doc_text"])
+        snippet = _expand_chunk_snippet(row["chunk_text"] if "chunk_text" in row else row["text"], row["doc_text"])
 
         results.append(
             ManSnippet(
@@ -354,9 +354,8 @@ def extract_snippet(
 
         # Boost for preferred sections
         section_boost = 1.0
-        if section_name:
-            if section_name.upper() in PREFERRED_SECTIONS:
-                section_boost = 2.0 - (PREFERRED_SECTIONS.index(section_name.upper()) * 0.3)
+        if section_name and section_name.upper() in PREFERRED_SECTIONS:
+            section_boost = 2.0 - (PREFERRED_SECTIONS.index(section_name.upper()) * 0.3)
 
         final_score = term_score * section_boost
         section_scores.append((section_name or "", section_text, final_score))

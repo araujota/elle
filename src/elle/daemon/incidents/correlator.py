@@ -25,30 +25,31 @@ from elle.daemon.incidents.store import (
 # Domain detection patterns
 DOMAIN_PATTERNS: list[tuple[str, re.Pattern, str]] = [
     # Network
-    ("net", re.compile(r"(network|eth\d|wlan\d|enp\d|ens\d|NetworkManager|DNS|DHCP|connection refused|timeout)", re.I), "net"),
+    (
+        "net",
+        re.compile(r"(network|eth\d|wlan\d|enp\d|ens\d|NetworkManager|DNS|DHCP|connection refused|timeout)", re.I),
+        "net",
+    ),
     ("net", re.compile(r"(link is (down|up)|carrier lost|no route)", re.I), "net"),
-
     # Disk
     ("disk", re.compile(r"(disk|nvme|sda|sdb|I/O error|read error|write error|SMART|filesystem)", re.I), "disk"),
     ("disk", re.compile(r"(No space left|quota exceeded|disk full)", re.I), "disk"),
-
     # OOM
     ("oom", re.compile(r"(Out of memory|oom[-_]?kill|Killed process|invoked oom-killer)", re.I), "oom"),
     ("oom", re.compile(r"(memory pressure|cannot allocate memory)", re.I), "oom"),
-
     # Docker
     ("docker", re.compile(r"(docker|container|containerd|podman)", re.I), "docker"),
-
     # Auth
     ("auth", re.compile(r"(authentication|auth|login|password|pam_unix|sshd|sudo|permission denied)", re.I), "auth"),
     ("auth", re.compile(r"(failed password|invalid user|unauthorized)", re.I), "auth"),
-
     # Package
-    ("pkg", re.compile(r"(apt|apt-get|dpkg|snap|package|dependency|unmet dependencies|Unable to fetch|repository)", re.I), "pkg"),
-
+    (
+        "pkg",
+        re.compile(r"(apt|apt-get|dpkg|snap|package|dependency|unmet dependencies|Unable to fetch|repository)", re.I),
+        "pkg",
+    ),
     # Filesystem
     ("fs", re.compile(r"(mount|unmount|fstab|ext4|xfs|btrfs|inode)", re.I), "fs"),
-
     # Service
     ("service", re.compile(r"(systemd|service|unit|failed to start|entered failed state)", re.I), "service"),
 ]
@@ -191,10 +192,7 @@ class IncidentCorrelator:
     def _clean_buffer(self) -> None:
         """Remove old events from the buffer."""
         cutoff = datetime.utcnow() - timedelta(seconds=self.time_window_sec * 2)
-        self._event_buffer = [
-            e for e in self._event_buffer
-            if self._get_event_time(e) > cutoff
-        ]
+        self._event_buffer = [e for e in self._event_buffer if self._get_event_time(e) > cutoff]
 
     def _get_event_time(self, event: dict[str, Any]) -> datetime:
         """Get timestamp from event."""
@@ -241,9 +239,7 @@ class IncidentCorrelator:
 
         # Count related events in window
         related = [
-            e for e in self._event_buffer
-            if self._get_correlation_key(e) == key
-            and self._get_event_time(e) > cutoff
+            e for e in self._event_buffer if self._get_correlation_key(e) == key and self._get_event_time(e) > cutoff
         ]
 
         # Check threshold

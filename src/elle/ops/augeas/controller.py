@@ -8,6 +8,7 @@ Integrates with Incident Vault for audit trail.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 from pathlib import Path
@@ -117,6 +118,7 @@ class EditController:
 
         # Get validation command for display
         from elle.ops.augeas.validators import get_validation_command
+
         validation_cmd = get_validation_command(file_path)
 
         return EditPreview(
@@ -202,9 +204,7 @@ class EditController:
         from elle.ops.augeas.yaml_handler import YAMLHandler, is_available
 
         if not is_available():
-            raise AugeasError(
-                "ruamel.yaml is not installed. Install with: pip install ruamel.yaml"
-            )
+            raise AugeasError("ruamel.yaml is not installed. Install with: pip install ruamel.yaml")
 
         handler = YAMLHandler()
 
@@ -212,6 +212,7 @@ class EditController:
         import io
 
         from ruamel.yaml import YAML
+
         yaml = YAML()
         yaml.preserve_quotes = True
         data = yaml.load(io.StringIO(original))
@@ -225,21 +226,25 @@ class EditController:
             if op.kind == "set" and op.value is not None:
                 old_value = handler.get_path(data, op.path)
                 handler.set_path(data, op.path, op.value)
-                changes.append(AugeasChange(
-                    path=op.path,
-                    old_value=str(old_value) if old_value is not None else None,
-                    new_value=op.value,
-                    operation="set",
-                ))
+                changes.append(
+                    AugeasChange(
+                        path=op.path,
+                        old_value=str(old_value) if old_value is not None else None,
+                        new_value=op.value,
+                        operation="set",
+                    )
+                )
             elif op.kind == "rm":
                 old_value = handler.get_path(data, op.path)
                 handler.delete_path(data, op.path)
-                changes.append(AugeasChange(
-                    path=op.path,
-                    old_value=str(old_value) if old_value is not None else None,
-                    new_value=None,
-                    operation="rm",
-                ))
+                changes.append(
+                    AugeasChange(
+                        path=op.path,
+                        old_value=str(old_value) if old_value is not None else None,
+                        new_value=None,
+                        operation="rm",
+                    )
+                )
 
         # Generate modified content
         modified = handler.dumps(data)
@@ -338,14 +343,10 @@ class EditController:
             if not request.skip_validation:
                 validation_result = await validate_config(file_path)
                 validation_passed = validation_result.valid
-                validation_output = (
-                    validation_result.output or validation_result.error or ""
-                )
+                validation_output = validation_result.output or validation_result.error or ""
 
                 if not validation_passed:
-                    logger.warning(
-                        f"Validation failed for {file_path}: {validation_output}"
-                    )
+                    logger.warning(f"Validation failed for {file_path}: {validation_output}")
 
                     # 6. Rollback on validation failure
                     if backup_path:
@@ -403,6 +404,7 @@ class EditController:
 
                     # Compute pre-edit hash from original content
                     import hashlib
+
                     pre_hash = hashlib.sha256(original_content.encode()).hexdigest()
 
                     # Build and store config state with hashes
@@ -510,12 +512,14 @@ class EditController:
         # Convert YAML changes to Augeas changes
         changes: list[AugeasChange] = []
         for yc in handler.get_changes():
-            changes.append(AugeasChange(
-                path=yc.path,
-                old_value=str(yc.old_value) if yc.old_value is not None else None,
-                new_value=str(yc.new_value) if yc.new_value is not None else None,
-                operation=yc.operation,  # type: ignore
-            ))
+            changes.append(
+                AugeasChange(
+                    path=yc.path,
+                    old_value=str(yc.old_value) if yc.old_value is not None else None,
+                    new_value=str(yc.new_value) if yc.new_value is not None else None,
+                    operation=yc.operation,  # type: ignore
+                )
+            )
 
         return changes
 
@@ -585,10 +589,8 @@ class EditController:
         except Exception as e:
             # Rollback on unexpected error
             for backup_path, original_path in reversed(backups):
-                try:
+                with contextlib.suppress(Exception):
                     self._backup_manager.restore(backup_path, original_path)
-                except Exception:
-                    pass
 
             return BatchEditResult(
                 success=False,

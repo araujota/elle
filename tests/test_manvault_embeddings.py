@@ -1,7 +1,5 @@
 """Tests for Man Vault embeddings."""
 
-import math
-
 import pytest
 
 from elle.daemon.manvault.embedder import cosine_similarity, euclidean_distance

@@ -6,6 +6,7 @@ All operations follow: backup → apply → validate → commit/rollback
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import subprocess
@@ -184,10 +185,8 @@ class PolkitHelper:
 
         finally:
             # Clean up temp file
-            try:
+            with contextlib.suppress(Exception):
                 os.unlink(tmp_path)
-            except Exception:
-                pass
 
     async def run_validator(
         self,

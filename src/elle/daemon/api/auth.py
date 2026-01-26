@@ -44,9 +44,7 @@ class AuthContext(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    source: Literal["uds_peer", "api_key", "anonymous"] = Field(
-        description="How the request was authenticated"
-    )
+    source: Literal["uds_peer", "api_key", "anonymous"] = Field(description="How the request was authenticated")
     uid: int | None = Field(
         default=None,
         description="Unix UID for UDS peer authentication",
@@ -59,9 +57,7 @@ class AuthContext(BaseModel):
         default=None,
         description="API key identifier for key-based auth",
     )
-    allowed_modes: tuple[ExecutionMode, ...] = Field(
-        description="Execution modes this auth context allows"
-    )
+    allowed_modes: tuple[ExecutionMode, ...] = Field(description="Execution modes this auth context allows")
 
     def can_use_mode(self, mode: ExecutionMode) -> bool:
         """Check if this auth context allows a specific execution mode."""
@@ -76,14 +72,9 @@ class ApiKey(BaseModel):
     key_id: str = Field(description="Unique key identifier")
     key_hash: str = Field(description="SHA-256 hash of the key")
     name: str = Field(description="Human-readable name for the key")
-    allowed_modes: tuple[ExecutionMode, ...] = Field(
-        description="Modes this key allows"
-    )
+    allowed_modes: tuple[ExecutionMode, ...] = Field(description="Modes this key allows")
     created_at: datetime = Field(description="When the key was created")
-    last_used_at: datetime | None = Field(
-        default=None,
-        description="Last time the key was used"
-    )
+    last_used_at: datetime | None = Field(default=None, description="Last time the key was used")
     revoked: bool = Field(default=False, description="Whether the key is revoked")
 
 
@@ -231,9 +222,7 @@ class ApiKeyStore:
 
             # Parse allowed modes
             modes_str = row["allowed_modes"]
-            allowed_modes = tuple(
-                ExecutionMode(m) for m in modes_str.split(",") if m
-            )
+            allowed_modes = tuple(ExecutionMode(m) for m in modes_str.split(",") if m)
 
             return ApiKey(
                 key_id=row["key_id"],
@@ -241,11 +230,7 @@ class ApiKeyStore:
                 name=row["name"],
                 allowed_modes=allowed_modes,
                 created_at=datetime.fromisoformat(row["created_at"]),
-                last_used_at=(
-                    datetime.fromisoformat(row["last_used_at"])
-                    if row["last_used_at"]
-                    else None
-                ),
+                last_used_at=(datetime.fromisoformat(row["last_used_at"]) if row["last_used_at"] else None),
                 revoked=bool(row["revoked"]),
             )
 
@@ -287,15 +272,9 @@ class ApiKeyStore:
                     key_id=row["key_id"],
                     key_hash=row["key_hash"],
                     name=row["name"],
-                    allowed_modes=tuple(
-                        ExecutionMode(m) for m in row["allowed_modes"].split(",") if m
-                    ),
+                    allowed_modes=tuple(ExecutionMode(m) for m in row["allowed_modes"].split(",") if m),
                     created_at=datetime.fromisoformat(row["created_at"]),
-                    last_used_at=(
-                        datetime.fromisoformat(row["last_used_at"])
-                        if row["last_used_at"]
-                        else None
-                    ),
+                    last_used_at=(datetime.fromisoformat(row["last_used_at"]) if row["last_used_at"] else None),
                     revoked=bool(row["revoked"]),
                 )
                 for row in rows
@@ -326,6 +305,7 @@ def _get_peer_credentials(request) -> tuple[int, int] | None:
 
         # Check if it's a Unix socket
         import socket as socket_module
+
         if socket.family != socket_module.AF_UNIX:
             return None
 

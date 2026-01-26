@@ -20,47 +20,53 @@ RiskLevel = Literal["low", "medium", "high"]
 
 
 # Commands that require rollback plans
-REQUIRES_ROLLBACK = frozenset({
-    "netplan",
-    "ufw",
-    "iptables",
-    "fstab",
-    "crontab",
-    "cron",
-    "systemctl enable",
-    "systemctl disable",
-    "systemctl mask",
-    "update-grub",
-    "grub",
-})
+REQUIRES_ROLLBACK = frozenset(
+    {
+        "netplan",
+        "ufw",
+        "iptables",
+        "fstab",
+        "crontab",
+        "cron",
+        "systemctl enable",
+        "systemctl disable",
+        "systemctl mask",
+        "update-grub",
+        "grub",
+    }
+)
 
 # Commands that are inherently high-risk
-HIGH_RISK_PATTERNS = frozenset({
-    "dd",
-    "mkfs",
-    "fdisk",
-    "parted",
-    "wipefs",
-    "shred",
-    "rm -rf",
-    "chmod -R",
-    "chown -R",
-})
+HIGH_RISK_PATTERNS = frozenset(
+    {
+        "dd",
+        "mkfs",
+        "fdisk",
+        "parted",
+        "wipefs",
+        "shred",
+        "rm -rf",
+        "chmod -R",
+        "chown -R",
+    }
+)
 
 # Commands that are medium-risk
-MEDIUM_RISK_PATTERNS = frozenset({
-    "apt",
-    "dpkg",
-    "snap",
-    "pip install",
-    "systemctl",
-    "service",
-    "mount",
-    "umount",
-    "ufw",
-    "iptables",
-    "netplan",
-})
+MEDIUM_RISK_PATTERNS = frozenset(
+    {
+        "apt",
+        "dpkg",
+        "snap",
+        "pip install",
+        "systemctl",
+        "service",
+        "mount",
+        "umount",
+        "ufw",
+        "iptables",
+        "netplan",
+    }
+)
 
 
 # =============================================================================
@@ -97,7 +103,9 @@ class ManDocContext(BaseModel):
         description="Flags referenced in snippet",
     )
     relevance_score: float = Field(
-        default=0.5, ge=0.0, le=1.0,
+        default=0.5,
+        ge=0.0,
+        le=1.0,
         description="Relevance score from search",
     )
     match_section: str | None = Field(
@@ -255,10 +263,7 @@ class PlanContext(BaseModel):
     def primary_source(self) -> Literal["man_vault", "incident_vault", "llm_only"]:
         """Determine the primary source of context."""
         # Prior plans with good outcomes are most valuable
-        good_prior = [
-            p for p in self.prior_plans
-            if p.outcome in ("improved", "partial", "success") and p.score > 0.5
-        ]
+        good_prior = [p for p in self.prior_plans if p.outcome in ("improved", "partial", "success") and p.score > 0.5]
         if good_prior:
             return "incident_vault"
 
@@ -277,10 +282,7 @@ class PlanContext(BaseModel):
             parts.append(f"man {', '.join(man_refs)}")
 
         if self.prior_plans:
-            successful = sum(
-                1 for p in self.prior_plans
-                if p.outcome in ("improved", "partial", "success")
-            )
+            successful = sum(1 for p in self.prior_plans if p.outcome in ("improved", "partial", "success"))
             if successful:
                 parts.append(f"{successful} similar task(s) succeeded")
 
@@ -328,10 +330,7 @@ class PlanContext(BaseModel):
             overall += from_man
 
         if incident_citations:
-            good_outcomes = [
-                c for c in incident_citations
-                if c.get("outcome") in ("improved", "partial", "success")
-            ]
+            good_outcomes = [c for c in incident_citations if c.get("outcome") in ("improved", "partial", "success")]
             if good_outcomes:
                 from_inc = max(c.get("similarity_score", 0) for c in good_outcomes) * 0.4
                 overall += from_inc
@@ -769,11 +768,7 @@ class PlanResult(BaseModel):
     @property
     def is_executable(self) -> bool:
         """Check if the plan can be executed."""
-        return (
-            self.plan is not None
-            and self.verification is not None
-            and self.verification.is_valid
-        )
+        return self.plan is not None and self.verification is not None and self.verification.is_valid
 
     @property
     def steps_succeeded(self) -> int:

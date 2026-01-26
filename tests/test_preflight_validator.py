@@ -1,14 +1,7 @@
 """Tests for preflight validator orchestrator."""
 
-import pytest
 from unittest.mock import MagicMock, patch
 
-from elle.ops.preflight.validator import (
-    PreflightValidator,
-    get_validator,
-    validate_packages,
-    format_result_for_display,
-)
 from elle.ops.preflight.models import (
     IssueSeverity,
     PreflightConfig,
@@ -18,6 +11,12 @@ from elle.ops.preflight.models import (
     PreflightTest,
 )
 from elle.ops.preflight.risk_classifier import RiskLevel
+from elle.ops.preflight.validator import (
+    PreflightValidator,
+    format_result_for_display,
+    get_validator,
+    validate_packages,
+)
 
 
 class TestPreflightValidator:
@@ -179,7 +178,7 @@ class TestValidatePackages:
             )
             mock_get.return_value = mock_validator
 
-            result = validate_packages(["nginx", "curl"])
+            validate_packages(["nginx", "curl"])
 
             # Verify it was called with a tuple
             call_args = mock_validator.validate.call_args[0][0]
@@ -329,6 +328,7 @@ class TestGetValidator:
         """Test that get_validator returns a validator."""
         # Reset the singleton first
         import elle.ops.preflight.validator as module
+
         module._validator = None
 
         validator = get_validator()
@@ -337,6 +337,7 @@ class TestGetValidator:
     def test_singleton(self):
         """Test that get_validator returns same instance."""
         import elle.ops.preflight.validator as module
+
         module._validator = None
 
         v1 = get_validator()

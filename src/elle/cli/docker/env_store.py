@@ -332,9 +332,7 @@ class DockerEnvStore:
         conn = self._get_conn()
         cursor = conn.cursor()
 
-        cursor.execute(
-            "SELECT DISTINCT image_family FROM docker_env_values ORDER BY image_family"
-        )
+        cursor.execute("SELECT DISTINCT image_family FROM docker_env_values ORDER BY image_family")
 
         return tuple(row["image_family"] for row in cursor.fetchall())
 

@@ -182,9 +182,7 @@ class SyscallTrace(BaseModel):
         """Check if any process operations were traced."""
         if not self.summary:
             return False
-        return bool(
-            self.summary.programs_executed or self.summary.processes_spawned > 0
-        )
+        return bool(self.summary.programs_executed or self.summary.processes_spawned > 0)
 
 
 # Constants for syscall tracing
@@ -211,7 +209,6 @@ SYSCALL_CATEGORIES: dict[str, SyscallCategory] = {
     "lstat": "file_read",
     "access": "file_read",
     "faccessat": "file_read",
-
     # File write operations
     "write": "file_write",
     "pwrite64": "file_write",
@@ -219,12 +216,10 @@ SYSCALL_CATEGORIES: dict[str, SyscallCategory] = {
     "pwritev": "file_write",
     "truncate": "file_write",
     "ftruncate": "file_write",
-
     # File delete operations
     "unlink": "file_delete",
     "unlinkat": "file_delete",
     "rmdir": "file_delete",
-
     # File create operations
     "creat": "file_create",
     "mkdir": "file_create",
@@ -235,12 +230,10 @@ SYSCALL_CATEGORIES: dict[str, SyscallCategory] = {
     "symlinkat": "file_create",
     "link": "file_create",
     "linkat": "file_create",
-
     # File rename operations
     "rename": "file_rename",
     "renameat": "file_rename",
     "renameat2": "file_rename",
-
     # File permission operations
     "chmod": "file_chmod",
     "fchmod": "file_chmod",
@@ -249,22 +242,17 @@ SYSCALL_CATEGORIES: dict[str, SyscallCategory] = {
     "fchown": "file_chmod",
     "fchownat": "file_chmod",
     "lchown": "file_chmod",
-
     # Network connect operations
     "connect": "net_connect",
-
     # Network bind operations
     "bind": "net_bind",
-
     # Network send operations
     "sendto": "net_send",
     "sendmsg": "net_send",
     "sendmmsg": "net_send",
-
     # Process execution
     "execve": "process_exec",
     "execveat": "process_exec",
-
     # Process creation
     "clone": "process_clone",
     "clone3": "process_clone",

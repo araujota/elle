@@ -57,6 +57,7 @@ def _notify_reboot(status: str, goal: str, intent_id: str, details: str | None =
     """Send a reboot notification (non-blocking)."""
     try:
         from elle.daemon.notifications import notify_reboot_status
+
         notify_reboot_status(status, goal, intent_id, details)
     except ImportError:
         logger.debug("Notifications module not available")
@@ -137,10 +138,7 @@ class RebootManager:
         # Check for existing active reboot
         active = get_active_intent()
         if active:
-            raise RebootManagerError(
-                f"Another reboot is already in progress: {active.goal} "
-                f"(status={active.status})"
-            )
+            raise RebootManagerError(f"Another reboot is already in progress: {active.goal} (status={active.status})")
 
         # Capture current system state
         boot_id = get_boot_id()
@@ -190,9 +188,7 @@ class RebootManager:
             raise RebootManagerError(f"Reboot intent not found: {intent_id}")
 
         if intent.status != "pending":
-            raise RebootManagerError(
-                f"Cannot execute reboot in status: {intent.status}"
-            )
+            raise RebootManagerError(f"Cannot execute reboot in status: {intent.status}")
 
         logger.info(f"Executing reboot: {intent.goal}")
 
@@ -265,9 +261,7 @@ class RebootManager:
         # Check if we actually rebooted
         if not has_rebooted_since(intent.boot_id):
             # Reboot never happened - mark as cancelled
-            logger.warning(
-                f"Reboot intent {intent.id} never executed, marking cancelled"
-            )
+            logger.warning(f"Reboot intent {intent.id} never executed, marking cancelled")
             return update_intent_status(
                 intent.id,
                 status="cancelled",
@@ -421,9 +415,7 @@ class RebootManager:
             return await self._initiate_rollback(intent, outcome_detail)
 
         # Non-critical failure - start intervention window
-        logger.warning(
-            f"Starting {AUTO_ROLLBACK_DELAY_SEC}s intervention window before rollback"
-        )
+        logger.warning(f"Starting {AUTO_ROLLBACK_DELAY_SEC}s intervention window before rollback")
 
         # Mark as failed with pending rollback
         update_intent_status(
@@ -438,9 +430,7 @@ class RebootManager:
         _notify_reboot("failed", intent.goal, intent.id, outcome_detail[:200])
 
         # Start rollback timer (can be cancelled by user)
-        self._rollback_task = asyncio.create_task(
-            self._delayed_rollback(intent)
-        )
+        self._rollback_task = asyncio.create_task(self._delayed_rollback(intent))
 
         return get_intent(intent.id) or intent
 
@@ -473,9 +463,7 @@ class RebootManager:
             symptoms = []
             if diagnostics.failed_checks:
                 for check in diagnostics.failed_checks[:5]:
-                    symptoms.append(
-                        f"Verification failed: {check.get('check_type')} - {check.get('check_command')}"
-                    )
+                    symptoms.append(f"Verification failed: {check.get('check_type')} - {check.get('check_command')}")
             if diagnostics.dmesg_errors:
                 symptoms.extend(diagnostics.dmesg_errors[:5])
             if diagnostics.journal_errors:
@@ -518,7 +506,7 @@ class RebootManager:
                 trigger_command=f"Reboot intent: {intent.id}",
                 symptoms=tuple(symptoms),
                 hypothesis=f"The reboot for '{intent.goal}' failed verification. "
-                           f"Likely causes: {'; '.join(diagnostics.likely_causes[:3]) if diagnostics.likely_causes else 'Unknown'}",
+                f"Likely causes: {'; '.join(diagnostics.likely_causes[:3]) if diagnostics.likely_causes else 'Unknown'}",
             )
 
             # Attach pre-reboot snapshot if available
@@ -536,6 +524,7 @@ class RebootManager:
             try:
                 current_snapshot = collect_snapshot()
                 from elle.daemon.incidents.store import attach_snapshot
+
                 attach_snapshot(incident.incident_id, "post", current_snapshot)
             except Exception:
                 pass
@@ -614,12 +603,15 @@ class RebootManager:
         if not result.success:
             logger.error(f"Failed to configure rollback: {result.error}")
             # Mark as failed, manual intervention needed
-            return update_intent_status(
-                intent.id,
-                status="failed",
-                outcome="failed",
-                outcome_detail=f"Rollback configuration failed: {result.error}",
-            ) or intent
+            return (
+                update_intent_status(
+                    intent.id,
+                    status="failed",
+                    outcome="failed",
+                    outcome_detail=f"Rollback configuration failed: {result.error}",
+                )
+                or intent
+            )
 
         # Mark as rolling back
         update_intent_status(
@@ -757,10 +749,7 @@ class RebootManager:
                     intent.id,
                     status="failed",
                     outcome="failed",
-                    outcome_detail=(
-                        f"Stale intent - no boot detected within "
-                        f"{STALE_REBOOT_THRESHOLD_HOURS} hours"
-                    ),
+                    outcome_detail=(f"Stale intent - no boot detected within {STALE_REBOOT_THRESHOLD_HOURS} hours"),
                 )
                 cleaned += 1
                 logger.warning(f"Cleaned up stale reboot intent: {intent.id}")

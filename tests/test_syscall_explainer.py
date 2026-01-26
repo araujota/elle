@@ -1,18 +1,16 @@
 """Tests for syscall explainer."""
 
-import pytest
-
+from elle.daemon.telemetry.ebpf.syscall_explainer import (
+    create_brief_summary,
+    create_trace_with_explanation,
+    explain_summary,
+    explain_trace,
+    format_trace_for_display,
+)
 from elle.daemon.telemetry.ebpf.syscall_models import (
     NetworkConnection,
     SyscallSummary,
     SyscallTrace,
-)
-from elle.daemon.telemetry.ebpf.syscall_explainer import (
-    explain_summary,
-    explain_trace,
-    create_brief_summary,
-    create_trace_with_explanation,
-    format_trace_for_display,
 )
 
 
@@ -281,10 +279,7 @@ class TestCreateBriefSummary:
 
     def test_multiple_connections(self):
         """Test brief summary with multiple connections."""
-        conns = tuple(
-            NetworkConnection(addr=f"server{i}.example.com", port=443)
-            for i in range(3)
-        )
+        conns = tuple(NetworkConnection(addr=f"server{i}.example.com", port=443) for i in range(3))
 
         summary = SyscallSummary(
             command="parallel curl",

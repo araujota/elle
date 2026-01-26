@@ -4,16 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+from unittest.mock import MagicMock, patch
+
 import pytest
-from datetime import datetime, UTC
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from elle.daemon.telemetry.docker_watcher import (
     CRASHLOOP_THRESHOLD,
-    CRASHLOOP_WINDOW_SEC,
     DockerEventsWatcher,
 )
-from elle.daemon.telemetry.models import TelemetryEvent
 
 
 @pytest.fixture
@@ -54,14 +52,16 @@ class TestDockerEventsWatcher:
     @pytest.mark.asyncio
     async def test_process_event_start(self, watcher, event_queue):
         """Test processing container start event."""
-        event_json = json.dumps({
-            "status": "start",
-            "Action": "start",
-            "Actor": {
-                "ID": "abc123def456",
-                "Attributes": {"name": "nginx"},
-            },
-        })
+        event_json = json.dumps(
+            {
+                "status": "start",
+                "Action": "start",
+                "Actor": {
+                    "ID": "abc123def456",
+                    "Attributes": {"name": "nginx"},
+                },
+            }
+        )
 
         await watcher._process_event(event_json)
 
@@ -76,14 +76,16 @@ class TestDockerEventsWatcher:
     @pytest.mark.asyncio
     async def test_process_event_die(self, watcher, event_queue):
         """Test processing container die event."""
-        event_json = json.dumps({
-            "status": "die",
-            "Action": "die",
-            "Actor": {
-                "ID": "abc123def456",
-                "Attributes": {"name": "webapp", "exitCode": "137"},
-            },
-        })
+        event_json = json.dumps(
+            {
+                "status": "die",
+                "Action": "die",
+                "Actor": {
+                    "ID": "abc123def456",
+                    "Attributes": {"name": "webapp", "exitCode": "137"},
+                },
+            }
+        )
 
         await watcher._process_event(event_json)
 
@@ -96,14 +98,16 @@ class TestDockerEventsWatcher:
     @pytest.mark.asyncio
     async def test_process_event_oom(self, watcher, event_queue):
         """Test processing OOM event."""
-        event_json = json.dumps({
-            "status": "oom",
-            "Action": "oom",
-            "Actor": {
-                "ID": "abc123def456",
-                "Attributes": {"name": "memory-hog"},
-            },
-        })
+        event_json = json.dumps(
+            {
+                "status": "oom",
+                "Action": "oom",
+                "Actor": {
+                    "ID": "abc123def456",
+                    "Attributes": {"name": "memory-hog"},
+                },
+            }
+        )
 
         await watcher._process_event(event_json)
 
@@ -115,15 +119,17 @@ class TestDockerEventsWatcher:
     async def test_crashloop_detection(self, watcher, event_queue):
         """Test crashloop detection."""
         # Simulate multiple restarts
-        for i in range(CRASHLOOP_THRESHOLD + 1):
-            event_json = json.dumps({
-                "status": "restart",
-                "Action": "restart",
-                "Actor": {
-                    "ID": "abc123def456",
-                    "Attributes": {"name": "flaky-app"},
-                },
-            })
+        for _i in range(CRASHLOOP_THRESHOLD + 1):
+            event_json = json.dumps(
+                {
+                    "status": "restart",
+                    "Action": "restart",
+                    "Actor": {
+                        "ID": "abc123def456",
+                        "Attributes": {"name": "flaky-app"},
+                    },
+                }
+            )
             await watcher._process_event(event_json)
 
         # Check that crashloop was detected
@@ -142,18 +148,26 @@ class TestDockerEventsWatcher:
     async def test_container_state_tracking(self, watcher):
         """Test container state tracking."""
         # Start event
-        await watcher._process_event(json.dumps({
-            "status": "start",
-            "Actor": {"ID": "abc", "Attributes": {"name": "test"}},
-        }))
+        await watcher._process_event(
+            json.dumps(
+                {
+                    "status": "start",
+                    "Actor": {"ID": "abc", "Attributes": {"name": "test"}},
+                }
+            )
+        )
 
         assert watcher.get_container_state("test") == "start"
 
         # Die event
-        await watcher._process_event(json.dumps({
-            "status": "die",
-            "Actor": {"ID": "abc", "Attributes": {"name": "test"}},
-        }))
+        await watcher._process_event(
+            json.dumps(
+                {
+                    "status": "die",
+                    "Actor": {"ID": "abc", "Attributes": {"name": "test"}},
+                }
+            )
+        )
 
         assert watcher.get_container_state("test") == "die"
 
@@ -182,10 +196,12 @@ class TestDockerEventsWatcher:
         ]
 
         for action, expected_word in actions:
-            event_json = json.dumps({
-                "status": action,
-                "Actor": {"ID": "abc", "Attributes": {"name": "test"}},
-            })
+            event_json = json.dumps(
+                {
+                    "status": action,
+                    "Actor": {"ID": "abc", "Attributes": {"name": "test"}},
+                }
+            )
             await watcher._process_event(event_json)
             event = event_queue.get_nowait()
             assert expected_word in event.message.lower()
@@ -194,18 +210,26 @@ class TestDockerEventsWatcher:
     async def test_priority_mapping(self, watcher, event_queue):
         """Test priority mapping for events."""
         # OOM should be critical
-        await watcher._process_event(json.dumps({
-            "status": "oom",
-            "Actor": {"ID": "abc", "Attributes": {"name": "test"}},
-        }))
+        await watcher._process_event(
+            json.dumps(
+                {
+                    "status": "oom",
+                    "Actor": {"ID": "abc", "Attributes": {"name": "test"}},
+                }
+            )
+        )
         event = event_queue.get_nowait()
         assert event.raw["PRIORITY"] == "2"
 
         # Die should be error
-        await watcher._process_event(json.dumps({
-            "status": "die",
-            "Actor": {"ID": "abc", "Attributes": {"name": "test"}},
-        }))
+        await watcher._process_event(
+            json.dumps(
+                {
+                    "status": "die",
+                    "Actor": {"ID": "abc", "Attributes": {"name": "test"}},
+                }
+            )
+        )
         event = event_queue.get_nowait()
         assert event.raw["PRIORITY"] == "3"
 

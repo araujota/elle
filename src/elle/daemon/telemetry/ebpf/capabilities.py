@@ -153,6 +153,7 @@ def _bcc_available() -> bool:
     """Check if BCC Python library is available."""
     try:
         from bcc import BPF  # noqa: F401
+
         return True
     except ImportError:
         return False

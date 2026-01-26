@@ -302,7 +302,7 @@ PACKAGE_CAPABILITY_GENERATION_SEGMENT = PromptSegment(
     id="package_capability_generation",
     intent="learn_package",
     priority=100,
-    content='''## Package Capability Generation
+    content="""## Package Capability Generation
 
 You are generating capabilities for a package based on extracted intelligence.
 Output MUST be valid JSON matching this exact schema - no other text:
@@ -382,7 +382,7 @@ Generate capabilities for:
 2. **Safe operations first** - Prefer read-only/reversible
 3. **Well-documented flags** - Only use flags from the intelligence
 4. **Composable operations** - Can be chained by the planner
-''',
+""",
 )
 
 

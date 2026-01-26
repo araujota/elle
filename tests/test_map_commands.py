@@ -3,15 +3,16 @@
 Renamed from test_learn_commands.py as part of the /learn -> /map rename.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from elle.cli.map_commands import (
-    handle_map_command,
     _get_help,
+    _handle_delete,
     _handle_list,
     _handle_show,
-    _handle_delete,
+    handle_map_command,
 )
 
 
@@ -157,8 +158,7 @@ class TestMapCommandMap:
 
                 # Verify passive mode was used
                 mock_map.assert_called_once()
-                assert mock_map.call_args[1].get("mode") == "passive" or \
-                       mock_map.call_args[0][1] == "passive"
+                assert mock_map.call_args[1].get("mode") == "passive" or mock_map.call_args[0][1] == "passive"
 
 
 class TestMapCommandShow:
@@ -168,6 +168,7 @@ class TestMapCommandShow:
     async def test_show_recipe_details(self):
         """Test showing recipe details."""
         from datetime import datetime
+
         from elle.atspi.models import UIElement
 
         mock_recipe = MagicMock()

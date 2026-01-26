@@ -106,9 +106,7 @@ class TestCondition:
 
     def test_simple_expression(self):
         """Test creating simple condition."""
-        condition = Condition(
-            expression={"gte": ["{event.raw.used_pct}", 90]}
-        )
+        condition = Condition(expression={"gte": ["{event.raw.used_pct}", 90]})
         assert "gte" in condition.expression
 
     def test_complex_expression(self):
@@ -218,9 +216,7 @@ class TestReactiveFunction:
                 type="event",
                 event=EventTrigger(category="disk"),
             ),
-            condition=Condition(
-                expression={"gte": ["{event.raw.used_pct}", 90]}
-            ),
+            condition=Condition(expression={"gte": ["{event.raw.used_pct}", 90]}),
             actions=(
                 ActionSpec(capability="docker.prune", input={"all": True}),
                 ActionSpec(capability="notify.send", input={"title": "Cleanup done"}),

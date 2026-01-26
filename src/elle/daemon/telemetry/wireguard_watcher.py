@@ -203,7 +203,10 @@ class WireguardWatcher:
         """
         try:
             proc = await asyncio.create_subprocess_exec(
-                "wg", "show", "all", "dump",
+                "wg",
+                "show",
+                "all",
+                "dump",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
             )

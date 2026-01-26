@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
+from elle.capabilities.autogen.models import FlagType, ParsedFlag, ParsedManPage
 from elle.capabilities.autogen.parser import (
     extract_sections,
     flag_exists,
@@ -14,7 +14,6 @@ from elle.capabilities.autogen.parser import (
     parse_options,
     parse_synopsis,
 )
-from elle.capabilities.autogen.models import FlagType, ParsedFlag, ParsedManPage
 
 
 class TestExtractSections:
@@ -176,9 +175,7 @@ class TestFlagExists:
         man_page = ParsedManPage(
             name="test",
             section=1,
-            flags=(
-                ParsedFlag(name="verbose", short="-v", long="--verbose", flag_type=FlagType.BOOL),
-            ),
+            flags=(ParsedFlag(name="verbose", short="-v", long="--verbose", flag_type=FlagType.BOOL),),
         )
 
         assert flag_exists(man_page, "verbose") is True
@@ -189,9 +186,7 @@ class TestFlagExists:
         man_page = ParsedManPage(
             name="test",
             section=1,
-            flags=(
-                ParsedFlag(name="verbose", short="-v", long="--verbose", flag_type=FlagType.BOOL),
-            ),
+            flags=(ParsedFlag(name="verbose", short="-v", long="--verbose", flag_type=FlagType.BOOL),),
         )
 
         assert flag_exists(man_page, "-v") is True
@@ -201,9 +196,7 @@ class TestFlagExists:
         man_page = ParsedManPage(
             name="test",
             section=1,
-            flags=(
-                ParsedFlag(name="verbose", short="-v", long="--verbose", flag_type=FlagType.BOOL),
-            ),
+            flags=(ParsedFlag(name="verbose", short="-v", long="--verbose", flag_type=FlagType.BOOL),),
         )
 
         assert flag_exists(man_page, "--verbose") is True

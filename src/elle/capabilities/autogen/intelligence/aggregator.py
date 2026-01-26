@@ -99,11 +99,13 @@ class IntelligenceAggregator:
 
             except Exception as e:
                 logger.warning(f"Extractor {extractor.name} failed: {e}")
-                results.append(ExtractionResult(
-                    source_name=extractor.name,
-                    success=False,
-                    error=str(e),
-                ))
+                results.append(
+                    ExtractionResult(
+                        source_name=extractor.name,
+                        success=False,
+                        error=str(e),
+                    )
+                )
 
         # Aggregate results
         return self._aggregate(package_name, results, manifest, metadata)
@@ -161,12 +163,14 @@ class IntelligenceAggregator:
             # Prefer binary matching package name
             for binary_path in manifest.binaries:
                 from pathlib import Path
+
                 name = Path(binary_path).name
                 if name == package_name:
                     primary_binary = name
                     break
             if primary_binary is None:
                 from pathlib import Path
+
                 primary_binary = Path(manifest.binaries[0]).name
 
         # Estimate tokens
@@ -229,11 +233,7 @@ class IntelligenceAggregator:
                 elif flag.confidence > flag_map[key].confidence:
                     # Prefer higher confidence
                     flag_map[key] = flag
-                elif (
-                    flag.confidence == flag_map[key].confidence
-                    and flag.description
-                    and not flag_map[key].description
-                ):
+                elif flag.confidence == flag_map[key].confidence and flag.description and not flag_map[key].description:
                     # Same confidence but this one has description
                     flag_map[key] = flag
 
@@ -285,6 +285,7 @@ class IntelligenceAggregator:
             lines.append("## Binaries")
             for binary in intel.manifest.binaries[:10]:
                 from pathlib import Path
+
                 lines.append(f"- {Path(binary).name}")
             if len(intel.manifest.binaries) > 10:
                 lines.append(f"- ... and {len(intel.manifest.binaries) - 10} more")

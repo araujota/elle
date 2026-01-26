@@ -232,15 +232,15 @@ class PolicyDocument(BaseModel):
 
 
 OperationType = Literal[
-    "command",       # Shell command execution
-    "file_read",     # Reading a file
-    "file_write",    # Writing/creating a file
-    "file_delete",   # Deleting a file
-    "config_edit",   # Editing configuration
+    "command",  # Shell command execution
+    "file_read",  # Reading a file
+    "file_write",  # Writing/creating a file
+    "file_delete",  # Deleting a file
+    "config_edit",  # Editing configuration
     "plan_execute",  # Executing a plan
-    "task",          # System task
-    "question",      # System question
-    "capability",    # Capability execution
+    "task",  # System task
+    "question",  # System question
+    "capability",  # Capability execution
 ]
 
 

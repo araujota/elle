@@ -1,15 +1,14 @@
 """Tests for the telemetry normalizer."""
 
-import pytest
 from datetime import UTC, datetime
 
 from elle.daemon.telemetry.normalizer import (
     Normalizer,
     detect_category,
     extract_entity,
-    priority_to_severity,
-    parse_timestamp,
     generate_fingerprint,
+    parse_timestamp,
+    priority_to_severity,
 )
 
 
@@ -311,7 +310,9 @@ class TestNormalizer:
         normalizer = Normalizer()
 
         # Normalize some events - use messages that clearly match categories
-        normalizer.normalize({"_SOURCE": "journal", "MESSAGE": "Started nginx.service - A high performance web server", "PRIORITY": "6"})
+        normalizer.normalize(
+            {"_SOURCE": "journal", "MESSAGE": "Started nginx.service - A high performance web server", "PRIORITY": "6"}
+        )
         normalizer.normalize({"_SOURCE": "kernel", "MESSAGE": "I/O error on /dev/sda, sector 1234", "PRIORITY": "3"})
 
         stats = normalizer.get_stats()

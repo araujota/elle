@@ -10,6 +10,7 @@ Flow:
     input + session -> classify -> policy check -> route -> execute -> result + new_session
 """
 
+import contextlib
 import logging
 from enum import Enum, auto
 
@@ -44,6 +45,7 @@ def _get_policy_module():
     if _policy_module is None:
         try:
             from elle import policy
+
             _policy_module = policy
         except ImportError:
             logger.warning("Policy module not available")
@@ -203,9 +205,7 @@ class Engine:
 
                 # Handle justification requirement
                 if policy_result.requires_justification:
-                    justification = self._get_policy_justification(
-                        policy_result.justification_prompt
-                    )
+                    justification = self._get_policy_justification(policy_result.justification_prompt)
                     if justification is None:
                         return EngineResult(
                             output=f"{Colors.DIM}Cancelled.{Colors.RESET}",
@@ -490,6 +490,7 @@ class Engine:
     def _is_reboot_command(self, text: str) -> bool:
         """Check if text is a reboot-related command."""
         import re
+
         reboot_patterns = [
             r"^reboot(\s|$)",
             r"^reboot\s+(status|history|cancel|confirm|rollback)",
@@ -657,6 +658,7 @@ class Engine:
             else:
                 # Try to extract from natural language patterns
                 import re
+
                 patterns = [
                     r"(?:learn|figure out|understand)\s+(?:how to (?:use|work with)\s+)?(\w[\w\-\.]+)",
                     r"(?:what can|how do I use)\s+(\w[\w\-\.]+)",
@@ -852,6 +854,7 @@ Validates package operations before execution to detect potential issues.
     def _is_incident_command(self, text: str) -> bool:
         """Check if text is an incident-related command."""
         import re
+
         incident_patterns = [
             r"^incidents?(\s|$)",
             r"^show\s+(me\s+)?(recent\s+)?incidents?",
@@ -951,6 +954,7 @@ Validates package operations before execution to detect potential issues.
             # Try partial match if exact match fails
             if incident is None:
                 from elle.daemon.incidents.store import list_incidents
+
                 all_incidents = list_incidents(limit=1000)
                 matches = [i for i in all_incidents if i.incident_id.startswith(incident_id)]
                 if len(matches) == 1:
@@ -1125,10 +1129,12 @@ Validates package operations before execution to detect potential issues.
             )
 
             # Generate response
-            response = llm.chat([
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": question},
-            ])
+            response = llm.chat(
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": question},
+                ]
+            )
 
             if response:
                 lines = [
@@ -1461,10 +1467,8 @@ Validates package operations before execution to detect potential issues.
         except Exception as e:
             logger.error(f"Error executing traced command: {e}")
             # Try to stop any active trace
-            try:
+            with contextlib.suppress(Exception):
                 manager.stop_trace()
-            except Exception:
-                pass
             return EngineResult(
                 output=f"{Colors.RED}Error executing command: {e}{Colors.RESET}",
                 session=session,
@@ -1590,10 +1594,7 @@ Validates package operations before execution to detect potential issues.
             # Add hint about fix command
             if output:
                 output += "\n"
-            output += (
-                f"{Colors.DIM}Command failed (exit {result.exit_code}). "
-                f"Type 'fix' for help.{Colors.RESET}"
-            )
+            output += f"{Colors.DIM}Command failed (exit {result.exit_code}). Type 'fix' for help.{Colors.RESET}"
 
         return EngineResult(
             output=output,
@@ -1684,10 +1685,7 @@ Validates package operations before execution to detect potential issues.
                 session=session,
             )
 
-        lines = [
-            f"  {i + 1}  {cmd}"
-            for i, cmd in enumerate(session.history)
-        ]
+        lines = [f"  {i + 1}  {cmd}" for i, cmd in enumerate(session.history)]
         return EngineResult(
             output="\n".join(lines),
             session=session,
@@ -1842,10 +1840,7 @@ Validates package operations before execution to detect potential issues.
         Returns:
             Formatted denial message.
         """
-        return (
-            f"{Colors.BOLD_RED}Command blocked{Colors.RESET}\n"
-            f"{explanation}"
-        )
+        return f"{Colors.BOLD_RED}Command blocked{Colors.RESET}\n{explanation}"
 
     def _format_timeout(self, command: str, timeout: float) -> str:
         """Format a timeout message.
@@ -1959,6 +1954,7 @@ Sponsor: https://github.com/sponsors/araujota{Colors.RESET}"""
         # Try to open the sponsor page in the default browser
         try:
             import subprocess
+
             subprocess.Popen(
                 ["xdg-open", sponsor_url],
                 stdout=subprocess.DEVNULL,
@@ -2070,10 +2066,7 @@ for fast lexical and semantic search.{Colors.RESET}"""
 
             for i, result in enumerate(results, 1):
                 # Header with name and section
-                lines.append(
-                    f"{Colors.CYAN}{i}. {result.name}({result.section}){Colors.RESET}"
-                    f" [{result.search_type}]"
-                )
+                lines.append(f"{Colors.CYAN}{i}. {result.name}({result.section}){Colors.RESET} [{result.search_type}]")
 
                 # Match section if available
                 if result.match_section:
@@ -2087,8 +2080,7 @@ for fast lexical and semantic search.{Colors.RESET}"""
                 lines.append("")
 
             lines.append(
-                f"{Colors.DIM}Tip: Use 'man <name> <section>' in your shell "
-                f"for full documentation{Colors.RESET}"
+                f"{Colors.DIM}Tip: Use 'man <name> <section>' in your shell for full documentation{Colors.RESET}"
             )
 
             return EngineResult(output="\n".join(lines), session=session)

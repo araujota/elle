@@ -72,9 +72,7 @@ class PlannerInteractive:
                 can_auto, reason = can_auto_approve(self.result.plan)
                 self.auto_approve = can_auto
                 if can_auto:
-                    lines.append(
-                        f"{Colors.GREEN}Low-risk operation - can proceed automatically{Colors.RESET}"
-                    )
+                    lines.append(f"{Colors.GREEN}Low-risk operation - can proceed automatically{Colors.RESET}")
             else:
                 lines.append(f"{Colors.RED}Plan has validation errors:{Colors.RESET}")
                 for error in self.result.verification.errors:
@@ -180,10 +178,7 @@ def run_interactive_planner(result: PlanResult, session: Session) -> PlanResult:
     if can_auto:
         prompt = f"{Colors.DIM}Press Enter to proceed or 'n' to cancel:{Colors.RESET} "
     elif result.plan.overall_risk == "high":
-        prompt = (
-            f"{Colors.BOLD_RED}HIGH-RISK operation.{Colors.RESET} "
-            f"Type 'yes' to proceed, or 'n' to cancel: "
-        )
+        prompt = f"{Colors.BOLD_RED}HIGH-RISK operation.{Colors.RESET} Type 'yes' to proceed, or 'n' to cancel: "
     else:
         prompt = "Proceed? [Y/n]: "
 
@@ -229,9 +224,9 @@ def run_interactive_planner(result: PlanResult, session: Session) -> PlanResult:
     if result.outcome == PlanOutcome.FAILED and result.plan and result.plan.has_rollback:
         print()
         try:
-            response = input(
-                f"{Colors.YELLOW}Execution failed. Rollback changes? [Y/n]:{Colors.RESET} "
-            ).strip().lower()
+            response = (
+                input(f"{Colors.YELLOW}Execution failed. Rollback changes? [Y/n]:{Colors.RESET} ").strip().lower()
+            )
 
             if response not in ("n", "no"):
                 print()

@@ -15,7 +15,7 @@ from elle.daemon.manvault.retriever import (
     search,
 )
 from elle.daemon.manvault.schema import get_connection, init_manvault_schema
-from elle.daemon.manvault.store import upsert_chunk, upsert_chunks_batch, upsert_doc
+from elle.daemon.manvault.store import upsert_chunks_batch, upsert_doc
 
 
 @pytest.fixture
@@ -215,9 +215,7 @@ class TestLexicalSearch:
 
     def test_search_filter_by_section(self, temp_db):
         """Test filtering search by section."""
-        results = search(
-            "filesystem", k=5, section="5", search_type="lexical", conn=temp_db
-        )
+        results = search("filesystem", k=5, section="5", search_type="lexical", conn=temp_db)
 
         # Should only return section 5 results
         for r in results:
@@ -225,9 +223,7 @@ class TestLexicalSearch:
 
     def test_search_no_results(self, temp_db):
         """Test search with no results."""
-        results = search(
-            "xyznonexistent123", k=5, search_type="lexical", conn=temp_db
-        )
+        results = search("xyznonexistent123", k=5, search_type="lexical", conn=temp_db)
 
         assert results == []
 

@@ -1,15 +1,13 @@
 """Tests for Docker image environment variable profiles."""
 
-import pytest
-
 from elle.cli.docker.env_profiles import (
-    get_profile,
-    extract_image_family,
-    list_known_families,
     IMAGE_PROFILES,
-    POSTGRES_PROFILE,
     MYSQL_PROFILE,
+    POSTGRES_PROFILE,
     REDIS_PROFILE,
+    extract_image_family,
+    get_profile,
+    list_known_families,
 )
 
 

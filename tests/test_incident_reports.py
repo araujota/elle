@@ -1,7 +1,7 @@
 """Tests for incident and efficacy report generation."""
 
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -22,7 +22,6 @@ from elle.daemon.incidents.schema import ensure_schema, get_connection
 from elle.daemon.incidents.store import (
     append_action,
     create_incident_draft,
-    finalize_outcome,
     update_incident,
 )
 
@@ -79,9 +78,8 @@ class TestReportGenerator:
         """Test generating report for nonexistent incident."""
         conn, _ = temp_db
 
-        with ReportGenerator(conn) as gen:
-            with pytest.raises(ValueError, match="not found"):
-                gen.generate_incident_report("nonexistent-id")
+        with ReportGenerator(conn) as gen, pytest.raises(ValueError, match="not found"):
+            gen.generate_incident_report("nonexistent-id")
 
     def test_generate_incident_report_markdown(self, temp_db):
         """Test generating incident report in Markdown format."""
@@ -247,7 +245,7 @@ class TestReportGenerator:
         """Test generating trend report in text format."""
         conn, _ = temp_db
 
-        incident = create_incident_draft(title="Test", domain="net", conn=conn)
+        create_incident_draft(title="Test", domain="net", conn=conn)
         conn.commit()
 
         with ReportGenerator(conn) as gen:

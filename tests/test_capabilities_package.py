@@ -2,17 +2,12 @@
 
 from __future__ import annotations
 
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from elle.capabilities.core.package import (
     PACKAGE_CAPABILITIES,
     PackageConflictDetectCapability,
     PackageConflictInput,
-    PackageInfoCapability,
-    PackageInstallCapability,
-    PackageRemoveCapability,
-    PackageUpdateCapability,
     _parse_apt_conflicts,
 )
 
@@ -155,7 +150,9 @@ class TestPackageConflictDetectCapability:
         result = cap.run(PackageConflictInput(package="nonexistent-pkg"))
 
         assert result.success is True
-        assert "not found" in str(result.output.recommendations).lower() or "apt update" in str(result.output.recommendations)
+        assert "not found" in str(result.output.recommendations).lower() or "apt update" in str(
+            result.output.recommendations
+        )
 
     @patch("elle.capabilities.core.package._run_apt")
     @patch("elle.capabilities.core.package._get_held_packages")

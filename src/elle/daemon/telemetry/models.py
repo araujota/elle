@@ -19,17 +19,17 @@ TelemetrySource = Literal["journal", "kernel", "probe", "ebpf"]
 
 # Category types for event classification
 TelemetryCategory = Literal[
-    "oom",      # Out-of-memory events
-    "disk",     # Disk/storage issues
-    "net",      # Network issues
-    "auth",     # Authentication/permission
+    "oom",  # Out-of-memory events
+    "disk",  # Disk/storage issues
+    "net",  # Network issues
+    "auth",  # Authentication/permission
     "service",  # Systemd service events
     "thermal",  # Temperature warnings
-    "smart",    # SMART disk health
-    "fs",       # Filesystem events
-    "pkg",      # Package management
-    "docker",   # Container events
-    "other",    # Uncategorized
+    "smart",  # SMART disk health
+    "fs",  # Filesystem events
+    "pkg",  # Package management
+    "docker",  # Container events
+    "other",  # Uncategorized
 ]
 
 
@@ -110,6 +110,7 @@ class TelemetryEvent(BaseModel):
             r"\b\d+\b",  # Numbers
         ]:
             import re
+
             normalized = re.sub(pattern, "", normalized)
 
         content = f"{category}:{entity or ''}:{normalized}"

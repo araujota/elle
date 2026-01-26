@@ -81,145 +81,140 @@ class RiskAssessment(BaseModel):
 # =============================================================================
 
 # System critical packages - changes can break boot/system
-CRITICAL_PACKAGES = frozenset({
-    # Init and core
-    "systemd",
-    "systemd-sysv",
-    "init",
-    "sysvinit-core",
-
-    # Kernel
-    "linux-image-*",
-    "linux-headers-*",
-    "linux-generic",
-    "linux-virtual",
-
-    # Boot
-    "grub-*",
-    "grub2-common",
-    "shim-signed",
-
-    # C library (breaking this bricks the system)
-    "libc6",
-    "libc-bin",
-    "libc6-dev",
-    "libgcc-s1",
-
-    # Package management
-    "apt",
-    "apt-utils",
-    "dpkg",
-    "aptitude",
-
-    # SSL/TLS (security critical)
-    "openssl",
-    "libssl*",
-    "ca-certificates",
-    "gnutls-bin",
-})
+CRITICAL_PACKAGES = frozenset(
+    {
+        # Init and core
+        "systemd",
+        "systemd-sysv",
+        "init",
+        "sysvinit-core",
+        # Kernel
+        "linux-image-*",
+        "linux-headers-*",
+        "linux-generic",
+        "linux-virtual",
+        # Boot
+        "grub-*",
+        "grub2-common",
+        "shim-signed",
+        # C library (breaking this bricks the system)
+        "libc6",
+        "libc-bin",
+        "libc6-dev",
+        "libgcc-s1",
+        # Package management
+        "apt",
+        "apt-utils",
+        "dpkg",
+        "aptitude",
+        # SSL/TLS (security critical)
+        "openssl",
+        "libssl*",
+        "ca-certificates",
+        "gnutls-bin",
+    }
+)
 
 # High-risk packages - can cause service outages
-HIGH_RISK_PACKAGES = frozenset({
-    # Network infrastructure
-    "netplan.io",
-    "networkmanager",
-    "network-manager",
-    "systemd-resolved",
-    "systemd-networkd",
-    "ifupdown",
-    "iproute2",
-
-    # Security
-    "openssh-server",
-    "openssh-client",
-    "libpam-*",
-    "sudo",
-    "polkit*",
-    "apparmor*",
-
-    # DNS
-    "bind9",
-    "dnsmasq",
-    "unbound",
-
-    # Web servers
-    "nginx",
-    "apache2",
-
-    # Databases (data loss risk)
-    "postgresql*",
-    "mysql-server*",
-    "mariadb-server*",
-    "mongodb-server*",
-    "redis-server",
-
-    # Container runtime
-    "docker*",
-    "containerd*",
-    "podman",
-    "lxc*",
-    "lxd*",
-})
+HIGH_RISK_PACKAGES = frozenset(
+    {
+        # Network infrastructure
+        "netplan.io",
+        "networkmanager",
+        "network-manager",
+        "systemd-resolved",
+        "systemd-networkd",
+        "ifupdown",
+        "iproute2",
+        # Security
+        "openssh-server",
+        "openssh-client",
+        "libpam-*",
+        "sudo",
+        "polkit*",
+        "apparmor*",
+        # DNS
+        "bind9",
+        "dnsmasq",
+        "unbound",
+        # Web servers
+        "nginx",
+        "apache2",
+        # Databases (data loss risk)
+        "postgresql*",
+        "mysql-server*",
+        "mariadb-server*",
+        "mongodb-server*",
+        "redis-server",
+        # Container runtime
+        "docker*",
+        "containerd*",
+        "podman",
+        "lxc*",
+        "lxd*",
+    }
+)
 
 # Medium-risk packages - may affect services
-MEDIUM_RISK_PACKAGES = frozenset({
-    # Python (many tools depend on this)
-    "python3",
-    "python3-minimal",
-    "libpython3*",
-
-    # Interpreters
-    "perl",
-    "ruby*",
-    "nodejs",
-
-    # System utilities
-    "coreutils",
-    "util-linux",
-    "procps",
-    "findutils",
-
-    # Logging
-    "rsyslog",
-    "syslog-ng*",
-    "journalctl",
-
-    # Time
-    "chrony",
-    "ntp",
-    "systemd-timesyncd",
-
-    # Mail
-    "postfix",
-    "exim4*",
-    "sendmail*",
-})
+MEDIUM_RISK_PACKAGES = frozenset(
+    {
+        # Python (many tools depend on this)
+        "python3",
+        "python3-minimal",
+        "libpython3*",
+        # Interpreters
+        "perl",
+        "ruby*",
+        "nodejs",
+        # System utilities
+        "coreutils",
+        "util-linux",
+        "procps",
+        "findutils",
+        # Logging
+        "rsyslog",
+        "syslog-ng*",
+        "journalctl",
+        # Time
+        "chrony",
+        "ntp",
+        "systemd-timesyncd",
+        # Mail
+        "postfix",
+        "exim4*",
+        "sendmail*",
+    }
+)
 
 # Low-risk packages - usually safe to update
-LOW_RISK_PACKAGES = frozenset({
-    "man-db",
-    "manpages*",
-    "vim",
-    "nano",
-    "less",
-    "curl",
-    "wget",
-    "git",
-    "htop",
-    "tmux",
-    "screen",
-})
+LOW_RISK_PACKAGES = frozenset(
+    {
+        "man-db",
+        "manpages*",
+        "vim",
+        "nano",
+        "less",
+        "curl",
+        "wget",
+        "git",
+        "htop",
+        "tmux",
+        "screen",
+    }
+)
 
 # Packages that should never be validated in container (need real hardware)
-NO_CONTAINER_PACKAGES = frozenset({
-    "linux-image-*",
-    "linux-headers-*",
-    "grub-*",
-    "shim-signed",
-    "fwupd",
-    "firmware-*",
-    "*-firmware",
-})
+NO_CONTAINER_PACKAGES = frozenset(
+    {
+        "linux-image-*",
+        "linux-headers-*",
+        "grub-*",
+        "shim-signed",
+        "fwupd",
+        "firmware-*",
+        "*-firmware",
+    }
+)
 
 
 def _matches_pattern(package: str, patterns: frozenset[str]) -> bool:
@@ -232,10 +227,7 @@ def _matches_pattern(package: str, patterns: frozenset[str]) -> bool:
     Returns:
         True if package matches any pattern.
     """
-    for pattern in patterns:
-        if fnmatch.fnmatch(package, pattern):
-            return True
-    return False
+    return any(fnmatch.fnmatch(package, pattern) for pattern in patterns)
 
 
 def _get_package_risk_level(package: str) -> tuple[RiskLevel, str]:
@@ -402,10 +394,12 @@ def get_risk_summary(assessment: RiskAssessment) -> str:
     for factor in assessment.factors:
         lines.append(f"  - {factor}")
 
-    lines.extend([
-        "",
-        f"Recommended Tier: {assessment.recommended_tier}",
-    ])
+    lines.extend(
+        [
+            "",
+            f"Recommended Tier: {assessment.recommended_tier}",
+        ]
+    )
 
     if assessment.require_confirmation:
         lines.append("User confirmation required")

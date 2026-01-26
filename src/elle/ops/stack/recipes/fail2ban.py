@@ -11,19 +11,11 @@ FAIL2BAN_RECIPE = StackRecipe(
     display_name="Fail2ban Intrusion Prevention",
     description="Fail2ban with SSH jail, custom ban times, and verified log source access",
     category="security",
-
-    packages=(
-        "fail2ban",
-    ),
-
-    services=(
-        "fail2ban",
-    ),
-
+    packages=("fail2ban",),
+    services=("fail2ban",),
     config_templates={
         # jail.local will be generated with SSH jail
     },
-
     guarantees=(
         StackGuarantee(
             name="service_running",
@@ -66,7 +58,6 @@ FAIL2BAN_RECIPE = StackRecipe(
             remediation_hint="Cannot communicate with fail2ban server. Check: systemctl status fail2ban",
         ),
     ),
-
     variables=(
         StackVariable(
             name="bantime",
@@ -100,7 +91,6 @@ FAIL2BAN_RECIPE = StackRecipe(
             required=False,
         ),
     ),
-
     presets={
         "lenient": {
             "bantime": "10m",
@@ -118,11 +108,9 @@ FAIL2BAN_RECIPE = StackRecipe(
             "maxretry": "3",
         },
     },
-
     min_ram_mb=64,
     min_disk_gb=1,
     ports_required=(),  # No ports opened
-
     version="1.0.0",
     tags=("security", "fail2ban", "intrusion-prevention", "ssh", "firewall"),
 )

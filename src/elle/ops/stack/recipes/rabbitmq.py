@@ -11,17 +11,9 @@ RABBITMQ_RECIPE = StackRecipe(
     display_name="RabbitMQ Message Broker",
     description="RabbitMQ message broker with management plugin and secure defaults",
     category="data",
-
-    packages=(
-        "rabbitmq-server",
-    ),
-
-    services=(
-        "rabbitmq-server",
-    ),
-
+    packages=("rabbitmq-server",),
+    services=("rabbitmq-server",),
     config_templates={},
-
     guarantees=(
         StackGuarantee(
             name="service_running",
@@ -56,7 +48,6 @@ RABBITMQ_RECIPE = StackRecipe(
             remediation_hint="Enable management plugin and check firewall",
         ),
     ),
-
     variables=(
         StackVariable(
             name="admin_password",
@@ -77,7 +68,6 @@ RABBITMQ_RECIPE = StackRecipe(
             required=False,
         ),
     ),
-
     presets={
         "dev": {
             "vm_memory_high_watermark": "0.6",
@@ -86,11 +76,9 @@ RABBITMQ_RECIPE = StackRecipe(
             "vm_memory_high_watermark": "0.4",
         },
     },
-
     min_ram_mb=512,
     min_disk_gb=2,
     ports_required=(5672, 15672),
-
     version="1.0.0",
     tags=("messaging", "queue", "rabbitmq", "amqp", "broker"),
 )

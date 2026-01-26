@@ -27,9 +27,7 @@ def _get_ruamel() -> Any:
 
             _ruamel = YAML
         except ImportError as e:
-            raise ImportError(
-                "ruamel.yaml is not installed. Install with: pip install ruamel.yaml"
-            ) from e
+            raise ImportError("ruamel.yaml is not installed. Install with: pip install ruamel.yaml") from e
     return _ruamel
 
 
@@ -353,11 +351,7 @@ class YAMLHandler:
             for key, value in update.items():
                 key_path = f"{current_path}.{key}" if current_path else key
 
-                if (
-                    key in base
-                    and isinstance(base[key], dict)
-                    and isinstance(value, dict)
-                ):
+                if key in base and isinstance(base[key], dict) and isinstance(value, dict):
                     # Recursive merge for nested dicts
                     _merge(base[key], value, key_path)
                 else:
@@ -509,9 +503,7 @@ class NetplanHandler(YAMLHandler):
         self.set_path(data, f"{base_path}.addresses", addresses)
 
         if gateway4:
-            self.set_path(data, f"{base_path}.routes", [
-                {"to": "default", "via": gateway4}
-            ])
+            self.set_path(data, f"{base_path}.routes", [{"to": "default", "via": gateway4}])
 
         if nameservers:
             self.set_path(data, f"{base_path}.nameservers.addresses", nameservers)

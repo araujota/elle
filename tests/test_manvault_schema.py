@@ -1,6 +1,5 @@
 """Tests for Man Vault schema and CRUD operations."""
 
-import sqlite3
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -10,7 +9,6 @@ import pytest
 from elle.daemon.manvault.models import ManChunk, ManDoc
 from elle.daemon.manvault.schema import (
     SCHEMA_VERSION,
-    drop_all_tables,
     ensure_schema,
     get_connection,
     get_schema_version,
@@ -58,42 +56,30 @@ class TestSchema:
         cursor = temp_db.cursor()
 
         # Check docs table
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='docs'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='docs'")
         assert cursor.fetchone() is not None
 
         # Check FTS table
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='docs_fts'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='docs_fts'")
         assert cursor.fetchone() is not None
 
         # Check chunks table
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks'")
         assert cursor.fetchone() is not None
 
         # Check embeddings table
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='embeddings'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='embeddings'")
         assert cursor.fetchone() is not None
 
         # Check meta table
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='meta'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='meta'")
         assert cursor.fetchone() is not None
 
     def test_init_schema_creates_triggers(self, temp_db):
         """Test that triggers are created for FTS sync."""
         cursor = temp_db.cursor()
 
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='trigger'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='trigger'")
         triggers = {row[0] for row in cursor.fetchall()}
 
         assert "docs_ai" in triggers  # After insert
@@ -104,9 +90,7 @@ class TestSchema:
         """Test that indexes are created."""
         cursor = temp_db.cursor()
 
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='index'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='index'")
         indexes = {row[0] for row in cursor.fetchall()}
 
         assert "idx_docs_name" in indexes
@@ -414,9 +398,7 @@ class TestFTS:
 
         # Search FTS
         cursor = temp_db.cursor()
-        cursor.execute(
-            "SELECT * FROM docs_fts WHERE docs_fts MATCH 'directory'"
-        )
+        cursor.execute("SELECT * FROM docs_fts WHERE docs_fts MATCH 'directory'")
         results = cursor.fetchall()
 
         assert len(results) == 1
@@ -439,9 +421,7 @@ class TestFTS:
 
         # FTS should be empty
         cursor = temp_db.cursor()
-        cursor.execute(
-            "SELECT * FROM docs_fts WHERE docs_fts MATCH 'directory'"
-        )
+        cursor.execute("SELECT * FROM docs_fts WHERE docs_fts MATCH 'directory'")
         results = cursor.fetchall()
 
         assert len(results) == 0

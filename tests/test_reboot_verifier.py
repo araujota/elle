@@ -1,6 +1,5 @@
 """Tests for reboot module verifier."""
 
-import asyncio
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
@@ -12,12 +11,12 @@ from elle.daemon.reboot.verifier import (
     create_default_verifications,
     create_kernel_update_verifications,
     create_service_restart_verifications,
+    run_all_verifications,
     run_command_check,
     run_file_check,
     run_port_check,
     run_service_check,
     run_verification,
-    run_all_verifications,
 )
 
 
@@ -94,9 +93,7 @@ class TestRunServiceCheck:
         """Test that service check uses correct command."""
         # We can't reliably test actual service status in tests,
         # but we can verify the check runs without error
-        passed, exit_code, stdout, stderr = await run_service_check(
-            "nonexistent-service-for-testing"
-        )
+        passed, exit_code, stdout, stderr = await run_service_check("nonexistent-service-for-testing")
 
         # Should fail gracefully for non-existent service
         assert passed is False
@@ -123,9 +120,7 @@ class TestRunFileCheck:
     @pytest.mark.asyncio
     async def test_nonexistent_file(self):
         """Test checking non-existent file."""
-        passed, exit_code, stdout, stderr = await run_file_check(
-            "/nonexistent/path/file.txt"
-        )
+        passed, exit_code, stdout, stderr = await run_file_check("/nonexistent/path/file.txt")
 
         assert passed is False
         assert exit_code == 1
@@ -355,9 +350,17 @@ class TestCreateDefaultVerifications:
         verifications = create_default_verifications()
 
         valid_check_types = (
-            "command", "service_active", "file_exists", "port_listening",
-            "filesystem_writable", "mount_exists", "kernel_module",
-            "dmesg_no_errors", "journal_no_errors", "disk_space", "network_interface"
+            "command",
+            "service_active",
+            "file_exists",
+            "port_listening",
+            "filesystem_writable",
+            "mount_exists",
+            "kernel_module",
+            "dmesg_no_errors",
+            "journal_no_errors",
+            "disk_space",
+            "network_interface",
         )
 
         for v in verifications:
@@ -377,10 +380,7 @@ class TestCreateKernelUpdateVerifications:
         assert len(verifications) >= 2
 
         # Find the kernel check
-        kernel_checks = [
-            v for v in verifications
-            if "uname" in v.check_command
-        ]
+        kernel_checks = [v for v in verifications if "uname" in v.check_command]
         assert len(kernel_checks) == 1
         assert kernel_checks[0].expected_output_contains == "6.8.0"
         assert kernel_checks[0].required is True
@@ -397,10 +397,7 @@ class TestCreateServiceRestartVerifications:
         assert len(verifications) >= 2
 
         # Find the nginx check
-        nginx_checks = [
-            v for v in verifications
-            if v.check_command == "nginx"
-        ]
+        nginx_checks = [v for v in verifications if v.check_command == "nginx"]
         assert len(nginx_checks) == 1
         assert nginx_checks[0].check_type == "service_active"
         assert nginx_checks[0].required is True

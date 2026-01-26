@@ -26,12 +26,8 @@ class UIElement(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     # Core identity
-    role: str = Field(
-        description="AT-SPI role: 'push button', 'toggle button', 'menu item', etc."
-    )
-    name: str = Field(
-        description="Accessible name: 'Bluetooth', 'Wi-Fi', 'Close', etc."
-    )
+    role: str = Field(description="AT-SPI role: 'push button', 'toggle button', 'menu item', etc.")
+    name: str = Field(description="Accessible name: 'Bluetooth', 'Wi-Fi', 'Close', etc.")
     description: str | None = Field(
         default=None,
         description="Accessibility description if available",

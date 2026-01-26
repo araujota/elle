@@ -221,9 +221,7 @@ class ReactiveScheduler:
             else:
                 # Function was rate-limited or condition not met
                 self._stats.executions_skipped += 1
-                logger.debug(
-                    f"Scheduled function {func.name} skipped (rate-limited or condition not met)"
-                )
+                logger.debug(f"Scheduled function {func.name} skipped (rate-limited or condition not met)")
 
         except Exception as e:
             self._stats.executions_failed += 1

@@ -17,6 +17,7 @@ Usage:
     # Instead of cls.model_validate(data)
     instance = safe_model_validate(MyModel, data)
 """
+
 from __future__ import annotations
 
 import json

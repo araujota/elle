@@ -42,7 +42,9 @@ class ManSnippetContext(BaseModel):
     snippet: str = Field(description="Relevant excerpt")
     match_section: str | None = Field(default=None, description="Section heading")
     relevance_score: float = Field(
-        default=0.0, ge=0.0, le=1.0,
+        default=0.0,
+        ge=0.0,
+        le=1.0,
         description="Relevance score from search",
     )
 
@@ -122,10 +124,7 @@ class FixitContext(BaseModel):
     def primary_source(self) -> Literal["man_vault", "incident_vault", "llm_only"]:
         """Determine the primary source of context."""
         # Prior incidents with good outcomes are most valuable
-        good_prior = [
-            p for p in self.prior_art
-            if p.outcome in ("improved", "partial") and p.score > 0.5
-        ]
+        good_prior = [p for p in self.prior_art if p.outcome in ("improved", "partial") and p.score > 0.5]
         if good_prior:
             return "incident_vault"
 
@@ -144,10 +143,7 @@ class FixitContext(BaseModel):
             parts.append(f"man {', '.join(man_refs)}")
 
         if self.prior_art:
-            successful = sum(
-                1 for p in self.prior_art
-                if p.outcome in ("improved", "partial")
-            )
+            successful = sum(1 for p in self.prior_art if p.outcome in ("improved", "partial"))
             if successful:
                 parts.append(f"{successful} similar incident(s) succeeded")
 
@@ -195,10 +191,7 @@ class FixitContext(BaseModel):
             overall += from_man
 
         if incident_citations:
-            good_outcomes = [
-                c for c in incident_citations
-                if c.get("outcome") in ("improved", "partial")
-            ]
+            good_outcomes = [c for c in incident_citations if c.get("outcome") in ("improved", "partial")]
             if good_outcomes:
                 from_inc = max(c.get("similarity_score", 0) for c in good_outcomes) * 0.4
                 overall += from_inc
@@ -286,7 +279,8 @@ class FixitDiagnosis(BaseModel):
     summary: str = Field(description="One-sentence summary of the problem")
     root_cause: str = Field(description="Explanation of why it failed")
     confidence: float = Field(
-        ge=0.0, le=1.0,
+        ge=0.0,
+        le=1.0,
         description="Confidence in this diagnosis (0.0-1.0)",
     )
 

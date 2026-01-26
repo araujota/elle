@@ -363,10 +363,7 @@ class BootstrapRunner:
                     return (pkg_name, False, str(e), 0, 0, 0)
 
         # Run all packages
-        tasks = [
-            process_package(pkg_name, category, i)
-            for i, (pkg_name, category) in enumerate(packages)
-        ]
+        tasks = [process_package(pkg_name, category, i) for i, (pkg_name, category) in enumerate(packages)]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -459,9 +456,7 @@ Output valid JSON only."""
             for cap_data in capabilities_json["capabilities"]:
                 try:
                     if "source_command" not in cap_data:
-                        cap_data["source_command"] = (
-                            intel.primary_binary or package_name
-                        )
+                        cap_data["source_command"] = intel.primary_binary or package_name
 
                     if "side_effects" in cap_data:
                         cap_data["side_effects"] = tuple(cap_data["side_effects"])

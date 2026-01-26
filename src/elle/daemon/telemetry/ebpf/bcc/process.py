@@ -33,12 +33,12 @@ class ProcessExitEvent(ctypes.Structure):
     """C struct for process exit events from ring buffer."""
 
     _fields_ = [
-        ("ts_ns", ctypes.c_uint64),       # Kernel timestamp
-        ("pid", ctypes.c_uint32),          # Process ID
-        ("tgid", ctypes.c_uint32),         # Thread group ID
-        ("uid", ctypes.c_uint32),          # User ID
-        ("exit_code", ctypes.c_int32),     # Exit code (signal << 8 | code)
-        ("comm", ctypes.c_char * 16),      # Process name
+        ("ts_ns", ctypes.c_uint64),  # Kernel timestamp
+        ("pid", ctypes.c_uint32),  # Process ID
+        ("tgid", ctypes.c_uint32),  # Thread group ID
+        ("uid", ctypes.c_uint32),  # User ID
+        ("exit_code", ctypes.c_int32),  # Exit code (signal << 8 | code)
+        ("comm", ctypes.c_char * 16),  # Process name
     ]
 
 
@@ -134,9 +134,7 @@ TRACEPOINT_PROBE(sched, sched_process_exit) {{
 }}
 """
 
-    def _parse_event(
-        self, cpu: int, data: ctypes.Structure, size: int
-    ) -> EBPFRawEvent | None:
+    def _parse_event(self, cpu: int, data: ctypes.Structure, size: int) -> EBPFRawEvent | None:
         """Parse process exit event from ring buffer.
 
         Args:

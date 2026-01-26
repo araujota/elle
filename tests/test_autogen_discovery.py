@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import MagicMock, patch
 
 from elle.capabilities.autogen.discovery import (
@@ -13,7 +12,6 @@ from elle.capabilities.autogen.discovery import (
     find_binary,
     find_man_page,
     get_package_for_binary,
-    scan_binary_directory,
 )
 
 

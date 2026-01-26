@@ -125,33 +125,22 @@ class PreflightResult(BaseModel):
     @property
     def has_errors(self) -> bool:
         """Check if any error or critical issues were detected."""
-        return any(
-            issue.severity in (IssueSeverity.ERROR, IssueSeverity.CRITICAL)
-            for issue in self.issues
-        )
+        return any(issue.severity in (IssueSeverity.ERROR, IssueSeverity.CRITICAL) for issue in self.issues)
 
     @property
     def has_warnings(self) -> bool:
         """Check if any warning issues were detected."""
-        return any(
-            issue.severity == IssueSeverity.WARNING for issue in self.issues
-        )
+        return any(issue.severity == IssueSeverity.WARNING for issue in self.issues)
 
     @property
     def error_count(self) -> int:
         """Count of error/critical issues."""
-        return sum(
-            1
-            for issue in self.issues
-            if issue.severity in (IssueSeverity.ERROR, IssueSeverity.CRITICAL)
-        )
+        return sum(1 for issue in self.issues if issue.severity in (IssueSeverity.ERROR, IssueSeverity.CRITICAL))
 
     @property
     def warning_count(self) -> int:
         """Count of warning issues."""
-        return sum(
-            1 for issue in self.issues if issue.severity == IssueSeverity.WARNING
-        )
+        return sum(1 for issue in self.issues if issue.severity == IssueSeverity.WARNING)
 
 
 class PreflightTest(BaseModel):

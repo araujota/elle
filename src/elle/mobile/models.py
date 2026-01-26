@@ -51,24 +51,12 @@ class PairedDevice(BaseModel):
 
     device_id: str = Field(..., description="Unique device identifier (UUID)")
     name: str = Field(..., description="Human-readable device name")
-    role: MobileRole = Field(
-        default=MobileRole.MOBILE_READONLY, description="Base access role"
-    )
-    status: DeviceStatus = Field(
-        default=DeviceStatus.PENDING, description="Pairing status"
-    )
-    cert_fingerprint: str = Field(
-        ..., description="SHA-256 fingerprint of client certificate"
-    )
-    paired_at: datetime | None = Field(
-        default=None, description="Timestamp when pairing completed"
-    )
-    last_seen_at: datetime | None = Field(
-        default=None, description="Last successful request timestamp"
-    )
-    created_at: datetime = Field(
-        default_factory=datetime.utcnow, description="When pairing was initiated"
-    )
+    role: MobileRole = Field(default=MobileRole.MOBILE_READONLY, description="Base access role")
+    status: DeviceStatus = Field(default=DeviceStatus.PENDING, description="Pairing status")
+    cert_fingerprint: str = Field(..., description="SHA-256 fingerprint of client certificate")
+    paired_at: datetime | None = Field(default=None, description="Timestamp when pairing completed")
+    last_seen_at: datetime | None = Field(default=None, description="Last successful request timestamp")
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="When pairing was initiated")
 
     model_config = {"frozen": True}
 
@@ -91,9 +79,7 @@ class Elevation(BaseModel):
     elevated_role: MobileRole = Field(..., description="Elevated role level")
     expires_at: datetime = Field(..., description="Elevation expiration time")
     granted_by: str = Field(..., description="Source of elevation grant")
-    created_at: datetime = Field(
-        default_factory=datetime.utcnow, description="When elevation was granted"
-    )
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="When elevation was granted")
 
     model_config = {"frozen": True}
 
@@ -118,13 +104,9 @@ class PairingToken(BaseModel):
 
     token: str = Field(..., description="64-byte hex token")
     expires_at: datetime = Field(..., description="Token expiration time")
-    role: MobileRole = Field(
-        default=MobileRole.MOBILE_READONLY, description="Role for paired device"
-    )
+    role: MobileRole = Field(default=MobileRole.MOBILE_READONLY, description="Role for paired device")
     used: bool = Field(default=False, description="Whether token has been used")
-    created_at: datetime = Field(
-        default_factory=datetime.utcnow, description="When token was created"
-    )
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="When token was created")
 
     model_config = {"frozen": True}
 
@@ -150,9 +132,7 @@ class QRPayload(BaseModel):
     host: str = Field(..., description="Gateway hostname or IP address")
     port: int = Field(..., description="Gateway port number")
     token: str = Field(..., description="Pairing token")
-    server_fingerprint: str = Field(
-        ..., description="SHA-256 fingerprint of server certificate"
-    )
+    server_fingerprint: str = Field(..., description="SHA-256 fingerprint of server certificate")
     version: int = Field(default=1, description="Protocol version")
 
     model_config = {"frozen": True}
@@ -190,9 +170,7 @@ class MobileAuditEntry(BaseModel):
         ip_address: Client IP address
     """
 
-    timestamp: datetime = Field(
-        default_factory=datetime.utcnow, description="When action occurred"
-    )
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="When action occurred")
     device_id: str | None = Field(default=None, description="Device identifier")
     device_name: str | None = Field(default=None, description="Device name")
     action: MobileAuditAction = Field(..., description="Type of action")

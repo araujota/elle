@@ -1,7 +1,5 @@
 """Tests for ModelWarmupService."""
 
-import pytest
-
 from elle.rag.constants import (
     DUAL_MODEL_VRAM_THRESHOLD,
     LLM_MODEL,

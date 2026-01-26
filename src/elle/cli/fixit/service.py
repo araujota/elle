@@ -138,13 +138,15 @@ class FixitService:
                 else:
                     relevance = 0.5  # Default if not available
 
-                snippets.append(ManSnippetContext(
-                    name=result.name,
-                    section=result.section,
-                    snippet=result.snippet,
-                    match_section=result.match_section,
-                    relevance_score=relevance,
-                ))
+                snippets.append(
+                    ManSnippetContext(
+                        name=result.name,
+                        section=result.section,
+                        snippet=result.snippet,
+                        match_section=result.match_section,
+                        relevance_score=relevance,
+                    )
+                )
 
             return tuple(snippets)
 
@@ -200,22 +202,24 @@ class FixitService:
             if results:
                 arts = []
                 for result in results:
-                    arts.append(PriorArtContext(
-                        incident_id=result.get("incident_id", ""),
-                        title=result.get("title", ""),
-                        outcome=result.get("outcome", "unknown"),
-                        summary=result.get("summary", ""),
-                        decision={},
-                        root_cause=result.get("root_cause"),
-                        verification_steps=(),
-                        successful_actions=(),
-                        trigger_command=None,
-                        score=result.get("score", 0.0),
-                        outcome_weight=0.5,
-                        precondition_match=0.0,
-                        days_ago=0,
-                        match_type="daemon_api",
-                    ))
+                    arts.append(
+                        PriorArtContext(
+                            incident_id=result.get("incident_id", ""),
+                            title=result.get("title", ""),
+                            outcome=result.get("outcome", "unknown"),
+                            summary=result.get("summary", ""),
+                            decision={},
+                            root_cause=result.get("root_cause"),
+                            verification_steps=(),
+                            successful_actions=(),
+                            trigger_command=None,
+                            score=result.get("score", 0.0),
+                            outcome_weight=0.5,
+                            precondition_match=0.0,
+                            days_ago=0,
+                            match_type="daemon_api",
+                        )
+                    )
                 logger.debug(f"Got {len(arts)} incidents from daemon API")
                 return tuple(arts[:3])
         except Exception as e:
@@ -270,28 +274,33 @@ class FixitService:
                 successful_actions = []
                 for action in result.get("successful_actions", []):
                     from elle.cli.fixit.models import SuccessfulAction
-                    successful_actions.append(SuccessfulAction(
-                        command=action.get("command", ""),
-                        kind=action.get("kind", "shell"),
-                        exit_code=action.get("exit_code", 0),
-                    ))
 
-                arts.append(PriorArtContext(
-                    incident_id=result.get("incident_id", ""),
-                    title=result.get("title", ""),
-                    outcome=result.get("outcome", "unknown"),
-                    summary=result.get("summary", ""),
-                    decision=result.get("decision", {}),
-                    root_cause=result.get("root_cause"),
-                    verification_steps=tuple(result.get("verification_steps", [])),
-                    successful_actions=tuple(successful_actions),
-                    trigger_command=result.get("trigger_command"),
-                    score=result.get("score", 0.0),
-                    outcome_weight=result.get("outcome_weight", 0.5),
-                    precondition_match=result.get("precondition_match", 0.0),
-                    days_ago=result.get("days_ago", 0),
-                    match_type=result.get("match_type", "hybrid"),
-                ))
+                    successful_actions.append(
+                        SuccessfulAction(
+                            command=action.get("command", ""),
+                            kind=action.get("kind", "shell"),
+                            exit_code=action.get("exit_code", 0),
+                        )
+                    )
+
+                arts.append(
+                    PriorArtContext(
+                        incident_id=result.get("incident_id", ""),
+                        title=result.get("title", ""),
+                        outcome=result.get("outcome", "unknown"),
+                        summary=result.get("summary", ""),
+                        decision=result.get("decision", {}),
+                        root_cause=result.get("root_cause"),
+                        verification_steps=tuple(result.get("verification_steps", [])),
+                        successful_actions=tuple(successful_actions),
+                        trigger_command=result.get("trigger_command"),
+                        score=result.get("score", 0.0),
+                        outcome_weight=result.get("outcome_weight", 0.5),
+                        precondition_match=result.get("precondition_match", 0.0),
+                        days_ago=result.get("days_ago", 0),
+                        match_type=result.get("match_type", "hybrid"),
+                    )
+                )
 
             # Return top 3 most relevant
             return tuple(arts[:3])
@@ -468,9 +477,7 @@ class FixitService:
                 confidence = self._compute_confidence(result, provenance)
 
                 # Build decision record
-                planned_commands = tuple(
-                    s.fix.command for s in result.verified_suggestions
-                )
+                planned_commands = tuple(s.fix.command for s in result.verified_suggestions)
                 decision_record = DecisionRecord(
                     chosen_approach=result.analysis.diagnosis.summary,
                     rationale=result.analysis.diagnosis.root_cause,
@@ -516,13 +523,15 @@ class FixitService:
 
         citations = []
         for snippet in context.man_snippets:
-            citations.append(ManPageCitation(
-                name=snippet.name,
-                section=snippet.section,
-                snippet=snippet.snippet[:500],  # Truncate for storage
-                match_section=snippet.match_section,
-                relevance_score=snippet.relevance_score,
-            ))
+            citations.append(
+                ManPageCitation(
+                    name=snippet.name,
+                    section=snippet.section,
+                    snippet=snippet.snippet[:500],  # Truncate for storage
+                    match_section=snippet.match_section,
+                    relevance_score=snippet.relevance_score,
+                )
+            )
         return tuple(citations)
 
     def _build_incident_citations(
@@ -542,17 +551,17 @@ class FixitService:
         citations = []
         for art in context.prior_art:
             # Extract successful command strings
-            successful_commands = tuple(
-                a.command for a in art.successful_actions if a.command
+            successful_commands = tuple(a.command for a in art.successful_actions if a.command)
+            citations.append(
+                IncidentCitation(
+                    incident_id=art.incident_id,
+                    title=art.title,
+                    outcome=art.outcome,  # type: ignore
+                    similarity_score=art.score,
+                    match_type=art.match_type,
+                    successful_actions=successful_commands,
+                )
             )
-            citations.append(IncidentCitation(
-                incident_id=art.incident_id,
-                title=art.title,
-                outcome=art.outcome,  # type: ignore
-                similarity_score=art.score,
-                match_type=art.match_type,
-                successful_actions=successful_commands,
-            ))
         return tuple(citations)
 
     def _compute_confidence(
@@ -584,10 +593,7 @@ class FixitService:
         incident_conf = 0.0
         if provenance.prior_incidents:
             # Prioritize incidents with good outcomes
-            good_incidents = [
-                i for i in provenance.prior_incidents
-                if i.outcome in ("improved", "partial")
-            ]
+            good_incidents = [i for i in provenance.prior_incidents if i.outcome in ("improved", "partial")]
             if good_incidents:
                 incident_conf = max(i.similarity_score for i in good_incidents) * 0.4
 
@@ -744,6 +750,7 @@ class FixitService:
         if analysis is None:
             # Use fallback
             from elle.cli.fixit.fallback import analyze_with_fallback
+
             analysis = analyze_with_fallback(context)
             used_fallback = True
 
@@ -824,10 +831,9 @@ class FixitService:
                         loop = asyncio.get_event_loop()
                         if loop.is_running():
                             import concurrent.futures
+
                             with concurrent.futures.ThreadPoolExecutor() as pool:
-                                cap_result = pool.submit(
-                                    lambda: asyncio.run(run_cap())
-                                ).result()
+                                cap_result = pool.submit(lambda: asyncio.run(run_cap())).result()
                         else:
                             cap_result = loop.run_until_complete(run_cap())
                     except RuntimeError:

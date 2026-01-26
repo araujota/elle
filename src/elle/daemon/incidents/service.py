@@ -7,6 +7,7 @@ Provides:
 """
 
 import asyncio
+import contextlib
 import logging
 from datetime import datetime, timedelta
 
@@ -54,10 +55,8 @@ class IncidentVaultService:
 
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
 
     async def _run_periodic_tasks(self) -> None:
         """Run periodic maintenance tasks."""

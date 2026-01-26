@@ -280,8 +280,7 @@ def _check_denylist_legacy(command: str) -> tuple[bool, DenyReason | None, str |
         return (
             True,
             DenyReason.SUDO_ATTEMPT,
-            "ELLE does not execute commands with sudo. Privileged operations "
-            "go through Polkit authorization.",
+            "ELLE does not execute commands with sudo. Privileged operations go through Polkit authorization.",
         )
 
     # Check each pattern category

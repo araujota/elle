@@ -9,14 +9,11 @@ from elle.ops.files.handler import (
     copy_file,
     create_directory,
     delete_file,
-    execute_operations,
     get_handler,
     move_file,
-    preview_operations,
 )
 from elle.ops.files.models import (
     FileOp,
-    FileOpResult,
     FilePreview,
     FileRequest,
     FileResult,
@@ -52,9 +49,7 @@ class TestPreviewOperations:
 
         handler = FileHandler()
         request = FileRequest(
-            operations=(
-                FileOp(kind="move", source=str(source), dest=str(dest)),
-            ),
+            operations=(FileOp(kind="move", source=str(source), dest=str(dest)),),
             description="Test move",
         )
 
@@ -72,9 +67,7 @@ class TestPreviewOperations:
 
         handler = FileHandler()
         request = FileRequest(
-            operations=(
-                FileOp(kind="move", source=str(source), dest=str(dest)),
-            ),
+            operations=(FileOp(kind="move", source=str(source), dest=str(dest)),),
             description="Test",
         )
 
@@ -94,9 +87,7 @@ class TestPreviewOperations:
 
         handler = FileHandler()
         request = FileRequest(
-            operations=(
-                FileOp(kind="move", source=str(source), dest=str(dest)),
-            ),
+            operations=(FileOp(kind="move", source=str(source), dest=str(dest)),),
             description="Test",
         )
 
@@ -115,9 +106,7 @@ class TestPreviewOperations:
 
         handler = FileHandler()
         request = FileRequest(
-            operations=(
-                FileOp(kind="move", source=str(source_dir), dest=str(dest)),
-            ),
+            operations=(FileOp(kind="move", source=str(source_dir), dest=str(dest)),),
             description="Test",
         )
 
@@ -139,9 +128,7 @@ class TestExecuteOperations:
 
         handler = FileHandler()
         request = FileRequest(
-            operations=(
-                FileOp(kind="move", source=str(source), dest=str(dest)),
-            ),
+            operations=(FileOp(kind="move", source=str(source), dest=str(dest)),),
             description="Test move",
         )
 
@@ -161,9 +148,7 @@ class TestExecuteOperations:
 
         handler = FileHandler()
         request = FileRequest(
-            operations=(
-                FileOp(kind="copy", source=str(source), dest=str(dest)),
-            ),
+            operations=(FileOp(kind="copy", source=str(source), dest=str(dest)),),
             description="Test copy",
         )
 
@@ -181,9 +166,7 @@ class TestExecuteOperations:
 
         handler = FileHandler()
         request = FileRequest(
-            operations=(
-                FileOp(kind="delete", source=str(source)),
-            ),
+            operations=(FileOp(kind="delete", source=str(source)),),
             description="Test delete",
         )
 
@@ -198,9 +181,7 @@ class TestExecuteOperations:
 
         handler = FileHandler()
         request = FileRequest(
-            operations=(
-                FileOp(kind="mkdir", source=str(new_dir)),
-            ),
+            operations=(FileOp(kind="mkdir", source=str(new_dir)),),
             description="Test mkdir",
         )
 
@@ -219,9 +200,7 @@ class TestExecuteOperations:
 
         handler = FileHandler()
         request = FileRequest(
-            operations=(
-                FileOp(kind="rename", source=str(source), dest=str(dest)),
-            ),
+            operations=(FileOp(kind="rename", source=str(source), dest=str(dest)),),
             description="Test rename",
         )
 
@@ -240,9 +219,7 @@ class TestExecuteOperations:
 
         handler = FileHandler()
         request = FileRequest(
-            operations=(
-                FileOp(kind="move", source=str(source), dest=str(dest)),
-            ),
+            operations=(FileOp(kind="move", source=str(source), dest=str(dest)),),
             description="Test dry run",
             dry_run=True,
         )

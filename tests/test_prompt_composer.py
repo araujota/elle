@@ -10,9 +10,7 @@ from elle.rag.prompts import (
 )
 from elle.rag.prompts.segments import (
     CAPABILITY_DISCOVERY_SEGMENT,
-    CONFIG_GENERATION_SEGMENT,
     DEFAULT_SEGMENTS,
-    DOCKER_OPERATIONS_SEGMENT,
     FIXIT_SEGMENT,
     INCIDENT_ANALYSIS_SEGMENT,
     REACTIVE_FUNCTION_SEGMENT,
@@ -157,11 +155,13 @@ class TestPromptComposerCompose:
     def test_compose_with_matching_segment(self) -> None:
         """Test composing with matching segments."""
         composer = PromptComposer("Base prompt")
-        composer.register(PromptSegment(
-            id="task_guide",
-            intent="system_task",
-            content="Task-specific guidance",
-        ))
+        composer.register(
+            PromptSegment(
+                id="task_guide",
+                intent="system_task",
+                content="Task-specific guidance",
+            )
+        )
 
         result = composer.compose("system_task")
 
@@ -186,12 +186,14 @@ class TestPromptComposerCompose:
         """Test that disabled segments are not included."""
         composer = PromptComposer("Base")
 
-        composer.register(PromptSegment(
-            id="disabled",
-            intent="task",
-            content="Should not appear",
-            enabled=False,
-        ))
+        composer.register(
+            PromptSegment(
+                id="disabled",
+                intent="task",
+                content="Should not appear",
+                enabled=False,
+            )
+        )
 
         result = composer.compose("task")
         assert "Should not appear" not in result
@@ -200,17 +202,22 @@ class TestPromptComposerCompose:
         """Test context variable substitution."""
         composer = PromptComposer("Base")
 
-        composer.register(PromptSegment(
-            id="contextual",
-            intent="task",
-            content="Working with {service_name} on {host}",
-            requires_context=("service_name", "host"),
-        ))
+        composer.register(
+            PromptSegment(
+                id="contextual",
+                intent="task",
+                content="Working with {service_name} on {host}",
+                requires_context=("service_name", "host"),
+            )
+        )
 
-        result = composer.compose("task", context={
-            "service_name": "nginx",
-            "host": "localhost",
-        })
+        result = composer.compose(
+            "task",
+            context={
+                "service_name": "nginx",
+                "host": "localhost",
+            },
+        )
 
         assert "Working with nginx on localhost" in result
 
@@ -218,12 +225,14 @@ class TestPromptComposerCompose:
         """Test handling of missing context keys."""
         composer = PromptComposer("Base")
 
-        composer.register(PromptSegment(
-            id="contextual",
-            intent="task",
-            content="Value: {missing_key}",
-            requires_context=("missing_key",),
-        ))
+        composer.register(
+            PromptSegment(
+                id="contextual",
+                intent="task",
+                content="Value: {missing_key}",
+                requires_context=("missing_key",),
+            )
+        )
 
         # Should not crash, uses empty string for missing keys
         result = composer.compose("task", context={})

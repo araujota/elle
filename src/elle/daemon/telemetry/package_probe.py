@@ -125,9 +125,7 @@ class PackageProbe(BaseProbe):
 
             if not self._initialized:
                 # First run - record baseline
-                self._package_versions = {
-                    pkg: ver for pkg, ver in current.items() if pkg in self._watched_packages
-                }
+                self._package_versions = {pkg: ver for pkg, ver in current.items() if pkg in self._watched_packages}
                 if self._detect_new_packages:
                     self._all_packages = dict(current)
                 self._initialized = True
@@ -164,14 +162,10 @@ class PackageProbe(BaseProbe):
                                 try:
                                     self._new_package_callback(pkg, ver)
                                 except Exception as cb_err:
-                                    logger.warning(
-                                        f"New package callback error for {pkg}: {cb_err}"
-                                    )
+                                    logger.warning(f"New package callback error for {pkg}: {cb_err}")
 
                 # Update tracked versions
-                self._package_versions = {
-                    pkg: ver for pkg, ver in current.items() if pkg in self._watched_packages
-                }
+                self._package_versions = {pkg: ver for pkg, ver in current.items() if pkg in self._watched_packages}
                 if self._detect_new_packages:
                     self._all_packages = dict(current)
 
@@ -183,9 +177,7 @@ class PackageProbe(BaseProbe):
                     "watched_packages": len(self._watched_packages),
                     "tracked_packages": len(self._package_versions),
                     "all_packages": len(self._all_packages),
-                    "upgrades_detected": len(
-                        [e for e in events if e.raw.get("event_type") == "upgrade"]
-                    ),
+                    "upgrades_detected": len([e for e in events if e.raw.get("event_type") == "upgrade"]),
                     "new_packages_detected": len(new_packages_detected),
                 },
                 events=tuple(events),

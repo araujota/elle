@@ -79,9 +79,7 @@ class RoleEnforcer:
     Filters and validates requests based on the device's effective role.
     """
 
-    def filter_request(
-        self, auth: MobileAuthContext, request_body: dict[str, Any]
-    ) -> dict[str, Any]:
+    def filter_request(self, auth: MobileAuthContext, request_body: dict[str, Any]) -> dict[str, Any]:
         """Filter and validate a chat completion request.
 
         Modifies the request to enforce role restrictions, particularly
@@ -124,9 +122,7 @@ class RoleEnforcer:
 
         return request_body
 
-    def can_execute_capability(
-        self, auth: MobileAuthContext, capability_name: str
-    ) -> bool:
+    def can_execute_capability(self, auth: MobileAuthContext, capability_name: str) -> bool:
         """Check if the effective role allows executing a capability.
 
         Args:
@@ -170,9 +166,7 @@ class RoleEnforcer:
             return "readonly"
         return "execute"
 
-    def validate_tool_call(
-        self, auth: MobileAuthContext, tool_name: str, tool_args: dict[str, Any]
-    ) -> bool:
+    def validate_tool_call(self, auth: MobileAuthContext, tool_name: str, tool_args: dict[str, Any]) -> bool:
         """Validate a tool call is allowed for the role.
 
         Args:

@@ -22,11 +22,16 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     pass
 
+
 # Import get_llm at module level for easier mocking
 def get_llm():
     """Get the LLM instance (lazy import)."""
     from elle.rag.llm import get_llm as _get_llm
+
     return _get_llm()
+
+
+import contextlib
 
 from elle.cli.planner.models import (
     CheckResult,
@@ -93,6 +98,7 @@ class PlannerService:
         if self._capability_executor is None and self.use_capabilities:
             try:
                 from elle.capabilities import get_executor
+
                 self._capability_executor = get_executor()
             except ImportError:
                 logger.debug("Capabilities not available")
@@ -104,6 +110,7 @@ class PlannerService:
         if self._preflight_validator is None and self.use_preflight:
             try:
                 from elle.ops.preflight import get_validator
+
                 self._preflight_validator = get_validator()
             except ImportError:
                 logger.debug("Preflight module not available")
@@ -345,15 +352,13 @@ class PlannerService:
 
             # Record rollback action
             if result.incident_id:
-                try:
+                with contextlib.suppress(Exception):
                     self._record_action(
                         result.incident_id,
                         rb.command,
                         rb_result,
                         is_rollback=True,
                     )
-                except Exception:
-                    pass
 
         result = result.with_rollback_results(tuple(rollback_results))
         result = result.with_outcome(PlanOutcome.ROLLED_BACK)
@@ -567,12 +572,14 @@ class PlannerService:
             if results:
                 docs = []
                 for r in results:
-                    docs.append(ManDocContext(
-                        name=r.get("command", ""),
-                        section=r.get("section", ""),
-                        snippet=r.get("snippet", ""),
-                        flags_used=(),
-                    ))
+                    docs.append(
+                        ManDocContext(
+                            name=r.get("command", ""),
+                            section=r.get("section", ""),
+                            snippet=r.get("snippet", ""),
+                            flags_used=(),
+                        )
+                    )
                 logger.debug(f"Got {len(docs)} man docs from daemon API")
                 return tuple(docs)
         except Exception as e:
@@ -586,12 +593,14 @@ class PlannerService:
 
             docs = []
             for r in results:
-                docs.append(ManDocContext(
-                    name=r.name,
-                    section=r.section,
-                    snippet=r.snippet,
-                    flags_used=(),  # Could extract flags from snippet
-                ))
+                docs.append(
+                    ManDocContext(
+                        name=r.name,
+                        section=r.section,
+                        snippet=r.snippet,
+                        flags_used=(),  # Could extract flags from snippet
+                    )
+                )
 
             return tuple(docs)
 
@@ -641,16 +650,18 @@ class PlannerService:
             if results:
                 contexts = []
                 for art in results:
-                    contexts.append(PriorPlanContext(
-                        incident_id=art.get("incident_id", ""),
-                        title=art.get("title", ""),
-                        outcome=art.get("outcome", "unknown"),
-                        plan_summary=art.get("summary", ""),
-                        commands_executed=(),  # Not available via simple API
-                        rollback_used=False,
-                        score=art.get("score", 0.0),
-                        days_ago=0,
-                    ))
+                    contexts.append(
+                        PriorPlanContext(
+                            incident_id=art.get("incident_id", ""),
+                            title=art.get("title", ""),
+                            outcome=art.get("outcome", "unknown"),
+                            plan_summary=art.get("summary", ""),
+                            commands_executed=(),  # Not available via simple API
+                            rollback_used=False,
+                            score=art.get("score", 0.0),
+                            days_ago=0,
+                        )
+                    )
                 logger.debug(f"Got {len(contexts)} prior plans from daemon API")
                 return tuple(contexts)
         except Exception as e:
@@ -673,16 +684,18 @@ class PlannerService:
                     if action.get("command"):
                         commands.append(action["command"])
 
-                contexts.append(PriorPlanContext(
-                    incident_id=art["incident_id"],
-                    title=art["title"],
-                    outcome=art["outcome"],
-                    plan_summary=art.get("summary", ""),
-                    commands_executed=tuple(commands),
-                    rollback_used=False,  # Could track this
-                    score=art.get("score", 0.0),
-                    days_ago=art.get("days_ago", 0),
-                ))
+                contexts.append(
+                    PriorPlanContext(
+                        incident_id=art["incident_id"],
+                        title=art["title"],
+                        outcome=art["outcome"],
+                        plan_summary=art.get("summary", ""),
+                        commands_executed=tuple(commands),
+                        rollback_used=False,  # Could track this
+                        score=art.get("score", 0.0),
+                        days_ago=art.get("days_ago", 0),
+                    )
+                )
 
             return tuple(contexts)
 
@@ -709,10 +722,7 @@ class PlannerService:
         if any(kw in request_lower for kw in keywords):
             return True
 
-        if "docker" in entities:
-            return True
-
-        return False
+        return "docker" in entities
 
     def _is_network_task(self, request: str, entities: tuple[str, ...]) -> bool:
         """Check if this is a network-related task.
@@ -725,18 +735,24 @@ class PlannerService:
             True if network-related.
         """
         keywords = {
-            "firewall", "ufw", "iptables", "port", "network",
-            "wireguard", "vpn", "wg", "route", "dns", "connectivity",
+            "firewall",
+            "ufw",
+            "iptables",
+            "port",
+            "network",
+            "wireguard",
+            "vpn",
+            "wg",
+            "route",
+            "dns",
+            "connectivity",
         }
         request_lower = request.lower()
 
         if any(kw in request_lower for kw in keywords):
             return True
 
-        if "network" in entities or "wireguard" in entities:
-            return True
-
-        return False
+        return bool("network" in entities or "wireguard" in entities)
 
     def _get_docker_state(self) -> DockerState:
         """Get current Docker environment state from daemon.
@@ -753,9 +769,7 @@ class PlannerService:
 
         try:
             client = get_daemon_client()
-            daemon_state = asyncio.get_event_loop().run_until_complete(
-                client.get_docker_state()
-            )
+            daemon_state = asyncio.get_event_loop().run_until_complete(client.get_docker_state())
 
             # Convert daemon client's ContainerInfo to dict format expected by planner
             containers = [
@@ -797,9 +811,7 @@ class PlannerService:
 
         try:
             client = get_daemon_client()
-            daemon_state = asyncio.get_event_loop().run_until_complete(
-                client.get_network_state()
-            )
+            daemon_state = asyncio.get_event_loop().run_until_complete(client.get_network_state())
 
             # Convert daemon client's InterfaceInfo to dict format expected by planner
             interfaces = [
@@ -836,31 +848,37 @@ class PlannerService:
         # Parse steps
         steps = []
         for step_data in response.get("steps", []):
-            steps.append(PlanStep(
-                command=step_data["command"],
-                explanation=step_data["explanation"],
-                risk_level=step_data.get("risk_level", "medium"),
-                requires_privilege=step_data.get("requires_privilege", False),
-                can_fail=step_data.get("can_fail", False),
-            ))
+            steps.append(
+                PlanStep(
+                    command=step_data["command"],
+                    explanation=step_data["explanation"],
+                    risk_level=step_data.get("risk_level", "medium"),
+                    requires_privilege=step_data.get("requires_privilege", False),
+                    can_fail=step_data.get("can_fail", False),
+                )
+            )
 
         # Parse checks
         checks = []
         for check_data in response.get("checks", []):
-            checks.append(ValidationCheck(
-                command=check_data["command"],
-                description=check_data["description"],
-                expected=check_data.get("expected"),
-            ))
+            checks.append(
+                ValidationCheck(
+                    command=check_data["command"],
+                    description=check_data["description"],
+                    expected=check_data.get("expected"),
+                )
+            )
 
         # Parse rollback
         rollback = []
         for rb_data in response.get("rollback", []):
-            rollback.append(RollbackStep(
-                command=rb_data["command"],
-                explanation=rb_data["explanation"],
-                requires_privilege=rb_data.get("requires_privilege", False),
-            ))
+            rollback.append(
+                RollbackStep(
+                    command=rb_data["command"],
+                    explanation=rb_data["explanation"],
+                    requires_privilege=rb_data.get("requires_privilege", False),
+                )
+            )
 
         # Determine if privilege is required
         requires_privilege = any(s.requires_privilege for s in steps)
@@ -916,9 +934,7 @@ class PlannerService:
                     capability=mapping.capability,
                     capability_input=mapping.capability_input,
                 )
-                logger.debug(
-                    f"Mapped command '{step.command}' to capability '{mapping.capability}'"
-                )
+                logger.debug(f"Mapped command '{step.command}' to capability '{mapping.capability}'")
                 return self._execute_capability_step(mapped_step, step_index)
             else:
                 # Log that we're falling back to raw command (audit trail)
@@ -1023,10 +1039,9 @@ class PlannerService:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
                     import concurrent.futures
+
                     with concurrent.futures.ThreadPoolExecutor() as pool:
-                        cap_result = pool.submit(
-                            lambda: asyncio.run(run_cap())
-                        ).result()
+                        cap_result = pool.submit(lambda: asyncio.run(run_cap())).result()
                 else:
                     cap_result = loop.run_until_complete(run_cap())
             except RuntimeError:
@@ -1133,14 +1148,16 @@ class PlannerService:
                 if not re.search(check.expected, actual, re.IGNORECASE):
                     passed = False
 
-            results.append(CheckResult(
-                check_index=i,
-                command=check.command,
-                passed=passed,
-                output=actual,
-                expected=check.expected,
-                actual=actual if check.expected else None,
-            ))
+            results.append(
+                CheckResult(
+                    check_index=i,
+                    command=check.command,
+                    passed=passed,
+                    output=actual,
+                    expected=check.expected,
+                    actual=actual if check.expected else None,
+                )
+            )
 
         return tuple(results)
 
@@ -1271,30 +1288,31 @@ class PlannerService:
             # Build man page citations
             man_citations = []
             for doc in result.context.man_docs:
-                man_citations.append(ManPageCitation(
-                    name=doc.name,
-                    section=doc.section,
-                    snippet=doc.snippet[:500],
-                    relevance_score=0.5,  # Default score
-                ))
+                man_citations.append(
+                    ManPageCitation(
+                        name=doc.name,
+                        section=doc.section,
+                        snippet=doc.snippet[:500],
+                        relevance_score=0.5,  # Default score
+                    )
+                )
 
             # Build incident citations
             incident_citations = []
             for prior in result.context.prior_plans:
-                incident_citations.append(IncidentCitation(
-                    incident_id=prior.incident_id,
-                    title=prior.title,
-                    outcome=prior.outcome,  # type: ignore
-                    similarity_score=prior.score,
-                    match_type="hybrid",
-                    successful_actions=prior.commands_executed,
-                ))
+                incident_citations.append(
+                    IncidentCitation(
+                        incident_id=prior.incident_id,
+                        title=prior.title,
+                        outcome=prior.outcome,  # type: ignore
+                        similarity_score=prior.score,
+                        match_type="hybrid",
+                        successful_actions=prior.commands_executed,
+                    )
+                )
 
             # Determine primary source
-            if incident_citations and any(
-                i.outcome in ("improved", "partial")
-                for i in incident_citations
-            ):
+            if incident_citations and any(i.outcome in ("improved", "partial") for i in incident_citations):
                 primary_source = "incident_vault"
             elif man_citations:
                 primary_source = "man_vault"

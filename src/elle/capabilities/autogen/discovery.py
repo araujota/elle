@@ -35,37 +35,39 @@ BINARY_DIRS = [
 ]
 
 # Skip these binaries (too dangerous or not useful)
-SKIP_BINARIES = frozenset({
-    # Dangerous
-    "rm",
-    "dd",
-    "mkfs",
-    "fdisk",
-    "parted",
-    "shutdown",
-    "reboot",
-    "halt",
-    "poweroff",
-    "init",
-    # Shell internals
-    "sh",
-    "bash",
-    "zsh",
-    "dash",
-    "csh",
-    "tcsh",
-    "fish",
-    # Too generic
-    "test",
-    "true",
-    "false",
-    "[",
-    ":",
-    # Package managers (complex)
-    "apt-get",
-    "dpkg",
-    "aptitude",
-})
+SKIP_BINARIES = frozenset(
+    {
+        # Dangerous
+        "rm",
+        "dd",
+        "mkfs",
+        "fdisk",
+        "parted",
+        "shutdown",
+        "reboot",
+        "halt",
+        "poweroff",
+        "init",
+        # Shell internals
+        "sh",
+        "bash",
+        "zsh",
+        "dash",
+        "csh",
+        "tcsh",
+        "fish",
+        # Too generic
+        "test",
+        "true",
+        "false",
+        "[",
+        ":",
+        # Package managers (complex)
+        "apt-get",
+        "dpkg",
+        "aptitude",
+    }
+)
 
 
 def find_binary(name: str) -> str | None:

@@ -1,8 +1,6 @@
 """Tests for policy matchers."""
 
-from datetime import datetime, time
-
-import pytest
+from datetime import time
 
 from elle.policy.matchers import (
     match_condition,

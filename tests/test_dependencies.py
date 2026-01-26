@@ -6,10 +6,25 @@ from pathlib import Path
 
 import pytest
 
+from elle.capabilities.dependencies.checker import (
+    DependencyChecker,
+    get_checker,
+    reset_checker,
+)
+from elle.capabilities.dependencies.core import (
+    ALLOWED_PACKAGES,
+    ATSPI_DEPENDENCY,
+    AUGEAS_DEPENDENCY,
+    CORE_DEPENDENCIES,
+)
+from elle.capabilities.dependencies.installer import (
+    DependencyInstaller,
+    DependencySecurityError,
+)
 from elle.capabilities.dependencies.models import (
-    DependencySpec,
     DependencyCheckResult,
     DependencyPreference,
+    DependencySpec,
     InstallationRequest,
     InstallationResult,
 )
@@ -18,27 +33,9 @@ from elle.capabilities.dependencies.registry import (
     get_registry,
     reset_registry,
 )
-from elle.capabilities.dependencies.checker import (
-    DependencyChecker,
-    get_checker,
-    reset_checker,
-)
 from elle.capabilities.dependencies.store import (
     DependencyPreferenceStore,
-    get_store,
-    reset_store,
 )
-from elle.capabilities.dependencies.installer import (
-    DependencyInstaller,
-    DependencySecurityError,
-)
-from elle.capabilities.dependencies.core import (
-    ALLOWED_PACKAGES,
-    ATSPI_DEPENDENCY,
-    AUGEAS_DEPENDENCY,
-    CORE_DEPENDENCIES,
-)
-
 
 # =============================================================================
 # Test Fixtures
@@ -347,7 +344,7 @@ class TestDependencyChecker:
         checker = DependencyChecker(registry)
 
         # First check
-        result1 = checker.check("cached")
+        checker.check("cached")
         # Second check should use cache
         result2 = checker.check("cached")
 
@@ -524,9 +521,7 @@ class TestDependencyInstaller:
         checker = DependencyChecker(registry)
         installer = DependencyInstaller(registry, checker, store)
 
-        disallowed = installer.get_disallowed_packages(
-            ("python3-pyatspi", "malicious", "docker.io", "evil")
-        )
+        disallowed = installer.get_disallowed_packages(("python3-pyatspi", "malicious", "docker.io", "evil"))
 
         assert "malicious" in disallowed
         assert "evil" in disallowed

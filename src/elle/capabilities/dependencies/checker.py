@@ -169,14 +169,12 @@ class DependencyChecker:
             # Continue to other checks - import might fail for non-Python deps
 
         # Try command check
-        if dep.check_command:
-            if self._check_command(dep.check_command):
-                return True, "command", None
+        if dep.check_command and self._check_command(dep.check_command):
+            return True, "command", None
 
         # Try file check
-        if dep.check_file:
-            if self._check_file(dep.check_file):
-                return True, "file", None
+        if dep.check_file and self._check_file(dep.check_file):
+            return True, "file", None
 
         # All checks failed
         error_parts = []

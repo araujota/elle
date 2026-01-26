@@ -128,11 +128,11 @@ class InotifyWatcher:
 
         # Set up watches
         watch_flags = (
-            inotify_flags.MODIFY |
-            inotify_flags.CREATE |
-            inotify_flags.DELETE |
-            inotify_flags.ATTRIB |
-            inotify_flags.CLOSE_WRITE
+            inotify_flags.MODIFY
+            | inotify_flags.CREATE
+            | inotify_flags.DELETE
+            | inotify_flags.ATTRIB
+            | inotify_flags.CLOSE_WRITE
         )
 
         for path_pattern in self._watch_paths:
@@ -214,16 +214,10 @@ class InotifyWatcher:
 
         # Build full path
         filename = event.name
-        if filename:
-            full_path = str(Path(watch_dir) / filename)
-        else:
-            full_path = watch_dir
+        full_path = str(Path(watch_dir) / filename) if filename else watch_dir
 
         # Check if this is a watched path
-        is_watched = any(
-            self._path_matches_pattern(full_path, pattern)
-            for pattern in self._watch_paths
-        )
+        is_watched = any(self._path_matches_pattern(full_path, pattern) for pattern in self._watch_paths)
         if not is_watched:
             return
 
@@ -333,9 +327,7 @@ class InotifyWatcher:
             category=category,
             message=message,
             entity=f"file:{filename}",
-            fingerprint=TelemetryEvent.compute_fingerprint(
-                category, f"file:{path}", f"{event_type}:{path}"
-            ),
+            fingerprint=TelemetryEvent.compute_fingerprint(category, f"file:{path}", f"{event_type}:{path}"),
             raw=raw,
         )
 
@@ -446,6 +438,7 @@ class InotifyWatcher:
         try:
             # Handle patterns like /home/*/.ssh/authorized_keys
             import glob
+
             paths = glob.glob(pattern)
             return paths
         except Exception:
@@ -466,6 +459,7 @@ class InotifyWatcher:
 
         # Simple glob matching
         import fnmatch
+
         return fnmatch.fnmatch(path, pattern)
 
     async def _cleanup(self) -> None:

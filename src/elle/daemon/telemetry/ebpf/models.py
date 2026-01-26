@@ -26,9 +26,7 @@ class EBPFRawEvent(BaseModel):
     cpu: int = Field(ge=0, description="CPU core where event occurred")
 
     # Event type identifier
-    event_type: str = Field(
-        description="Event type (oom_kill, block_rq_complete, net_drop, etc.)"
-    )
+    event_type: str = Field(description="Event type (oom_kill, block_rq_complete, net_drop, etc.)")
 
     # Process context (may be None for kernel-only events)
     pid: int | None = Field(default=None, description="Process ID")

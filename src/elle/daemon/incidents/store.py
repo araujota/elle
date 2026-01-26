@@ -1094,6 +1094,7 @@ def finalize_outcome(
         if updated_incident and outcome in ("improved", "partial", "no_change", "worse"):
             try:
                 from elle.daemon.incidents.efficacy_tracker import record_outcome
+
                 record_outcome(updated_incident, outcome, conn=conn)
             except Exception:
                 # Don't fail finalization if efficacy tracking fails
@@ -1371,11 +1372,7 @@ def store_config_state(
     try:
         cursor = conn.cursor()
 
-        mtime_str = (
-            _serialize_datetime(config_state.mtime)
-            if config_state.mtime
-            else None
-        )
+        mtime_str = _serialize_datetime(config_state.mtime) if config_state.mtime else None
 
         cursor.execute(
             """

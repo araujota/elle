@@ -217,11 +217,7 @@ class TestExecutePlan:
 
         context = PlanContext(request=TaskRequest(request="echo"))
         verification = PlanVerification(is_valid=True)
-        result = (
-            PlanResult(context=context)
-            .with_plan(plan)
-            .with_verification(verification)
-        )
+        result = PlanResult(context=context).with_plan(plan).with_verification(verification)
 
         mock_run.return_value = MagicMock(
             exit_code=0,
@@ -242,20 +238,14 @@ class TestExecutePlan:
         plan = CommandPlan(
             title="Test",
             explanation="Test",
-            steps=(
-                PlanStep(command="false", explanation="Fail", risk_level="low"),
-            ),
+            steps=(PlanStep(command="false", explanation="Fail", risk_level="low"),),
         )
 
         from elle.cli.planner.models import PlanContext, PlanResult, PlanVerification, TaskRequest
 
         context = PlanContext(request=TaskRequest(request="test"))
         verification = PlanVerification(is_valid=True)
-        result = (
-            PlanResult(context=context)
-            .with_plan(plan)
-            .with_verification(verification)
-        )
+        result = PlanResult(context=context).with_plan(plan).with_verification(verification)
 
         mock_run.return_value = MagicMock(
             exit_code=1,
@@ -279,9 +269,7 @@ class TestRunChecks:
         plan = CommandPlan(
             title="Test",
             explanation="Test",
-            steps=(
-                PlanStep(command="true", explanation="OK", risk_level="low"),
-            ),
+            steps=(PlanStep(command="true", explanation="OK", risk_level="low"),),
             checks=(
                 ValidationCheck(
                     command="echo active",
@@ -295,14 +283,13 @@ class TestRunChecks:
 
         context = PlanContext(request=TaskRequest(request="test"))
         verification = PlanVerification(is_valid=True)
-        result = (
-            PlanResult(context=context)
-            .with_plan(plan)
-            .with_verification(verification)
-        )
+        result = PlanResult(context=context).with_plan(plan).with_verification(verification)
 
         mock_run.return_value = MagicMock(
-            exit_code=0, stdout="active", stderr="", success=True,
+            exit_code=0,
+            stdout="active",
+            stderr="",
+            success=True,
         )
 
         result = service.execute_plan(result, session)
@@ -320,15 +307,17 @@ class TestRollback:
         plan = CommandPlan(
             title="Test",
             explanation="Test",
-            steps=(
-                PlanStep(command="touch /tmp/test", explanation="Create", risk_level="low"),
-            ),
-            rollback=(
-                RollbackStep(command="rm /tmp/test", explanation="Remove"),
-            ),
+            steps=(PlanStep(command="touch /tmp/test", explanation="Create", risk_level="low"),),
+            rollback=(RollbackStep(command="rm /tmp/test", explanation="Remove"),),
         )
 
-        from elle.cli.planner.models import PlanContext, PlanResult, PlanVerification, StepResult, TaskRequest
+        from elle.cli.planner.models import (
+            PlanContext,
+            PlanResult,
+            PlanVerification,
+            StepResult,
+            TaskRequest,
+        )
 
         context = PlanContext(request=TaskRequest(request="test"))
         verification = PlanVerification(is_valid=True)
@@ -336,17 +325,22 @@ class TestRollback:
             PlanResult(context=context)
             .with_plan(plan)
             .with_verification(verification)
-            .with_step_result(StepResult(
-                step_index=0,
-                command="touch /tmp/test",
-                exit_code=0,
-                success=True,
-            ))
+            .with_step_result(
+                StepResult(
+                    step_index=0,
+                    command="touch /tmp/test",
+                    exit_code=0,
+                    success=True,
+                )
+            )
             .with_outcome(PlanOutcome.PARTIAL)
         )
 
         mock_run.return_value = MagicMock(
-            exit_code=0, stdout="", stderr="", success=True,
+            exit_code=0,
+            stdout="",
+            stderr="",
+            success=True,
         )
 
         result = service.rollback_plan(result, session)

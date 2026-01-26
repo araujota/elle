@@ -21,12 +21,12 @@ class BlockIOEvent(ctypes.Structure):
     """C struct for block I/O events from ring buffer."""
 
     _fields_ = [
-        ("ts_ns", ctypes.c_uint64),       # Kernel timestamp
-        ("dev", ctypes.c_uint32),          # Device (major << 20 | minor)
-        ("sector", ctypes.c_uint64),       # Sector number
-        ("nr_sector", ctypes.c_uint32),    # Number of sectors
-        ("error", ctypes.c_int32),         # Error code (negative on error)
-        ("rwbs", ctypes.c_char * 8),       # R/W/S flags
+        ("ts_ns", ctypes.c_uint64),  # Kernel timestamp
+        ("dev", ctypes.c_uint32),  # Device (major << 20 | minor)
+        ("sector", ctypes.c_uint64),  # Sector number
+        ("nr_sector", ctypes.c_uint32),  # Number of sectors
+        ("error", ctypes.c_int32),  # Error code (negative on error)
+        ("rwbs", ctypes.c_char * 8),  # R/W/S flags
     ]
 
 
@@ -95,9 +95,7 @@ TRACEPOINT_PROBE(block, block_rq_complete) {
 }
 """
 
-    def _parse_event(
-        self, cpu: int, data: ctypes.Structure, size: int
-    ) -> EBPFRawEvent | None:
+    def _parse_event(self, cpu: int, data: ctypes.Structure, size: int) -> EBPFRawEvent | None:
         """Parse block I/O event from ring buffer.
 
         Args:

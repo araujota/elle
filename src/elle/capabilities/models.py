@@ -20,37 +20,37 @@ RiskLevel = Literal["none", "low", "medium", "high", "critical"]
 
 # Domain categories for capabilities
 CapabilityDomain = Literal[
-    "service",       # Systemd service management
-    "file",          # File operations
-    "config",        # Configuration editing
-    "network",       # Network configuration
-    "package",       # Package management
-    "docker",        # Container operations
-    "auth",          # Authentication/authorization
+    "service",  # Systemd service management
+    "file",  # File operations
+    "config",  # Configuration editing
+    "network",  # Network configuration
+    "package",  # Package management
+    "docker",  # Container operations
+    "auth",  # Authentication/authorization
     "notification",  # Desktop/push notifications
-    "incident",      # Incident management
-    "gui",           # GUI automation via AT-SPI
+    "incident",  # Incident management
+    "gui",  # GUI automation via AT-SPI
 ]
 
 # Types of side effects capabilities can have
 SideEffectKind = Literal[
-    "file_write",           # Writes to a file
-    "file_delete",          # Deletes a file
-    "service_change",       # Changes service state
-    "network_change",       # Modifies network config
-    "privilege_escalation", # Requires elevated privileges
-    "package_change",       # Installs/removes packages
-    "container_change",     # Container state change
-    "notification_sent",    # Sends a notification
-    "incident_created",     # Creates/updates an incident
-    "ui_interaction",       # Interacts with UI via AT-SPI
-    "window_focus",         # Changes window focus
+    "file_write",  # Writes to a file
+    "file_delete",  # Deletes a file
+    "service_change",  # Changes service state
+    "network_change",  # Modifies network config
+    "privilege_escalation",  # Requires elevated privileges
+    "package_change",  # Installs/removes packages
+    "container_change",  # Container state change
+    "notification_sent",  # Sends a notification
+    "incident_created",  # Creates/updates an incident
+    "ui_interaction",  # Interacts with UI via AT-SPI
+    "window_focus",  # Changes window focus
 ]
 
 # Trust level for capabilities
 TrustLevel = Literal[
-    "core",         # Built-in, fully trusted
-    "official",     # Official extensions
+    "core",  # Built-in, fully trusted
+    "official",  # Official extensions
     "third_party",  # Third-party extensions
 ]
 
@@ -70,9 +70,7 @@ class SideEffect(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     kind: SideEffectKind = Field(description="Type of side effect")
-    target: str = Field(
-        description="Target of the effect (e.g., '/etc/ssh/sshd_config', 'nginx.service')"
-    )
+    target: str = Field(description="Target of the effect (e.g., '/etc/ssh/sshd_config', 'nginx.service')")
     reversible: bool = Field(
         default=True,
         description="Whether this effect can be undone via rollback",
@@ -99,20 +97,12 @@ class CapabilitySpec(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     # Identity
-    name: str = Field(
-        description="Unique capability name (e.g., 'service.restart')"
-    )
-    summary: str = Field(
-        description="One-line description of what this capability does"
-    )
+    name: str = Field(description="Unique capability name (e.g., 'service.restart')")
+    summary: str = Field(description="One-line description of what this capability does")
 
     # Classification
-    domain: CapabilityDomain = Field(
-        description="Domain this capability belongs to"
-    )
-    risk: RiskLevel = Field(
-        description="Risk level of this capability"
-    )
+    domain: CapabilityDomain = Field(description="Domain this capability belongs to")
+    risk: RiskLevel = Field(description="Risk level of this capability")
 
     # Effects
     side_effects: tuple[SideEffect, ...] = Field(

@@ -11,23 +11,15 @@ Tests the multi-source intelligence extraction system including:
 - IntelligenceAggregator
 """
 
-import pytest
 from unittest.mock import MagicMock, patch
-from pathlib import Path
 
-from elle.capabilities.autogen.intelligence.models import (
-    ExtractionResult,
-    ExtractedFlag,
-    ExtractedSubcommand,
-    FileManifest,
-    PackageIntelligence,
-    PackageMetadata,
-    ShellCompletions,
-    SystemdUnitInfo,
+from elle.capabilities.autogen.intelligence.aggregator import (
+    IntelligenceAggregator,
+    estimate_tokens,
+    get_aggregator,
 )
 from elle.capabilities.autogen.intelligence.extractors import (
     ALL_EXTRACTORS,
-    BaseExtractor,
     BashCompletionExtractor,
     DpkgMetadataExtractor,
     FileManifestExtractor,
@@ -37,10 +29,12 @@ from elle.capabilities.autogen.intelligence.extractors import (
     ZshCompletionExtractor,
     get_extractors,
 )
-from elle.capabilities.autogen.intelligence.aggregator import (
-    IntelligenceAggregator,
-    estimate_tokens,
-    get_aggregator,
+from elle.capabilities.autogen.intelligence.models import (
+    ExtractedFlag,
+    ExtractionResult,
+    FileManifest,
+    PackageIntelligence,
+    PackageMetadata,
 )
 
 
@@ -52,9 +46,7 @@ class TestExtractionResult:
         result = ExtractionResult(
             source_name="dpkg",
             success=True,
-            flags=(
-                ExtractedFlag(flag="-v", description="verbose", source="dpkg"),
-            ),
+            flags=(ExtractedFlag(flag="-v", description="verbose", source="dpkg"),),
         )
 
         assert result.success
@@ -280,9 +272,7 @@ class TestIntelligenceAggregator:
             package_name="ffmpeg",
             metadata=metadata,
             manifest=manifest,
-            all_flags=(
-                ExtractedFlag(flag="-i", description="Input", source="man"),
-            ),
+            all_flags=(ExtractedFlag(flag="-i", description="Input", source="man"),),
             extraction_sources=("dpkg", "man"),
             primary_binary="ffmpeg",
         )
@@ -404,6 +394,7 @@ class TestExtractorProtocol:
 
             # Should accept package_name and optional manifest
             import inspect
+
             sig = inspect.signature(extractor.extract)
             params = list(sig.parameters.keys())
             assert "package_name" in params or len(params) >= 1

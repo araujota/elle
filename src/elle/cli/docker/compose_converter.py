@@ -21,8 +21,8 @@ import io
 import shlex
 from typing import TYPE_CHECKING, Any
 
-from ruamel.yaml import YAML
 from pydantic import BaseModel, ConfigDict, Field
+from ruamel.yaml import YAML
 
 if TYPE_CHECKING:
     from rich.console import Console

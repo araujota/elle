@@ -28,8 +28,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from elle.common.pydantic_compat import safe_model_dump_json
-
 from elle.capabilities.autogen.discovery import (
     DiscoveryResult,
     InstalledBinary,
@@ -97,6 +95,7 @@ from elle.capabilities.autogen.versioner import (
     get_versioner,
     reset_versioner,
 )
+from elle.common.pydantic_compat import safe_model_dump_json
 
 if TYPE_CHECKING:
     from elle.capabilities.registry import CapabilityRegistry
@@ -246,17 +245,19 @@ def list_generated_capabilities() -> list[dict[str, Any]]:
     for stored in store.list_all():
         try:
             spec = GeneratedCapabilitySpec.model_validate_json(stored.spec_json)
-            capabilities.append({
-                "id": stored.id,
-                "name": stored.capability_name,
-                "source_command": stored.source_command,
-                "domain": spec.domain,
-                "risk_level": spec.risk_level,
-                "trust_level": stored.trust_level.value,
-                "approved": stored.approved,
-                "enabled": stored.enabled,
-                "generated_at": stored.generated_at.isoformat(),
-            })
+            capabilities.append(
+                {
+                    "id": stored.id,
+                    "name": stored.capability_name,
+                    "source_command": stored.source_command,
+                    "domain": spec.domain,
+                    "risk_level": spec.risk_level,
+                    "trust_level": stored.trust_level.value,
+                    "approved": stored.approved,
+                    "enabled": stored.enabled,
+                    "generated_at": stored.generated_at.isoformat(),
+                }
+            )
         except Exception:
             pass
 
@@ -275,15 +276,17 @@ def list_pending_capabilities() -> list[dict[str, Any]]:
     for stored in store.list_pending_approval():
         try:
             spec = GeneratedCapabilitySpec.model_validate_json(stored.spec_json)
-            capabilities.append({
-                "id": stored.id,
-                "name": stored.capability_name,
-                "source_command": stored.source_command,
-                "domain": spec.domain,
-                "risk_level": spec.risk_level,
-                "trust_level": stored.trust_level.value,
-                "generated_at": stored.generated_at.isoformat(),
-            })
+            capabilities.append(
+                {
+                    "id": stored.id,
+                    "name": stored.capability_name,
+                    "source_command": stored.source_command,
+                    "domain": spec.domain,
+                    "risk_level": spec.risk_level,
+                    "trust_level": stored.trust_level.value,
+                    "generated_at": stored.generated_at.isoformat(),
+                }
+            )
         except Exception:
             pass
 

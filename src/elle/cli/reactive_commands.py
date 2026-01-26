@@ -91,8 +91,7 @@ def handle_reactive_command(user_input: str, session: Session) -> tuple[str, boo
         return handler(parts, session)
 
     return (
-        f"{Colors.RED}Unknown subcommand: {subcommand}{Colors.RESET}\n"
-        f"Use '/react help' for available commands.",
+        f"{Colors.RED}Unknown subcommand: {subcommand}{Colors.RESET}\nUse '/react help' for available commands.",
         False,
     )
 
@@ -274,9 +273,7 @@ def _react_show(name: str | None, session: Session) -> tuple[str, bool]:
         if func.policy.require_confirmation:
             lines.append("  Requires confirmation: yes")
         if func.policy.allowed_hours:
-            lines.append(
-                f"  Allowed hours: {func.policy.allowed_hours[0]}-{func.policy.allowed_hours[1]}"
-            )
+            lines.append(f"  Allowed hours: {func.policy.allowed_hours[0]}-{func.policy.allowed_hours[1]}")
         if func.policy.escalate_on_failure:
             lines.append("  Escalate on failure: yes")
 
@@ -381,11 +378,7 @@ def _react_create(prompt: str | None, session: Session) -> tuple[str, bool]:
 
         # Prompt for confirmation
         try:
-            response = (
-                input(f"{Colors.BOLD}Save this function? [y/N/e(dit)]: {Colors.RESET}")
-                .strip()
-                .lower()
-            )
+            response = input(f"{Colors.BOLD}Save this function? [y/N/e(dit)]: {Colors.RESET}").strip().lower()
         except (EOFError, KeyboardInterrupt):
             return f"\n{Colors.DIM}Cancelled.{Colors.RESET}", False
 
@@ -474,11 +467,7 @@ def _react_delete(name: str | None, session: Session) -> tuple[str, bool]:
 
         # Confirm deletion
         try:
-            response = (
-                input(f"{Colors.YELLOW}Delete reactive function '{name}'? [y/N]: {Colors.RESET}")
-                .strip()
-                .lower()
-            )
+            response = input(f"{Colors.YELLOW}Delete reactive function '{name}'? [y/N]: {Colors.RESET}").strip().lower()
         except (EOFError, KeyboardInterrupt):
             return f"{Colors.DIM}Cancelled.{Colors.RESET}", False
 
@@ -568,9 +557,7 @@ def _react_test(name: str | None, session: Session) -> tuple[str, bool]:
         engine = get_engine()
 
         # Run dry-run
-        result, explanation, context = asyncio.get_event_loop().run_until_complete(
-            engine.dry_run(func)
-        )
+        result, explanation, context = asyncio.get_event_loop().run_until_complete(engine.dry_run(func))
 
         lines = [
             f"\n{Colors.BOLD}Dry-run: {name}{Colors.RESET}",
@@ -591,9 +578,7 @@ def _react_test(name: str | None, session: Session) -> tuple[str, bool]:
         if context.get("event"):
             lines.append("  Event: present")
         else:
-            lines.append(
-                f"  Event: {Colors.DIM}(none - would be provided by trigger){Colors.RESET}"
-            )
+            lines.append(f"  Event: {Colors.DIM}(none - would be provided by trigger){Colors.RESET}")
 
         if context.get("state"):
             import json

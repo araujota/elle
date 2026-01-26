@@ -121,12 +121,14 @@ def fixit_panel(
     has_provenance = man_citations or incident_citations or confidence_breakdown
     if has_provenance and show_rationale:
         content_parts.append(Text())
-        content_parts.append(rationale_panel(
-            man_citations=man_citations,
-            incident_citations=incident_citations,
-            confidence=confidence_breakdown,
-            summary=rationale_summary,
-        ))
+        content_parts.append(
+            rationale_panel(
+                man_citations=man_citations,
+                incident_citations=incident_citations,
+                confidence=confidence_breakdown,
+                summary=rationale_summary,
+            )
+        )
 
     # Suggestions
     if suggestions:
@@ -389,12 +391,14 @@ def plan_panel(
     # Rationale panel (if provenance data provided and show_rationale is True)
     has_provenance = man_citations or incident_citations or confidence
     if has_provenance and show_rationale:
-        content_parts.append(rationale_panel(
-            man_citations=man_citations,
-            incident_citations=incident_citations,
-            confidence=confidence,
-            summary=rationale_summary,
-        ))
+        content_parts.append(
+            rationale_panel(
+                man_citations=man_citations,
+                incident_citations=incident_citations,
+                confidence=confidence,
+                summary=rationale_summary,
+            )
+        )
         content_parts.append(Text())
 
     # Risk warnings
@@ -756,9 +760,7 @@ def config_diff_panel(
 
     # Diff
     content_parts.append(section_rule("Diff"))
-    content_parts.append(
-        Syntax(diff_text, "diff", theme="monokai", line_numbers=False, word_wrap=True)
-    )
+    content_parts.append(Syntax(diff_text, "diff", theme="monokai", line_numbers=False, word_wrap=True))
 
     # Risks
     if risks:

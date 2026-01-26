@@ -57,10 +57,7 @@ class WireguardHandler(DomainHandler):
             return True
 
         # Check filename pattern
-        if path.name.startswith("wg") and path.suffix == ".conf":
-            return True
-
-        return False
+        return bool(path.name.startswith("wg") and path.suffix == ".conf")
 
     def get_schema_hint(self, file_path: Path | str) -> dict[str, Any] | None:
         """Get schema hints for WireGuard configuration."""
@@ -351,10 +348,7 @@ class WireguardHandler(DomainHandler):
             return False
 
         # Check base64 character set (with possible = padding)
-        if not re.match(r"^[A-Za-z0-9+/]{43}=$", key):
-            return False
-
-        return True
+        return re.match(r"^[A-Za-z0-9+/]{43}=$", key)
 
     def _is_valid_cidr(self, cidr: str) -> bool:
         """Check if a string looks like a valid CIDR notation."""

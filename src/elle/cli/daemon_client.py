@@ -36,6 +36,7 @@ def _read_session_token() -> str | None:
     """
     try:
         from elle.daemon.api.session_token import read_token_file
+
         return read_token_file()
     except ImportError:
         # Fallback: try reading directly from common locations
@@ -270,12 +271,8 @@ class DaemonClient:
                 data = response.json()
                 return DockerState(
                     docker_available=data.get("docker_available", False),
-                    running_containers=tuple(
-                        ContainerInfo(**c) for c in data.get("running_containers", [])
-                    ),
-                    all_containers=tuple(
-                        ContainerInfo(**c) for c in data.get("all_containers", [])
-                    ),
+                    running_containers=tuple(ContainerInfo(**c) for c in data.get("running_containers", [])),
+                    all_containers=tuple(ContainerInfo(**c) for c in data.get("all_containers", [])),
                     images=tuple(data.get("images", [])),
                     networks=tuple(data.get("networks", [])),
                     volumes=tuple(data.get("volumes", [])),
@@ -348,9 +345,7 @@ class DaemonClient:
                     backend=data.get("backend", "unknown"),
                     default_incoming=data.get("default_incoming", "allow"),
                     default_outgoing=data.get("default_outgoing", "allow"),
-                    rules=tuple(
-                        FirewallRule(**r) for r in data.get("rules", [])
-                    ),
+                    rules=tuple(FirewallRule(**r) for r in data.get("rules", [])),
                     collected_at=datetime.fromisoformat(data.get("collected_at", datetime.now(UTC).isoformat())),
                 )
             else:
@@ -372,9 +367,7 @@ class DaemonClient:
 
             if response.status_code == 200:
                 data = response.json()
-                return tuple(
-                    Listener(**l) for l in data.get("listeners", [])
-                )
+                return tuple(Listener(**l) for l in data.get("listeners", []))
             else:
                 return ()
 
@@ -555,14 +548,16 @@ class DaemonClient:
                     if line:
                         try:
                             data = json.loads(line)
-                            containers.append(ContainerInfo(
-                                id=data.get("ID", "")[:12],
-                                names=data.get("Names", ""),
-                                image=data.get("Image", ""),
-                                status=data.get("Status", ""),
-                                state=data.get("State", ""),
-                                ports=data.get("Ports", ""),
-                            ))
+                            containers.append(
+                                ContainerInfo(
+                                    id=data.get("ID", "")[:12],
+                                    names=data.get("Names", ""),
+                                    image=data.get("Image", ""),
+                                    status=data.get("Status", ""),
+                                    state=data.get("State", ""),
+                                    ports=data.get("Ports", ""),
+                                )
+                            )
                         except json.JSONDecodeError:
                             pass
 
@@ -655,17 +650,17 @@ class DaemonClient:
                         name = iface.get("ifname", "")
                         if name == "lo":
                             continue
-                        interfaces.append(InterfaceInfo(
-                            name=name,
-                            state=iface.get("operstate", "unknown").upper(),
-                            addresses=tuple(
-                                a.get("local", "")
-                                for a in iface.get("addr_info", [])
-                                if a.get("local")
-                            ),
-                            mac=iface.get("address"),
-                            mtu=iface.get("mtu"),
-                        ))
+                        interfaces.append(
+                            InterfaceInfo(
+                                name=name,
+                                state=iface.get("operstate", "unknown").upper(),
+                                addresses=tuple(
+                                    a.get("local", "") for a in iface.get("addr_info", []) if a.get("local")
+                                ),
+                                mac=iface.get("address"),
+                                mtu=iface.get("mtu"),
+                            )
+                        )
                 except json.JSONDecodeError:
                     pass
 

@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -78,9 +78,7 @@ class EvaluationResult:
             "By Category:",
         ]
         for category, stats in sorted(self.by_category.items()):
-            cat_accuracy = (
-                (stats["passed"] / stats["total"]) * 100 if stats["total"] > 0 else 0
-            )
+            cat_accuracy = (stats["passed"] / stats["total"]) * 100 if stats["total"] > 0 else 0
             lines.append(f"  {category}: {stats['passed']}/{stats['total']} ({cat_accuracy:.1f}%)")
 
         if self.failures:
@@ -187,14 +185,12 @@ def test_intent_classification(
     # For dangerous commands, we check that it's flagged
     if case.should_flag:
         assert result.requires_clarification, (
-            f"Dangerous command not flagged: '{case.input}' "
-            f"(confidence={result.confidence})"
+            f"Dangerous command not flagged: '{case.input}' (confidence={result.confidence})"
         )
     else:
         # Normal intent check
         assert result.intent == expected, (
-            f"Intent mismatch for '{case.input}': "
-            f"expected {expected.value}, got {result.intent.value}"
+            f"Intent mismatch for '{case.input}': expected {expected.value}, got {result.intent.value}"
         )
 
 
@@ -240,14 +236,10 @@ def test_overall_accuracy(
             cat_accuracy = (stats["passed"] / stats["total"]) * 100
             if category in ("hard_route", "prefix"):
                 # Hard routes and prefixes should be near-perfect
-                assert cat_accuracy >= 95.0, (
-                    f"Category '{category}' accuracy too low: {cat_accuracy:.1f}%"
-                )
+                assert cat_accuracy >= 95.0, f"Category '{category}' accuracy too low: {cat_accuracy:.1f}%"
             elif category == "shell_command":
                 # Shell command detection should be high
-                assert cat_accuracy >= 85.0, (
-                    f"Category '{category}' accuracy too low: {cat_accuracy:.1f}%"
-                )
+                assert cat_accuracy >= 85.0, f"Category '{category}' accuracy too low: {cat_accuracy:.1f}%"
 
 
 # =============================================================================
@@ -264,10 +256,7 @@ class TestHardRouteAccuracy:
         default_session: Session,
     ) -> None:
         """All meta commands should match perfectly."""
-        meta_cases = [
-            c for c in ALL_CASES
-            if c.category == "hard_route" and c.expected_intent == "meta"
-        ]
+        meta_cases = [c for c in ALL_CASES if c.category == "hard_route" and c.expected_intent == "meta"]
 
         for case in meta_cases:
             result = classifier.classify(case.input, default_session)
@@ -280,10 +269,7 @@ class TestHardRouteAccuracy:
         default_session: Session,
     ) -> None:
         """All navigation commands should match perfectly."""
-        nav_cases = [
-            c for c in ALL_CASES
-            if c.category == "hard_route" and c.expected_intent == "navigation"
-        ]
+        nav_cases = [c for c in ALL_CASES if c.category == "hard_route" and c.expected_intent == "navigation"]
 
         for case in nav_cases:
             result = classifier.classify(case.input, default_session)
@@ -303,9 +289,7 @@ class TestDangerousCommandDetection:
 
         for case in dangerous_cases:
             result = classifier.classify(case.input, default_session)
-            assert result.requires_clarification, (
-                f"Dangerous command not flagged: '{case.input}'"
-            )
+            assert result.requires_clarification, f"Dangerous command not flagged: '{case.input}'"
 
 
 class TestPrefixCommands:
@@ -323,9 +307,6 @@ class TestPrefixCommands:
             result = classifier.classify(case.input, default_session)
             expected = Intent.from_label(case.expected_intent)
             assert result.intent == expected, (
-                f"Prefix mismatch: '{case.input}' -> {result.intent.value} "
-                f"(expected {expected.value})"
+                f"Prefix mismatch: '{case.input}' -> {result.intent.value} (expected {expected.value})"
             )
-            assert result.classified_by == "rule", (
-                f"Prefix should be rule-based: {case.input}"
-            )
+            assert result.classified_by == "rule", f"Prefix should be rule-based: {case.input}"

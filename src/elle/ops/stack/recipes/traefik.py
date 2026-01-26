@@ -11,17 +11,9 @@ TRAEFIK_RECIPE = StackRecipe(
     display_name="Traefik Reverse Proxy",
     description="Traefik cloud-native reverse proxy with dashboard and auto-discovery",
     category="web",
-
-    packages=(
-        "traefik",
-    ),
-
-    services=(
-        "traefik",
-    ),
-
+    packages=("traefik",),
+    services=("traefik",),
     config_templates={},
-
     guarantees=(
         StackGuarantee(
             name="service_running",
@@ -56,7 +48,6 @@ TRAEFIK_RECIPE = StackRecipe(
             remediation_hint="Configure at least one provider (file, docker, etc.)",
         ),
     ),
-
     variables=(
         StackVariable(
             name="dashboard_enabled",
@@ -77,7 +68,6 @@ TRAEFIK_RECIPE = StackRecipe(
             required=False,
         ),
     ),
-
     presets={
         "dev": {
             "dashboard_enabled": "true",
@@ -88,11 +78,9 @@ TRAEFIK_RECIPE = StackRecipe(
             "docker_provider": "true",
         },
     },
-
     min_ram_mb=64,
     min_disk_gb=1,
     ports_required=(80, 443, 8080),
-
     version="1.0.0",
     tags=("web", "proxy", "traefik", "loadbalancer", "ingress"),
 )

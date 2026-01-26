@@ -914,9 +914,7 @@ def get_reboot_status(
         rolled_back = cursor.fetchone()[0]
 
         # Get counts by outcome
-        cursor.execute(
-            "SELECT outcome, COUNT(*) FROM reboot_intents GROUP BY outcome"
-        )
+        cursor.execute("SELECT outcome, COUNT(*) FROM reboot_intents GROUP BY outcome")
         by_outcome = dict(cursor.fetchall())
 
         # Get active intent

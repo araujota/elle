@@ -1,26 +1,22 @@
 """Tests for capabilities registry."""
 
 import pytest
+from pydantic import BaseModel
 
-from elle.capabilities.registry import (
-    CapabilityRegistry,
-    get_registry,
-    reset_registry,
+from elle.capabilities.exceptions import (
+    CapabilityNotFoundError,
 )
 from elle.capabilities.models import (
     CapabilityResult,
     CapabilitySpec,
     DryRunResult,
-    VerificationResult,
 )
 from elle.capabilities.protocol import BaseCapability
-from elle.capabilities.exceptions import (
-    CapabilityNotFoundError,
-    CapabilityRegistrationError,
+from elle.capabilities.registry import (
+    CapabilityRegistry,
+    get_registry,
+    reset_registry,
 )
-
-from pydantic import BaseModel
-
 
 # =============================================================================
 # Test fixtures
@@ -259,6 +255,6 @@ class TestGlobalRegistry:
 
         # If core capabilities are available, check for service caps
         if registry.count() > 0:
-            service_caps = registry.list_by_domain("service")
+            registry.list_by_domain("service")
             # Service domain should have capabilities if loaded
             pass  # Don't assert specific count as it depends on imports

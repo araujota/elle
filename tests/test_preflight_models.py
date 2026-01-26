@@ -1,7 +1,8 @@
 """Tests for preflight models."""
 
-import pytest
 from datetime import datetime
+
+import pytest
 
 from elle.ops.preflight.models import (
     IssueSeverity,

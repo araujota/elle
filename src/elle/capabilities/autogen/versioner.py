@@ -11,7 +11,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from elle.common.pydantic_compat import safe_model_dump_json
 from elle.capabilities.autogen.discovery import discover_binary
 from elle.capabilities.autogen.factory import create_capability_from_spec
 from elle.capabilities.autogen.generator import generate_capability_spec
@@ -19,6 +18,7 @@ from elle.capabilities.autogen.models import StoredCapability
 from elle.capabilities.autogen.parser import parse_man_page
 from elle.capabilities.autogen.store import AutogenStore, get_store
 from elle.capabilities.autogen.validator import validate_capability
+from elle.common.pydantic_compat import safe_model_dump_json
 
 if TYPE_CHECKING:
     from elle.capabilities.autogen.generator import CapabilityGenerator
@@ -66,9 +66,7 @@ class CapabilityVersioner:
             if cap.source_package:
                 if cap.source_package not in self._package_to_capabilities:
                     self._package_to_capabilities[cap.source_package] = []
-                self._package_to_capabilities[cap.source_package].append(
-                    cap.capability_name
-                )
+                self._package_to_capabilities[cap.source_package].append(cap.capability_name)
 
         logger.info(
             f"Built package map: {len(self._package_to_capabilities)} packages, "
@@ -151,9 +149,7 @@ class CapabilityVersioner:
 
             # Check if version actually differs
             if stored.package_version == new_version:
-                logger.debug(
-                    f"Capability {cap_name} already at version {new_version}"
-                )
+                logger.debug(f"Capability {cap_name} already at version {new_version}")
                 continue
 
             # Attempt regeneration
@@ -199,25 +195,19 @@ class CapabilityVersioner:
             # Re-discover binary
             binary = discover_binary(source_command)
             if not binary:
-                logger.warning(
-                    f"Could not find binary for {source_command} during regeneration"
-                )
+                logger.warning(f"Could not find binary for {source_command} during regeneration")
                 return False
 
             # Re-parse man page
             man_page = parse_man_page(source_command)
             if not man_page:
-                logger.warning(
-                    f"Could not parse man page for {source_command} during regeneration"
-                )
+                logger.warning(f"Could not parse man page for {source_command} during regeneration")
                 return False
 
             # Check if man page actually changed
             if not self._store.check_needs_regeneration(cap_name, man_page.raw_text):
                 # Man page unchanged, just update version
-                logger.debug(
-                    f"Man page unchanged for {cap_name}, updating version only"
-                )
+                logger.debug(f"Man page unchanged for {cap_name}, updating version only")
                 return self._update_version_only(stored, binary, new_version)
 
             # Man page changed - regenerate with LLM
@@ -268,9 +258,7 @@ class CapabilityVersioner:
             if not stored.enabled:
                 self._store.disable(cap_name)
 
-            logger.info(
-                f"Successfully regenerated {cap_name} for version {new_version}"
-            )
+            logger.info(f"Successfully regenerated {cap_name} for version {new_version}")
             return True
 
         except Exception as e:
@@ -356,9 +344,7 @@ class CapabilityVersioner:
         """
         return {
             "packages_tracked": len(self._package_to_capabilities),
-            "capabilities_tracked": sum(
-                len(caps) for caps in self._package_to_capabilities.values()
-            ),
+            "capabilities_tracked": sum(len(caps) for caps in self._package_to_capabilities.values()),
             "regeneration_stats": self._regeneration_stats,
         }
 
@@ -378,12 +364,14 @@ class CapabilityVersioner:
                     version = stored.package_version
                     break
 
-            result.append({
-                "package": package,
-                "version": version,
-                "capabilities": capabilities,
-                "count": len(capabilities),
-            })
+            result.append(
+                {
+                    "package": package,
+                    "version": version,
+                    "capabilities": capabilities,
+                    "count": len(capabilities),
+                }
+            )
 
         return result
 

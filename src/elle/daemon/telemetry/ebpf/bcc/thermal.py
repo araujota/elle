@@ -29,13 +29,13 @@ class ThermalEvent(ctypes.Structure):
     """C struct for thermal events from ring buffer."""
 
     _fields_ = [
-        ("ts_ns", ctypes.c_uint64),       # Kernel timestamp
-        ("id", ctypes.c_int32),            # Thermal zone ID
-        ("trip", ctypes.c_int32),          # Trip point index
-        ("trip_type", ctypes.c_int32),     # Trip type (critical, hot, etc.)
-        ("temp", ctypes.c_int32),          # Current temperature (millidegrees C)
-        ("trip_temp", ctypes.c_int32),     # Trip point temperature
-        ("zone_type", ctypes.c_char * 16), # Zone type name
+        ("ts_ns", ctypes.c_uint64),  # Kernel timestamp
+        ("id", ctypes.c_int32),  # Thermal zone ID
+        ("trip", ctypes.c_int32),  # Trip point index
+        ("trip_type", ctypes.c_int32),  # Trip type (critical, hot, etc.)
+        ("temp", ctypes.c_int32),  # Current temperature (millidegrees C)
+        ("trip_temp", ctypes.c_int32),  # Trip point temperature
+        ("zone_type", ctypes.c_char * 16),  # Zone type name
     ]
 
 
@@ -101,9 +101,7 @@ TRACEPOINT_PROBE(thermal, thermal_zone_trip) {
 }
 """
 
-    def _parse_event(
-        self, cpu: int, data: ctypes.Structure, size: int
-    ) -> EBPFRawEvent | None:
+    def _parse_event(self, cpu: int, data: ctypes.Structure, size: int) -> EBPFRawEvent | None:
         """Parse thermal event from ring buffer.
 
         Args:

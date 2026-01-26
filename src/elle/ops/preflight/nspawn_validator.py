@@ -194,9 +194,11 @@ class NspawnValidator:
             # Mount overlay filesystem
             mount_cmd = [
                 "mount",
-                "-t", "overlay",
+                "-t",
                 "overlay",
-                "-o", f"lowerdir={self._config.base_image_path},upperdir={upper_dir},workdir={work_dir}",
+                "overlay",
+                "-o",
+                f"lowerdir={self._config.base_image_path},upperdir={upper_dir},workdir={work_dir}",
                 str(merged_dir),
             ]
 
@@ -239,7 +241,8 @@ class NspawnValidator:
         nspawn_cmd = [
             "systemd-nspawn",
             "--quiet",
-            "--directory", str(container_path),
+            "--directory",
+            str(container_path),
             "--ephemeral",
             "--as-pid2",
         ]
@@ -293,22 +296,21 @@ class NspawnValidator:
             )
 
         # Check/prepare base image
-        if not self.has_base_image:
-            if not self.prepare_base_image():
-                return PreflightResult(
-                    status=PreflightStatus.BLOCKED,
-                    tier_used=2,
-                    issues=(
-                        PreflightIssue(
-                            severity=IssueSeverity.ERROR,
-                            message="Failed to prepare base image for container validation",
-                            recommendation="Check debootstrap installation and disk space",
-                            source="nspawn",
-                        ),
+        if not self.has_base_image and not self.prepare_base_image():
+            return PreflightResult(
+                status=PreflightStatus.BLOCKED,
+                tier_used=2,
+                issues=(
+                    PreflightIssue(
+                        severity=IssueSeverity.ERROR,
+                        message="Failed to prepare base image for container validation",
+                        recommendation="Check debootstrap installation and disk space",
+                        source="nspawn",
                     ),
-                    duration_ms=int((time.time() - start_time) * 1000),
-                    can_proceed=False,
-                )
+                ),
+                duration_ms=int((time.time() - start_time) * 1000),
+                can_proceed=False,
+            )
 
         try:
             with self._create_ephemeral_container() as container_path:
@@ -379,10 +381,7 @@ class NspawnValidator:
 
                 # Determine result
                 duration_ms = int((time.time() - start_time) * 1000)
-                has_errors = any(
-                    i.severity in (IssueSeverity.ERROR, IssueSeverity.CRITICAL)
-                    for i in issues
-                )
+                has_errors = any(i.severity in (IssueSeverity.ERROR, IssueSeverity.CRITICAL) for i in issues)
 
                 if has_errors:
                     status = PreflightStatus.BLOCKED

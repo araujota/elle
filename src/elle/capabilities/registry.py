@@ -65,9 +65,7 @@ class CapabilityRegistry:
             instance = capability_class()
             spec = instance.spec
         except Exception as e:
-            raise CapabilityRegistrationError(
-                f"Failed to instantiate capability for registration: {e}"
-            ) from e
+            raise CapabilityRegistrationError(f"Failed to instantiate capability for registration: {e}") from e
 
         name = spec.name
 
@@ -95,9 +93,8 @@ class CapabilityRegistry:
         cap_class = self._capabilities[name]
         try:
             spec = cap_class().spec
-            if spec.domain in self._by_domain:
-                if name in self._by_domain[spec.domain]:
-                    self._by_domain[spec.domain].remove(name)
+            if spec.domain in self._by_domain and name in self._by_domain[spec.domain]:
+                self._by_domain[spec.domain].remove(name)
         except Exception:
             pass
 
@@ -231,10 +228,7 @@ class CapabilityRegistry:
             cap = self.get(name)
             if cap:
                 spec = cap.spec
-                if (
-                    query_lower in spec.name.lower()
-                    or query_lower in spec.summary.lower()
-                ):
+                if query_lower in spec.name.lower() or query_lower in spec.summary.lower():
                     matches.append(spec)
 
         return matches

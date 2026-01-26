@@ -613,9 +613,7 @@ def search_elements(
             elements_data = _json_loads(row["elements_json"])
             for elem_data in elements_data:
                 if tuple(elem_data.get("path", [])) == path:
-                    results.append(
-                        (row["recipe_id"], _dict_to_element(elem_data))
-                    )
+                    results.append((row["recipe_id"], _dict_to_element(elem_data)))
                     break
 
         return results

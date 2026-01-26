@@ -1,14 +1,20 @@
 """Tests for capabilities executor."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
+import pytest
+from pydantic import BaseModel
+
+from elle.capabilities.exceptions import (
+    CapabilityCancelledError,
+    CapabilityDeniedError,
+    CapabilityNotFoundError,
+)
 from elle.capabilities.executor import (
     CapabilityExecutor,
     get_executor,
     reset_executor,
 )
-from elle.capabilities.registry import CapabilityRegistry
 from elle.capabilities.models import (
     CapabilityEvidence,
     CapabilityResult,
@@ -17,14 +23,7 @@ from elle.capabilities.models import (
     VerificationResult,
 )
 from elle.capabilities.protocol import BaseCapability
-from elle.capabilities.exceptions import (
-    CapabilityCancelledError,
-    CapabilityDeniedError,
-    CapabilityNotFoundError,
-)
-
-from pydantic import BaseModel
-
+from elle.capabilities.registry import CapabilityRegistry
 
 # =============================================================================
 # Test fixtures

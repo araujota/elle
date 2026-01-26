@@ -91,12 +91,14 @@ def _diff_kernel(
     changes = []
 
     if before.kernel != after.kernel:
-        changes.append(SemanticChange(
-            category="kernel",
-            description=f"Kernel updated from {before.kernel} to {after.kernel}",
-            technical_detail=f"uname -r: {before.kernel} -> {after.kernel}",
-            significance="high",
-        ))
+        changes.append(
+            SemanticChange(
+                category="kernel",
+                description=f"Kernel updated from {before.kernel} to {after.kernel}",
+                technical_detail=f"uname -r: {before.kernel} -> {after.kernel}",
+                significance="high",
+            )
+        )
 
     return changes
 
@@ -115,12 +117,14 @@ def _diff_memory(
 
         # Alert if swap usage increased significantly
         if after_pct > before_pct + 0.2:
-            changes.append(SemanticChange(
-                category="kernel",
-                description=f"Swap usage increased from {int(before_pct * 100)}% to {int(after_pct * 100)}%",
-                technical_detail=f"swap_used_mb: {before.swap_used_mb} -> {after.swap_used_mb}",
-                significance="medium",
-            ))
+            changes.append(
+                SemanticChange(
+                    category="kernel",
+                    description=f"Swap usage increased from {int(before_pct * 100)}% to {int(after_pct * 100)}%",
+                    technical_detail=f"swap_used_mb: {before.swap_used_mb} -> {after.swap_used_mb}",
+                    significance="medium",
+                )
+            )
 
     return changes
 
@@ -143,12 +147,14 @@ def _diff_disks(
         before_disk = before_by_mount.get(mount)
         if not before_disk:
             # New mount appeared
-            changes.append(SemanticChange(
-                category="config",
-                description=f"New mount point: {mount}",
-                technical_detail=f"device: {after_disk.get('device', 'unknown')}",
-                significance="medium",
-            ))
+            changes.append(
+                SemanticChange(
+                    category="config",
+                    description=f"New mount point: {mount}",
+                    technical_detail=f"device: {after_disk.get('device', 'unknown')}",
+                    significance="medium",
+                )
+            )
             continue
 
         # Check for disk usage changes
@@ -156,28 +162,34 @@ def _diff_disks(
         after_pct = after_disk.get("used_pct", 0)
 
         if after_pct >= 90 and before_pct < 90:
-            changes.append(SemanticChange(
-                category="config",
-                description=f"Disk {mount} now at {after_pct}% capacity",
-                technical_detail=f"used_pct: {before_pct}% -> {after_pct}%",
-                significance="high",
-            ))
+            changes.append(
+                SemanticChange(
+                    category="config",
+                    description=f"Disk {mount} now at {after_pct}% capacity",
+                    technical_detail=f"used_pct: {before_pct}% -> {after_pct}%",
+                    significance="high",
+                )
+            )
         elif after_pct - before_pct >= 10:
-            changes.append(SemanticChange(
-                category="config",
-                description=f"Disk usage on {mount} increased by {after_pct - before_pct}%",
-                technical_detail=f"used_pct: {before_pct}% -> {after_pct}%",
-                significance="medium",
-            ))
+            changes.append(
+                SemanticChange(
+                    category="config",
+                    description=f"Disk usage on {mount} increased by {after_pct - before_pct}%",
+                    technical_detail=f"used_pct: {before_pct}% -> {after_pct}%",
+                    significance="medium",
+                )
+            )
 
     # Check for removed mounts
     for mount in before_by_mount:
         if mount and mount not in after_by_mount:
-            changes.append(SemanticChange(
-                category="config",
-                description=f"Mount point removed: {mount}",
-                significance="medium",
-            ))
+            changes.append(
+                SemanticChange(
+                    category="config",
+                    description=f"Mount point removed: {mount}",
+                    significance="medium",
+                )
+            )
 
     return changes
 
@@ -204,11 +216,13 @@ def _diff_services(
         if not before_svc:
             # New service appeared
             if after_active:
-                changes.append(SemanticChange(
-                    category="service",
-                    description=f"Service {name} started",
-                    significance="medium",
-                ))
+                changes.append(
+                    SemanticChange(
+                        category="service",
+                        description=f"Service {name} started",
+                        significance="medium",
+                    )
+                )
             continue
 
         before_active = before_svc.get("active", False)
@@ -216,35 +230,43 @@ def _diff_services(
 
         # Service started
         if after_active and not before_active:
-            changes.append(SemanticChange(
-                category="service",
-                description=f"Service {name} started",
-                significance="medium",
-            ))
+            changes.append(
+                SemanticChange(
+                    category="service",
+                    description=f"Service {name} started",
+                    significance="medium",
+                )
+            )
 
         # Service stopped
         elif not after_active and before_active:
-            changes.append(SemanticChange(
-                category="service",
-                description=f"Service {name} stopped",
-                significance="medium",
-            ))
+            changes.append(
+                SemanticChange(
+                    category="service",
+                    description=f"Service {name} stopped",
+                    significance="medium",
+                )
+            )
 
         # Service failed
         elif after_failed and not before_failed:
-            changes.append(SemanticChange(
-                category="service",
-                description=f"Service {name} entered failed state",
-                significance="high",
-            ))
+            changes.append(
+                SemanticChange(
+                    category="service",
+                    description=f"Service {name} entered failed state",
+                    significance="high",
+                )
+            )
 
         # Service recovered
         elif not after_failed and before_failed:
-            changes.append(SemanticChange(
-                category="service",
-                description=f"Service {name} recovered from failed state",
-                significance="medium",
-            ))
+            changes.append(
+                SemanticChange(
+                    category="service",
+                    description=f"Service {name} recovered from failed state",
+                    significance="medium",
+                )
+            )
 
     return changes
 
@@ -269,12 +291,14 @@ def _diff_interfaces(
 
         if not before_iface:
             # New interface appeared
-            changes.append(SemanticChange(
-                category="network",
-                description=f"Network interface {name} added",
-                technical_detail=f"state: {after_state}, ip: {after_iface.get('ip', 'none')}",
-                significance="medium",
-            ))
+            changes.append(
+                SemanticChange(
+                    category="network",
+                    description=f"Network interface {name} added",
+                    technical_detail=f"state: {after_state}, ip: {after_iface.get('ip', 'none')}",
+                    significance="medium",
+                )
+            )
             continue
 
         before_state = before_iface.get("state", "unknown")
@@ -282,28 +306,34 @@ def _diff_interfaces(
         # State change
         if after_state != before_state:
             if after_state == "up" and before_state == "down":
-                changes.append(SemanticChange(
-                    category="network",
-                    description=f"Network interface {name} came up",
-                    significance="medium",
-                ))
+                changes.append(
+                    SemanticChange(
+                        category="network",
+                        description=f"Network interface {name} came up",
+                        significance="medium",
+                    )
+                )
             elif after_state == "down" and before_state == "up":
-                changes.append(SemanticChange(
-                    category="network",
-                    description=f"Network interface {name} went down",
-                    significance="high",
-                ))
+                changes.append(
+                    SemanticChange(
+                        category="network",
+                        description=f"Network interface {name} went down",
+                        significance="high",
+                    )
+                )
 
         # IP address change
         before_ip = before_iface.get("ip")
         after_ip = after_iface.get("ip")
         if before_ip != after_ip:
-            changes.append(SemanticChange(
-                category="network",
-                description=f"IP address changed on {name}",
-                technical_detail=f"ip: {before_ip} -> {after_ip}",
-                significance="medium",
-            ))
+            changes.append(
+                SemanticChange(
+                    category="network",
+                    description=f"IP address changed on {name}",
+                    technical_detail=f"ip: {before_ip} -> {after_ip}",
+                    significance="medium",
+                )
+            )
 
     return changes
 
@@ -319,29 +349,35 @@ def _diff_docker(
     if after.docker_running != before.docker_running:
         diff = after.docker_running - before.docker_running
         if diff > 0:
-            changes.append(SemanticChange(
-                category="service",
-                description=f"{diff} Docker container(s) started",
-                technical_detail=f"running: {before.docker_running} -> {after.docker_running}",
-                significance="medium",
-            ))
+            changes.append(
+                SemanticChange(
+                    category="service",
+                    description=f"{diff} Docker container(s) started",
+                    technical_detail=f"running: {before.docker_running} -> {after.docker_running}",
+                    significance="medium",
+                )
+            )
         else:
-            changes.append(SemanticChange(
-                category="service",
-                description=f"{-diff} Docker container(s) stopped",
-                technical_detail=f"running: {before.docker_running} -> {after.docker_running}",
-                significance="medium",
-            ))
+            changes.append(
+                SemanticChange(
+                    category="service",
+                    description=f"{-diff} Docker container(s) stopped",
+                    technical_detail=f"running: {before.docker_running} -> {after.docker_running}",
+                    significance="medium",
+                )
+            )
 
     # Exited container changes
     if after.docker_exited > before.docker_exited:
         diff = after.docker_exited - before.docker_exited
-        changes.append(SemanticChange(
-            category="service",
-            description=f"{diff} Docker container(s) exited",
-            technical_detail=f"exited: {before.docker_exited} -> {after.docker_exited}",
-            significance="medium",
-        ))
+        changes.append(
+            SemanticChange(
+                category="service",
+                description=f"{diff} Docker container(s) exited",
+                technical_detail=f"exited: {before.docker_exited} -> {after.docker_exited}",
+                significance="medium",
+            )
+        )
 
     return changes
 
@@ -377,32 +413,38 @@ def _diff_packages(
         pre_ver = pre_pkgs.get(name)
         if pre_ver and pre_ver != post_ver:
             is_bedrock = name in pre_bedrock or name in post_bedrock
-            changes.append(SemanticChange(
-                category="package",
-                description=f"{name} upgraded: {pre_ver} → {post_ver}",
-                technical_detail=f"dpkg-query -W {name}",
-                significance="high" if is_bedrock else "medium",
-            ))
+            changes.append(
+                SemanticChange(
+                    category="package",
+                    description=f"{name} upgraded: {pre_ver} → {post_ver}",
+                    technical_detail=f"dpkg-query -W {name}",
+                    significance="high" if is_bedrock else "medium",
+                )
+            )
 
     # New installations
     for name in set(post_pkgs) - set(pre_pkgs):
         is_bedrock = name in post_bedrock
-        changes.append(SemanticChange(
-            category="package",
-            description=f"{name} installed: {post_pkgs[name]}",
-            technical_detail=f"apt install {name}",
-            significance="high" if is_bedrock else "low",
-        ))
+        changes.append(
+            SemanticChange(
+                category="package",
+                description=f"{name} installed: {post_pkgs[name]}",
+                technical_detail=f"apt install {name}",
+                significance="high" if is_bedrock else "low",
+            )
+        )
 
     # Removals
     for name in set(pre_pkgs) - set(post_pkgs):
         is_bedrock = name in pre_bedrock
-        changes.append(SemanticChange(
-            category="package",
-            description=f"{name} removed (was {pre_pkgs[name]})",
-            technical_detail=f"apt remove {name}",
-            significance="high" if is_bedrock else "medium",
-        ))
+        changes.append(
+            SemanticChange(
+                category="package",
+                description=f"{name} removed (was {pre_pkgs[name]})",
+                technical_detail=f"apt remove {name}",
+                significance="high" if is_bedrock else "medium",
+            )
+        )
 
     return changes
 
@@ -423,28 +465,28 @@ def _diff_configs(
 
         if not before_cfg:
             # New config file tracked
-            changes.append(SemanticChange(
-                category="config",
-                description=f"Config file modified: {_path_basename(path)}",
-                technical_detail=path,
-                significance="medium",
-            ))
+            changes.append(
+                SemanticChange(
+                    category="config",
+                    description=f"Config file modified: {_path_basename(path)}",
+                    technical_detail=path,
+                    significance="medium",
+                )
+            )
             continue
 
         # Check for hash changes
-        if (
-            before_cfg.sha256_after
-            and after_cfg.sha256_after
-            and before_cfg.sha256_after != after_cfg.sha256_after
-        ):
+        if before_cfg.sha256_after and after_cfg.sha256_after and before_cfg.sha256_after != after_cfg.sha256_after:
             # Determine significance based on path
             significance = _config_significance(path)
-            changes.append(SemanticChange(
-                category="config",
-                description=f"Config file modified: {_path_basename(path)}",
-                technical_detail=path,
-                significance=significance,
-            ))
+            changes.append(
+                SemanticChange(
+                    category="config",
+                    description=f"Config file modified: {_path_basename(path)}",
+                    technical_detail=path,
+                    significance=significance,
+                )
+            )
 
     return changes
 

@@ -25,23 +25,23 @@ BOX = {
     "tr": "\u2510",  # ┐
     "bl": "\u2514",  # └
     "br": "\u2518",  # ┘
-    "h": "\u2500",   # ─
-    "v": "\u2502",   # │
+    "h": "\u2500",  # ─
+    "v": "\u2502",  # │
     "vr": "\u251c",  # ├
     "vl": "\u2524",  # ┤
     "hd": "\u252c",  # ┬
     "hu": "\u2534",  # ┴
-    "x": "\u253c",   # ┼
+    "x": "\u253c",  # ┼
 }
 
 # Double line variants for headers
 DBOX = {
-    "h": "\u2550",   # ═
+    "h": "\u2550",  # ═
     "tl": "\u2554",  # ╔
     "tr": "\u2557",  # ╗
     "bl": "\u255a",  # ╚
     "br": "\u255d",  # ╝
-    "v": "\u2551",   # ║
+    "v": "\u2551",  # ║
 }
 
 
@@ -49,8 +49,10 @@ DBOX = {
 # ANSI Color Codes
 # =============================================================================
 
+
 class Color:
     """ANSI color codes for terminal output."""
+
     RESET = "\033[0m"
     BOLD = "\033[1m"
     DIM = "\033[2m"
@@ -97,23 +99,24 @@ SEVERITY_COLORS = {
 }
 
 DOMAIN_ICONS = {
-    "net": "\u26a1",      # ⚡
-    "disk": "\u26c1",     # ⛁
-    "oom": "\u26a0",      # ⚠
-    "docker": "\u2693",   # ⚓
-    "auth": "\u26bf",     # ⚿
-    "pkg": "\u2615",      # ☕
-    "fs": "\u2648",       # ♈
+    "net": "\u26a1",  # ⚡
+    "disk": "\u26c1",  # ⛁
+    "oom": "\u26a0",  # ⚠
+    "docker": "\u2693",  # ⚓
+    "auth": "\u26bf",  # ⚿
+    "pkg": "\u2615",  # ☕
+    "fs": "\u2648",  # ♈
     "service": "\u2699",  # ⚙
     "thermal": "\u2668",  # ♨
-    "smart": "\u26c3",    # ⛃
-    "other": "\u2022",    # •
+    "smart": "\u26c3",  # ⛃
+    "other": "\u2022",  # •
 }
 
 
 # =============================================================================
 # Utility Functions
 # =============================================================================
+
 
 def _truncate(text: str, max_len: int, ellipsis: str = "\u2026") -> str:
     """Truncate text with ellipsis if too long."""
@@ -164,7 +167,8 @@ def _pad(text: str, width: int, align: str = "left") -> str:
     """Pad text to width with alignment."""
     # Strip ANSI codes for length calculation
     import re
-    visible_len = len(re.sub(r'\033\[[0-9;]*m', '', text))
+
+    visible_len = len(re.sub(r"\033\[[0-9;]*m", "", text))
     padding = width - visible_len
 
     if padding <= 0:
@@ -183,6 +187,7 @@ def _pad(text: str, width: int, align: str = "left") -> str:
 # =============================================================================
 # Incident List Rendering
 # =============================================================================
+
 
 def render_incident_list(
     incidents: list[IncidentReport],
@@ -287,6 +292,7 @@ def render_incident_list(
 # Incident Detail Rendering
 # =============================================================================
 
+
 def render_incident_detail(
     incident: IncidentReport,
     actions: list[IncidentAction] | None = None,
@@ -311,9 +317,13 @@ def render_incident_detail(
     lines.append("")
     lines.append(f"  {DBOX['h'] * 70}")
     lines.append(f"  {Color.BOLD}{incident.title}{Color.RESET}")
-    lines.append(f"  {status_badge}  {severity_color}{incident.severity.upper()}{Color.RESET}  {domain_icon} {incident.domain}")
+    lines.append(
+        f"  {status_badge}  {severity_color}{incident.severity.upper()}{Color.RESET}  {domain_icon} {incident.domain}"
+    )
     lines.append(f"  {Color.DIM}ID: {incident.incident_id}{Color.RESET}")
-    lines.append(f"  {Color.DIM}Created: {incident.created_at.strftime('%Y-%m-%d %H:%M:%S')} ({_time_ago(incident.created_at)}){Color.RESET}")
+    lines.append(
+        f"  {Color.DIM}Created: {incident.created_at.strftime('%Y-%m-%d %H:%M:%S')} ({_time_ago(incident.created_at)}){Color.RESET}"
+    )
     lines.append(f"  {DBOX['h'] * 70}")
     lines.append("")
 
@@ -390,7 +400,9 @@ def render_incident_detail(
 
     # Fingerprint summary
     if incident.fingerprint:
-        lines.append(f"  {Color.DIM}Fingerprint: disk={incident.fingerprint.disk_pressure:.0%} mem={incident.fingerprint.mem_pressure:.0%} cpu={incident.fingerprint.cpu_pressure:.1f}{Color.RESET}")
+        lines.append(
+            f"  {Color.DIM}Fingerprint: disk={incident.fingerprint.disk_pressure:.0%} mem={incident.fingerprint.mem_pressure:.0%} cpu={incident.fingerprint.cpu_pressure:.1f}{Color.RESET}"
+        )
 
     return "\n".join(lines)
 
@@ -398,6 +410,7 @@ def render_incident_detail(
 # =============================================================================
 # Snapshot Diff Rendering
 # =============================================================================
+
 
 def render_snapshot_diff(
     pre: SystemSnapshot,
@@ -421,7 +434,9 @@ def render_snapshot_diff(
     if abs(mem_delta) > 5:  # Only show if > 5% change
         arrow = "\u2191" if mem_delta > 0 else "\u2193"
         color = Color.RED if mem_delta > 0 else Color.GREEN
-        changes.append(f"    Memory: {pre_mem_pct:.0f}% {arrow} {post_mem_pct:.0f}% ({color}{mem_delta:+.0f}%{Color.RESET})")
+        changes.append(
+            f"    Memory: {pre_mem_pct:.0f}% {arrow} {post_mem_pct:.0f}% ({color}{mem_delta:+.0f}%{Color.RESET})"
+        )
 
     # Disk changes
     pre_disks = {d.get("mount"): d.get("used_pct", 0) for d in pre.disks}
@@ -435,7 +450,9 @@ def render_snapshot_diff(
         if abs(delta) > 2:  # Only show if > 2% change
             arrow = "\u2191" if delta > 0 else "\u2193"
             color = Color.RED if delta > 0 else Color.GREEN
-            changes.append(f"    Disk {mount}: {pre_pct:.0f}% {arrow} {post_pct:.0f}% ({color}{delta:+.0f}%{Color.RESET})")
+            changes.append(
+                f"    Disk {mount}: {pre_pct:.0f}% {arrow} {post_pct:.0f}% ({color}{delta:+.0f}%{Color.RESET})"
+            )
 
     # Interface changes
     pre_ifaces = {i.get("name"): i.get("state") for i in pre.interfaces}
@@ -481,6 +498,7 @@ def render_snapshot_diff(
 # =============================================================================
 # Markdown Export
 # =============================================================================
+
 
 def render_incident_markdown(
     incident: IncidentReport,
@@ -614,10 +632,14 @@ def _snapshot_to_markdown(snapshot: SystemSnapshot) -> str:
     lines.append(f"- **OS:** {snapshot.os}")
     lines.append(f"- **Kernel:** {snapshot.kernel}")
     lines.append(f"- **Uptime:** {_format_duration(snapshot.uptime_sec)}")
-    lines.append(f"- **Load Average:** {snapshot.cpu_load[0]:.2f}, {snapshot.cpu_load[1]:.2f}, {snapshot.cpu_load[2]:.2f}")
+    lines.append(
+        f"- **Load Average:** {snapshot.cpu_load[0]:.2f}, {snapshot.cpu_load[1]:.2f}, {snapshot.cpu_load[2]:.2f}"
+    )
 
     mem_pct = 100 * (1 - snapshot.mem_available_mb / snapshot.mem_total_mb) if snapshot.mem_total_mb else 0
-    lines.append(f"- **Memory:** {mem_pct:.0f}% used ({snapshot.mem_available_mb}MB available / {snapshot.mem_total_mb}MB total)")
+    lines.append(
+        f"- **Memory:** {mem_pct:.0f}% used ({snapshot.mem_available_mb}MB available / {snapshot.mem_total_mb}MB total)"
+    )
 
     if snapshot.disks:
         lines.append("- **Disks:**")
@@ -641,6 +663,7 @@ def _snapshot_to_markdown(snapshot: SystemSnapshot) -> str:
 # Search Results Rendering
 # =============================================================================
 
+
 def render_search_results(
     query: str,
     results: list[tuple[IncidentReport, float]],
@@ -648,7 +671,7 @@ def render_search_results(
     """Render incident search results with relevance scores."""
     lines = []
 
-    lines.append(f"  {Color.BOLD}Search results for: {Color.CYAN}\"{query}\"{Color.RESET}")
+    lines.append(f'  {Color.BOLD}Search results for: {Color.CYAN}"{query}"{Color.RESET}')
     lines.append(f"  {BOX['h'] * 50}")
     lines.append("")
 

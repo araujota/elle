@@ -2,12 +2,11 @@
 
 import pytest
 
-from elle.rag.confgen.docker import DockerHandler
 from elle.cli.docker.compose_converter import (
     docker_run_to_compose,
     parse_docker_run,
-    DockerRunConfig,
 )
+from elle.rag.confgen.docker import DockerHandler
 
 
 class TestDockerHandler:
@@ -222,9 +221,7 @@ class TestDockerRunToCompose:
         assert "/data:/data" in result
 
     def test_conversion_with_environment(self):
-        result = docker_run_to_compose(
-            "docker run -e POSTGRES_PASSWORD=secret postgres:15"
-        )
+        result = docker_run_to_compose("docker run -e POSTGRES_PASSWORD=secret postgres:15")
         assert "environment:" in result
         assert "POSTGRES_PASSWORD: secret" in result
 
@@ -245,10 +242,7 @@ class TestDockerRunToCompose:
         assert "restart: unless-stopped" in result
 
     def test_conversion_with_custom_service_name(self):
-        result = docker_run_to_compose(
-            "docker run nginx",
-            service_name="webserver"
-        )
+        result = docker_run_to_compose("docker run nginx", service_name="webserver")
         assert "webserver:" in result
 
     def test_full_postgres_example(self):

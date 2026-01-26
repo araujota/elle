@@ -68,7 +68,32 @@ def sanitize_identifier(name: str) -> str:
     if name and name[0].isdigit():
         name = "_" + name
     # Avoid Python keywords
-    if name in ("class", "def", "return", "import", "from", "if", "else", "for", "while", "try", "except", "with", "as", "pass", "break", "continue", "and", "or", "not", "in", "is", "None", "True", "False"):
+    if name in (
+        "class",
+        "def",
+        "return",
+        "import",
+        "from",
+        "if",
+        "else",
+        "for",
+        "while",
+        "try",
+        "except",
+        "with",
+        "as",
+        "pass",
+        "break",
+        "continue",
+        "and",
+        "or",
+        "not",
+        "in",
+        "is",
+        "None",
+        "True",
+        "False",
+    ):
         name = name + "_"
     return name or "value"
 
@@ -109,9 +134,8 @@ def generate_input_model_code(spec: GeneratedCapabilitySpec) -> str:
             field_type = normalize_type(field.field_type)
 
             # Handle optional fields
-            if not field.required:
-                if "None" not in field_type:
-                    field_type = f"{field_type} | None"
+            if not field.required and "None" not in field_type:
+                field_type = f"{field_type} | None"
 
             # Build Field() call
             field_args = []
@@ -165,11 +189,13 @@ def generate_output_model_code(spec: GeneratedCapabilitySpec) -> str:
     ]
 
     # Always include success and output fields
-    lines.extend([
-        '    success: bool = Field(..., description="Whether the operation succeeded")',
-        '    output: str = Field(default="", description="Command output")',
-        '    return_code: int = Field(default=0, description="Command return code")',
-    ])
+    lines.extend(
+        [
+            '    success: bool = Field(..., description="Whether the operation succeeded")',
+            '    output: str = Field(default="", description="Command output")',
+            '    return_code: int = Field(default=0, description="Command return code")',
+        ]
+    )
 
     # Add any additional output fields
     for field in spec.output_fields:
@@ -232,85 +258,29 @@ def generate_capability_class_code(spec: GeneratedCapabilitySpec) -> str:
         f'            name="{spec.name}",',
         f'            description="{spec.description[:100]}",',
         f'            domain="{spec.domain}",',
-        f'            risk_level=RiskLevel.{spec.risk_level.upper()},',
+        f"            risk_level=RiskLevel.{spec.risk_level.upper()},",
         "            side_effects=(",
     ]
 
     # Add side effects
     for effect in spec.side_effects:
         lines.append("                SideEffect(")
-        lines.append(f'                    kind=SideEffectKind.{effect.upper()},')
+        lines.append(f"                    kind=SideEffectKind.{effect.upper()},")
         lines.append(f'                    description="{effect} by {spec.name}",')
         lines.append("                    reversible=False,")
         lines.append("                ),")
 
-    lines.extend([
-        "            ),",
-        "            input_schema={},  # TODO: Generate from input fields",
-        "            output_schema={},",
-        "        )",
-        "",
-        "    def _build_command(self, input_data: Any) -> str:",
-        '        """Build command string from input."""',
-        f'        template = "{cmd_template}"',
-        "        # Substitute input fields",
-        "        if hasattr(input_data, 'model_dump'):",
-        "            values = input_data.model_dump()",
-        "        elif isinstance(input_data, dict):",
-        "            values = input_data",
-        "        else:",
-        "            values = {}",
-        "        for key, value in values.items():",
-        "            if value is not None:",
-        '                template = template.replace("{" + key + "}", str(value))',
-        "        return template",
-        "",
-        "    def dry_run(self, input_data: Any) -> DryRunResult:",
-        '        """Preview what the capability would do."""',
-        "        command = self._build_command(input_data)",
-        "        return DryRunResult(",
-        "            would_execute=(command,),",
-        '            preview_text=f"Would run: {command}",',
-        "            estimated_duration_sec=5.0,",
-        "        )",
-        "",
-        "    def run(self, input_data: Any) -> Any:",
-        '        """Execute the capability."""',
-        "        command = self._build_command(input_data)",
-        "        try:",
-        "            result = subprocess.run(",
-        "                command,",
-        "                shell=True,",
-        "                capture_output=True,",
-        "                text=True,",
-        "                timeout=60,",
-        "            )",
-        "            return {",
-        "                'success': result.returncode == 0,",
-        "                'output': result.stdout + result.stderr,",
-        "                'return_code': result.returncode,",
-        "            }",
-        "        except subprocess.TimeoutExpired:",
-        "            return {",
-        "                'success': False,",
-        "                'output': 'Command timed out',",
-        "                'return_code': -1,",
-        "            }",
-        "        except Exception as e:",
-        "            return {",
-        "                'success': False,",
-        '                \'output\': f"Error: {e}",',
-        "                'return_code': -1,",
-        "            }",
-    ])
-
-    # Add verify method if verify_command is provided
-    if spec.verify_command:
-        lines.extend([
+    lines.extend(
+        [
+            "            ),",
+            "            input_schema={},  # TODO: Generate from input fields",
+            "            output_schema={},",
+            "        )",
             "",
-            "    def verify(self, input_data: Any, run_result: Any) -> bool:",
-            '        """Verify the operation completed successfully."""',
-            f'        template = "{verify_template}"',
+            "    def _build_command(self, input_data: Any) -> str:",
+            '        """Build command string from input."""',
+            f'        template = "{cmd_template}"',
+            "        # Substitute input fields",
             "        if hasattr(input_data, 'model_dump'):",
             "            values = input_data.model_dump()",
             "        elif isinstance(input_data, dict):",
@@ -320,24 +290,86 @@ def generate_capability_class_code(spec: GeneratedCapabilitySpec) -> str:
             "        for key, value in values.items():",
             "            if value is not None:",
             '                template = template.replace("{" + key + "}", str(value))',
+            "        return template",
+            "",
+            "    def dry_run(self, input_data: Any) -> DryRunResult:",
+            '        """Preview what the capability would do."""',
+            "        command = self._build_command(input_data)",
+            "        return DryRunResult(",
+            "            would_execute=(command,),",
+            '            preview_text=f"Would run: {command}",',
+            "            estimated_duration_sec=5.0,",
+            "        )",
+            "",
+            "    def run(self, input_data: Any) -> Any:",
+            '        """Execute the capability."""',
+            "        command = self._build_command(input_data)",
             "        try:",
             "            result = subprocess.run(",
-            "                template,",
+            "                command,",
             "                shell=True,",
             "                capture_output=True,",
-            "                timeout=30,",
+            "                text=True,",
+            "                timeout=60,",
             "            )",
-            "            return result.returncode == 0",
-            "        except Exception:",
-            "            return False",
-        ])
+            "            return {",
+            "                'success': result.returncode == 0,",
+            "                'output': result.stdout + result.stderr,",
+            "                'return_code': result.returncode,",
+            "            }",
+            "        except subprocess.TimeoutExpired:",
+            "            return {",
+            "                'success': False,",
+            "                'output': 'Command timed out',",
+            "                'return_code': -1,",
+            "            }",
+            "        except Exception as e:",
+            "            return {",
+            "                'success': False,",
+            "                'output': f\"Error: {e}\",",
+            "                'return_code': -1,",
+            "            }",
+        ]
+    )
+
+    # Add verify method if verify_command is provided
+    if spec.verify_command:
+        lines.extend(
+            [
+                "",
+                "    def verify(self, input_data: Any, run_result: Any) -> bool:",
+                '        """Verify the operation completed successfully."""',
+                f'        template = "{verify_template}"',
+                "        if hasattr(input_data, 'model_dump'):",
+                "            values = input_data.model_dump()",
+                "        elif isinstance(input_data, dict):",
+                "            values = input_data",
+                "        else:",
+                "            values = {}",
+                "        for key, value in values.items():",
+                "            if value is not None:",
+                '                template = template.replace("{" + key + "}", str(value))',
+                "        try:",
+                "            result = subprocess.run(",
+                "                template,",
+                "                shell=True,",
+                "                capture_output=True,",
+                "                timeout=30,",
+                "            )",
+                "            return result.returncode == 0",
+                "        except Exception:",
+                "            return False",
+            ]
+        )
     else:
-        lines.extend([
-            "",
-            "    def verify(self, input_data: Any, run_result: Any) -> bool:",
-            '        """Verify the operation completed successfully."""',
-            "        return run_result.get('success', False)",
-        ])
+        lines.extend(
+            [
+                "",
+                "    def verify(self, input_data: Any, run_result: Any) -> bool:",
+                '        """Verify the operation completed successfully."""',
+                "        return run_result.get('success', False)",
+            ]
+        )
 
     return "\n".join(lines)
 

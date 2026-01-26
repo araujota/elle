@@ -1,10 +1,5 @@
 """Tests for Man Vault indexer."""
 
-import tempfile
-from pathlib import Path
-
-import pytest
-
 from elle.daemon.manvault.indexer import (
     CORE_COMMANDS,
     _extract_name,
@@ -168,8 +163,11 @@ class TestChunking:
     def test_large_section_split(self):
         """Test that large sections are split into multiple chunks."""
         # Create a large section
-        large_text = """OPTIONS
-       """ + "This is a very long option description. " * 100
+        large_text = (
+            """OPTIONS
+       """
+            + "This is a very long option description. " * 100
+        )
 
         chunks = chunk_document(large_text, max_chunk_size=200)
 

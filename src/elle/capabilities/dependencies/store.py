@@ -306,10 +306,7 @@ class DependencyPreferenceStore:
         )
         conn.commit()
 
-        logger.info(
-            f"Recorded installation for '{result.dependency}': "
-            f"{'success' if result.success else 'failed'}"
-        )
+        logger.info(f"Recorded installation for '{result.dependency}': {'success' if result.success else 'failed'}")
 
         return record_id
 

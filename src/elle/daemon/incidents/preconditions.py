@@ -152,10 +152,7 @@ def evaluate_preconditions(
                 required_matched += 1
 
     # Compute match ratio based on required preconditions only
-    if required_total == 0:
-        ratio = 1.0
-    else:
-        ratio = required_matched / required_total
+    ratio = 1.0 if required_total == 0 else required_matched / required_total
 
     return ratio, results
 
@@ -196,9 +193,8 @@ def _resolve_path(
     # Check snapshot fields
     if snapshot:
         # Simple snapshot fields
-        if len(parts) == 1:
-            if hasattr(snapshot, parts[0]):
-                return getattr(snapshot, parts[0])
+        if len(parts) == 1 and hasattr(snapshot, parts[0]):
+            return getattr(snapshot, parts[0])
 
         # Disk info: disk./.used_pct or disk./home.avail_gb
         if parts[0] == "disk" and len(parts) >= 3:
@@ -285,8 +281,9 @@ def _parse_value(value_str: str) -> Any:
         return None
 
     # Quoted string
-    if (value_str.startswith('"') and value_str.endswith('"')) or \
-       (value_str.startswith("'") and value_str.endswith("'")):
+    if (value_str.startswith('"') and value_str.endswith('"')) or (
+        value_str.startswith("'") and value_str.endswith("'")
+    ):
         return value_str[1:-1]
 
     # Number
@@ -364,24 +361,30 @@ def infer_preconditions(
             mount = disk.get("mount", "")
             pct = disk.get("used_pct", 0)
             if pct > 80:
-                preconditions.append(create_precondition(
-                    f"disk.{mount}.used_pct > {pct - 10}",
-                    f"Disk at {mount} above {pct - 10}% used",
-                ))
+                preconditions.append(
+                    create_precondition(
+                        f"disk.{mount}.used_pct > {pct - 10}",
+                        f"Disk at {mount} above {pct - 10}% used",
+                    )
+                )
 
     # Memory-related
     if domain == "oom" or fingerprint.mem_pressure > 0.8:
-        preconditions.append(create_precondition(
-            f"mem_pressure > {round(fingerprint.mem_pressure - 0.1, 2)}",
-            "High memory pressure",
-        ))
+        preconditions.append(
+            create_precondition(
+                f"mem_pressure > {round(fingerprint.mem_pressure - 0.1, 2)}",
+                "High memory pressure",
+            )
+        )
 
     # OOM events
     if fingerprint.oom_count_1h > 0:
-        preconditions.append(create_precondition(
-            "oom_count_1h > 0",
-            "OOM kills observed in last hour",
-        ))
+        preconditions.append(
+            create_precondition(
+                "oom_count_1h > 0",
+                "OOM kills observed in last hour",
+            )
+        )
 
     # Network-related
     if domain == "net":
@@ -389,27 +392,32 @@ def infer_preconditions(
             name = iface.get("name", "")
             state = iface.get("state", "")
             if state and state != "UP":
-                preconditions.append(create_precondition(
-                    f"interfaces.{name}.state == {state}",
-                    f"Interface {name} in {state} state",
-                ))
+                preconditions.append(
+                    create_precondition(
+                        f"interfaces.{name}.state == {state}",
+                        f"Interface {name} in {state} state",
+                    )
+                )
 
     # Docker-related
-    if domain == "docker":
-        if snapshot.docker_exited > 0:
-            preconditions.append(create_precondition(
+    if domain == "docker" and snapshot.docker_exited > 0:
+        preconditions.append(
+            create_precondition(
                 "docker.exited > 0",
                 "Docker containers in exited state",
-            ))
+            )
+        )
 
     # Service-related
     if domain == "service":
         for svc in snapshot.services:
             if svc.get("failed"):
                 name = svc.get("name", "")
-                preconditions.append(create_precondition(
-                    f"services.{name}.failed == true",
-                    f"Service {name} in failed state",
-                ))
+                preconditions.append(
+                    create_precondition(
+                        f"services.{name}.failed == true",
+                        f"Service {name} in failed state",
+                    )
+                )
 
     return preconditions

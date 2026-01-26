@@ -93,7 +93,9 @@ def severity_badge(severity: Literal["info", "warning", "error", "critical"]) ->
 def domain_badge(domain: str) -> Text:
     """Create a domain badge with icon."""
     icon = Icons.domain_icon(domain)
-    style = f"domain.{domain}" if domain in ("net", "disk", "oom", "docker", "auth", "pkg", "service", "fs") else "muted"
+    style = (
+        f"domain.{domain}" if domain in ("net", "disk", "oom", "docker", "auth", "pkg", "service", "fs") else "muted"
+    )
     return badge(domain.upper(), style, icon=icon)
 
 
@@ -620,26 +622,30 @@ def env_var_panel(
     if required_vars:
         content.append("Required:\n", style="bold")
         for name, description, sensitive in required_vars:
-            content.append_text(env_var_line(
-                name,
-                required=True,
-                sensitive=sensitive,
-                description=description,
-                has_saved=name in saved,
-            ))
+            content.append_text(
+                env_var_line(
+                    name,
+                    required=True,
+                    sensitive=sensitive,
+                    description=description,
+                    has_saved=name in saved,
+                )
+            )
             content.append("\n")
         content.append("\n")
 
     if optional_vars:
         content.append("Optional:\n", style="bold")
         for name, description, sensitive in optional_vars:
-            content.append_text(env_var_line(
-                name,
-                required=False,
-                sensitive=sensitive,
-                description=description,
-                has_saved=name in saved,
-            ))
+            content.append_text(
+                env_var_line(
+                    name,
+                    required=False,
+                    sensitive=sensitive,
+                    description=description,
+                    has_saved=name in saved,
+                )
+            )
             content.append("\n")
 
     return Panel(

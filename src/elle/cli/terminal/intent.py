@@ -144,7 +144,8 @@ def create_clarification_result(
         confidence=0.0,
         rationale=rationale,
         requires_clarification=True,
-        suggested_followups=suggested_followups or [
+        suggested_followups=suggested_followups
+        or [
             "Run a shell command",
             "Ask a system question",
             "Perform a system task",

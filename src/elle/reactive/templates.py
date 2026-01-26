@@ -83,8 +83,7 @@ DISK_PRESSURE_CLEANUP = ReactiveFunction(
     id="builtin:disk-pressure-cleanup",
     name="disk-pressure-cleanup",
     description=(
-        "Automatically clean Docker resources when disk usage exceeds 85%. "
-        "Requires confirmation before execution."
+        "Automatically clean Docker resources when disk usage exceeds 85%. Requires confirmation before execution."
     ),
     enabled=False,  # Disabled by default - user must enable
     created_by="builtin",
@@ -124,10 +123,7 @@ DISK_PRESSURE_CLEANUP = ReactiveFunction(
 CONTAINER_RESTART_ALERT = ReactiveFunction(
     id="builtin:container-restart-alert",
     name="container-restart-alert",
-    description=(
-        "Send notification when a container enters a restart loop "
-        "(more than 3 restarts detected)."
-    ),
+    description=("Send notification when a container enters a restart loop (more than 3 restarts detected)."),
     enabled=False,  # Disabled by default
     created_by="builtin",
     trigger=Trigger(

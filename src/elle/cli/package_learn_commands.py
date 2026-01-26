@@ -399,19 +399,14 @@ async def _handle_list(args: str) -> str:
         packages = store.list_packages_with_capabilities()
 
         if not packages:
-            return (
-                "No packages have generated capabilities yet.\nUse '/learn <package>' to learn one."
-            )
+            return "No packages have generated capabilities yet.\nUse '/learn <package>' to learn one."
 
         lines = [f"{Colors.BOLD}Packages with generated capabilities:{Colors.RESET}", ""]
 
         for pkg_name, pkg_version in packages:
             caps = store.list_by_package(pkg_name)
             approved = sum(1 for c in caps if c.approved)
-            lines.append(
-                f"  {pkg_name:30} v{pkg_version or 'unknown':12} "
-                f"({len(caps)} caps, {approved} approved)"
-            )
+            lines.append(f"  {pkg_name:30} v{pkg_version or 'unknown':12} ({len(caps)} caps, {approved} approved)")
 
         return "\n".join(lines)
 
@@ -576,9 +571,7 @@ async def _handle_bootstrap(args: str) -> str:
                 lines.append(f"    - {pkg}")
             lines.append("")
 
-        lines.append(
-            f"{Colors.DIM}Run '/learn bootstrap' without --dry-run to proceed.{Colors.RESET}"
-        )
+        lines.append(f"{Colors.DIM}Run '/learn bootstrap' without --dry-run to proceed.{Colors.RESET}")
         return "\n".join(lines)
 
     # Run bootstrap with progress indicator
@@ -614,15 +607,11 @@ async def _handle_bootstrap(args: str) -> str:
         if result.packages_failed > 0:
             lines.append(f"  Failed: {Colors.RED}{result.packages_failed}{Colors.RESET}")
         if result.packages_skipped > 0:
-            lines.append(
-                f"  Skipped (existing): {Colors.DIM}{result.packages_skipped}{Colors.RESET}"
-            )
+            lines.append(f"  Skipped (existing): {Colors.DIM}{result.packages_skipped}{Colors.RESET}")
         lines.append("")
         lines.append(f"  Capabilities generated: {result.capabilities_generated}")
         lines.append(f"  Capabilities validated: {result.capabilities_validated}")
-        lines.append(
-            f"  Capabilities saved: {Colors.GREEN}{result.capabilities_saved}{Colors.RESET}"
-        )
+        lines.append(f"  Capabilities saved: {Colors.GREEN}{result.capabilities_saved}{Colors.RESET}")
         lines.append("")
         lines.append(f"  Duration: {result.duration_seconds:.1f}s")
 
@@ -672,10 +661,7 @@ async def _handle_bootstrap_status(args: str) -> str:
 
     if should_run_bootstrap():
         lines.append("")
-        lines.append(
-            f"{Colors.DIM}Run '/learn bootstrap' to generate capabilities "
-            f"for core packages.{Colors.RESET}"
-        )
+        lines.append(f"{Colors.DIM}Run '/learn bootstrap' to generate capabilities for core packages.{Colors.RESET}")
 
     return "\n".join(lines)
 
@@ -932,10 +918,7 @@ async def _run_full_system_learn(
 
         # Log progress periodically
         if attempted % 10 == 0:
-            logger.info(
-                f"Learn --all progress: {attempted}/{len(to_learn)} "
-                f"(+{succeeded} success, +{failed} fail)"
-            )
+            logger.info(f"Learn --all progress: {attempted}/{len(to_learn)} (+{succeeded} success, +{failed} fail)")
 
     end_time = datetime.utcnow()
     duration = (end_time - start_time).total_seconds()

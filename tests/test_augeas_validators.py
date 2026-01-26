@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from elle.ops.augeas.validators import (
-    ConfigValidator,
     CronValidator,
     FstabValidator,
     HostsValidator,

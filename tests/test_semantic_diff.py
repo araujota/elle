@@ -6,15 +6,13 @@ and config file changes.
 
 from datetime import datetime, timedelta
 
-import pytest
-
 from elle.daemon.incidents.models import (
     ConfigFileState,
+    PackageState,
     SemanticChange,
     SemanticDiff,
     SystemSnapshot,
 )
-from elle.daemon.incidents.models import PackageState
 from elle.daemon.incidents.semantic_diff import (
     _config_significance,
     _diff_configs,
@@ -268,14 +266,10 @@ class TestPackageDiff:
     def test_package_upgrade_detected(self):
         """Test package upgrade is detected."""
         before = make_snapshot(
-            packages=(
-                PackageState(name="nginx", version="1.18.0", is_bedrock=False),
-            ),
+            packages=(PackageState(name="nginx", version="1.18.0", is_bedrock=False),),
         )
         after = make_snapshot(
-            packages=(
-                PackageState(name="nginx", version="1.20.0", is_bedrock=False),
-            ),
+            packages=(PackageState(name="nginx", version="1.20.0", is_bedrock=False),),
         )
         changes = _diff_packages(before, after)
         assert len(changes) == 1
@@ -287,14 +281,10 @@ class TestPackageDiff:
     def test_bedrock_package_upgrade_is_high_significance(self):
         """Test bedrock package upgrade has high significance."""
         before = make_snapshot(
-            packages=(
-                PackageState(name="systemd", version="253", is_bedrock=True),
-            ),
+            packages=(PackageState(name="systemd", version="253", is_bedrock=True),),
         )
         after = make_snapshot(
-            packages=(
-                PackageState(name="systemd", version="254", is_bedrock=True),
-            ),
+            packages=(PackageState(name="systemd", version="254", is_bedrock=True),),
         )
         changes = _diff_packages(before, after)
         assert len(changes) == 1
@@ -304,9 +294,7 @@ class TestPackageDiff:
         """Test new package installation is detected."""
         before = make_snapshot(packages=())
         after = make_snapshot(
-            packages=(
-                PackageState(name="nginx", version="1.18.0", is_bedrock=False),
-            ),
+            packages=(PackageState(name="nginx", version="1.18.0", is_bedrock=False),),
         )
         changes = _diff_packages(before, after)
         assert len(changes) == 1
@@ -316,9 +304,7 @@ class TestPackageDiff:
     def test_package_removed_detected(self):
         """Test package removal is detected."""
         before = make_snapshot(
-            packages=(
-                PackageState(name="nginx", version="1.18.0", is_bedrock=False),
-            ),
+            packages=(PackageState(name="nginx", version="1.18.0", is_bedrock=False),),
         )
         after = make_snapshot(packages=())
         changes = _diff_packages(before, after)
@@ -360,14 +346,18 @@ class TestConfigDiff:
 
     def test_config_modified(self):
         """Test config modification is detected."""
-        before = (ConfigFileState(
-            path="/etc/ssh/sshd_config",
-            sha256_after="abc123",
-        ),)
-        after = (ConfigFileState(
-            path="/etc/ssh/sshd_config",
-            sha256_after="def456",
-        ),)
+        before = (
+            ConfigFileState(
+                path="/etc/ssh/sshd_config",
+                sha256_after="abc123",
+            ),
+        )
+        after = (
+            ConfigFileState(
+                path="/etc/ssh/sshd_config",
+                sha256_after="def456",
+            ),
+        )
         changes = _diff_configs(before, after)
         assert len(changes) == 1
         assert "sshd_config" in changes[0].description
@@ -376,10 +366,12 @@ class TestConfigDiff:
     def test_new_config_tracked(self):
         """Test new config file is detected."""
         before: tuple = ()
-        after = (ConfigFileState(
-            path="/etc/nginx/nginx.conf",
-            sha256_after="abc123",
-        ),)
+        after = (
+            ConfigFileState(
+                path="/etc/nginx/nginx.conf",
+                sha256_after="abc123",
+            ),
+        )
         changes = _diff_configs(before, after)
         assert len(changes) == 1
         assert "nginx.conf" in changes[0].description
@@ -418,14 +410,18 @@ class TestGenerateSemanticDiff:
             kernel="6.6.0-generic",
             services=({"name": "nginx", "active": False, "failed": False},),
         )
-        config_before = (ConfigFileState(
-            path="/etc/nginx/nginx.conf",
-            sha256_after="old",
-        ),)
-        config_after = (ConfigFileState(
-            path="/etc/nginx/nginx.conf",
-            sha256_after="new",
-        ),)
+        config_before = (
+            ConfigFileState(
+                path="/etc/nginx/nginx.conf",
+                sha256_after="old",
+            ),
+        )
+        config_after = (
+            ConfigFileState(
+                path="/etc/nginx/nginx.conf",
+                sha256_after="new",
+            ),
+        )
 
         diff = generate_semantic_diff(before, after, config_before, config_after)
 

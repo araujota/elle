@@ -11,17 +11,9 @@ MYSQL_RECIPE = StackRecipe(
     display_name="MySQL Server",
     description="MySQL relational database server with localhost-only access and secure defaults",
     category="data",
-
-    packages=(
-        "mysql-server",
-    ),
-
-    services=(
-        "mysql",
-    ),
-
+    packages=("mysql-server",),
+    services=("mysql",),
     config_templates={},
-
     guarantees=(
         StackGuarantee(
             name="service_running",
@@ -56,7 +48,6 @@ MYSQL_RECIPE = StackRecipe(
             remediation_hint="Check service status with: systemctl status mysql",
         ),
     ),
-
     variables=(
         StackVariable(
             name="root_password",
@@ -77,7 +68,6 @@ MYSQL_RECIPE = StackRecipe(
             required=False,
         ),
     ),
-
     presets={
         "dev": {
             "max_connections": "50",
@@ -86,11 +76,9 @@ MYSQL_RECIPE = StackRecipe(
             "max_connections": "200",
         },
     },
-
     min_ram_mb=512,
     min_disk_gb=5,
     ports_required=(3306,),
-
     version="1.0.0",
     tags=("database", "sql", "mysql", "data", "relational"),
 )

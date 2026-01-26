@@ -108,11 +108,7 @@ def capability_requires_confirmation(spec: CapabilitySpec) -> bool:
         return True
 
     # Side effects that are not reversible require confirmation
-    for effect in spec.side_effects:
-        if not effect.reversible:
-            return True
-
-    return False
+    return any(not effect.reversible for effect in spec.side_effects)
 
 
 def capability_requires_privilege_check(spec: CapabilitySpec) -> bool:

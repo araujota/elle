@@ -59,6 +59,7 @@ def main(args: list[str] | None = None) -> int:
     if not args:
         # No arguments - launch REPL
         from elle.cli.terminal.repl import run
+
         run()
         return 0  # run() calls sys.exit, so this is unreachable
 

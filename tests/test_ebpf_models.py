@@ -1,7 +1,8 @@
 """Tests for eBPF telemetry models."""
 
-import pytest
 from datetime import datetime
+
+import pytest
 
 from elle.daemon.telemetry.ebpf.models import (
     EBPF_EVENT_CATEGORIES,

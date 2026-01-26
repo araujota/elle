@@ -281,74 +281,76 @@ class StoredCapability(BaseModel, frozen=True):
 
 
 # Well-known core commands that get CORE trust level
-CORE_COMMANDS: frozenset[str] = frozenset({
-    # Systemd
-    "systemctl",
-    "journalctl",
-    "hostnamectl",
-    "timedatectl",
-    "loginctl",
-    # Network
-    "ip",
-    "ss",
-    "netplan",
-    "ufw",
-    "iptables",
-    "wg",
-    "wg-quick",
-    # Package management
-    "apt",
-    "apt-get",
-    "dpkg",
-    "snap",
-    # Docker/containers
-    "docker",
-    "docker-compose",
-    "podman",
-    "crictl",
-    # File operations
-    "cp",
-    "mv",
-    "rm",
-    "mkdir",
-    "chmod",
-    "chown",
-    # Process management
-    "ps",
-    "top",
-    "kill",
-    "pkill",
-    "nice",
-    "renice",
-    # Disk management
-    "df",
-    "du",
-    "mount",
-    "umount",
-    "lsblk",
-    "fdisk",
-    "parted",
-    # Text processing
-    "grep",
-    "sed",
-    "awk",
-    "sort",
-    "uniq",
-    # System info
-    "uname",
-    "lscpu",
-    "lsmem",
-    "free",
-    "uptime",
-    # Services
-    "service",
-    "update-rc.d",
-    # Cron
-    "crontab",
-    # Users
-    "useradd",
-    "usermod",
-    "userdel",
-    "passwd",
-    "groups",
-})
+CORE_COMMANDS: frozenset[str] = frozenset(
+    {
+        # Systemd
+        "systemctl",
+        "journalctl",
+        "hostnamectl",
+        "timedatectl",
+        "loginctl",
+        # Network
+        "ip",
+        "ss",
+        "netplan",
+        "ufw",
+        "iptables",
+        "wg",
+        "wg-quick",
+        # Package management
+        "apt",
+        "apt-get",
+        "dpkg",
+        "snap",
+        # Docker/containers
+        "docker",
+        "docker-compose",
+        "podman",
+        "crictl",
+        # File operations
+        "cp",
+        "mv",
+        "rm",
+        "mkdir",
+        "chmod",
+        "chown",
+        # Process management
+        "ps",
+        "top",
+        "kill",
+        "pkill",
+        "nice",
+        "renice",
+        # Disk management
+        "df",
+        "du",
+        "mount",
+        "umount",
+        "lsblk",
+        "fdisk",
+        "parted",
+        # Text processing
+        "grep",
+        "sed",
+        "awk",
+        "sort",
+        "uniq",
+        # System info
+        "uname",
+        "lscpu",
+        "lsmem",
+        "free",
+        "uptime",
+        # Services
+        "service",
+        "update-rc.d",
+        # Cron
+        "crontab",
+        # Users
+        "useradd",
+        "usermod",
+        "userdel",
+        "passwd",
+        "groups",
+    }
+)

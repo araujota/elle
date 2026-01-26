@@ -11,24 +11,20 @@ PROMETHEUS_GRAFANA_RECIPE = StackRecipe(
     display_name="Prometheus + Grafana Monitoring Stack",
     description="Complete observability stack with Prometheus metrics collection, node_exporter, and Grafana dashboards",
     category="observability",
-
     packages=(
         "prometheus",
         "prometheus-node-exporter",
         "grafana",
     ),
-
     services=(
         "prometheus",
         "prometheus-node-exporter",
         "grafana-server",
     ),
-
     config_templates={
         # Prometheus scrape config will be generated
         # Grafana datasource config will be generated
     },
-
     guarantees=(
         StackGuarantee(
             name="prometheus_running",
@@ -57,7 +53,7 @@ PROMETHEUS_GRAFANA_RECIPE = StackRecipe(
         StackGuarantee(
             name="prometheus_scraping",
             description="Prometheus is successfully scraping targets",
-            check_command="curl -s http://localhost:9090/api/v1/targets | grep -o '\"health\":\"up\"' | head -1",
+            check_command='curl -s http://localhost:9090/api/v1/targets | grep -o \'"health":"up"\' | head -1',
             expected_pattern=r'"health":"up"',
             failure_action="warn",
             remediation_hint="No healthy scrape targets. Check prometheus.yml configuration",
@@ -71,7 +67,6 @@ PROMETHEUS_GRAFANA_RECIPE = StackRecipe(
             remediation_hint="Prometheus may be exposed externally. Check --web.listen-address in service config",
         ),
     ),
-
     variables=(
         StackVariable(
             name="grafana_admin_password",
@@ -100,7 +95,6 @@ PROMETHEUS_GRAFANA_RECIPE = StackRecipe(
             validator=r"^\d{4,5}$",
         ),
     ),
-
     presets={
         "dev": {
             "retention_days": "7",
@@ -113,11 +107,9 @@ PROMETHEUS_GRAFANA_RECIPE = StackRecipe(
             "grafana_port": "3000",
         },
     },
-
     min_ram_mb=512,
     min_disk_gb=5,
     ports_required=(9090, 9100, 3000),
-
     version="1.0.0",
     tags=("observability", "monitoring", "prometheus", "grafana", "metrics"),
 )

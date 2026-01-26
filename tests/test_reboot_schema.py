@@ -46,21 +46,15 @@ class TestSchemaInitialization:
         cursor = conn.cursor()
 
         # Check reboot_intents table exists
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='reboot_intents'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='reboot_intents'")
         assert cursor.fetchone() is not None
 
         # Check pending_verifications table exists
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='pending_verifications'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pending_verifications'")
         assert cursor.fetchone() is not None
 
         # Check meta table exists
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='meta'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='meta'")
         assert cursor.fetchone() is not None
 
     def test_init_schema_creates_indexes(self, conn):
@@ -68,9 +62,7 @@ class TestSchemaInitialization:
         init_reboot_schema(conn)
 
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='index'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='index'")
         indexes = [row[0] for row in cursor.fetchall()]
 
         # Check key indexes exist
@@ -148,23 +140,17 @@ class TestDropAllTables:
 
         # Verify tables exist
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='reboot_intents'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='reboot_intents'")
         assert cursor.fetchone() is not None
 
         # Drop all
         drop_all_tables(conn)
 
         # Verify tables are gone
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='reboot_intents'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='reboot_intents'")
         assert cursor.fetchone() is None
 
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='pending_verifications'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pending_verifications'")
         assert cursor.fetchone() is None
 
     def test_drop_tables_idempotent(self, conn):
@@ -185,14 +171,28 @@ class TestTableStructure:
         columns = {row[1] for row in cursor.fetchall()}
 
         expected = {
-            "id", "incident_id", "created_at", "updated_at",
-            "goal", "task_description", "reason", "reason_detail",
-            "session_history_json", "plan_json", "status",
-            "pre_snapshot_json", "boot_id",
-            "grub_entry", "grub_default_saved", "grub_state_json",
-            "post_snapshot_json", "new_boot_id",
-            "verification_attempts", "last_verification_at",
-            "outcome", "outcome_detail"
+            "id",
+            "incident_id",
+            "created_at",
+            "updated_at",
+            "goal",
+            "task_description",
+            "reason",
+            "reason_detail",
+            "session_history_json",
+            "plan_json",
+            "status",
+            "pre_snapshot_json",
+            "boot_id",
+            "grub_entry",
+            "grub_default_saved",
+            "grub_state_json",
+            "post_snapshot_json",
+            "new_boot_id",
+            "verification_attempts",
+            "last_verification_at",
+            "outcome",
+            "outcome_detail",
         }
         assert expected.issubset(columns)
 
@@ -205,10 +205,19 @@ class TestTableStructure:
         columns = {row[1] for row in cursor.fetchall()}
 
         expected = {
-            "id", "reboot_intent_id", "check_type", "check_command",
-            "expected_exit_code", "expected_output_contains",
-            "step_index", "required",
-            "executed_at", "exit_code", "stdout", "stderr", "passed"
+            "id",
+            "reboot_intent_id",
+            "check_type",
+            "check_command",
+            "expected_exit_code",
+            "expected_output_contains",
+            "step_index",
+            "required",
+            "executed_at",
+            "exit_code",
+            "stdout",
+            "stderr",
+            "passed",
         }
         assert expected.issubset(columns)
 
@@ -238,10 +247,7 @@ class TestStatusConstraints:
         init_reboot_schema(conn)
 
         cursor = conn.cursor()
-        valid_statuses = [
-            "pending", "rebooting", "verifying",
-            "completed", "failed", "rolled_back", "cancelled"
-        ]
+        valid_statuses = ["pending", "rebooting", "verifying", "completed", "failed", "rolled_back", "cancelled"]
 
         for i, status in enumerate(valid_statuses):
             cursor.execute(
@@ -249,7 +255,7 @@ class TestStatusConstraints:
                 INSERT INTO reboot_intents (id, created_at, updated_at, goal, task_description, reason, status)
                 VALUES (?, datetime('now'), datetime('now'), 'Test', 'Test', 'user_requested', ?)
                 """,
-                (f"test-{i}", status)
+                (f"test-{i}", status),
             )
         conn.commit()
 
@@ -281,7 +287,7 @@ class TestStatusConstraints:
                 INSERT INTO reboot_intents (id, created_at, updated_at, goal, task_description, reason, outcome)
                 VALUES (?, datetime('now'), datetime('now'), 'Test', 'Test', 'user_requested', ?)
                 """,
-                (f"test-{i}", outcome)
+                (f"test-{i}", outcome),
             )
         conn.commit()
 
@@ -308,7 +314,7 @@ class TestStatusConstraints:
                 (reboot_intent_id, step_index, check_type, check_command)
                 VALUES ('test-intent', ?, ?, 'test')
                 """,
-                (i, check_type)
+                (i, check_type),
             )
         conn.commit()
 

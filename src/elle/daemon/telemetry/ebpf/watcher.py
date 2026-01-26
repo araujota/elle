@@ -188,6 +188,7 @@ class EBPFWatcher:
         # OOM program
         try:
             from elle.daemon.telemetry.ebpf.bcc.oom import create_oom_program
+
             factories["oom"] = create_oom_program
         except ImportError as e:
             logger.debug(f"OOM program not available: {e}")
@@ -195,6 +196,7 @@ class EBPFWatcher:
         # Block I/O program
         try:
             from elle.daemon.telemetry.ebpf.bcc.block_io import create_block_io_program
+
             factories["block_io"] = create_block_io_program
         except ImportError as e:
             logger.debug(f"Block I/O program not available: {e}")
@@ -202,6 +204,7 @@ class EBPFWatcher:
         # Process program
         try:
             from elle.daemon.telemetry.ebpf.bcc.process import create_process_program
+
             factories["process"] = create_process_program
         except ImportError as e:
             logger.debug(f"Process program not available: {e}")
@@ -209,6 +212,7 @@ class EBPFWatcher:
         # Thermal program
         try:
             from elle.daemon.telemetry.ebpf.bcc.thermal import create_thermal_program
+
             factories["thermal"] = create_thermal_program
         except ImportError as e:
             logger.debug(f"Thermal program not available: {e}")
@@ -216,6 +220,7 @@ class EBPFWatcher:
         # Network drops program
         try:
             from elle.daemon.telemetry.ebpf.bcc.net_drops import create_net_drops_program
+
             factories["net_drops"] = create_net_drops_program
         except ImportError as e:
             logger.debug(f"Network drops program not available: {e}")

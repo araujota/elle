@@ -118,9 +118,7 @@ class RequestProxy:
             if stream:
                 return self._stream_request(session, method, url, headers, body)
             else:
-                return await self._simple_request(
-                    session, method, url, headers, body
-                )
+                return await self._simple_request(session, method, url, headers, body)
 
         except aiohttp.ClientError as e:
             logger.error("Proxy request failed: %s", e)
@@ -154,9 +152,7 @@ class RequestProxy:
         ) as response:
             if response.status >= 400:
                 error_text = await response.text()
-                logger.warning(
-                    "Internal API returned %d: %s", response.status, error_text
-                )
+                logger.warning("Internal API returned %d: %s", response.status, error_text)
                 raise ProxyError(
                     f"Internal API error: {error_text}",
                     status_code=response.status,
@@ -192,9 +188,7 @@ class RequestProxy:
         ) as response:
             if response.status >= 400:
                 error_text = await response.text()
-                logger.warning(
-                    "Internal API returned %d: %s", response.status, error_text
-                )
+                logger.warning("Internal API returned %d: %s", response.status, error_text)
                 raise ProxyError(
                     f"Internal API error: {error_text}",
                     status_code=response.status,
@@ -245,11 +239,7 @@ class RequestProxy:
         allowed_models = ROLE_ALLOWED_MODELS.get(auth.effective_role, set())
 
         if "data" in response:
-            response["data"] = [
-                model
-                for model in response["data"]
-                if model.get("id") in allowed_models
-            ]
+            response["data"] = [model for model in response["data"] if model.get("id") in allowed_models]
 
         return response
 
@@ -289,9 +279,7 @@ class RequestProxy:
         except ConfigError as e:
             raise ProxyError(str(e), status_code=403) from e
 
-    async def proxy_update_config(
-        self, auth: MobileAuthContext, updates: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def proxy_update_config(self, auth: MobileAuthContext, updates: dict[str, Any]) -> dict[str, Any]:
         """Update ELLE configuration.
 
         Args:

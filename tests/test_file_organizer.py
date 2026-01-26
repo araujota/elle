@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import pytest
 
+from elle.ops.files.models import (
+    FileCategory,
+    OrganizeRequest,
+    OrganizeResult,
+)
 from elle.ops.files.organizer import (
     DEFAULT_CATEGORIES,
     FileOrganizer,
@@ -11,11 +16,6 @@ from elle.ops.files.organizer import (
     categorize_file,
     get_organizer,
     organize_directory,
-)
-from elle.ops.files.models import (
-    FileCategory,
-    OrganizeRequest,
-    OrganizeResult,
 )
 
 
@@ -238,10 +238,12 @@ class TestOrganizeDirectory:
         (tmp_path / "doc.pdf").write_text("pdf")
 
         organizer = FileOrganizer()
-        result = organizer.organize(OrganizeRequest(
-            source_dir=str(tmp_path),
-            mode="by_type",
-        ))
+        result = organizer.organize(
+            OrganizeRequest(
+                source_dir=str(tmp_path),
+                mode="by_type",
+            )
+        )
 
         assert result.success is True
         assert result.files_moved == 2
@@ -255,11 +257,13 @@ class TestOrganizeDirectory:
         (tmp_path / "photo.jpg").write_text("image")
 
         organizer = FileOrganizer()
-        result = organizer.organize(OrganizeRequest(
-            source_dir=str(tmp_path),
-            mode="by_type",
-            dry_run=True,
-        ))
+        result = organizer.organize(
+            OrganizeRequest(
+                source_dir=str(tmp_path),
+                mode="by_type",
+                dry_run=True,
+            )
+        )
 
         assert result.success is True
         assert result.files_moved == 1
@@ -274,10 +278,12 @@ class TestOrganizeDirectory:
         test_file.write_text("content")
 
         organizer = FileOrganizer()
-        result = organizer.organize(OrganizeRequest(
-            source_dir=str(tmp_path),
-            mode="by_date",
-        ))
+        result = organizer.organize(
+            OrganizeRequest(
+                source_dir=str(tmp_path),
+                mode="by_date",
+            )
+        )
 
         assert result.success is True
         # File should be in YYYY/MM folder
@@ -290,10 +296,12 @@ class TestOrganizeDirectory:
         small_file.write_text("small content")
 
         organizer = FileOrganizer()
-        result = organizer.organize(OrganizeRequest(
-            source_dir=str(tmp_path),
-            mode="by_size",
-        ))
+        result = organizer.organize(
+            OrganizeRequest(
+                source_dir=str(tmp_path),
+                mode="by_size",
+            )
+        )
 
         assert result.success is True
         # Small file should be in "small" folder

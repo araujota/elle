@@ -637,23 +637,15 @@ class SetupWizard:
                         )
                 else:
                     console.print()
-                    print_muted(
-                        "You can continue setup, but AI features won't work until "
-                        "Ollama is running."
-                    )
+                    print_muted("You can continue setup, but AI features won't work until Ollama is running.")
             else:
                 # Ollama is not installed
                 print_warning("ELLE requires Ollama for AI features. Install it from ollama.ai")
                 console.print()
-                print_muted(
-                    "You can continue setup, but AI features won't work until "
-                    "Ollama is installed."
-                )
+                print_muted("You can continue setup, but AI features won't work until Ollama is installed.")
 
             console.print()
-            if not self.prompt.prompt_confirm(
-                "Continue setup without Ollama running?", default=True
-            ):
+            if not self.prompt.prompt_confirm("Continue setup without Ollama running?", default=True):
                 return StepResult.CANCEL
 
         # Handle daemon not running (only ask if Ollama is running, otherwise defer to end)
@@ -662,9 +654,7 @@ class SetupWizard:
             print_muted("The ELLE daemon provides background monitoring and the API.")
             console.print()
 
-            if self.prompt.prompt_confirm(
-                "Would you like to start the ELLE daemon now?", default=True
-            ):
+            if self.prompt.prompt_confirm("Would you like to start the ELLE daemon now?", default=True):
                 console.print()
                 console.print(f"  {Icons.INFO} Starting ELLE daemon...")
                 daemon_result = self._start_daemon()
@@ -1001,9 +991,7 @@ class SetupWizard:
             )
             console.print()
 
-            if not self.prompt.prompt_confirm(
-                "Proceed with group-based configuration?", default=True
-            ):
+            if not self.prompt.prompt_confirm("Proceed with group-based configuration?", default=True):
                 self.prefs.privilege_level = PrivilegeLevel.SECURE
                 console.print()
                 print_muted("Reverted to secure (password) mode.")
@@ -1027,9 +1015,7 @@ class SetupWizard:
             )
             console.print()
 
-            if not self.prompt.prompt_confirm(
-                "I understand the risks. Enable passwordless mode?", default=False
-            ):
+            if not self.prompt.prompt_confirm("I understand the risks. Enable passwordless mode?", default=False):
                 self.prefs.privilege_level = PrivilegeLevel.SECURE
                 console.print()
                 print_muted("Reverted to secure (password) mode.")
@@ -1301,9 +1287,7 @@ class SetupWizard:
 
         # Run async setup in sync context
         try:
-            return asyncio.get_event_loop().run_until_complete(
-                self._setup_models_async(SLM_MODEL, LLM_MODEL)
-            )
+            return asyncio.get_event_loop().run_until_complete(self._setup_models_async(SLM_MODEL, LLM_MODEL))
         except RuntimeError:
             # No event loop running, create one
             return asyncio.run(self._setup_models_async(SLM_MODEL, LLM_MODEL))
@@ -1591,20 +1575,14 @@ class SetupWizard:
         daemon_running = self._check_daemon_running()
 
         if ollama_status["running"] and daemon_running:
-            console.print(
-                Text.from_markup(
-                    "[bold green]ELLE is ready![/bold green] All services are running.\n"
-                )
-            )
+            console.print(Text.from_markup("[bold green]ELLE is ready![/bold green] All services are running.\n"))
         else:
             issues = []
             if not ollama_status["running"]:
                 issues.append("Ollama is not running")
             if not daemon_running:
                 issues.append("Daemon is not running")
-            console.print(
-                Text.from_markup(f"[bold yellow]Partial setup:[/bold yellow] {', '.join(issues)}\n")
-            )
+            console.print(Text.from_markup(f"[bold yellow]Partial setup:[/bold yellow] {', '.join(issues)}\n"))
 
         next_steps = [
             "Type a question to get started (e.g., 'how much disk space is left?')",

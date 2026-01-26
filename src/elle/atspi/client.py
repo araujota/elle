@@ -9,6 +9,7 @@ Requires the accessibility bus to be running:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
 from collections.abc import Callable
@@ -294,17 +295,13 @@ class ATSPIClient:
 
                         # Get PID if available
                         pid = None
-                        try:
+                        with contextlib.suppress(Exception):
                             pid = child.get_process_id() if hasattr(child, "get_process_id") else None
-                        except Exception:
-                            pass
 
                         # Count windows (top-level children of the app)
                         window_count = 0
-                        try:
+                        with contextlib.suppress(Exception):
                             window_count = child.get_child_count() if hasattr(child, "get_child_count") else 0
-                        except Exception:
-                            pass
 
                         apps.append(
                             AccessibleApp(
@@ -739,7 +736,9 @@ class ATSPIClient:
                         text_iface = element.queryText()
 
                     if text_iface:
-                        char_count = text_iface.get_character_count() if hasattr(text_iface, "get_character_count") else 0
+                        char_count = (
+                            text_iface.get_character_count() if hasattr(text_iface, "get_character_count") else 0
+                        )
                         if char_count > 0:
                             edit_iface.delete_text(0, char_count) if hasattr(edit_iface, "delete_text") else None
 

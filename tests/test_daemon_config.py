@@ -4,8 +4,6 @@ import os
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from elle.daemon.config import (
     ApiConfig,
     Config,
@@ -13,9 +11,9 @@ from elle.daemon.config import (
     ProbeConfig,
     QueueConfig,
     ThresholdConfig,
+    get_config,
     load_config,
     reset_config,
-    get_config,
     set_config,
 )
 

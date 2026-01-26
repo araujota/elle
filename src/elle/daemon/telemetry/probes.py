@@ -9,6 +9,7 @@ Runs periodic checks via:
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -115,12 +116,14 @@ class MemoryProbe(BaseProbe):
                 data["mem_pressure"] = round(pressure, 3)
 
                 if pressure > self._thresholds.memory_warning_pct:
-                    events.append(self._create_event(
-                        message=f"High memory pressure: {pressure:.1%} used",
-                        severity="warning",
-                        category="oom",
-                        data=data,
-                    ))
+                    events.append(
+                        self._create_event(
+                            message=f"High memory pressure: {pressure:.1%} used",
+                            severity="warning",
+                            category="oom",
+                            data=data,
+                        )
+                    )
 
             # Check swap
             swap_total = data.get("swaptotal_kb", 0)
@@ -131,12 +134,14 @@ class MemoryProbe(BaseProbe):
                 data["swap_pressure"] = round(swap_pressure, 3)
 
                 if swap_pressure > 0.8:
-                    events.append(self._create_event(
-                        message=f"High swap usage: {swap_pressure:.1%} used",
-                        severity="warning",
-                        category="oom",
-                        data=data,
-                    ))
+                    events.append(
+                        self._create_event(
+                            message=f"High swap usage: {swap_pressure:.1%} used",
+                            severity="warning",
+                            category="oom",
+                            data=data,
+                        )
+                    )
 
             return ProbeResult(
                 probe_name=self.name,
@@ -167,10 +172,8 @@ class MemoryProbe(BaseProbe):
                     key = key.strip().lower().replace(" ", "_")
                     # Parse value (remove "kB" suffix)
                     value = value.strip().split()[0]
-                    try:
+                    with contextlib.suppress(ValueError):
                         data[f"{key}_kb"] = int(value)
-                    except ValueError:
-                        pass
         except Exception:
             pass
         return data
@@ -202,13 +205,15 @@ class DiskProbe(BaseProbe):
             for mount in mounts:
                 used_pct = mount.get("used_pct", 0)
                 if used_pct > self._thresholds.disk_warning_pct * 100:
-                    events.append(self._create_event(
-                        message=f"Disk space low on {mount['mount']}: {used_pct:.1f}% used",
-                        severity="warning",
-                        category="disk",
-                        entity=f"mount:{mount['mount']}",
-                        data=mount,
-                    ))
+                    events.append(
+                        self._create_event(
+                            message=f"Disk space low on {mount['mount']}: {used_pct:.1f}% used",
+                            severity="warning",
+                            category="disk",
+                            entity=f"mount:{mount['mount']}",
+                            data=mount,
+                        )
+                    )
 
             return ProbeResult(
                 probe_name=self.name,
@@ -254,15 +259,17 @@ class DiskProbe(BaseProbe):
                                 used = total - free
 
                                 if total > 0:
-                                    results.append({
-                                        "mount": mount,
-                                        "device": device,
-                                        "fstype": fstype,
-                                        "total_gb": round(total / (1024 ** 3), 2),
-                                        "used_gb": round(used / (1024 ** 3), 2),
-                                        "free_gb": round(free / (1024 ** 3), 2),
-                                        "used_pct": round(100 * used / total, 1),
-                                    })
+                                    results.append(
+                                        {
+                                            "mount": mount,
+                                            "device": device,
+                                            "fstype": fstype,
+                                            "total_gb": round(total / (1024**3), 2),
+                                            "used_gb": round(used / (1024**3), 2),
+                                            "free_gb": round(free / (1024**3), 2),
+                                            "used_pct": round(100 * used / total, 1),
+                                        }
+                                    )
                             except OSError:
                                 continue
             except Exception:
@@ -302,13 +309,15 @@ class NetworkProbe(BaseProbe):
 
                 # Check for link down
                 if state == "down":
-                    events.append(self._create_event(
-                        message=f"Network interface {name} is down",
-                        severity="warning",
-                        category="net",
-                        entity=f"interface:{name}",
-                        data=iface,
-                    ))
+                    events.append(
+                        self._create_event(
+                            message=f"Network interface {name} is down",
+                            severity="warning",
+                            category="net",
+                            entity=f"interface:{name}",
+                            data=iface,
+                        )
+                    )
 
                 # Check for new errors
                 rx_err = iface.get("rx_errors", 0)
@@ -320,13 +329,15 @@ class NetworkProbe(BaseProbe):
 
                 new_errors = (rx_err - prev_rx) + (tx_err - prev_tx)
                 if new_errors > self._thresholds.network_error_threshold:
-                    events.append(self._create_event(
-                        message=f"Network errors on {name}: {new_errors} new errors",
-                        severity="warning",
-                        category="net",
-                        entity=f"interface:{name}",
-                        data=iface,
-                    ))
+                    events.append(
+                        self._create_event(
+                            message=f"Network errors on {name}: {new_errors} new errors",
+                            severity="warning",
+                            category="net",
+                            entity=f"interface:{name}",
+                            data=iface,
+                        )
+                    )
 
                 # Update previous errors
                 self._prev_errors[name] = {"rx_errors": rx_err, "tx_errors": tx_err}
@@ -376,18 +387,10 @@ class NetworkProbe(BaseProbe):
                     stats_path = iface_path / "statistics"
                     if stats_path.exists():
                         try:
-                            iface["rx_errors"] = int(
-                                (stats_path / "rx_errors").read_text().strip()
-                            )
-                            iface["tx_errors"] = int(
-                                (stats_path / "tx_errors").read_text().strip()
-                            )
-                            iface["rx_bytes"] = int(
-                                (stats_path / "rx_bytes").read_text().strip()
-                            )
-                            iface["tx_bytes"] = int(
-                                (stats_path / "tx_bytes").read_text().strip()
-                            )
+                            iface["rx_errors"] = int((stats_path / "rx_errors").read_text().strip())
+                            iface["tx_errors"] = int((stats_path / "tx_errors").read_text().strip())
+                            iface["rx_bytes"] = int((stats_path / "rx_bytes").read_text().strip())
+                            iface["tx_bytes"] = int((stats_path / "tx_bytes").read_text().strip())
                         except (FileNotFoundError, ValueError):
                             pass
 
@@ -425,13 +428,15 @@ class ThermalProbe(BaseProbe):
                 zone = temp.get("zone", "unknown")
 
                 if celsius > self._thresholds.thermal_warning_c:
-                    events.append(self._create_event(
-                        message=f"High temperature on {zone}: {celsius}C",
-                        severity="warning",
-                        category="thermal",
-                        entity=f"thermal:{zone}",
-                        data=temp,
-                    ))
+                    events.append(
+                        self._create_event(
+                            message=f"High temperature on {zone}: {celsius}C",
+                            severity="warning",
+                            category="thermal",
+                            entity=f"thermal:{zone}",
+                            data=temp,
+                        )
+                    )
 
             return ProbeResult(
                 probe_name=self.name,
@@ -478,11 +483,13 @@ class ThermalProbe(BaseProbe):
                         temp_mdeg = int(temp_file.read_text().strip())
                         temp_celsius = temp_mdeg // 1000
 
-                        results.append({
-                            "zone": zone_name,
-                            "type": zone_type,
-                            "celsius": temp_celsius,
-                        })
+                        results.append(
+                            {
+                                "zone": zone_name,
+                                "type": zone_type,
+                                "celsius": temp_celsius,
+                            }
+                        )
                 except Exception:
                     continue
 
@@ -556,35 +563,41 @@ class SmartProbe(BaseProbe):
                 device = disk.get("device", "unknown")
 
                 if health not in ("PASSED", "OK"):
-                    events.append(self._create_event(
-                        message=f"SMART health check failed for {device}: {health}",
-                        severity="critical",
-                        category="smart",
-                        entity=f"disk:{device}",
-                        data=disk,
-                    ))
+                    events.append(
+                        self._create_event(
+                            message=f"SMART health check failed for {device}: {health}",
+                            severity="critical",
+                            category="smart",
+                            entity=f"disk:{device}",
+                            data=disk,
+                        )
+                    )
 
                 # Check for high percentage used (NVMe)
                 pct_used = disk.get("pct_used", 0)
                 if pct_used > 90:
-                    events.append(self._create_event(
-                        message=f"High wear on {device}: {pct_used}% used",
-                        severity="warning",
-                        category="smart",
-                        entity=f"disk:{device}",
-                        data=disk,
-                    ))
+                    events.append(
+                        self._create_event(
+                            message=f"High wear on {device}: {pct_used}% used",
+                            severity="warning",
+                            category="smart",
+                            entity=f"disk:{device}",
+                            data=disk,
+                        )
+                    )
 
                 # Check for media errors
                 media_errors = disk.get("media_errors", 0)
                 if media_errors > 0:
-                    events.append(self._create_event(
-                        message=f"Media errors detected on {device}: {media_errors} errors",
-                        severity="warning",
-                        category="smart",
-                        entity=f"disk:{device}",
-                        data=disk,
-                    ))
+                    events.append(
+                        self._create_event(
+                            message=f"Media errors detected on {device}: {media_errors} errors",
+                            severity="warning",
+                            category="smart",
+                            entity=f"disk:{device}",
+                            data=disk,
+                        )
+                    )
 
             return ProbeResult(
                 probe_name=self.name,
@@ -623,7 +636,11 @@ class SmartProbe(BaseProbe):
         devices = []
         try:
             proc = await asyncio.create_subprocess_exec(
-                "lsblk", "-d", "-n", "-o", "NAME,TYPE",
+                "lsblk",
+                "-d",
+                "-n",
+                "-o",
+                "NAME,TYPE",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
             )
@@ -644,7 +661,10 @@ class SmartProbe(BaseProbe):
         """Get SMART info for a single device."""
         try:
             proc = await asyncio.create_subprocess_exec(
-                "smartctl", "-j", "-a", device,
+                "smartctl",
+                "-j",
+                "-a",
+                device,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
             )
@@ -715,10 +735,7 @@ class ProbeRunner:
         self._running = True
 
         # Create tasks for each probe
-        tasks = [
-            asyncio.create_task(self._run_probe_loop(probe))
-            for probe in self._probes
-        ]
+        tasks = [asyncio.create_task(self._run_probe_loop(probe)) for probe in self._probes]
 
         # Wait for shutdown
         await self._shutdown.wait()

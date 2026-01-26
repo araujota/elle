@@ -41,6 +41,7 @@ class StackCoordinator:
     def _load_recipes(self) -> None:
         """Load all available recipes."""
         from elle.ops.stack.recipes import get_all_recipes
+
         for recipe in get_all_recipes():
             self._recipes[recipe.name] = recipe
 
@@ -145,8 +146,7 @@ class StackCoordinator:
                             available_mb = available_kb // 1024
                             if available_mb < recipe.min_ram_mb:
                                 warnings.append(
-                                    f"Available RAM ({available_mb}MB) is below "
-                                    f"recommended ({recipe.min_ram_mb}MB)"
+                                    f"Available RAM ({available_mb}MB) is below recommended ({recipe.min_ram_mb}MB)"
                                 )
                                 ram_ok = False
                             break
@@ -157,13 +157,11 @@ class StackCoordinator:
         if recipe.min_disk_gb > 0:
             try:
                 import os
+
                 stat = os.statvfs("/")
                 available_gb = (stat.f_bavail * stat.f_frsize) // (1024**3)
                 if available_gb < recipe.min_disk_gb:
-                    errors.append(
-                        f"Available disk ({available_gb}GB) is below "
-                        f"required ({recipe.min_disk_gb}GB)"
-                    )
+                    errors.append(f"Available disk ({available_gb}GB) is below required ({recipe.min_disk_gb}GB)")
                     disk_ok = False
             except Exception:
                 warnings.append("Could not check available disk space")
@@ -252,21 +250,23 @@ class StackCoordinator:
         # Package phase
         if recipe.packages:
             pkg_list = " ".join(recipe.packages)
-            phases.append(StackPhase(
-                name="install_packages",
-                layer="package",
-                steps=(
-                    StackStep(
-                        command="apt-get update",
-                        description="Update package lists",
+            phases.append(
+                StackPhase(
+                    name="install_packages",
+                    layer="package",
+                    steps=(
+                        StackStep(
+                            command="apt-get update",
+                            description="Update package lists",
+                        ),
+                        StackStep(
+                            command=f"DEBIAN_FRONTEND=noninteractive apt-get install -y {pkg_list}",
+                            description=f"Install {', '.join(recipe.packages)}",
+                        ),
                     ),
-                    StackStep(
-                        command=f"DEBIAN_FRONTEND=noninteractive apt-get install -y {pkg_list}",
-                        description=f"Install {', '.join(recipe.packages)}",
-                    ),
-                ),
-                rollback_on_failure=True,
-            ))
+                    rollback_on_failure=True,
+                )
+            )
 
         # Config phase
         if recipe.config_templates:
@@ -278,55 +278,69 @@ class StackCoordinator:
                     content = content.replace(f"{{{var_name}}}", var_value)
 
                 # Create backup and write config
-                config_steps.append(StackStep(
-                    command=f"cp -f {path} {path}.bak 2>/dev/null || true",
-                    description=f"Backup {path}",
-                    can_fail=True,
-                ))
+                config_steps.append(
+                    StackStep(
+                        command=f"cp -f {path} {path}.bak 2>/dev/null || true",
+                        description=f"Backup {path}",
+                        can_fail=True,
+                    )
+                )
 
-            phases.append(StackPhase(
-                name="configure",
-                layer="config",
-                steps=tuple(config_steps),
-                rollback_on_failure=True,
-            ))
+            phases.append(
+                StackPhase(
+                    name="configure",
+                    layer="config",
+                    steps=tuple(config_steps),
+                    rollback_on_failure=True,
+                )
+            )
 
         # Service phase
         if recipe.services:
             service_steps: list[StackStep] = []
             for service in recipe.services:
-                service_steps.append(StackStep(
-                    command=f"systemctl enable {service}",
-                    description=f"Enable {service}",
-                ))
-                service_steps.append(StackStep(
-                    command=f"systemctl restart {service}",
-                    description=f"Start {service}",
-                ))
+                service_steps.append(
+                    StackStep(
+                        command=f"systemctl enable {service}",
+                        description=f"Enable {service}",
+                    )
+                )
+                service_steps.append(
+                    StackStep(
+                        command=f"systemctl restart {service}",
+                        description=f"Start {service}",
+                    )
+                )
 
-            phases.append(StackPhase(
-                name="start_services",
-                layer="service",
-                steps=tuple(service_steps),
-                rollback_on_failure=True,
-            ))
+            phases.append(
+                StackPhase(
+                    name="start_services",
+                    layer="service",
+                    steps=tuple(service_steps),
+                    rollback_on_failure=True,
+                )
+            )
 
         # Verify phase
         if recipe.guarantees:
             verify_steps: list[StackStep] = []
             for guarantee in recipe.guarantees:
-                verify_steps.append(StackStep(
-                    command=guarantee.check_command,
-                    description=f"Verify: {guarantee.name}",
-                    can_fail=guarantee.failure_action == "warn",
-                ))
+                verify_steps.append(
+                    StackStep(
+                        command=guarantee.check_command,
+                        description=f"Verify: {guarantee.name}",
+                        can_fail=guarantee.failure_action == "warn",
+                    )
+                )
 
-            phases.append(StackPhase(
-                name="verify",
-                layer="verify",
-                steps=tuple(verify_steps),
-                rollback_on_failure=False,
-            ))
+            phases.append(
+                StackPhase(
+                    name="verify",
+                    layer="verify",
+                    steps=tuple(verify_steps),
+                    rollback_on_failure=False,
+                )
+            )
 
         return tuple(phases)
 
@@ -360,12 +374,14 @@ class StackCoordinator:
             for phase in deployment.phases:
                 if dry_run:
                     # Simulate success
-                    phase_results.append(PhaseResult(
-                        phase=phase,
-                        success=True,
-                        step_results=tuple(),
-                        duration_ms=0,
-                    ))
+                    phase_results.append(
+                        PhaseResult(
+                            phase=phase,
+                            success=True,
+                            step_results=(),
+                            duration_ms=0,
+                        )
+                    )
                     continue
 
                 result = self._execute_phase(phase)

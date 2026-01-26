@@ -338,9 +338,7 @@ def diff_snapshots(
         "mem_free_delta_mb": after.mem_free_mb - before.mem_free_mb,
         "mem_available_delta_mb": after.mem_available_mb - before.mem_available_mb,
         "swap_used_delta_mb": after.swap_used_mb - before.swap_used_mb,
-        "cpu_load_delta": (
-            after.cpu_load[0] - before.cpu_load[0] if after.cpu_load and before.cpu_load else 0
-        ),
+        "cpu_load_delta": (after.cpu_load[0] - before.cpu_load[0] if after.cpu_load and before.cpu_load else 0),
     }
 
     # Disk changes
@@ -353,10 +351,12 @@ def diff_snapshots(
             before_d = before_disks[mount]
             pct_delta = after_d.get("used_pct", 0) - before_d.get("used_pct", 0)
             if abs(pct_delta) > 0.1:
-                disk_changes.append({
-                    "mount": mount,
-                    "used_pct_delta": pct_delta,
-                })
+                disk_changes.append(
+                    {
+                        "mount": mount,
+                        "used_pct_delta": pct_delta,
+                    }
+                )
     diff["disk_changes"] = disk_changes
 
     # Interface changes
@@ -368,11 +368,13 @@ def diff_snapshots(
         if name in before_ifaces:
             before_i = before_ifaces[name]
             if after_i.get("state") != before_i.get("state"):
-                iface_changes.append({
-                    "name": name,
-                    "state_before": before_i.get("state"),
-                    "state_after": after_i.get("state"),
-                })
+                iface_changes.append(
+                    {
+                        "name": name,
+                        "state_before": before_i.get("state"),
+                        "state_after": after_i.get("state"),
+                    }
+                )
     diff["interface_changes"] = iface_changes
 
     # Service changes
@@ -384,11 +386,13 @@ def diff_snapshots(
         if name in before_svc:
             before_s = before_svc[name]
             if after_s.get("active") != before_s.get("active"):
-                svc_changes.append({
-                    "name": name,
-                    "active_before": before_s.get("active"),
-                    "active_after": after_s.get("active"),
-                })
+                svc_changes.append(
+                    {
+                        "name": name,
+                        "active_before": before_s.get("active"),
+                        "active_after": after_s.get("active"),
+                    }
+                )
     diff["service_changes"] = svc_changes
 
     # Docker changes
@@ -555,12 +559,14 @@ def _get_disk_info() -> list[dict[str, Any]]:
                             continue
                         avail_str = parts[2]
                         avail_gb = _parse_size_to_gb(avail_str)
-                        disks.append({
-                            "mount": mount,
-                            "used_pct": used_pct,
-                            "avail_gb": avail_gb,
-                            "device": parts[3] if len(parts) > 3 else "",
-                        })
+                        disks.append(
+                            {
+                                "mount": mount,
+                                "used_pct": used_pct,
+                                "avail_gb": avail_gb,
+                                "device": parts[3] if len(parts) > 3 else "",
+                            }
+                        )
     except Exception:
         pass
     return disks
@@ -595,6 +601,7 @@ def _get_network_info() -> list[dict[str, Any]]:
         )
         if result.returncode == 0:
             import json
+
             links = json.loads(result.stdout)
             for link in links:
                 name = link.get("ifname", "")
@@ -607,12 +614,14 @@ def _get_network_info() -> list[dict[str, Any]]:
                 rx_errors = stats.get("rx", {}).get("errors", 0)
                 tx_errors = stats.get("tx", {}).get("errors", 0)
 
-                interfaces.append({
-                    "name": name,
-                    "state": state,
-                    "rx_err": rx_errors,
-                    "tx_err": tx_errors,
-                })
+                interfaces.append(
+                    {
+                        "name": name,
+                        "state": state,
+                        "rx_err": rx_errors,
+                        "tx_err": tx_errors,
+                    }
+                )
     except Exception:
         pass
     return interfaces
@@ -643,11 +652,13 @@ def _get_service_info() -> list[dict[str, Any]]:
         for i, svc_name in enumerate(key_services):
             if i < len(lines):
                 status = lines[i].strip()
-                services.append({
-                    "name": svc_name,
-                    "active": status == "active",
-                    "failed": status == "failed",
-                })
+                services.append(
+                    {
+                        "name": svc_name,
+                        "active": status == "active",
+                        "failed": status == "failed",
+                    }
+                )
     except Exception:
         pass
     return services
@@ -701,11 +712,13 @@ def _get_docker_containers() -> list[dict[str, Any]]:
                     continue
                 parts = line.split("\t")
                 if len(parts) >= 3:
-                    containers.append({
-                        "name": parts[0],
-                        "state": parts[1],
-                        "image": parts[2],
-                    })
+                    containers.append(
+                        {
+                            "name": parts[0],
+                            "state": parts[1],
+                            "image": parts[2],
+                        }
+                    )
     except Exception:
         pass
     return containers
@@ -723,6 +736,7 @@ def _get_temps() -> list[dict[str, Any]]:
         )
         if result.returncode == 0:
             import json
+
             data = json.loads(result.stdout)
             for adapter, sensors in data.items():
                 if isinstance(sensors, dict):
@@ -730,10 +744,12 @@ def _get_temps() -> list[dict[str, Any]]:
                         if isinstance(readings, dict):
                             for key, value in readings.items():
                                 if key.endswith("_input") and isinstance(value, (int, float)):
-                                    temps.append({
-                                        "sensor": f"{adapter}/{sensor_name}",
-                                        "celsius": int(value),
-                                    })
+                                    temps.append(
+                                        {
+                                            "sensor": f"{adapter}/{sensor_name}",
+                                            "celsius": int(value),
+                                        }
+                                    )
     except Exception:
         pass
     return temps
@@ -776,6 +792,7 @@ def _get_smart_for_device(device: str) -> dict[str, Any] | None:
         )
         if result.returncode in (0, 4):  # 4 = some SMART data available
             import json
+
             data = json.loads(result.stdout)
             health = data.get("smart_status", {}).get("passed", True)
             pct_used = 0

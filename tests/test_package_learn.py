@@ -4,14 +4,15 @@ Tests the new /learn command that generates typed capabilities from
 installed packages using multi-source intelligence extraction.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from elle.cli.package_learn_commands import (
-    handle_learn_command,
     _get_help,
     _handle_list,
     _handle_show,
+    handle_learn_command,
 )
 
 
@@ -139,15 +140,19 @@ class TestNaturalLanguagePatterns:
     def classifier(self):
         """Get the classifier instance."""
         from elle.cli.terminal.classifier import get_classifier
+
         return get_classifier()
 
-    @pytest.mark.parametrize("input_text,expected_intent", [
-        ("learn ffmpeg", "learn_package"),
-        ("figure out how to use nginx", "learn_package"),
-        ("teach me about docker", "learn_package"),
-        ("what can ffmpeg do?", "learn_package"),
-        ("how do I use systemctl", "learn_package"),
-    ])
+    @pytest.mark.parametrize(
+        "input_text,expected_intent",
+        [
+            ("learn ffmpeg", "learn_package"),
+            ("figure out how to use nginx", "learn_package"),
+            ("teach me about docker", "learn_package"),
+            ("what can ffmpeg do?", "learn_package"),
+            ("how do I use systemctl", "learn_package"),
+        ],
+    )
     def test_learn_patterns(self, classifier, input_text, expected_intent):
         """Test natural language patterns are classified correctly."""
         from elle.common.session import Session
@@ -275,9 +280,7 @@ class TestValidationStage:
             domain="media",
             risk_level="low",
             side_effects=("file_write",),
-            input_fields=(
-                InputFieldSpec(name="input_file", field_type="Path", required=True),
-            ),
+            input_fields=(InputFieldSpec(name="input_file", field_type="Path", required=True),),
             output_fields=(),
             command_template="ffmpeg -i {input_file} output.mp4",
             source_command="ffmpeg",

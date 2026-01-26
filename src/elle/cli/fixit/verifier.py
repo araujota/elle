@@ -86,10 +86,28 @@ def _check_executable_exists(command: str) -> tuple[bool, str | None]:
 
         # Skip shell builtins that won't be found by which
         shell_builtins = {
-            "cd", "export", "source", ".", "alias", "unalias",
-            "echo", "printf", "read", "type", "set", "unset",
-            "local", "return", "exit", "exec", "eval",
-            "true", "false", "test", "[", "[[",
+            "cd",
+            "export",
+            "source",
+            ".",
+            "alias",
+            "unalias",
+            "echo",
+            "printf",
+            "read",
+            "type",
+            "set",
+            "unset",
+            "local",
+            "return",
+            "exit",
+            "exec",
+            "eval",
+            "true",
+            "false",
+            "test",
+            "[",
+            "[[",
         }
         if executable in shell_builtins:
             return True, None
@@ -265,9 +283,7 @@ def verify_command(fix: FixCommand) -> VerifiedFixCommand:
         passed.append("flags")
     else:
         # Not a failure, just a warning
-        warnings.append(
-            f"Unknown flags (may be valid): {', '.join(unknown_flags)}"
-        )
+        warnings.append(f"Unknown flags (may be valid): {', '.join(unknown_flags)}")
         if verified_flags:
             passed.append(f"flags ({len(verified_flags)} verified)")
 

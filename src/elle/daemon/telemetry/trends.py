@@ -130,7 +130,9 @@ class Forecast(BaseModel):
 
     # Confidence
     confidence: float = Field(
-        ge=0.0, le=1.0, default=0.5,
+        ge=0.0,
+        le=1.0,
+        default=0.5,
         description="Confidence in forecast (based on trend stability)",
     )
 
@@ -261,9 +263,7 @@ class ValidationWarning(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    severity: Literal["info", "warning", "critical"] = Field(
-        description="Warning severity"
-    )
+    severity: Literal["info", "warning", "critical"] = Field(description="Warning severity")
     message: str = Field(description="Human-readable warning message")
     metric: str | None = Field(default=None, description="Related metric")
     suggestion: str | None = Field(default=None, description="Suggested action")
@@ -284,7 +284,9 @@ class PlanValidationResult(BaseModel):
         description="Whether plan is likely to succeed",
     )
     success_probability: float = Field(
-        ge=0.0, le=1.0, default=0.8,
+        ge=0.0,
+        le=1.0,
+        default=0.8,
         description="Estimated success probability",
     )
 
@@ -325,33 +327,40 @@ class TrendConfig(BaseModel):
 
     # Aggregation intervals
     aggregation_interval_sec: int = Field(
-        ge=60, default=300,
+        ge=60,
+        default=300,
         description="How often to run aggregation (default: 5 min)",
     )
 
     # Anomaly detection
     anomaly_z_threshold: float = Field(
-        ge=1.0, le=5.0, default=3.0,
+        ge=1.0,
+        le=5.0,
+        default=3.0,
         description="Z-score threshold for anomaly detection",
     )
     anomaly_min_samples: int = Field(
-        ge=10, default=100,
+        ge=10,
+        default=100,
         description="Minimum samples before anomaly detection",
     )
 
     # Forecast
     forecast_min_samples: int = Field(
-        ge=5, default=10,
+        ge=5,
+        default=10,
         description="Minimum samples for forecasting",
     )
 
     # Retention
     raw_retention_hours: int = Field(
-        ge=1, default=168,
+        ge=1,
+        default=168,
         description="Hours to retain raw metric samples (default: 7 days)",
     )
     aggregation_retention_days: int = Field(
-        ge=1, default=90,
+        ge=1,
+        default=90,
         description="Days to retain aggregations",
     )
 

@@ -91,10 +91,7 @@ def _is_mutating_command(command: str) -> bool:
         True if the command is considered mutating.
     """
     command = command.strip()
-    for pattern in MUTATING_COMMAND_PATTERNS:
-        if pattern.search(command):
-            return True
-    return False
+    return any(pattern.search(command) for pattern in MUTATING_COMMAND_PATTERNS)
 
 
 @dataclass(frozen=True)
@@ -452,13 +449,8 @@ class EngineAdapter:
         # For tasks, convert to capability tool calls
         if intent == Intent.SYSTEM_TASK:
             # Generate a capability representation
-            tool_calls = self._generate_capability_tool_calls(
-                user_input, intent_result
-            )
-            content = (
-                f"[CAPABILITIES_ONLY MODE] Task: {user_input}\n\n"
-                "The following capabilities would be invoked:"
-            )
+            tool_calls = self._generate_capability_tool_calls(user_input, intent_result)
+            content = f"[CAPABILITIES_ONLY MODE] Task: {user_input}\n\nThe following capabilities would be invoked:"
             return EngineResponse(
                 content=content,
                 intent=intent.value,
@@ -589,10 +581,12 @@ class EngineAdapter:
                     type="function",
                     function=FunctionCall(
                         name="system.task",
-                        arguments=json.dumps({
-                            "description": user_input,
-                            "entities": entities,
-                        }),
+                        arguments=json.dumps(
+                            {
+                                "description": user_input,
+                                "entities": entities,
+                            }
+                        ),
                     ),
                 )
             )

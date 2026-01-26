@@ -1,6 +1,5 @@
 """Tests for Incident Vault schema."""
 
-import sqlite3
 import tempfile
 from pathlib import Path
 
@@ -39,9 +38,7 @@ class TestSchemaCreation:
         init_incident_schema(conn)
 
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='incidents'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='incidents'")
         assert cursor.fetchone() is not None
 
     def test_init_creates_actions_table(self, temp_db):
@@ -50,9 +47,7 @@ class TestSchemaCreation:
         init_incident_schema(conn)
 
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='incident_actions'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='incident_actions'")
         assert cursor.fetchone() is not None
 
     def test_init_creates_snapshots_table(self, temp_db):
@@ -61,9 +56,7 @@ class TestSchemaCreation:
         init_incident_schema(conn)
 
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='incident_snapshots'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='incident_snapshots'")
         assert cursor.fetchone() is not None
 
     def test_init_creates_events_table(self, temp_db):
@@ -72,9 +65,7 @@ class TestSchemaCreation:
         init_incident_schema(conn)
 
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='incident_events'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='incident_events'")
         assert cursor.fetchone() is not None
 
     def test_init_creates_embeddings_table(self, temp_db):
@@ -83,9 +74,7 @@ class TestSchemaCreation:
         init_incident_schema(conn)
 
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='incident_embeddings'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='incident_embeddings'")
         assert cursor.fetchone() is not None
 
     def test_init_creates_fts_table(self, temp_db):
@@ -94,9 +83,7 @@ class TestSchemaCreation:
         init_incident_schema(conn)
 
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='incidents_fts'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='incidents_fts'")
         assert cursor.fetchone() is not None
 
     def test_init_creates_meta_table(self, temp_db):
@@ -105,9 +92,7 @@ class TestSchemaCreation:
         init_incident_schema(conn)
 
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='meta'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='meta'")
         assert cursor.fetchone() is not None
 
 
@@ -173,9 +158,7 @@ class TestDropTables:
         drop_all_tables(conn)
 
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='incidents'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='incidents'")
         assert cursor.fetchone() is None
 
 
@@ -217,9 +200,7 @@ class TestTriggers:
         conn.commit()
 
         # Check FTS
-        cursor.execute(
-            "SELECT * FROM incidents_fts WHERE incidents_fts MATCH 'Test'"
-        )
+        cursor.execute("SELECT * FROM incidents_fts WHERE incidents_fts MATCH 'Test'")
         result = cursor.fetchone()
         assert result is not None
 
@@ -244,8 +225,6 @@ class TestTriggers:
         conn.commit()
 
         # Check FTS - should not find
-        cursor.execute(
-            "SELECT * FROM incidents_fts WHERE incidents_fts MATCH 'UniqueTitle'"
-        )
+        cursor.execute("SELECT * FROM incidents_fts WHERE incidents_fts MATCH 'UniqueTitle'")
         result = cursor.fetchone()
         assert result is None

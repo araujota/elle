@@ -47,7 +47,9 @@ class CausalLink(BaseModel):
         description="Type of causal relationship",
     )
     confidence: float = Field(
-        ge=0.0, le=1.0, default=0.5,
+        ge=0.0,
+        le=1.0,
+        default=0.5,
         description="Confidence in this causal link (0.0-1.0)",
     )
 
@@ -57,7 +59,8 @@ class CausalLink(BaseModel):
         description="Evidence supporting this link",
     )
     temporal_delta_sec: int = Field(
-        ge=0, default=0,
+        ge=0,
+        default=0,
         description="Time between cause and effect in seconds",
     )
 
@@ -89,11 +92,14 @@ class CausalChain(BaseModel):
 
     # Metadata
     overall_confidence: float = Field(
-        ge=0.0, le=1.0, default=0.0,
+        ge=0.0,
+        le=1.0,
+        default=0.0,
         description="Overall confidence in the chain",
     )
     search_iterations: int = Field(
-        ge=0, default=0,
+        ge=0,
+        default=0,
         description="Number of search iterations to build this chain",
     )
 
@@ -176,9 +182,7 @@ class SearchHop(BaseModel):
 
     # Search parameters
     query: str = Field(description="Query used for this hop")
-    search_type: Literal["incident", "event", "entity"] = Field(
-        description="Type of search performed"
-    )
+    search_type: Literal["incident", "event", "entity"] = Field(description="Type of search performed")
     time_window_start: datetime | None = Field(default=None)
     time_window_end: datetime | None = Field(default=None)
 
@@ -243,23 +247,33 @@ class MultiHopConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     max_iterations: int = Field(
-        ge=1, le=10, default=5,
+        ge=1,
+        le=10,
+        default=5,
         description="Maximum search iterations",
     )
     time_window_hours: int = Field(
-        ge=1, le=168, default=24,
+        ge=1,
+        le=168,
+        default=24,
         description="Time window for event search (hours)",
     )
     min_confidence: float = Field(
-        ge=0.0, le=1.0, default=0.5,
+        ge=0.0,
+        le=1.0,
+        default=0.5,
         description="Minimum confidence to include a link",
     )
     max_results_per_hop: int = Field(
-        ge=1, le=100, default=20,
+        ge=1,
+        le=100,
+        default=20,
         description="Maximum results to consider per hop",
     )
     high_relevance_threshold: float = Field(
-        ge=0.0, le=1.0, default=0.7,
+        ge=0.0,
+        le=1.0,
+        default=0.7,
         description="Threshold for high-relevance results",
     )
     expand_entities: bool = Field(

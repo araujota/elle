@@ -11,7 +11,6 @@ LEMP_RECIPE = StackRecipe(
     display_name="LEMP Stack (Nginx, PHP, MariaDB)",
     description="Complete LEMP web stack with localhost-only database, PHP-FPM, and working DB connection",
     category="web",
-
     packages=(
         "nginx",
         "php-fpm",
@@ -22,17 +21,14 @@ LEMP_RECIPE = StackRecipe(
         "mariadb-server",
         "mariadb-client",
     ),
-
     services=(
         "nginx",
         "php8.1-fpm",  # Ubuntu 22.04+
         "mariadb",
     ),
-
     config_templates={
         # Default site config with PHP support
     },
-
     guarantees=(
         StackGuarantee(
             name="nginx_running",
@@ -75,7 +71,6 @@ LEMP_RECIPE = StackRecipe(
             remediation_hint="PHP MySQL extension missing. Install with: apt install php-mysql",
         ),
     ),
-
     variables=(
         StackVariable(
             name="db_root_password",
@@ -96,7 +91,6 @@ LEMP_RECIPE = StackRecipe(
             required=False,
         ),
     ),
-
     presets={
         "dev": {
             "php_memory_limit": "128M",
@@ -107,11 +101,9 @@ LEMP_RECIPE = StackRecipe(
             "server_name": "_",
         },
     },
-
     min_ram_mb=512,
     min_disk_gb=2,
     ports_required=(80, 443),
-
     version="1.0.0",
     tags=("web", "nginx", "php", "mysql", "mariadb", "lemp", "lamp"),
 )

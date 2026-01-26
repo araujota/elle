@@ -96,9 +96,7 @@ class TelemetryQueue(Generic[T]):
                     self._queue.put_nowait(item)
 
                     if self._dropped % 100 == 0:
-                        logger.warning(
-                            f"Queue '{self._name}' backpressure: {self._dropped} items dropped"
-                        )
+                        logger.warning(f"Queue '{self._name}' backpressure: {self._dropped} items dropped")
                     return True
                 except asyncio.QueueEmpty:
                     return False
@@ -260,11 +258,7 @@ class PriorityQueue(Generic[T]):
     @property
     def size(self) -> int:
         """Get total queue size."""
-        return (
-            self._critical.qsize()
-            + self._high.qsize()
-            + self._normal.qsize()
-        )
+        return self._critical.qsize() + self._high.qsize() + self._normal.qsize()
 
     async def put(self, item: T, priority: str = "normal") -> bool:
         """Put an item with priority.
@@ -407,7 +401,9 @@ class BatchProcessor(Generic[T]):
                     return batch
 
 
-def create_queues(raw_size: int = 10000, event_size: int = 5000) -> tuple[
+def create_queues(
+    raw_size: int = 10000, event_size: int = 5000
+) -> tuple[
     TelemetryQueue[dict[str, Any]],
     TelemetryQueue[Any],
 ]:

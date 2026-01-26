@@ -78,9 +78,7 @@ class BCCProgram(ABC):
             last_event=self._last_event,
         )
 
-    def set_event_callback(
-        self, callback: Callable[[EBPFRawEvent], None] | None
-    ) -> None:
+    def set_event_callback(self, callback: Callable[[EBPFRawEvent], None] | None) -> None:
         """Set callback for event handling.
 
         Args:
@@ -103,9 +101,7 @@ class BCCProgram(ABC):
         pass
 
     @abstractmethod
-    def _parse_event(
-        self, cpu: int, data: ctypes.Structure, size: int
-    ) -> EBPFRawEvent | None:
+    def _parse_event(self, cpu: int, data: ctypes.Structure, size: int) -> EBPFRawEvent | None:
         """Parse raw event data from ring buffer.
 
         Args:
@@ -224,9 +220,7 @@ class BCCProgram(ABC):
             self._errors_count += 1
             return False
 
-    def _ring_buffer_callback(
-        self, cpu: int, data: ctypes.Structure, size: int
-    ) -> None:
+    def _ring_buffer_callback(self, cpu: int, data: ctypes.Structure, size: int) -> None:
         """Internal callback for ring buffer events.
 
         Args:

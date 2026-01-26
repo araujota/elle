@@ -408,18 +408,9 @@ def _migrate_v1_to_v2(conn: sqlite3.Connection) -> None:
     cursor.execute(CONFIG_STATES_TABLE)
 
     # Create new indexes
-    cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_decision_records_incident "
-        "ON decision_records(incident_id)"
-    )
-    cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_config_states_incident "
-        "ON config_states(incident_id)"
-    )
-    cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_config_states_path "
-        "ON config_states(path)"
-    )
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_decision_records_incident ON decision_records(incident_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_config_states_incident ON config_states(incident_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_config_states_path ON config_states(path)")
 
     conn.commit()
 
@@ -440,25 +431,12 @@ def _migrate_v2_to_v3(conn: sqlite3.Connection) -> None:
     cursor.execute(SOLUTION_APPROACH_EFFICACY_TABLE)
 
     # Create indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_domain_efficacy_success ON domain_efficacy(success_rate DESC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_entity_efficacy_success ON entity_efficacy(success_rate DESC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_entity_efficacy_total ON entity_efficacy(total_incidents DESC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_approach_efficacy_domain ON solution_approach_efficacy(domain)")
     cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_domain_efficacy_success "
-        "ON domain_efficacy(success_rate DESC)"
-    )
-    cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_entity_efficacy_success "
-        "ON entity_efficacy(success_rate DESC)"
-    )
-    cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_entity_efficacy_total "
-        "ON entity_efficacy(total_incidents DESC)"
-    )
-    cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_approach_efficacy_domain "
-        "ON solution_approach_efficacy(domain)"
-    )
-    cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_approach_efficacy_success "
-        "ON solution_approach_efficacy(success_rate DESC)"
+        "CREATE INDEX IF NOT EXISTS idx_approach_efficacy_success ON solution_approach_efficacy(success_rate DESC)"
     )
 
     conn.commit()

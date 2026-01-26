@@ -322,9 +322,7 @@ class MobileAuditStore:
         since = datetime.utcnow() - timedelta(hours=hours)
         return self.query(since=since, limit=limit)
 
-    def get_device_history(
-        self, device_id: str, limit: int = 50
-    ) -> list[MobileAuditEntry]:
+    def get_device_history(self, device_id: str, limit: int = 50) -> list[MobileAuditEntry]:
         """Get audit history for a specific device.
 
         Args:
@@ -336,9 +334,7 @@ class MobileAuditStore:
         """
         return self.query(device_id=device_id, limit=limit)
 
-    def get_failed_attempts(
-        self, hours: int = 24, limit: int = 100
-    ) -> list[MobileAuditEntry]:
+    def get_failed_attempts(self, hours: int = 24, limit: int = 100) -> list[MobileAuditEntry]:
         """Get failed actions in recent time period.
 
         Args:

@@ -19,16 +19,16 @@ from elle.daemon.telemetry.ebpf.syscall_models import SyscallSummary
 
 # Domain categories for incident classification
 IncidentDomain = Literal[
-    "net",     # Network issues
-    "disk",    # Disk/storage issues
-    "oom",     # Out-of-memory events
+    "net",  # Network issues
+    "disk",  # Disk/storage issues
+    "oom",  # Out-of-memory events
     "docker",  # Container issues
-    "auth",    # Authentication/permission issues
-    "pkg",     # Package management issues
-    "fs",      # Filesystem issues
-    "service", # Systemd service issues
-    "gui",     # GUI automation
-    "other",   # Uncategorized
+    "auth",  # Authentication/permission issues
+    "pkg",  # Package management issues
+    "fs",  # Filesystem issues
+    "service",  # Systemd service issues
+    "gui",  # GUI automation
+    "other",  # Uncategorized
 ]
 
 # Severity levels matching TelemetryEvent
@@ -36,30 +36,30 @@ IncidentSeverity = Literal["info", "warning", "error", "critical"]
 
 # Incident lifecycle states
 IncidentStatus = Literal[
-    "open",           # Issue ongoing or not yet mitigated
-    "mitigated",      # Immediate symptoms improved, root cause may be unknown
-    "resolved",       # Checks passed + stability window elapsed
-    "false_positive", # Correlated noise, not a real issue
+    "open",  # Issue ongoing or not yet mitigated
+    "mitigated",  # Immediate symptoms improved, root cause may be unknown
+    "resolved",  # Checks passed + stability window elapsed
+    "false_positive",  # Correlated noise, not a real issue
 ]
 
 # Outcome of actions taken
 IncidentOutcome = Literal[
-    "unknown",   # Not yet determined
+    "unknown",  # Not yet determined
     "improved",  # Problem resolved or significantly better
-    "partial",   # Some improvement but not fully resolved
-    "no_change", # Actions had no effect
-    "worse",     # Actions made the problem worse
+    "partial",  # Some improvement but not fully resolved
+    "no_change",  # Actions had no effect
+    "worse",  # Actions made the problem worse
 ]
 
 # Action types
 ActionKind = Literal[
-    "shell",      # Shell command executed
-    "edit",       # File edit via helper
-    "privileged", # Privileged operation via Polkit
-    "verify",     # Verification check
-    "rollback",   # Rollback action
-    "capability", # Capability execution
-    "gui",        # GUI automation action
+    "shell",  # Shell command executed
+    "edit",  # File edit via helper
+    "privileged",  # Privileged operation via Polkit
+    "verify",  # Verification check
+    "rollback",  # Rollback action
+    "capability",  # Capability execution
+    "gui",  # GUI automation action
 ]
 
 
@@ -100,9 +100,7 @@ class SystemSnapshot(BaseModel):
     hostname: str = Field(default="", description="System hostname")
 
     # CPU
-    cpu_load: tuple[float, float, float] = Field(
-        description="Load averages: 1min, 5min, 15min"
-    )
+    cpu_load: tuple[float, float, float] = Field(description="Load averages: 1min, 5min, 15min")
 
     # Memory
     mem_total_mb: int = Field(ge=0, description="Total memory in MB")
@@ -173,19 +171,26 @@ class Fingerprint(BaseModel):
 
     # Resource pressure (0.0 - 1.0)
     disk_pressure: float = Field(
-        ge=0.0, le=1.0, default=0.0,
+        ge=0.0,
+        le=1.0,
+        default=0.0,
         description="Max disk usage ratio across mounts",
     )
     mem_pressure: float = Field(
-        ge=0.0, le=1.0, default=0.0,
+        ge=0.0,
+        le=1.0,
+        default=0.0,
         description="Memory pressure: 1 - (available / total)",
     )
     swap_pressure: float = Field(
-        ge=0.0, le=1.0, default=0.0,
+        ge=0.0,
+        le=1.0,
+        default=0.0,
         description="Swap usage ratio",
     )
     cpu_pressure: float = Field(
-        ge=0.0, default=0.0,
+        ge=0.0,
+        default=0.0,
         description="CPU load (1min average)",
     )
 
@@ -279,9 +284,7 @@ class Precondition(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    expression: str = Field(
-        description="Condition expression, e.g., 'disk./.used_pct > 95'"
-    )
+    expression: str = Field(description="Condition expression, e.g., 'disk./.used_pct > 95'")
     description: str = Field(
         default="",
         description="Human-readable explanation",
@@ -382,7 +385,9 @@ class IncidentReport(BaseModel):
         description="User-defined tags",
     )
     confidence: float = Field(
-        ge=0.0, le=1.0, default=0.0,
+        ge=0.0,
+        le=1.0,
+        default=0.0,
         description="Confidence in root cause diagnosis",
     )
 
@@ -418,15 +423,17 @@ class IncidentSearchResult(BaseModel):
 
     incident: IncidentReport
     score: float = Field(ge=0.0, description="Relevance score")
-    match_type: Literal["fingerprint", "lexical", "semantic", "hybrid"] = Field(
-        default="hybrid"
-    )
+    match_type: Literal["fingerprint", "lexical", "semantic", "hybrid"] = Field(default="hybrid")
     precondition_match_ratio: float = Field(
-        ge=0.0, le=1.0, default=0.0,
+        ge=0.0,
+        le=1.0,
+        default=0.0,
         description="How many preconditions match current state",
     )
     outcome_weight: float = Field(
-        ge=0.0, le=1.0, default=0.5,
+        ge=0.0,
+        le=1.0,
+        default=0.5,
         description="Weight based on past outcome quality",
     )
 
@@ -480,7 +487,9 @@ class ManPageCitation(BaseModel):
         description="Section heading within man page, e.g., 'OPTIONS'",
     )
     relevance_score: float = Field(
-        ge=0.0, le=1.0, default=0.0,
+        ge=0.0,
+        le=1.0,
+        default=0.0,
         description="How relevant this citation was to the decision",
     )
 
@@ -498,7 +507,8 @@ class IncidentCitation(BaseModel):
     title: str = Field(description="Title of the cited incident")
     outcome: IncidentOutcome = Field(description="Outcome of the cited incident")
     similarity_score: float = Field(
-        ge=0.0, le=1.0,
+        ge=0.0,
+        le=1.0,
         description="How similar this incident was to the current one",
     )
     match_type: Literal["fingerprint", "lexical", "semantic", "hybrid"] = Field(
@@ -573,10 +583,7 @@ class Provenance(BaseModel):
             parts.append(f"man {', '.join(man_refs)}")
 
         if self.prior_incidents:
-            successful = sum(
-                1 for i in self.prior_incidents
-                if i.outcome in ("improved", "partial")
-            )
+            successful = sum(1 for i in self.prior_incidents if i.outcome in ("improved", "partial"))
             if successful:
                 parts.append(f"{successful} similar incident(s) succeeded")
 
@@ -610,7 +617,8 @@ class ConfigFileState(BaseModel):
         description="SHA256 hash of file after changes",
     )
     size_bytes: int = Field(
-        ge=0, default=0,
+        ge=0,
+        default=0,
         description="File size in bytes (after changes)",
     )
     mtime: datetime | None = Field(
@@ -642,23 +650,32 @@ class ConfidenceBreakdown(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     overall: float = Field(
-        ge=0.0, le=1.0,
+        ge=0.0,
+        le=1.0,
         description="Combined overall confidence",
     )
     from_man_vault: float = Field(
-        ge=0.0, le=1.0, default=0.0,
+        ge=0.0,
+        le=1.0,
+        default=0.0,
         description="Confidence contribution from man page matches",
     )
     from_incident_vault: float = Field(
-        ge=0.0, le=1.0, default=0.0,
+        ge=0.0,
+        le=1.0,
+        default=0.0,
         description="Confidence contribution from prior incident matches",
     )
     from_telemetry: float = Field(
-        ge=0.0, le=1.0, default=0.0,
+        ge=0.0,
+        le=1.0,
+        default=0.0,
         description="Confidence contribution from telemetry correlation",
     )
     from_llm: float = Field(
-        ge=0.0, le=1.0, default=0.0,
+        ge=0.0,
+        le=1.0,
+        default=0.0,
         description="Confidence contribution from LLM analysis",
     )
     dominant_tier: ConfidenceTier = Field(
@@ -706,12 +723,12 @@ class DecisionRecord(BaseModel):
 
 # Category of system change
 ChangeCategory = Literal[
-    "config",    # Configuration file change
-    "service",   # Service state change
-    "kernel",    # Kernel parameter or version change
-    "network",   # Network configuration change
+    "config",  # Configuration file change
+    "service",  # Service state change
+    "kernel",  # Kernel parameter or version change
+    "network",  # Network configuration change
     "security",  # Security-related change
-    "package",   # Package installation/removal
+    "package",  # Package installation/removal
 ]
 
 # Significance level of a change

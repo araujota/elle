@@ -11,13 +11,11 @@ from elle.daemon.incidents.efficacy import (
     PRIOR_SUCCESS_RATE,
     DomainEfficacy,
     EfficacyContext,
-    EfficacyStats,
     EntityEfficacy,
     SolutionApproachEfficacy,
 )
 from elle.daemon.incidents.efficacy_tracker import (
     _compute_decayed_rate,
-    _extract_key_commands,
     _normalize_command,
     get_all_domain_efficacy,
     get_domain_efficacy,
@@ -26,7 +24,7 @@ from elle.daemon.incidents.efficacy_tracker import (
     get_entity_efficacy,
     record_outcome,
 )
-from elle.daemon.incidents.models import Fingerprint, IncidentReport
+from elle.daemon.incidents.models import Fingerprint
 from elle.daemon.incidents.schema import ensure_schema, get_connection
 from elle.daemon.incidents.store import create_incident_draft, update_incident
 
@@ -107,8 +105,13 @@ class TestDecayedRate:
         """Test rate with all improved outcomes."""
         now = datetime.utcnow()
         rate = _compute_decayed_rate(
-            improved=10, partial=0, no_change=0, worse=0,
-            total=10, last_updated=now, now=now,
+            improved=10,
+            partial=0,
+            no_change=0,
+            worse=0,
+            total=10,
+            last_updated=now,
+            now=now,
         )
         # Should be close to 1.0 (perfect success)
         assert rate > 0.9
@@ -117,8 +120,13 @@ class TestDecayedRate:
         """Test rate with all worse outcomes."""
         now = datetime.utcnow()
         rate = _compute_decayed_rate(
-            improved=0, partial=0, no_change=0, worse=10,
-            total=10, last_updated=now, now=now,
+            improved=0,
+            partial=0,
+            no_change=0,
+            worse=10,
+            total=10,
+            last_updated=now,
+            now=now,
         )
         # Should be close to 0.0 (complete failure)
         assert rate < 0.2
@@ -127,8 +135,13 @@ class TestDecayedRate:
         """Test rate with mixed outcomes."""
         now = datetime.utcnow()
         rate = _compute_decayed_rate(
-            improved=5, partial=3, no_change=2, worse=0,
-            total=10, last_updated=now, now=now,
+            improved=5,
+            partial=3,
+            no_change=2,
+            worse=0,
+            total=10,
+            last_updated=now,
+            now=now,
         )
         # Should be moderately high
         assert 0.6 < rate < 0.9
@@ -139,12 +152,22 @@ class TestDecayedRate:
         old = now - timedelta(days=DECAY_HALF_LIFE_DAYS * 2)  # Two half-lives
 
         recent_rate = _compute_decayed_rate(
-            improved=10, partial=0, no_change=0, worse=0,
-            total=10, last_updated=now, now=now,
+            improved=10,
+            partial=0,
+            no_change=0,
+            worse=0,
+            total=10,
+            last_updated=now,
+            now=now,
         )
         old_rate = _compute_decayed_rate(
-            improved=10, partial=0, no_change=0, worse=0,
-            total=10, last_updated=old, now=now,
+            improved=10,
+            partial=0,
+            no_change=0,
+            worse=0,
+            total=10,
+            last_updated=old,
+            now=now,
         )
 
         # Old rate should be closer to prior (0.5)
@@ -155,8 +178,13 @@ class TestDecayedRate:
         """Test rate with zero incidents returns prior."""
         now = datetime.utcnow()
         rate = _compute_decayed_rate(
-            improved=0, partial=0, no_change=0, worse=0,
-            total=0, last_updated=now, now=now,
+            improved=0,
+            partial=0,
+            no_change=0,
+            worse=0,
+            total=0,
+            last_updated=now,
+            now=now,
         )
         assert rate == PRIOR_SUCCESS_RATE
 

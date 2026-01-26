@@ -426,7 +426,7 @@ class CronValidator(ConfigValidator):
                 time_fields = parts[:5]
                 for j, field in enumerate(time_fields):
                     if not self._validate_cron_field(field, j):
-                        warnings.append(f"Line {i}: Unusual value in field {j+1}: {field}")
+                        warnings.append(f"Line {i}: Unusual value in field {j + 1}: {field}")
 
         except Exception as e:
             return ValidationResult(

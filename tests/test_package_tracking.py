@@ -6,7 +6,6 @@ from elle.daemon.incidents.models import PackageState, SystemSnapshot
 from elle.daemon.incidents.snapshot import (
     BEDROCK_PACKAGES,
     _extract_relevant_packages,
-    _get_package_version,
     collect_package_state,
 )
 
@@ -194,7 +193,7 @@ class TestCollectPackageState:
             entity=None,
         )
         # nginx may or may not be installed, but if it is, it should be included
-        pkg_names = {p.name for p in packages}
+        {p.name for p in packages}
         # Bedrock packages should still be there
         assert len(packages) >= 0  # May be 0 on non-Linux
 

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import pytest
 import tempfile
 from pathlib import Path
+
+import pytest
 
 from elle.capabilities.autogen.models import (
     GeneratedCapabilitySpec,
@@ -39,9 +40,7 @@ def sample_spec():
         domain="file",
         risk_level="low",
         side_effects=("file_write",),
-        input_fields=(
-            InputFieldSpec(name="path", field_type="str", description="File path"),
-        ),
+        input_fields=(InputFieldSpec(name="path", field_type="str", description="File path"),),
         command_template="test {path}",
         source_command="test",
         confidence_score=0.8,

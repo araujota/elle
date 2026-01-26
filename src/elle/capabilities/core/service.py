@@ -197,8 +197,7 @@ class ServiceRestartCapability(BaseCapability):
             estimated_risk="medium",
             requires_confirmation=True,
             preview_text=(
-                f"Would restart {input.service} "
-                f"(currently: {active_state}/{sub_state}, PID: {pid or 'N/A'})"
+                f"Would restart {input.service} (currently: {active_state}/{sub_state}, PID: {pid or 'N/A'})"
             ),
             diff=None,
             is_valid=True,
@@ -414,9 +413,7 @@ class ServiceStartCapability(BaseCapability):
             checks_performed=(f"systemctl is-active {input.service}",),
             actual_state={"active_state": active_state},
             expected_state={"active_state": "active"},
-            discrepancies=()
-            if passed
-            else (f"Service not active: {active_state}",),
+            discrepancies=() if passed else (f"Service not active: {active_state}",),
         )
 
     def rollback(
@@ -545,9 +542,7 @@ class ServiceStopCapability(BaseCapability):
             checks_performed=(f"systemctl is-active {input.service}",),
             actual_state={"active_state": active_state},
             expected_state={"active_state": "inactive"},
-            discrepancies=()
-            if passed
-            else (f"Service still active: {active_state}",),
+            discrepancies=() if passed else (f"Service still active: {active_state}",),
         )
 
     def rollback(
@@ -556,9 +551,7 @@ class ServiceStopCapability(BaseCapability):
         result: CapabilityResult,
     ) -> RollbackResult:
         """Rollback by starting the service."""
-        success, _, stderr, _ = _run_systemctl(
-            "start", input.service, input.timeout_sec
-        )
+        success, _, stderr, _ = _run_systemctl("start", input.service, input.timeout_sec)
 
         return RollbackResult(
             success=success,
@@ -612,8 +605,7 @@ class ServiceStatusCapability(BaseCapability):
 
         # Get comprehensive status
         result = run_safe(
-            f"systemctl show {input.service} "
-            "--property=ActiveState,SubState,MainPID,Description,LoadState",
+            f"systemctl show {input.service} --property=ActiveState,SubState,MainPID,Description,LoadState",
             timeout=10.0,
             mode=RunMode.CAPTURE,
             check_denylist_flag=False,

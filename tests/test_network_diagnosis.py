@@ -1,23 +1,20 @@
 """Tests for network diagnosis and firewall explanation."""
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from elle.cli.network.diagnosis import (
-    diagnose_connectivity,
-    ConnectivityDiagnosis,
     ConnectivityCheck,
     _check_dns,
     _check_route,
+    diagnose_connectivity,
 )
 from elle.cli.network.firewall import (
-    explain_firewall_rules,
-    suggest_lockdown,
-    parse_restriction,
-    FirewallExplanation,
     FirewallRule,
-    _parse_ufw_rule,
     _explain_rule,
+    _parse_ufw_rule,
+    explain_firewall_rules,
+    parse_restriction,
+    suggest_lockdown,
 )
 
 
@@ -173,9 +170,7 @@ class TestDnsCheck:
 
     @patch("socket.getaddrinfo")
     def test_successful_resolution(self, mock_getaddrinfo):
-        mock_getaddrinfo.return_value = [
-            (2, 1, 6, "", ("93.184.216.34", 0))
-        ]
+        mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 0))]
         result = _check_dns("example.com")
         assert result.passed
         assert "93.184.216.34" in result.result
@@ -183,6 +178,7 @@ class TestDnsCheck:
     @patch("socket.getaddrinfo")
     def test_failed_resolution(self, mock_getaddrinfo):
         import socket
+
         mock_getaddrinfo.side_effect = socket.gaierror("Name or service not known")
         result = _check_dns("nonexistent.invalid")
         assert not result.passed

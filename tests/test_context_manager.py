@@ -1,7 +1,5 @@
 """Tests for ContextWindowManager."""
 
-import pytest
-
 from elle.rag.llm import ContextWindowManager
 
 

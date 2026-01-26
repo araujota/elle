@@ -121,13 +121,15 @@ LENS_REGISTRY: dict[str, str] = {
 }
 
 # Files that use YAML format (not suitable for Augeas)
-YAML_FILES: frozenset[str] = frozenset({
-    "/etc/netplan/*.yaml",
-    "/etc/netplan/*.yml",
-    "/etc/docker/daemon.json",  # JSON but similar handling pattern
-    "/etc/containerd/config.toml",  # TOML
-    "~/.config/systemd/user/*.service",  # User systemd units
-})
+YAML_FILES: frozenset[str] = frozenset(
+    {
+        "/etc/netplan/*.yaml",
+        "/etc/netplan/*.yml",
+        "/etc/docker/daemon.json",  # JSON but similar handling pattern
+        "/etc/containerd/config.toml",  # TOML
+        "~/.config/systemd/user/*.service",  # User systemd units
+    }
+)
 
 # Config file domains for categorization
 DOMAIN_REGISTRY: dict[str, tuple[str, ...]] = {
@@ -200,9 +202,8 @@ def detect_lens(file_path: str | Path) -> str | None:
 
     # Check glob patterns
     for pattern, lens in LENS_REGISTRY.items():
-        if "*" in pattern:
-            if fnmatch.fnmatch(path_str, pattern):
-                return lens
+        if "*" in pattern and fnmatch.fnmatch(path_str, pattern):
+            return lens
 
     logger.debug(f"No lens found for {path_str}")
     return None
@@ -225,10 +226,7 @@ def is_yaml_file(file_path: str | Path) -> bool:
             return True
 
     # Also check by extension for unregistered YAML files
-    if path_str.endswith((".yaml", ".yml")):
-        return True
-
-    return False
+    return bool(path_str.endswith((".yaml", ".yml")))
 
 
 def detect_domain(file_path: str | Path) -> str:
@@ -348,10 +346,7 @@ def build_path(base: str, *parts: str | int) -> str:
     """
     path = base.rstrip("/")
     for part in parts:
-        if isinstance(part, int):
-            path = f"{path}/{part}"
-        else:
-            path = f"{path}/{part}"
+        path = f"{path}/{part}" if isinstance(part, int) else f"{path}/{part}"
     return path
 
 

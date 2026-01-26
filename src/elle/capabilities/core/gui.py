@@ -424,10 +424,12 @@ class GuiClickCapability(Capability):
             if not result.found:
                 return CapabilityResult(
                     success=False,
-                    output=safe_model_dump(GuiClickOutput(
-                        clicked=False,
-                        element_found=False,
-                    )),
+                    output=safe_model_dump(
+                        GuiClickOutput(
+                            clicked=False,
+                            element_found=False,
+                        )
+                    ),
                     error=result.error,
                     execution_time_ms=_elapsed_ms(start_time),
                 )
@@ -438,6 +440,7 @@ class GuiClickCapability(Capability):
 
             if input_data.wait_ms > 0:
                 import time
+
                 time.sleep(input_data.wait_ms / 1000)
 
             state_after = client.get_state(accessible) if accessible else ()
@@ -572,10 +575,12 @@ class GuiTypeCapability(Capability):
             if not result.found:
                 return CapabilityResult(
                     success=False,
-                    output=safe_model_dump(GuiTypeOutput(
-                        typed=False,
-                        element_found=False,
-                    )),
+                    output=safe_model_dump(
+                        GuiTypeOutput(
+                            typed=False,
+                            element_found=False,
+                        )
+                    ),
                     error=result.error,
                     execution_time_ms=_elapsed_ms(start_time),
                 )
@@ -712,10 +717,12 @@ class GuiNavigateCapability(Capability):
             if not result.found:
                 return CapabilityResult(
                     success=False,
-                    output=safe_model_dump(GuiNavigateOutput(
-                        focused=False,
-                        element_found=False,
-                    )),
+                    output=safe_model_dump(
+                        GuiNavigateOutput(
+                            focused=False,
+                            element_found=False,
+                        )
+                    ),
                     error=result.error,
                     execution_time_ms=_elapsed_ms(start_time),
                 )
@@ -875,10 +882,7 @@ class GuiExecuteTaskCapability(Capability):
                 recipe,
             )
 
-            actions = [
-                f"{a.action_type} '{a.target_name}'"
-                for a in plan.actions
-            ]
+            actions = [f"{a.action_type} '{a.target_name}'" for a in plan.actions]
 
             return DryRunResult(
                 is_valid=True,

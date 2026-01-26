@@ -1,12 +1,9 @@
 """Tests for planner verifier."""
 
-import pytest
-
 from elle.cli.planner.models import (
     CommandPlan,
     PlanStep,
     RollbackStep,
-    ValidationCheck,
 )
 from elle.cli.planner.verifier import (
     can_auto_approve,
@@ -105,9 +102,7 @@ class TestVerifyPlan:
         plan = CommandPlan(
             title="List Files",
             explanation="List files in directory",
-            steps=(
-                PlanStep(command="ls -la", explanation="List", risk_level="low"),
-            ),
+            steps=(PlanStep(command="ls -la", explanation="List", risk_level="low"),),
         )
         result = verify_plan(plan)
         assert result.is_valid is True
@@ -190,9 +185,7 @@ class TestVerifyPlan:
         plan = CommandPlan(
             title="Test",
             explanation="Test",
-            steps=(
-                PlanStep(command="ls", explanation="List", risk_level="low"),
-            ),
+            steps=(PlanStep(command="ls", explanation="List", risk_level="low"),),
             rollback=(
                 RollbackStep(
                     command="sudo rm -rf /",
@@ -213,9 +206,7 @@ class TestCanAutoApprove:
         plan = CommandPlan(
             title="List Files",
             explanation="Safe operation",
-            steps=(
-                PlanStep(command="ls", explanation="List", risk_level="low"),
-            ),
+            steps=(PlanStep(command="ls", explanation="List", risk_level="low"),),
         )
         can_auto, reason = can_auto_approve(plan)
         assert can_auto is True
@@ -277,9 +268,7 @@ class TestCanAutoApprove:
         plan = CommandPlan(
             title="List",
             explanation="Safe",
-            steps=(
-                PlanStep(command="ls", explanation="List", risk_level="low"),
-            ),
+            steps=(PlanStep(command="ls", explanation="List", risk_level="low"),),
         )
         can_auto, reason = can_auto_approve(plan, allow_auto=False)
         assert can_auto is False

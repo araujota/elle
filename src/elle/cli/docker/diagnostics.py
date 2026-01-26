@@ -152,11 +152,14 @@ def _get_container_info(container_id: str) -> ContainerInfo | None:
     Returns:
         ContainerInfo or None if not found.
     """
-    output = _run_docker_command([
-        "inspect",
-        "--format", "{{json .}}",
-        container_id,
-    ])
+    output = _run_docker_command(
+        [
+            "inspect",
+            "--format",
+            "{{json .}}",
+            container_id,
+        ]
+    )
 
     if not output:
         return None
@@ -217,11 +220,14 @@ def _get_container_logs(container_id: str, lines: int = 50) -> str:
     Returns:
         Log output.
     """
-    output = _run_docker_command([
-        "logs",
-        "--tail", str(lines),
-        container_id,
-    ])
+    output = _run_docker_command(
+        [
+            "logs",
+            "--tail",
+            str(lines),
+            container_id,
+        ]
+    )
     return output or ""
 
 
@@ -355,33 +361,20 @@ def diagnose_container_restart(container_id: str) -> ContainerDiagnosis:
     if info.oom_killed:
         likely_cause = "Out of memory (OOM) kill"
         summary = (
-            f"Container '{info.name}' was killed due to memory exhaustion. "
-            f"It has restarted {info.restart_count} times."
+            f"Container '{info.name}' was killed due to memory exhaustion. It has restarted {info.restart_count} times."
         )
     elif info.exit_code == 137:
         likely_cause = "Killed by SIGKILL (likely OOM or external kill)"
-        summary = (
-            f"Container '{info.name}' was killed by SIGKILL. "
-            f"This often indicates OOM or manual termination."
-        )
+        summary = f"Container '{info.name}' was killed by SIGKILL. This often indicates OOM or manual termination."
     elif info.health_status == "unhealthy":
         likely_cause = "Failing health checks"
-        summary = (
-            f"Container '{info.name}' is unhealthy. "
-            f"The health check command is failing."
-        )
+        summary = f"Container '{info.name}' is unhealthy. The health check command is failing."
     elif log_issues:
         likely_cause = log_issues[0]
-        summary = (
-            f"Container '{info.name}' is experiencing issues. "
-            f"Log analysis suggests: {likely_cause}"
-        )
+        summary = f"Container '{info.name}' is experiencing issues. Log analysis suggests: {likely_cause}"
     else:
         likely_cause = "Unknown - check container logs"
-        summary = (
-            f"Container '{info.name}' exited with code {info.exit_code}. "
-            f"Review logs for more details."
-        )
+        summary = f"Container '{info.name}' exited with code {info.exit_code}. Review logs for more details."
 
     # Default recommendations
     if not recommendations:
@@ -520,10 +513,7 @@ def explain_resource_usage(container_id: str | None = None) -> ResourceExplanati
     summary_parts: list[str] = []
     if sorted_by_memory and sorted_by_memory[0].memory_percent > 50:
         c = sorted_by_memory[0]
-        summary_parts.append(
-            f"{c.name} is using {_format_size(c.memory_usage)} "
-            f"({c.memory_percent:.0f}% of limit)"
-        )
+        summary_parts.append(f"{c.name} is using {_format_size(c.memory_usage)} ({c.memory_percent:.0f}% of limit)")
     if sorted_by_cpu and sorted_by_cpu[0].cpu_percent > 50:
         c = sorted_by_cpu[0]
         summary_parts.append(f"{c.name} is CPU-bound at {c.cpu_percent:.0f}%")

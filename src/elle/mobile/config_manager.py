@@ -28,23 +28,27 @@ DAEMON_PID_FILE = Path("/var/run/elle/elled.pid")
 
 
 # Fields that cannot be modified remotely for security reasons
-READONLY_FIELDS = frozenset({
-    "db_path",
-    "incidents_db_path",
-    "manvault_db_path",
-    "api.host",  # Internal API should stay on localhost
-    "api_auth.api_keys_db_path",
-    "api_auth.elle_uid",
-})
+READONLY_FIELDS = frozenset(
+    {
+        "db_path",
+        "incidents_db_path",
+        "manvault_db_path",
+        "api.host",  # Internal API should stay on localhost
+        "api_auth.api_keys_db_path",
+        "api_auth.elle_uid",
+    }
+)
 
 # Fields that require daemon restart (not just reload)
-RESTART_REQUIRED_FIELDS = frozenset({
-    "api.port",
-    "mobile.bind_host",
-    "mobile.bind_port",
-    "ebpf.enabled",
-    "ebpf.programs",
-})
+RESTART_REQUIRED_FIELDS = frozenset(
+    {
+        "api.port",
+        "mobile.bind_host",
+        "mobile.bind_port",
+        "ebpf.enabled",
+        "ebpf.programs",
+    }
+)
 
 
 class ConfigError(Exception):
@@ -181,9 +185,7 @@ class ConfigManager:
         # Check for readonly fields
         readonly_violations = self._check_readonly_fields(updates)
         if readonly_violations:
-            raise ConfigError(
-                f"Cannot modify readonly fields: {', '.join(readonly_violations)}"
-            )
+            raise ConfigError(f"Cannot modify readonly fields: {', '.join(readonly_violations)}")
 
         # Check if restart is required
         restart_required = self._check_restart_required(updates)
@@ -236,8 +238,7 @@ class ConfigManager:
         # Validate probes section
         if "probes" in updates:
             probes = updates["probes"]
-            for key in ["memory_interval", "disk_interval", "network_interval",
-                        "thermal_interval", "smart_interval"]:
+            for key in ["memory_interval", "disk_interval", "network_interval", "thermal_interval", "smart_interval"]:
                 if key in probes and probes[key] < 5:
                     errors.append(f"{key} must be at least 5 seconds")
 
@@ -309,6 +310,7 @@ class ConfigManager:
         Returns:
             True if restart is required.
         """
+
         def check_nested(data: dict, prefix: str = "") -> bool:
             for key, value in data.items():
                 full_key = f"{prefix}.{key}" if prefix else key
@@ -334,11 +336,13 @@ class ConfigManager:
         if USER_CONFIG_PATH.exists():
             try:
                 import tomllib
+
                 with open(USER_CONFIG_PATH, "rb") as f:
                     existing = tomllib.load(f)
             except ImportError:
                 try:
                     import tomli as tomllib
+
                     with open(USER_CONFIG_PATH, "rb") as f:
                         existing = tomllib.load(f)
                 except ImportError:

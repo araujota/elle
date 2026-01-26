@@ -143,7 +143,7 @@ def _format_man_context(context: FixitContext) -> str:
         return "DOCUMENTATION CONTEXT:\nNo relevant documentation found."
 
     lines = ["DOCUMENTATION CONTEXT:"]
-    for i, snippet in enumerate(context.man_snippets[:3], 1):
+    for _i, snippet in enumerate(context.man_snippets[:3], 1):
         lines.append(f"\n--- {snippet.name}({snippet.section}) ---")
         if snippet.match_section:
             lines.append(f"Section: {snippet.match_section}")
@@ -203,11 +203,10 @@ def _format_prior_art_context(context: FixitContext) -> str:
                 lines.append(f"  $ {action.command}")
 
         # Decision/approach taken
-        if art.decision:
-            if "diagnosis" in art.decision:
-                diag = art.decision["diagnosis"]
-                if isinstance(diag, dict) and "error_category" in diag:
-                    lines.append(f"Diagnosed as: {diag['error_category']}")
+        if art.decision and "diagnosis" in art.decision:
+            diag = art.decision["diagnosis"]
+            if isinstance(diag, dict) and "error_category" in diag:
+                lines.append(f"Diagnosed as: {diag['error_category']}")
 
         lines.append("")
 

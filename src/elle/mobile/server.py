@@ -61,9 +61,7 @@ class GatewayServer:
         # Check if already running
         status = self.get_status()
         if status.running:
-            raise ServerError(
-                f"Gateway already running (PID {status.pid})"
-            )
+            raise ServerError(f"Gateway already running (PID {status.pid})")
 
         # Ensure certificates exist
         cert_paths = self.crypto.ensure_certificates()
@@ -119,9 +117,7 @@ class GatewayServer:
             # Wait briefly and check if process is still running
             time.sleep(0.5)
             if process.poll() is not None:
-                raise ServerError(
-                    f"Gateway process exited immediately (code {process.returncode})"
-                )
+                raise ServerError(f"Gateway process exited immediately (code {process.returncode})")
 
             logger.info(
                 "Gateway started on %s:%d (PID %d)",

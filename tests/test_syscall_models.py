@@ -1,16 +1,14 @@
 """Tests for syscall tracing models."""
 
 import pytest
-from datetime import datetime, UTC
 
 from elle.daemon.telemetry.ebpf.syscall_models import (
+    MAX_TRACED_EVENTS,
+    SYSCALL_CATEGORIES,
     NetworkConnection,
-    SyscallCategory,
     SyscallEvent,
     SyscallSummary,
     SyscallTrace,
-    SYSCALL_CATEGORIES,
-    MAX_TRACED_EVENTS,
 )
 
 

@@ -1,17 +1,18 @@
 """Tests for reboot module Pydantic models."""
 
-import pytest
 from datetime import datetime
 
+import pytest
+
 from elle.daemon.reboot.models import (
+    CRITICAL_SERVICES,
+    MAX_VERIFICATION_ATTEMPTS,
+    VERIFICATION_DELAYS,
     GRUBState,
     PendingVerification,
     RebootIntent,
     RebootIntentSummary,
     RebootStatus,
-    MAX_VERIFICATION_ATTEMPTS,
-    VERIFICATION_DELAYS,
-    CRITICAL_SERVICES,
 )
 
 
@@ -180,10 +181,7 @@ class TestRebootIntent:
 
     def test_intent_status_values(self):
         """Test valid status values."""
-        statuses = [
-            "pending", "rebooting", "verifying",
-            "completed", "failed", "rolled_back", "cancelled"
-        ]
+        statuses = ["pending", "rebooting", "verifying", "completed", "failed", "rolled_back", "cancelled"]
         for status in statuses:
             intent = RebootIntent(
                 id="test",
@@ -197,8 +195,12 @@ class TestRebootIntent:
     def test_intent_reason_values(self):
         """Test valid reason values."""
         reasons = [
-            "kernel_update", "driver_update", "config_change",
-            "service_restart", "grub_update", "user_requested"
+            "kernel_update",
+            "driver_update",
+            "config_change",
+            "service_restart",
+            "grub_update",
+            "user_requested",
         ]
         for reason in reasons:
             intent = RebootIntent(

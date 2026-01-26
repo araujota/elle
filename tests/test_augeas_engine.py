@@ -10,7 +10,6 @@ from elle.ops.augeas.models import (
     AugeasError,
     AugeasLensNotFoundError,
     AugeasOp,
-    AugeasUnavailableError,
 )
 
 

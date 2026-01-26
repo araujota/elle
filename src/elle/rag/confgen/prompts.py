@@ -321,15 +321,13 @@ def build_create_prompt(
 
     prior_context = ""
     if prior_art:
-        incidents = "\n\n".join(
-            f"- {p.get('title', 'Unknown')}: {p.get('outcome', 'unknown')}"
-            for p in prior_art
-        )
+        incidents = "\n\n".join(f"- {p.get('title', 'Unknown')}: {p.get('outcome', 'unknown')}" for p in prior_art)
         prior_context = PRIOR_ART_TEMPLATE.format(incidents=incidents)
 
     schema_context = ""
     if schema_hint:
         import json
+
         schema_context = SCHEMA_HINT_TEMPLATE.format(
             format=file_type,
             schema=json.dumps(schema_hint, indent=2),
@@ -363,10 +361,7 @@ def build_patch_prompt(
 
     prior_context = ""
     if prior_art:
-        incidents = "\n\n".join(
-            f"- {p.get('title', 'Unknown')}: {p.get('outcome', 'unknown')}"
-            for p in prior_art
-        )
+        incidents = "\n\n".join(f"- {p.get('title', 'Unknown')}: {p.get('outcome', 'unknown')}" for p in prior_art)
         prior_context = PRIOR_ART_TEMPLATE.format(incidents=incidents)
 
     return PATCH_PROMPT_TEMPLATE.format(

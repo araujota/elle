@@ -297,30 +297,36 @@ def generating_plan() -> Iterator[Status]:
 
 def fixit_phases() -> PhaseSpinner:
     """Multi-phase spinner for full fixit flow."""
-    return PhaseSpinner([
-        "Analyzing failure",
-        "Searching similar incidents",
-        "Querying documentation",
-        "Generating fix",
-        "Verifying safety",
-    ])
+    return PhaseSpinner(
+        [
+            "Analyzing failure",
+            "Searching similar incidents",
+            "Querying documentation",
+            "Generating fix",
+            "Verifying safety",
+        ]
+    )
 
 
 def planner_phases() -> PhaseSpinner:
     """Multi-phase spinner for full planning flow."""
-    return PhaseSpinner([
-        "Analyzing request",
-        "Searching documentation",
-        "Checking prior art",
-        "Generating plan",
-        "Validating steps",
-    ])
+    return PhaseSpinner(
+        [
+            "Analyzing request",
+            "Searching documentation",
+            "Checking prior art",
+            "Generating plan",
+            "Validating steps",
+        ]
+    )
 
 
 def classification_phases() -> PhaseSpinner:
     """Multi-phase spinner for intent classification."""
-    return PhaseSpinner([
-        "Parsing input",
-        "Classifying intent",
-        "Checking safety",
-    ])
+    return PhaseSpinner(
+        [
+            "Parsing input",
+            "Classifying intent",
+            "Checking safety",
+        ]
+    )

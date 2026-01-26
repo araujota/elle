@@ -11,17 +11,9 @@ LOKI_RECIPE = StackRecipe(
     display_name="Grafana Loki",
     description="Loki log aggregation system with retention configuration",
     category="observability",
-
-    packages=(
-        "loki",
-    ),
-
-    services=(
-        "loki",
-    ),
-
+    packages=("loki",),
+    services=("loki",),
     config_templates={},
-
     guarantees=(
         StackGuarantee(
             name="service_running",
@@ -56,7 +48,6 @@ LOKI_RECIPE = StackRecipe(
             remediation_hint="Configure retention in /etc/loki/config.yml",
         ),
     ),
-
     variables=(
         StackVariable(
             name="retention_period",
@@ -77,7 +68,6 @@ LOKI_RECIPE = StackRecipe(
             required=False,
         ),
     ),
-
     presets={
         "dev": {
             "retention_period": "168h",  # 7 days
@@ -86,11 +76,9 @@ LOKI_RECIPE = StackRecipe(
             "retention_period": "2160h",  # 90 days
         },
     },
-
     min_ram_mb=512,
     min_disk_gb=10,
     ports_required=(3100,),
-
     version="1.0.0",
     tags=("observability", "logging", "loki", "logs", "aggregation"),
 )

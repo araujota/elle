@@ -136,6 +136,7 @@ class MobileNotificationEvent(BaseModel):
             json_str = self.model_dump_json()
         except AttributeError:
             import json
+
             json_str = json.dumps(self.dict())
         return f"event: {self.event_type.value}\ndata: {json_str}\n\n"
 
@@ -263,9 +264,7 @@ class MobilePushNotifier:
         """
         return len(self._clients)
 
-    async def connect(
-        self, device_id: str, device_name: str
-    ) -> MobileClientConnection:
+    async def connect(self, device_id: str, device_name: str) -> MobileClientConnection:
         """Register a new client connection.
 
         Args:
@@ -335,10 +334,7 @@ class MobilePushNotifier:
         event_type = _map_category_to_event_type(notification.category.value)
 
         # Build actions list
-        actions = tuple(
-            {"id": action.id, "label": action.label}
-            for action in notification.actions
-        )
+        actions = tuple({"id": action.id, "label": action.label} for action in notification.actions)
 
         event = MobileNotificationEvent(
             event_type=event_type,

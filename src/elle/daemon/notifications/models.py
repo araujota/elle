@@ -14,8 +14,8 @@ from pydantic import BaseModel, ConfigDict, Field
 class NotificationUrgency(str, Enum):
     """Notification urgency level (maps to libnotify urgency)."""
 
-    LOW = "low"          # Informational, non-critical
-    NORMAL = "normal"    # Standard notifications
+    LOW = "low"  # Informational, non-critical
+    NORMAL = "normal"  # Standard notifications
     CRITICAL = "critical"  # Requires immediate attention
 
 
@@ -210,9 +210,7 @@ def job_complete_notification(
             title="Job Complete",
             body=f"{job_name} completed successfully." + (f"\n{details}" if details else ""),
             category=NotificationCategory.JOB_COMPLETE,
-            actions=(
-                NotificationAction(id="open", label="Open ELLE"),
-            ),
+            actions=(NotificationAction(id="open", label="Open ELLE"),),
             default_action="open",
         )
     else:
@@ -220,9 +218,7 @@ def job_complete_notification(
             title="Job Failed",
             body=f"{job_name} failed." + (f"\n{details}" if details else ""),
             category=NotificationCategory.JOB_FAILED,
-            actions=(
-                NotificationAction(id="open", label="View Details"),
-            ),
+            actions=(NotificationAction(id="open", label="View Details"),),
             default_action="open",
         )
 
@@ -262,15 +258,9 @@ def incident_notification(
         format_incident_title,
     )
 
-    urgency = (
-        NotificationUrgency.CRITICAL
-        if severity in ("critical", "error")
-        else NotificationUrgency.NORMAL
-    )
+    urgency = NotificationUrgency.CRITICAL if severity in ("critical", "error") else NotificationUrgency.NORMAL
     category = (
-        NotificationCategory.INCIDENT_ESCALATED
-        if severity == "critical"
-        else NotificationCategory.INCIDENT_DETECTED
+        NotificationCategory.INCIDENT_ESCALATED if severity == "critical" else NotificationCategory.INCIDENT_DETECTED
     )
 
     # Format title with context
@@ -360,9 +350,7 @@ def reboot_notification(
         context_id=intent_id,
         context_type="reboot",
         timeout_ms=0 if status in ("failed", "rollback") else 10000,
-        actions=(
-            NotificationAction(id=action[0], label=action[1]),
-        ),
+        actions=(NotificationAction(id=action[0], label=action[1]),),
         default_action="open",
     )
 

@@ -26,15 +26,9 @@ class DependencySpec(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     # Identity
-    name: str = Field(
-        description="Unique identifier (e.g., 'atspi', 'augeas')"
-    )
-    display_name: str = Field(
-        description="Human-readable name (e.g., 'AT-SPI Accessibility')"
-    )
-    description: str = Field(
-        description="Why this dependency is needed"
-    )
+    name: str = Field(description="Unique identifier (e.g., 'atspi', 'augeas')")
+    display_name: str = Field(description="Human-readable name (e.g., 'AT-SPI Accessibility')")
+    description: str = Field(description="Why this dependency is needed")
 
     # Installation
     apt_packages: tuple[str, ...] = Field(
@@ -86,28 +80,18 @@ class DependencyCheckResult(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     # Identity
-    dependency: str = Field(
-        description="DependencySpec.name"
-    )
+    dependency: str = Field(description="DependencySpec.name")
 
     # Status
-    available: bool = Field(
-        description="Whether the dependency is available"
-    )
-    check_method: str = Field(
-        description="Method used to check: 'import', 'command', 'file', 'none'"
-    )
+    available: bool = Field(description="Whether the dependency is available")
+    check_method: str = Field(description="Method used to check: 'import', 'command', 'file', 'none'")
 
     # Error info (if unavailable)
-    error_message: str | None = Field(
-        default=None,
-        description="Why the check failed"
-    )
+    error_message: str | None = Field(default=None, description="Why the check failed")
 
     # Installation info (if unavailable)
     install_command: str | None = Field(
-        default=None,
-        description="Command to install (e.g., 'sudo apt install python3-pyatspi at-spi2-core')"
+        default=None, description="Command to install (e.g., 'sudo apt install python3-pyatspi at-spi2-core')"
     )
 
 
@@ -126,20 +110,10 @@ class DependencyPreference(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    dependency: str = Field(
-        description="DependencySpec.name"
-    )
-    preference: PreferenceChoice = Field(
-        description="What to do when dependency is missing"
-    )
-    created_at: datetime = Field(
-        default_factory=datetime.utcnow,
-        description="When preference was first set"
-    )
-    updated_at: datetime = Field(
-        default_factory=datetime.utcnow,
-        description="When preference was last updated"
-    )
+    dependency: str = Field(description="DependencySpec.name")
+    preference: PreferenceChoice = Field(description="What to do when dependency is missing")
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="When preference was first set")
+    updated_at: datetime = Field(default_factory=datetime.utcnow, description="When preference was last updated")
 
 
 # =============================================================================
@@ -155,19 +129,10 @@ class InstallationRequest(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    dependency: str = Field(
-        description="DependencySpec.name"
-    )
-    apt_packages: tuple[str, ...] = Field(
-        description="APT packages to install"
-    )
-    pip_packages: tuple[str, ...] = Field(
-        default_factory=tuple,
-        description="Pip packages to install"
-    )
-    reason: str = Field(
-        description="Why this installation is needed (for audit)"
-    )
+    dependency: str = Field(description="DependencySpec.name")
+    apt_packages: tuple[str, ...] = Field(description="APT packages to install")
+    pip_packages: tuple[str, ...] = Field(default_factory=tuple, description="Pip packages to install")
+    reason: str = Field(description="Why this installation is needed (for audit)")
 
 
 class InstallationResult(BaseModel):
@@ -178,25 +143,9 @@ class InstallationResult(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    success: bool = Field(
-        description="Whether installation succeeded"
-    )
-    dependency: str = Field(
-        description="DependencySpec.name"
-    )
-    installed_packages: tuple[str, ...] = Field(
-        default_factory=tuple,
-        description="Packages that were installed"
-    )
-    error_message: str | None = Field(
-        default=None,
-        description="Error message if failed"
-    )
-    duration_sec: float = Field(
-        default=0.0,
-        description="Time taken to install in seconds"
-    )
-    installed_at: datetime = Field(
-        default_factory=datetime.utcnow,
-        description="When installation was attempted"
-    )
+    success: bool = Field(description="Whether installation succeeded")
+    dependency: str = Field(description="DependencySpec.name")
+    installed_packages: tuple[str, ...] = Field(default_factory=tuple, description="Packages that were installed")
+    error_message: str | None = Field(default=None, description="Error message if failed")
+    duration_sec: float = Field(default=0.0, description="Time taken to install in seconds")
+    installed_at: datetime = Field(default_factory=datetime.utcnow, description="When installation was attempted")

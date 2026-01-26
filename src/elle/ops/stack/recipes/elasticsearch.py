@@ -11,17 +11,9 @@ ELASTICSEARCH_RECIPE = StackRecipe(
     display_name="Elasticsearch",
     description="Elasticsearch search and analytics engine with secure defaults",
     category="data",
-
-    packages=(
-        "elasticsearch",
-    ),
-
-    services=(
-        "elasticsearch",
-    ),
-
+    packages=("elasticsearch",),
+    services=("elasticsearch",),
     config_templates={},
-
     guarantees=(
         StackGuarantee(
             name="service_running",
@@ -34,7 +26,7 @@ ELASTICSEARCH_RECIPE = StackRecipe(
         StackGuarantee(
             name="cluster_health",
             description="Elasticsearch cluster is healthy",
-            check_command="curl -s http://localhost:9200/_cluster/health 2>/dev/null | grep -o '\"status\":\"[^\"]*\"'",
+            check_command='curl -s http://localhost:9200/_cluster/health 2>/dev/null | grep -o \'"status":"[^"]*"\'',
             expected_pattern=r"green|yellow",
             failure_action="warn",
             remediation_hint="Check cluster health with: curl localhost:9200/_cluster/health?pretty",
@@ -56,7 +48,6 @@ ELASTICSEARCH_RECIPE = StackRecipe(
             remediation_hint="Configure heap size in /etc/elasticsearch/jvm.options",
         ),
     ),
-
     variables=(
         StackVariable(
             name="cluster_name",
@@ -77,7 +68,6 @@ ELASTICSEARCH_RECIPE = StackRecipe(
             required=False,
         ),
     ),
-
     presets={
         "dev": {
             "heap_size": "512m",
@@ -86,11 +76,9 @@ ELASTICSEARCH_RECIPE = StackRecipe(
             "heap_size": "4g",
         },
     },
-
     min_ram_mb=2048,
     min_disk_gb=20,
     ports_required=(9200, 9300),
-
     version="1.0.0",
     tags=("search", "analytics", "elasticsearch", "data", "fulltext"),
 )

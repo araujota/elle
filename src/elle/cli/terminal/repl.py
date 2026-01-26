@@ -85,11 +85,10 @@ class REPL:
         self._show_banner()
 
         # Check for first run and show setup wizard
-        if is_first_run():
-            if not run_setup_wizard(self.prompt, reconfigure=False):
-                # User cancelled setup, but continue anyway
-                print_muted("Continuing with default settings...")
-                console.print()
+        if is_first_run() and not run_setup_wizard(self.prompt, reconfigure=False):
+            # User cancelled setup, but continue anyway
+            print_muted("Continuing with default settings...")
+            console.print()
 
         # Show reboot/incident status
         self._show_startup_notices()
@@ -122,9 +121,7 @@ class REPL:
                     # Handle output - use Rich console for rendering
                     if result.output:
                         # Check if it's a renderable or plain text
-                        if hasattr(result.output, "__rich__") or hasattr(
-                            result.output, "__rich_console__"
-                        ):
+                        if hasattr(result.output, "__rich__") or hasattr(result.output, "__rich_console__"):
                             console.print(result.output)
                         else:
                             console.print(result.output)
@@ -216,10 +213,7 @@ class REPL:
             return
 
         # Show the tip
-        print_muted(
-            "Tip: ELLE is open source. If you find it useful, "
-            "type 'sponsor' to support development."
-        )
+        print_muted("Tip: ELLE is open source. If you find it useful, type 'sponsor' to support development.")
         console.print()
 
     def _get_model_name(self) -> str | None:

@@ -221,9 +221,7 @@ class ElementMatcher:
 
         # Strategy 5: Sibling context
         if sibling_context and recipe_elements:
-            result = self._try_sibling_context(
-                root, target_name, target_role, sibling_context, recipe_elements
-            )
+            result = self._try_sibling_context(root, target_name, target_role, sibling_context, recipe_elements)
             if result.found:
                 return result
 
@@ -336,6 +334,7 @@ class ElementMatcher:
         Returns:
             MatchResult.
         """
+
         # Get all elements with the role (or all actionable elements)
         def has_name(accessible: Any) -> bool:
             elem_name = accessible.get_name() if hasattr(accessible, "get_name") else ""
@@ -391,9 +390,7 @@ class ElementMatcher:
             elem_name = accessible.get_name() if hasattr(accessible, "get_name") else ""
             return bool(elem_name) and pattern_match(elem_name, patterns)
 
-        candidates = self.client.find_elements(
-            root, role=role, predicate=matches_pattern, max_results=10
-        )
+        candidates = self.client.find_elements(root, role=role, predicate=matches_pattern, max_results=10)
 
         if candidates:
             match = candidates[0]
@@ -436,9 +433,7 @@ class ElementMatcher:
                 # Get parent and search among siblings
                 parent = sibling.get_parent() if hasattr(sibling, "get_parent") else None
                 if parent:
-                    candidates = self.client.find_elements(
-                        parent, name=name, role=role, max_results=5
-                    )
+                    candidates = self.client.find_elements(parent, name=name, role=role, max_results=5)
                     if candidates:
                         match = candidates[0]
                         path = self.client.get_element_path(match)
@@ -674,18 +669,14 @@ class UIAdaptor:
         if method == "exact_name":
             if expected_path and result.actual_path != expected_path:
                 return (
-                    f"Element has moved from position {expected_path} "
-                    f"to {result.actual_path}. Updated understanding."
+                    f"Element has moved from position {expected_path} to {result.actual_path}. Updated understanding."
                 )
             return "Found by exact name match"
 
         if method == "fuzzy_name":
             confidence_pct = int(result.confidence * 100)
             if result.element:
-                return (
-                    f"Found similar element '{result.element.name}' "
-                    f"({confidence_pct}% match)"
-                )
+                return f"Found similar element '{result.element.name}' ({confidence_pct}% match)"
             return f"Found via fuzzy name match ({confidence_pct}% confidence)"
 
         if method == "sibling_context":
@@ -693,10 +684,7 @@ class UIAdaptor:
 
         if method == "role_search":
             if result.element:
-                return (
-                    f"Found '{result.element.name}' among all "
-                    f"'{result.element.role}' elements"
-                )
+                return f"Found '{result.element.name}' among all '{result.element.role}' elements"
             return "Found by searching all elements with matching role"
 
         if method == "tree_search":

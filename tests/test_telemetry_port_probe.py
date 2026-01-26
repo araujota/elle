@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from elle.daemon.telemetry.port_probe import (
     SENSITIVE_PORTS,
@@ -107,8 +108,7 @@ class TestPortListenerProbe:
 
         # Add to baseline
         probe._baseline[(22, "tcp", "0.0.0.0")] = Listener(
-            port=22, proto="tcp", address="0.0.0.0",
-            pid=1, comm="sshd", is_wildcard=True
+            port=22, proto="tcp", address="0.0.0.0", pid=1, comm="sshd", is_wildcard=True
         )
 
         baseline = probe.get_baseline()
@@ -119,12 +119,10 @@ class TestPortListenerProbe:
         """Test getting sensitive port listeners."""
         # Add listeners - use port 9000 as non-sensitive port
         probe._baseline[(22, "tcp", "0.0.0.0")] = Listener(
-            port=22, proto="tcp", address="0.0.0.0",
-            pid=1, comm="sshd", is_wildcard=True
+            port=22, proto="tcp", address="0.0.0.0", pid=1, comm="sshd", is_wildcard=True
         )
         probe._baseline[(9000, "tcp", "0.0.0.0")] = Listener(
-            port=9000, proto="tcp", address="0.0.0.0",
-            pid=2, comm="app", is_wildcard=True
+            port=9000, proto="tcp", address="0.0.0.0", pid=2, comm="app", is_wildcard=True
         )
 
         sensitive = probe.get_sensitive_listeners()

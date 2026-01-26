@@ -31,47 +31,107 @@ logger = logging.getLogger(__name__)
 DEFAULT_CATEGORIES: tuple[FileCategory, ...] = (
     FileCategory(
         name="images",
-        patterns=("*.jpg", "*.jpeg", "*.png", "*.gif", "*.webp", "*.svg", "*.bmp",
-                  "*.ico", "*.tiff", "*.tif", "*.raw", "*.heic", "*.heif"),
+        patterns=(
+            "*.jpg",
+            "*.jpeg",
+            "*.png",
+            "*.gif",
+            "*.webp",
+            "*.svg",
+            "*.bmp",
+            "*.ico",
+            "*.tiff",
+            "*.tif",
+            "*.raw",
+            "*.heic",
+            "*.heif",
+        ),
         destination="images",
     ),
     FileCategory(
         name="documents",
-        patterns=("*.pdf", "*.doc", "*.docx", "*.txt", "*.md", "*.odt", "*.rtf",
-                  "*.xls", "*.xlsx", "*.ods", "*.ppt", "*.pptx", "*.odp", "*.csv",
-                  "*.epub", "*.mobi"),
+        patterns=(
+            "*.pdf",
+            "*.doc",
+            "*.docx",
+            "*.txt",
+            "*.md",
+            "*.odt",
+            "*.rtf",
+            "*.xls",
+            "*.xlsx",
+            "*.ods",
+            "*.ppt",
+            "*.pptx",
+            "*.odp",
+            "*.csv",
+            "*.epub",
+            "*.mobi",
+        ),
         destination="documents",
     ),
     FileCategory(
         name="videos",
-        patterns=("*.mp4", "*.mkv", "*.avi", "*.mov", "*.wmv", "*.webm", "*.flv",
-                  "*.m4v", "*.mpeg", "*.mpg", "*.3gp"),
+        patterns=("*.mp4", "*.mkv", "*.avi", "*.mov", "*.wmv", "*.webm", "*.flv", "*.m4v", "*.mpeg", "*.mpg", "*.3gp"),
         destination="videos",
     ),
     FileCategory(
         name="audio",
-        patterns=("*.mp3", "*.wav", "*.flac", "*.ogg", "*.m4a", "*.aac", "*.wma",
-                  "*.opus", "*.aiff"),
+        patterns=("*.mp3", "*.wav", "*.flac", "*.ogg", "*.m4a", "*.aac", "*.wma", "*.opus", "*.aiff"),
         destination="audio",
     ),
     FileCategory(
         name="archives",
-        patterns=("*.zip", "*.tar", "*.gz", "*.bz2", "*.xz", "*.7z", "*.rar",
-                  "*.tar.gz", "*.tar.bz2", "*.tar.xz", "*.tgz"),
+        patterns=(
+            "*.zip",
+            "*.tar",
+            "*.gz",
+            "*.bz2",
+            "*.xz",
+            "*.7z",
+            "*.rar",
+            "*.tar.gz",
+            "*.tar.bz2",
+            "*.tar.xz",
+            "*.tgz",
+        ),
         destination="archives",
     ),
     FileCategory(
         name="code",
-        patterns=("*.py", "*.js", "*.ts", "*.go", "*.rs", "*.java", "*.c", "*.cpp",
-                  "*.h", "*.hpp", "*.cs", "*.rb", "*.php", "*.swift", "*.kt",
-                  "*.scala", "*.sh", "*.bash", "*.zsh", "*.html", "*.css", "*.json",
-                  "*.yaml", "*.yml", "*.xml", "*.sql"),
+        patterns=(
+            "*.py",
+            "*.js",
+            "*.ts",
+            "*.go",
+            "*.rs",
+            "*.java",
+            "*.c",
+            "*.cpp",
+            "*.h",
+            "*.hpp",
+            "*.cs",
+            "*.rb",
+            "*.php",
+            "*.swift",
+            "*.kt",
+            "*.scala",
+            "*.sh",
+            "*.bash",
+            "*.zsh",
+            "*.html",
+            "*.css",
+            "*.json",
+            "*.yaml",
+            "*.yml",
+            "*.xml",
+            "*.sql",
+        ),
         destination="code",
     ),
     FileCategory(
         name="installers",
-        patterns=("*.deb", "*.rpm", "*.exe", "*.msi", "*.dmg", "*.pkg", "*.appimage",
-                  "*.flatpak", "*.snap"),
+        patterns=("*.deb", "*.rpm", "*.exe", "*.msi", "*.dmg", "*.pkg", "*.appimage", "*.flatpak", "*.snap"),
         destination="installers",
     ),
     FileCategory(
@@ -172,10 +232,7 @@ class FileOrganizer:
         skipped = 0
 
         # Get files to process
-        if recursive:
-            files = directory.rglob("*")
-        else:
-            files = directory.iterdir()
+        files = directory.rglob("*") if recursive else directory.iterdir()
 
         for path in files:
             # Skip directories
@@ -295,8 +352,7 @@ class FileOrganizer:
                 )
 
         logger.info(
-            f"Organized {result.files_moved} files in {directory} "
-            f"({result.bytes_organized / 1024 / 1024:.1f} MB)"
+            f"Organized {result.files_moved} files in {directory} ({result.bytes_organized / 1024 / 1024:.1f} MB)"
         )
 
         return result
@@ -361,10 +417,7 @@ class FileOrganizer:
         total_bytes = 0
         skipped = 0
 
-        if recursive:
-            files = directory.rglob("*")
-        else:
-            files = directory.iterdir()
+        files = directory.rglob("*") if recursive else directory.iterdir()
 
         for path in files:
             if path.is_dir():
@@ -385,9 +438,7 @@ class FileOrganizer:
                     skipped += 1
                     continue
 
-                operations.append(
-                    FileOp(kind="move", source=str(path), dest=str(dest))
-                )
+                operations.append(FileOp(kind="move", source=str(path), dest=str(dest)))
 
                 by_category[year_month] = by_category.get(year_month, 0) + 1
                 total_bytes += path.stat().st_size
@@ -423,10 +474,7 @@ class FileOrganizer:
         total_bytes = 0
         skipped = 0
 
-        if recursive:
-            files = directory.rglob("*")
-        else:
-            files = directory.iterdir()
+        files = directory.rglob("*") if recursive else directory.iterdir()
 
         for path in files:
             if path.is_dir():
@@ -456,9 +504,7 @@ class FileOrganizer:
                     skipped += 1
                     continue
 
-                operations.append(
-                    FileOp(kind="move", source=str(path), dest=str(dest))
-                )
+                operations.append(FileOp(kind="move", source=str(path), dest=str(dest)))
 
                 by_category[category_name] = by_category.get(category_name, 0) + 1
                 total_bytes += size

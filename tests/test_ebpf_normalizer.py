@@ -1,10 +1,7 @@
 """Tests for eBPF event normalization."""
 
-import pytest
-
 from elle.daemon.telemetry.ebpf.normalizer import (
     _extract_ebpf_entity,
-    _parse_ebpf_timestamp,
     extract_entity_from_message,
     get_ebpf_severity_override,
     is_ebpf_event,

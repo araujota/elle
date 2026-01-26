@@ -149,9 +149,7 @@ class LLMConfigGenerator:
             ConfigGenLLMError: If LLM generation fails.
         """
         if not self.llm.is_available():
-            raise ConfigGenLLMError(
-                "LLM not available. Is Ollama running?"
-            )
+            raise ConfigGenLLMError("LLM not available. Is Ollama running?")
 
         # Select prompt based on mode
         mode = context.request.mode
@@ -254,9 +252,7 @@ class LLMConfigGenerator:
             # Auto-detect based on path
             path = Path(target_path)
             system_paths = ("/etc", "/var", "/usr", "/lib", "/boot")
-            requires_privilege = any(
-                str(path).startswith(sp) for sp in system_paths
-            )
+            requires_privilege = any(str(path).startswith(sp) for sp in system_paths)
 
         # Get validation command from domain handler if not provided
         validation_command = response.get("validation_command")

@@ -66,11 +66,9 @@ class BackupManager:
         try:
             self.backup_root.mkdir(parents=True, exist_ok=True)
         except PermissionError:
-            logger.warning(
-                f"Cannot create backup directory {self.backup_root}, "
-                "will use temporary directory"
-            )
+            logger.warning(f"Cannot create backup directory {self.backup_root}, will use temporary directory")
             import tempfile
+
             self.backup_root = Path(tempfile.gettempdir()) / "elle-backups"
             self.backup_root.mkdir(parents=True, exist_ok=True)
 
@@ -163,14 +161,10 @@ class BackupManager:
             backup_path = Path(backup)
             original_path = Path(target_path) if target_path else None
             if original_path is None:
-                raise AugeasBackupError(
-                    "restore", str(backup_path), "Target path not specified"
-                )
+                raise AugeasBackupError("restore", str(backup_path), "Target path not specified")
 
         if not backup_path.exists():
-            raise AugeasBackupError(
-                "restore", str(backup_path), "Backup file does not exist"
-            )
+            raise AugeasBackupError("restore", str(backup_path), "Backup file does not exist")
 
         try:
             # Copy backup to original location
@@ -285,9 +279,7 @@ class BackupManager:
                             domain=domain_name,
                             sha256="",
                             size_bytes=backup_file.stat().st_size,
-                            created_at=datetime.fromtimestamp(
-                                backup_file.stat().st_mtime
-                            ),
+                            created_at=datetime.fromtimestamp(backup_file.stat().st_mtime),
                         )
                         backups.append(record)
                         domain_count += 1
@@ -330,10 +322,7 @@ class BackupManager:
         Returns:
             True if deleted successfully.
         """
-        if isinstance(backup, BackupRecord):
-            backup_path = Path(backup.backup_path)
-        else:
-            backup_path = Path(backup)
+        backup_path = Path(backup.backup_path) if isinstance(backup, BackupRecord) else Path(backup)
 
         if not backup_path.exists():
             return False
@@ -369,10 +358,7 @@ class BackupManager:
         cutoff = datetime.utcnow() - timedelta(days=max_age)
         deleted = 0
 
-        if domain:
-            domains = [domain]
-        else:
-            domains = [d.name for d in self.backup_root.iterdir() if d.is_dir()]
+        domains = [domain] if domain else [d.name for d in self.backup_root.iterdir() if d.is_dir()]
 
         for domain_name in domains:
             domain_dir = self.backup_root / domain_name

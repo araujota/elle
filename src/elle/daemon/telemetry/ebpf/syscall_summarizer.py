@@ -35,12 +35,14 @@ EXCLUDED_PATH_PREFIXES = (
 )
 
 # Paths that are always excluded (internal files)
-EXCLUDED_PATHS = frozenset({
-    "/dev/null",
-    "/dev/zero",
-    "/dev/urandom",
-    "/dev/random",
-})
+EXCLUDED_PATHS = frozenset(
+    {
+        "/dev/null",
+        "/dev/zero",
+        "/dev/urandom",
+        "/dev/random",
+    }
+)
 
 
 def _should_include_path(path: str) -> bool:
@@ -58,11 +60,7 @@ def _should_include_path(path: str) -> bool:
     if path in EXCLUDED_PATHS:
         return False
 
-    for prefix in EXCLUDED_PATH_PREFIXES:
-        if path.startswith(prefix):
-            return False
-
-    return True
+    return all(not path.startswith(prefix) for prefix in EXCLUDED_PATH_PREFIXES)
 
 
 def _normalize_path(path: str, cwd: Path | None = None) -> str:

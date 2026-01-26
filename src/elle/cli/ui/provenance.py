@@ -183,11 +183,7 @@ def build_rationale_kwargs(
         result["confidence"] = confidence_to_ui(confidence)
 
     # Only show rationale if we have actual content
-    has_content = (
-        result.get("man_citations")
-        or result.get("incident_citations")
-        or result.get("confidence")
-    )
+    has_content = result.get("man_citations") or result.get("incident_citations") or result.get("confidence")
     result["show_rationale"] = bool(has_content)
 
     return result

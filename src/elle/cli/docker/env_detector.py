@@ -243,8 +243,7 @@ class DockerEnvDetector:
 
                     # Detect if it looks like a required variable
                     is_sensitive = any(
-                        kw in name.upper()
-                        for kw in ("PASSWORD", "SECRET", "KEY", "TOKEN", "CREDENTIAL")
+                        kw in name.upper() for kw in ("PASSWORD", "SECRET", "KEY", "TOKEN", "CREDENTIAL")
                     )
 
                     specs.append(

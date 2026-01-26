@@ -77,9 +77,7 @@ class ElevationManager:
             raise ElevationError("TTL must be positive")
 
         if ttl_seconds > self.config.max_elevation_ttl_seconds:
-            raise ElevationError(
-                f"TTL exceeds maximum ({self.config.max_elevation_ttl_seconds}s)"
-            )
+            raise ElevationError(f"TTL exceeds maximum ({self.config.max_elevation_ttl_seconds}s)")
 
         # Get device
         device = self.store.get_device(device_id)
@@ -91,16 +89,12 @@ class ElevationManager:
 
         # Validate role elevation makes sense
         if target_role == device.role:
-            raise ElevationError(
-                f"Device already has role {target_role.value}"
-            )
+            raise ElevationError(f"Device already has role {target_role.value}")
 
         # Only allow elevation, not demotion
         role_order = [MobileRole.MOBILE_READONLY, MobileRole.MOBILE_OPERATOR]
         if role_order.index(target_role) <= role_order.index(device.role):
-            raise ElevationError(
-                f"Cannot elevate from {device.role.value} to {target_role.value}"
-            )
+            raise ElevationError(f"Cannot elevate from {device.role.value} to {target_role.value}")
 
         # Revoke any existing elevation
         self.store.revoke_elevation(device_id)
@@ -183,14 +177,16 @@ class ElevationManager:
 
         if elevation and elevation.is_active():
             remaining = (elevation.expires_at - datetime.utcnow()).total_seconds()
-            result.update({
-                "elevated": True,
-                "effective_role": elevation.elevated_role.value,
-                "elevated_role": elevation.elevated_role.value,
-                "expires_at": elevation.expires_at.isoformat(),
-                "remaining_seconds": max(0, int(remaining)),
-                "granted_by": elevation.granted_by,
-            })
+            result.update(
+                {
+                    "elevated": True,
+                    "effective_role": elevation.elevated_role.value,
+                    "elevated_role": elevation.elevated_role.value,
+                    "expires_at": elevation.expires_at.isoformat(),
+                    "remaining_seconds": max(0, int(remaining)),
+                    "granted_by": elevation.granted_by,
+                }
+            )
 
         return result
 
@@ -206,18 +202,18 @@ class ElevationManager:
         for elevation in elevations:
             device = self.store.get_device(elevation.device_id)
             if device:
-                remaining = (
-                    elevation.expires_at - datetime.utcnow()
-                ).total_seconds()
-                result.append({
-                    "device_id": device.device_id,
-                    "device_name": device.name,
-                    "base_role": device.role.value,
-                    "elevated_role": elevation.elevated_role.value,
-                    "expires_at": elevation.expires_at.isoformat(),
-                    "remaining_seconds": max(0, int(remaining)),
-                    "granted_by": elevation.granted_by,
-                })
+                remaining = (elevation.expires_at - datetime.utcnow()).total_seconds()
+                result.append(
+                    {
+                        "device_id": device.device_id,
+                        "device_name": device.name,
+                        "base_role": device.role.value,
+                        "elevated_role": elevation.elevated_role.value,
+                        "expires_at": elevation.expires_at.isoformat(),
+                        "remaining_seconds": max(0, int(remaining)),
+                        "granted_by": elevation.granted_by,
+                    }
+                )
 
         return result
 

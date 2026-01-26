@@ -19,11 +19,9 @@ from elle.daemon.incidents.models import (
     TelemetryCitation,
 )
 from elle.daemon.incidents.schema import (
-    drop_all_tables,
-    ensure_schema,
+    SCHEMA_VERSION,
     get_schema_version,
     init_incident_schema,
-    SCHEMA_VERSION,
 )
 from elle.daemon.incidents.store import (
     create_incident_draft,
@@ -127,23 +125,27 @@ class TestProvenanceModels:
 
         # With man page
         with_man = Provenance(
-            man_pages=(ManPageCitation(
-                name="systemctl",
-                section="1",
-                snippet="test",
-            ),),
+            man_pages=(
+                ManPageCitation(
+                    name="systemctl",
+                    section="1",
+                    snippet="test",
+                ),
+            ),
         )
         assert "man systemctl(1)" in with_man.summary()
 
         # With prior incident
         with_prior = Provenance(
-            prior_incidents=(IncidentCitation(
-                incident_id="1",
-                title="Test",
-                outcome="improved",
-                similarity_score=0.8,
-                match_type="semantic",
-            ),),
+            prior_incidents=(
+                IncidentCitation(
+                    incident_id="1",
+                    title="Test",
+                    outcome="improved",
+                    similarity_score=0.8,
+                    match_type="semantic",
+                ),
+            ),
         )
         assert "similar incident" in with_prior.summary()
 
@@ -250,12 +252,14 @@ class TestDecisionRecordStorage:
             dominant_tier="semantic",
         )
         provenance = Provenance(
-            man_pages=(ManPageCitation(
-                name="systemctl",
-                section="1",
-                snippet="Control services",
-                relevance_score=0.7,
-            ),),
+            man_pages=(
+                ManPageCitation(
+                    name="systemctl",
+                    section="1",
+                    snippet="Control services",
+                    relevance_score=0.7,
+                ),
+            ),
             primary_source="man_vault",
         )
         record = DecisionRecord(
@@ -427,15 +431,11 @@ class TestSchemaVersion:
         cursor = test_db.cursor()
 
         # Check decision_records table
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='decision_records'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='decision_records'")
         assert cursor.fetchone() is not None
 
         # Check config_states table
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='config_states'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='config_states'")
         assert cursor.fetchone() is not None
 
     def test_fresh_schema_has_all_tables(self):

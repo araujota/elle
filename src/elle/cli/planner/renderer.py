@@ -134,7 +134,7 @@ def render_box(
         padding = inner_width - visible_len
         if padding < 0:
             # Truncate line
-            line = line[:inner_width - 3] + "..."
+            line = line[: inner_width - 3] + "..."
             padding = 0
         lines.append(
             f"{border_color}{box['vertical']}{Colors.RESET}"
@@ -144,9 +144,7 @@ def render_box(
 
     # Bottom border
     lines.append(
-        f"{border_color}{box['bottom_left']}"
-        f"{box['horizontal'] * inner_width}"
-        f"{box['bottom_right']}{Colors.RESET}"
+        f"{border_color}{box['bottom_left']}{box['horizontal'] * inner_width}{box['bottom_right']}{Colors.RESET}"
     )
 
     return "\n".join(lines)
@@ -162,6 +160,7 @@ def _strip_ansi(text: str) -> str:
         Text without ANSI codes.
     """
     import re
+
     return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
@@ -196,11 +195,13 @@ def render_plan(plan: CommandPlan, verification: PlanVerification | None = None)
     if plan.grounded_in:
         header_content.append(f"Grounded in: {', '.join(plan.grounded_in)}")
 
-    lines.append(render_box(
-        f"Plan: {plan.title}",
-        header_content,
-        title_color=Colors.BOLD_CYAN,
-    ))
+    lines.append(
+        render_box(
+            f"Plan: {plan.title}",
+            header_content,
+            title_color=Colors.BOLD_CYAN,
+        )
+    )
     lines.append("")
 
     # Steps
@@ -265,10 +266,7 @@ def render_confirmation_prompt(plan: CommandPlan, auto_approve: bool = False) ->
         Confirmation prompt string.
     """
     if auto_approve:
-        return (
-            f"{Colors.DIM}This is a low-risk operation. "
-            f"Press Enter to continue or 'n' to cancel.{Colors.RESET}"
-        )
+        return f"{Colors.DIM}This is a low-risk operation. Press Enter to continue or 'n' to cancel.{Colors.RESET}"
 
     risk = plan.overall_risk
     if risk == "high":
@@ -296,10 +294,7 @@ def render_step_progress(step_index: int, total: int, command: str) -> str:
     Returns:
         Progress string.
     """
-    return (
-        f"{Colors.CYAN}[{step_index + 1}/{total}]{Colors.RESET} "
-        f"Executing: {Colors.DIM}${Colors.RESET} {command}"
-    )
+    return f"{Colors.CYAN}[{step_index + 1}/{total}]{Colors.RESET} Executing: {Colors.DIM}${Colors.RESET} {command}"
 
 
 def render_step_result(result: StepResult, step_explanation: str = "") -> str:

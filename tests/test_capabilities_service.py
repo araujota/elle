@@ -1,23 +1,16 @@
 """Tests for service capabilities."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from elle.capabilities.core.service import (
     ServiceInput,
-    ServiceOutput,
-    ServiceStatusOutput,
     ServiceRestartCapability,
     ServiceStartCapability,
-    ServiceStopCapability,
     ServiceStatusCapability,
+    ServiceStopCapability,
 )
-from elle.capabilities.models import (
-    DryRunResult,
-    CapabilityResult,
-    VerificationResult,
-)
-
 
 # =============================================================================
 # Mock helpers

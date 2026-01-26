@@ -1,17 +1,15 @@
 """Tests for AT-SPI data models."""
 
 import pytest
-from datetime import datetime
 
 from elle.atspi.models import (
+    AccessibleApp,
+    ActionResult,
+    MatchResult,
+    UIAction,
     UIElement,
     UIRecipe,
-    UIAction,
     UITaskPlan,
-    ActionResult,
-    ExecutionResult,
-    MatchResult,
-    AccessibleApp,
 )
 
 
@@ -175,9 +173,7 @@ class TestUITaskPlan:
 
     def test_create_task_plan(self):
         """Test creating a task plan."""
-        actions = (
-            UIAction(action_type="click", target_name="Bluetooth"),
-        )
+        actions = (UIAction(action_type="click", target_name="Bluetooth"),)
 
         plan = UITaskPlan(
             task_id="task-123",

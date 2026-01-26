@@ -129,20 +129,22 @@ class TestCausalChain:
     def test_compute_overall_confidence(self):
         """Test computing overall confidence."""
         now = datetime.utcnow()
-        links = tuple([
-            CausalLink(
-                cause_type="event",
-                cause_id=f"evt-{i}",
-                cause_summary=f"Event {i}",
-                cause_timestamp=now,
-                effect_type="event",
-                effect_id=f"evt-{i+1}",
-                effect_summary=f"Event {i+1}",
-                effect_timestamp=now,
-                confidence=0.8,
-            )
-            for i in range(3)
-        ])
+        links = tuple(
+            [
+                CausalLink(
+                    cause_type="event",
+                    cause_id=f"evt-{i}",
+                    cause_summary=f"Event {i}",
+                    cause_timestamp=now,
+                    effect_type="event",
+                    effect_id=f"evt-{i + 1}",
+                    effect_summary=f"Event {i + 1}",
+                    effect_timestamp=now,
+                    confidence=0.8,
+                )
+                for i in range(3)
+            ]
+        )
 
         chain = CausalChain(
             chain_id="test",

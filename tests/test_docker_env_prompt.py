@@ -1,18 +1,17 @@
 """Tests for Docker environment variable prompting session."""
 
-import pytest
-from unittest.mock import patch, MagicMock
 import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
+import pytest
 from rich.console import Console
 
+from elle.cli.docker.env_models import EnvVarPromptResult, EnvVarSpec
 from elle.cli.docker.env_prompt import (
     EnvVarPromptSession,
-    prompt_env_vars,
     prompt_for_image,
 )
-from elle.cli.docker.env_models import EnvVarSpec, EnvVarPromptResult
 from elle.cli.docker.env_store import DockerEnvStore
 
 
@@ -110,7 +109,7 @@ class TestPromptEnvVars:
 
     def test_prompt_returns_result(self):
         """Test basic structure of prompt result."""
-        specs = (EnvVarSpec(name="VAR1", required=False),)
+        (EnvVarSpec(name="VAR1", required=False),)
 
         # Mock user cancelling
         with patch("builtins.input", side_effect=KeyboardInterrupt):
@@ -125,9 +124,7 @@ class TestPromptForImage:
 
     def test_returns_empty_for_unknown_image(self):
         """Unknown images with no specs return empty result."""
-        with patch(
-            "elle.cli.docker.env_detector.DockerEnvDetector"
-        ) as mock_detector_class:
+        with patch("elle.cli.docker.env_detector.DockerEnvDetector") as mock_detector_class:
             mock_detector = MagicMock()
             mock_detector.detect_from_image.return_value = ()
             mock_detector_class.return_value = mock_detector

@@ -155,7 +155,7 @@ def render_side_by_side_diff(
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag == "equal":
             # Show some context
-            for old, new in zip(old_lines[i1:i2], new_lines[j1:j2]):
+            for old, new in zip(old_lines[i1:i2], new_lines[j1:j2], strict=False):
                 table.add_row(
                     Text(old[:half_width], style="muted"),
                     Text(new[:half_width], style="muted"),

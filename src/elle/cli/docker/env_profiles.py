@@ -741,7 +741,7 @@ def list_known_families() -> list[str]:
     seen: set[str] = set()
     families: list[str] = []
 
-    for name, profile in IMAGE_PROFILES.items():
+    for _name, profile in IMAGE_PROFILES.items():
         if profile.image_family not in seen:
             seen.add(profile.image_family)
             families.append(profile.image_family)

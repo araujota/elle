@@ -83,9 +83,7 @@ class TestVariableResolution:
 
     def test_resolve_embedded_variable(self, evaluator, event_context):
         """Test resolving embedded variables in string."""
-        result = evaluator._resolve_value(
-            "Host: {system.hostname}", event_context
-        )
+        result = evaluator._resolve_value("Host: {system.hostname}", event_context)
         assert result == "Host: test-host"
 
 
@@ -138,38 +136,28 @@ class TestStringOperators:
 
     def test_contains_true(self, evaluator, event_context):
         """Test contains operator returns true."""
-        result = evaluator._op_contains(
-            ["{event.message}", "low"], event_context
-        )
+        result = evaluator._op_contains(["{event.message}", "low"], event_context)
         assert result is True
 
     def test_contains_false(self, evaluator, event_context):
         """Test contains operator returns false."""
-        result = evaluator._op_contains(
-            ["{event.message}", "high"], event_context
-        )
+        result = evaluator._op_contains(["{event.message}", "high"], event_context)
         assert result is False
 
     def test_matches_true(self, evaluator, event_context):
         """Test matches operator returns true."""
-        result = evaluator._op_matches(
-            ["{event.message}", r"[Dd]isk"], event_context
-        )
+        result = evaluator._op_matches(["{event.message}", r"[Dd]isk"], event_context)
         assert result is True
 
     def test_matches_false(self, evaluator, event_context):
         """Test matches operator returns false."""
-        result = evaluator._op_matches(
-            ["{event.message}", r"^Error"], event_context
-        )
+        result = evaluator._op_matches(["{event.message}", r"^Error"], event_context)
         assert result is False
 
     def test_matches_invalid_regex(self, evaluator, event_context):
         """Test matches with invalid regex raises error."""
         with pytest.raises(EvaluationError):
-            evaluator._op_matches(
-                ["{event.message}", r"[invalid"], event_context
-            )
+            evaluator._op_matches(["{event.message}", r"[invalid"], event_context)
 
 
 class TestLogicalOperators:
@@ -255,9 +243,7 @@ class TestConditionEvaluation:
 
     def test_evaluate_simple_condition(self, event_context):
         """Test evaluating simple condition."""
-        condition = Condition(
-            expression={"gte": ["{event.raw.used_pct}", 90]}
-        )
+        condition = Condition(expression={"gte": ["{event.raw.used_pct}", 90]})
         result, explanation = evaluate_condition(condition, event_context)
         assert result is True
         assert "95" in explanation or "90" in explanation
@@ -278,9 +264,7 @@ class TestConditionEvaluation:
 
     def test_evaluate_failing_condition(self, event_context):
         """Test evaluating failing condition."""
-        condition = Condition(
-            expression={"gte": ["{event.raw.used_pct}", 100]}
-        )
+        condition = Condition(expression={"gte": ["{event.raw.used_pct}", 100]})
         result, explanation = evaluate_condition(condition, event_context)
         assert result is False
 

@@ -133,16 +133,10 @@ class EnvVarPromptSession:
                     self._from_saved.add(spec.name)
 
             # Prompt for any missing required
-            missing_required = [
-                spec
-                for spec in self.specs
-                if spec.required and spec.name not in self._collected
-            ]
+            missing_required = [spec for spec in self.specs if spec.required and spec.name not in self._collected]
             if missing_required:
                 self.console.print()
-                self.console.print(
-                    Text("Some required variables are missing:", style="warning")
-                )
+                self.console.print(Text("Some required variables are missing:", style="warning"))
                 for spec in missing_required:
                     self._prompt_single_var(spec, saved_values)
         else:
@@ -157,9 +151,7 @@ class EnvVarPromptSession:
 
             # Save values if requested
             if self.save_values and self.store:
-                values_to_save = [
-                    v for v in self._collected.values() if not v.from_saved
-                ]
+                values_to_save = [v for v in self._collected.values() if not v.from_saved]
                 if values_to_save:
                     self.store.save_values(self.image, values_to_save)
 
@@ -241,12 +233,14 @@ class EnvVarPromptSession:
         options = []
         if has_saved:
             options.append(("[u]", "Use saved values"))
-        options.extend([
-            ("[e]", "Enter values"),
-            ("[s]", "Skip"),
-            ("[?]", "Explain"),
-            ("[q]", "Cancel"),
-        ])
+        options.extend(
+            [
+                ("[e]", "Enter values"),
+                ("[s]", "Skip"),
+                ("[?]", "Explain"),
+                ("[q]", "Cancel"),
+            ]
+        )
 
         option_text = "  ".join(f"[cyan]{k}[/cyan] {v}" for k, v in options)
         self.console.print(option_text)

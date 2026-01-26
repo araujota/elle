@@ -108,10 +108,7 @@ def read_token_file(path: Path | None = None) -> str | None:
         # Check permissions - warn if too permissive
         mode = path.stat().st_mode
         if mode & (stat.S_IRGRP | stat.S_IROTH):
-            logger.warning(
-                f"Token file {path} has insecure permissions "
-                f"(mode={oct(mode)}). Should be 600."
-            )
+            logger.warning(f"Token file {path} has insecure permissions (mode={oct(mode)}). Should be 600.")
 
         return path.read_text().strip()
 

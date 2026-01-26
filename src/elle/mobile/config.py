@@ -44,9 +44,7 @@ class MobileGatewayConfig:
     internal_api_port: int = 8377
     cert_dir: Path = field(default_factory=lambda: Path("/var/lib/elle/mobile"))
     db_path: Path = field(default_factory=lambda: Path("/var/lib/elle/mobile.db"))
-    audit_db_path: Path = field(
-        default_factory=lambda: Path("/var/lib/elle/mobile_audit.db")
-    )
+    audit_db_path: Path = field(default_factory=lambda: Path("/var/lib/elle/mobile_audit.db"))
     rate_limit_pairing: int = 5  # Max pairing attempts per minute
 
 

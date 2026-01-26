@@ -11,17 +11,9 @@ MONGODB_RECIPE = StackRecipe(
     display_name="MongoDB Server",
     description="MongoDB document database with authentication enabled and localhost binding",
     category="data",
-
-    packages=(
-        "mongodb-org",
-    ),
-
-    services=(
-        "mongod",
-    ),
-
+    packages=("mongodb-org",),
+    services=("mongod",),
     config_templates={},
-
     guarantees=(
         StackGuarantee(
             name="service_running",
@@ -56,7 +48,6 @@ MONGODB_RECIPE = StackRecipe(
             remediation_hint="Check mongod.conf port setting and service status",
         ),
     ),
-
     variables=(
         StackVariable(
             name="admin_password",
@@ -77,16 +68,13 @@ MONGODB_RECIPE = StackRecipe(
             required=False,
         ),
     ),
-
     presets={
         "dev": {},
         "prod": {},
     },
-
     min_ram_mb=1024,
     min_disk_gb=10,
     ports_required=(27017,),
-
     version="1.0.0",
     tags=("database", "nosql", "mongodb", "data", "document"),
 )

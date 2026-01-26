@@ -11,17 +11,9 @@ GRAFANA_RECIPE = StackRecipe(
     display_name="Grafana Dashboards",
     description="Grafana visualization and dashboards with secure defaults",
     category="observability",
-
-    packages=(
-        "grafana",
-    ),
-
-    services=(
-        "grafana-server",
-    ),
-
+    packages=("grafana",),
+    services=("grafana-server",),
     config_templates={},
-
     guarantees=(
         StackGuarantee(
             name="service_running",
@@ -56,7 +48,6 @@ GRAFANA_RECIPE = StackRecipe(
             remediation_hint="Change default password: grafana-cli admin reset-admin-password <newpassword>",
         ),
     ),
-
     variables=(
         StackVariable(
             name="admin_password",
@@ -77,7 +68,6 @@ GRAFANA_RECIPE = StackRecipe(
             required=False,
         ),
     ),
-
     presets={
         "dev": {
             "http_port": "3000",
@@ -86,11 +76,9 @@ GRAFANA_RECIPE = StackRecipe(
             "http_port": "3000",
         },
     },
-
     min_ram_mb=256,
     min_disk_gb=1,
     ports_required=(3000,),
-
     version="1.0.0",
     tags=("observability", "dashboards", "grafana", "visualization", "monitoring"),
 )

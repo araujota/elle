@@ -85,21 +85,29 @@ def _format_elements_for_prompt(
 
     # Filter to actionable elements
     actionable = [
-        e for e in elements
-        if e.actions or e.role in (
-            "push button", "toggle button", "check box",
-            "radio button", "menu item", "combo box",
-            "text", "entry", "slider", "switch", "link"
+        e
+        for e in elements
+        if e.actions
+        or e.role
+        in (
+            "push button",
+            "toggle button",
+            "check box",
+            "radio button",
+            "menu item",
+            "combo box",
+            "text",
+            "entry",
+            "slider",
+            "switch",
+            "link",
         )
     ]
 
     for elem in actionable[:max_elements]:
         states_str = ", ".join(elem.states) if elem.states else "none"
         actions_str = ", ".join(elem.actions) if elem.actions else "none"
-        lines.append(
-            f"- name='{elem.name}' role='{elem.role}' "
-            f"states=[{states_str}] actions=[{actions_str}]"
-        )
+        lines.append(f"- name='{elem.name}' role='{elem.role}' states=[{states_str}] actions=[{actions_str}]")
 
     if len(actionable) > max_elements:
         lines.append(f"... and {len(actionable) - max_elements} more elements")
@@ -319,31 +327,37 @@ class UITaskPlanner:
             # Try to find matching element
             matched = self._match_request_to_elements(target_name, recipe.elements)
             if matched:
-                actions.append({
-                    "action_type": action_type,
-                    "target_name": matched.name,
-                    "target_role": matched.role,
-                    "verify_state": verify_state,
-                    "wait_ms": 200,
-                })
+                actions.append(
+                    {
+                        "action_type": action_type,
+                        "target_name": matched.name,
+                        "target_role": matched.role,
+                        "verify_state": verify_state,
+                        "wait_ms": 200,
+                    }
+                )
                 expected_outcome = f"{matched.name} is {verify_state or 'clicked'}"
             else:
                 # Use raw target name
-                actions.append({
+                actions.append(
+                    {
+                        "action_type": action_type,
+                        "target_name": target_name,
+                        "verify_state": verify_state,
+                        "wait_ms": 200,
+                    }
+                )
+                expected_outcome = f"{target_name} is {verify_state or 'clicked'}"
+        else:
+            # No recipe, use raw target
+            actions.append(
+                {
                     "action_type": action_type,
                     "target_name": target_name,
                     "verify_state": verify_state,
                     "wait_ms": 200,
-                })
-                expected_outcome = f"{target_name} is {verify_state or 'clicked'}"
-        else:
-            # No recipe, use raw target
-            actions.append({
-                "action_type": action_type,
-                "target_name": target_name,
-                "verify_state": verify_state,
-                "wait_ms": 200,
-            })
+                }
+            )
             expected_outcome = f"{target_name} is {verify_state or 'clicked'}"
 
         return {
@@ -364,8 +378,20 @@ class UITaskPlanner:
         request_lower = request.lower()
 
         # Remove common action words
-        for word in ["disable", "enable", "turn off", "turn on", "click",
-                     "press", "toggle", "activate", "deactivate", "the", "a", "an"]:
+        for word in [
+            "disable",
+            "enable",
+            "turn off",
+            "turn on",
+            "click",
+            "press",
+            "toggle",
+            "activate",
+            "deactivate",
+            "the",
+            "a",
+            "an",
+        ]:
             request_lower = request_lower.replace(word, "")
 
         # Remove common prepositions

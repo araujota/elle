@@ -13,6 +13,7 @@ Features:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from datetime import datetime, timedelta
 
@@ -123,10 +124,8 @@ class ManVaultService:
             except TimeoutError:
                 logger.warning("ManVault service stop timed out, cancelling")
                 self._task.cancel()
-                try:
+                with contextlib.suppress(asyncio.CancelledError):
                     await self._task
-                except asyncio.CancelledError:
-                    pass
             self._task = None
 
     async def _run_periodic_tasks(self) -> None:

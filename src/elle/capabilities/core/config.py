@@ -186,11 +186,13 @@ class ConfigEditCapability(BaseCapability):
             # Convert operations
             ops = []
             for op in input.operations:
-                ops.append(AugeasOperation(
-                    kind=op.kind,
-                    path=op.path,
-                    value=op.value,
-                ))
+                ops.append(
+                    AugeasOperation(
+                        kind=op.kind,
+                        path=op.path,
+                        value=op.value,
+                    )
+                )
 
             request = AugeasEditRequest(
                 file_path=input.file_path,
@@ -228,6 +230,7 @@ class ConfigEditCapability(BaseCapability):
     def run(self, input: ConfigEditInput) -> CapabilityResult:
         """Execute config edit."""
         import asyncio
+
         start_time = time.time()
 
         try:
@@ -237,11 +240,13 @@ class ConfigEditCapability(BaseCapability):
             # Convert operations
             ops = []
             for op in input.operations:
-                ops.append(AugeasOperation(
-                    kind=op.kind,
-                    path=op.path,
-                    value=op.value,
-                ))
+                ops.append(
+                    AugeasOperation(
+                        kind=op.kind,
+                        path=op.path,
+                        value=op.value,
+                    )
+                )
 
             request = AugeasEditRequest(
                 file_path=input.file_path,
@@ -260,10 +265,9 @@ class ConfigEditCapability(BaseCapability):
                 if loop.is_running():
                     # Create a new task for async execution
                     import concurrent.futures
+
                     with concurrent.futures.ThreadPoolExecutor() as pool:
-                        result = pool.submit(
-                            lambda: asyncio.run(controller.execute(request))
-                        ).result()
+                        result = pool.submit(lambda: asyncio.run(controller.execute(request))).result()
                 else:
                     result = loop.run_until_complete(controller.execute(request))
             except RuntimeError:
@@ -349,10 +353,9 @@ class ConfigEditCapability(BaseCapability):
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
                     import concurrent.futures
+
                     with concurrent.futures.ThreadPoolExecutor() as pool:
-                        result = pool.submit(
-                            lambda: asyncio.run(validate_config(path))
-                        ).result()
+                        result = pool.submit(lambda: asyncio.run(validate_config(path))).result()
                 else:
                     result = loop.run_until_complete(validate_config(path))
             except RuntimeError:
@@ -363,9 +366,7 @@ class ConfigEditCapability(BaseCapability):
                 checks_performed=(result.command or "validation",),
                 actual_state={"valid": result.valid},
                 expected_state={"valid": True},
-                discrepancies=()
-                if result.valid
-                else (result.error or "Validation failed",),
+                discrepancies=() if result.valid else (result.error or "Validation failed",),
             )
 
         except ImportError:
@@ -469,11 +470,13 @@ class ConfigPreviewCapability(BaseCapability):
             # Convert operations
             ops = []
             for op in input.operations:
-                ops.append(AugeasOperation(
-                    kind=op.kind,
-                    path=op.path,
-                    value=op.value,
-                ))
+                ops.append(
+                    AugeasOperation(
+                        kind=op.kind,
+                        path=op.path,
+                        value=op.value,
+                    )
+                )
 
             request = AugeasEditRequest(
                 file_path=input.file_path,

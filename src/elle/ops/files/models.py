@@ -24,12 +24,8 @@ class FileOp(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    kind: Literal["move", "copy", "delete", "rename", "mkdir", "read", "write"] = Field(
-        description="Type of operation"
-    )
-    source: str = Field(
-        description="Source file/directory path"
-    )
+    kind: Literal["move", "copy", "delete", "rename", "mkdir", "read", "write"] = Field(description="Type of operation")
+    source: str = Field(description="Source file/directory path")
     dest: str | None = Field(
         default=None,
         description="Destination path (for move, copy, rename)",
@@ -60,9 +56,7 @@ class FileRequest(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    operations: tuple[FileOp, ...] = Field(
-        description="Sequence of operations to perform"
-    )
+    operations: tuple[FileOp, ...] = Field(description="Sequence of operations to perform")
     description: str = Field(
         description="Human-readable summary of the operations",
     )
@@ -263,9 +257,7 @@ class FileCategory(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     name: str = Field(description="Category name (e.g., 'images', 'documents')")
-    patterns: tuple[str, ...] = Field(
-        description="File patterns that match this category (glob style)"
-    )
+    patterns: tuple[str, ...] = Field(description="File patterns that match this category (glob style)")
     destination: str | None = Field(
         default=None,
         description="Destination subdirectory for this category",
@@ -277,9 +269,7 @@ class OrganizeRequest(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    source_dir: str = Field(
-        description="Directory to organize"
-    )
+    source_dir: str = Field(description="Directory to organize")
     categories: tuple[FileCategory, ...] = Field(
         default_factory=tuple,
         description="Categories to use (uses defaults if empty)",

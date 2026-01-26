@@ -195,9 +195,7 @@ def execute_gui_task_sync(
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-    return loop.run_until_complete(
-        execute_gui_task(request, app_name, adapt_on_failure, dry_run)
-    )
+    return loop.run_until_complete(execute_gui_task(request, app_name, adapt_on_failure, dry_run))
 
 
 __all__ = [

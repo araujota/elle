@@ -173,9 +173,7 @@ def create_mobile_gateway(
                         from cryptography.hazmat.primitives import serialization
 
                         cert = x509.load_der_x509_certificate(peer_cert)
-                        client_cert_pem = cert.public_bytes(
-                            serialization.Encoding.PEM
-                        )
+                        client_cert_pem = cert.public_bytes(serialization.Encoding.PEM)
 
         # Get client IP
         client_ip = "unknown"
@@ -202,9 +200,7 @@ def create_mobile_gateway(
     # ========================================================================
 
     @app.post("/pair", response_model=PairingResponse)
-    async def complete_pairing(
-        request: Request, pairing_request: PairingRequest
-    ) -> PairingResponse:
+    async def complete_pairing(request: Request, pairing_request: PairingRequest) -> PairingResponse:
         """Complete device pairing with a valid token.
 
         This endpoint is called by the mobile app after scanning the QR code.
@@ -401,16 +397,16 @@ def create_mobile_gateway(
         devices = deps.store.list_devices()
         return {
             "devices": [
-                safe_model_dump(DeviceResponse(
-                    device_id=d.device_id,
-                    name=d.name,
-                    role=d.role.value,
-                    status=d.status.value,
-                    paired_at=d.paired_at.isoformat() if d.paired_at else None,
-                    last_seen_at=(
-                        d.last_seen_at.isoformat() if d.last_seen_at else None
-                    ),
-                ))
+                safe_model_dump(
+                    DeviceResponse(
+                        device_id=d.device_id,
+                        name=d.name,
+                        role=d.role.value,
+                        status=d.status.value,
+                        paired_at=d.paired_at.isoformat() if d.paired_at else None,
+                        last_seen_at=(d.last_seen_at.isoformat() if d.last_seen_at else None),
+                    )
+                )
                 for d in devices
             ]
         }
@@ -504,16 +500,16 @@ def create_mobile_gateway(
         elevation_status = deps.elevation.get_elevation_status(device_id)
 
         return {
-            "device": safe_model_dump(DeviceResponse(
-                device_id=device.device_id,
-                name=device.name,
-                role=device.role.value,
-                status=device.status.value,
-                paired_at=device.paired_at.isoformat() if device.paired_at else None,
-                last_seen_at=(
-                    device.last_seen_at.isoformat() if device.last_seen_at else None
-                ),
-            )),
+            "device": safe_model_dump(
+                DeviceResponse(
+                    device_id=device.device_id,
+                    name=device.name,
+                    role=device.role.value,
+                    status=device.status.value,
+                    paired_at=device.paired_at.isoformat() if device.paired_at else None,
+                    last_seen_at=(device.last_seen_at.isoformat() if device.last_seen_at else None),
+                )
+            ),
             "elevation": elevation_status,
         }
 

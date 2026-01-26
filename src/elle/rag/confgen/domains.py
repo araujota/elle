@@ -54,10 +54,7 @@ class DomainHandler(ABC):
     def matches_path(self, path: Path | str) -> bool:
         """Check if a path matches this domain's file patterns."""
         path = Path(path)
-        for pattern in self.file_patterns:
-            if path.match(pattern):
-                return True
-        return False
+        return any(path.match(pattern) for pattern in self.file_patterns)
 
     def get_schema_hint(self, file_path: Path | str) -> dict[str, Any] | None:
         """Get a schema hint for the file type.
@@ -89,16 +86,15 @@ class DomainHandler(ABC):
                 )
 
             # Check for dangerous patterns in values
-            if op.value:
-                if self._has_shell_injection(op.value):
-                    issues.append(
-                        ValidationIssue(
-                            severity="error",
-                            message="Potential shell injection in value",
-                            path=op.path,
-                            suggestion="Escape or quote special characters",
-                        )
+            if op.value and self._has_shell_injection(op.value):
+                issues.append(
+                    ValidationIssue(
+                        severity="error",
+                        message="Potential shell injection in value",
+                        path=op.path,
+                        suggestion="Escape or quote special characters",
                     )
+                )
 
         return ConfigGenValidation(
             valid=not any(i.severity == "error" for i in issues),
@@ -136,10 +132,7 @@ class DomainHandler(ABC):
             r"&&\s*\w+",  # And command
             r"\|\|\s*\w+",  # Or command
         ]
-        for pattern in dangerous_patterns:
-            if re.search(pattern, value):
-                return True
-        return False
+        return any(re.search(pattern, value) for pattern in dangerous_patterns)
 
 
 # =============================================================================
@@ -231,10 +224,7 @@ class NetplanHandler(DomainHandler):
         return ConfigGenValidation(
             valid=not any(i.severity == "error" for i in issues),
             issues=tuple(issues),
-            syntax_valid=not any(
-                i.severity == "error" and "syntax" in i.message.lower()
-                for i in issues
-            ),
+            syntax_valid=not any(i.severity == "error" and "syntax" in i.message.lower() for i in issues),
         )
 
     def get_template(self) -> str | None:
@@ -344,10 +334,24 @@ class FstabHandler(DomainHandler):
             # Validate mount options
             if op.kind == "set" and "opt" in op.path.lower() and op.value:
                 valid_options = {
-                    "defaults", "rw", "ro", "noatime", "nodiratime",
-                    "relatime", "noexec", "nosuid", "nodev", "user",
-                    "users", "auto", "noauto", "sync", "async",
-                    "dirsync", "nofail", "x-systemd.automount",
+                    "defaults",
+                    "rw",
+                    "ro",
+                    "noatime",
+                    "nodiratime",
+                    "relatime",
+                    "noexec",
+                    "nosuid",
+                    "nodev",
+                    "user",
+                    "users",
+                    "auto",
+                    "noauto",
+                    "sync",
+                    "async",
+                    "dirsync",
+                    "nofail",
+                    "x-systemd.automount",
                 }
                 for opt in op.value.split(","):
                     opt = opt.strip().split("=")[0]
@@ -651,6 +655,7 @@ class GeneralHandler(DomainHandler):
 # Handler Registry
 # =============================================================================
 
+
 def _build_handlers() -> dict[ConfigDomain, DomainHandler]:
     """Build the handler registry.
 
@@ -670,6 +675,7 @@ def _build_handlers() -> dict[ConfigDomain, DomainHandler]:
     # Add Docker handler
     try:
         from elle.rag.confgen.docker import DockerHandler
+
         handlers["docker"] = DockerHandler()
     except ImportError:
         pass
@@ -677,6 +683,7 @@ def _build_handlers() -> dict[ConfigDomain, DomainHandler]:
     # Add WireGuard handler
     try:
         from elle.rag.confgen.wireguard import WireguardHandler
+
         handlers["wireguard"] = WireguardHandler()
     except ImportError:
         pass

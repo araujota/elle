@@ -11,17 +11,9 @@ APACHE_RECIPE = StackRecipe(
     display_name="Apache HTTP Server",
     description="Apache HTTP server with MPM configuration and secure defaults",
     category="web",
-
-    packages=(
-        "apache2",
-    ),
-
-    services=(
-        "apache2",
-    ),
-
+    packages=("apache2",),
+    services=("apache2",),
     config_templates={},
-
     guarantees=(
         StackGuarantee(
             name="service_running",
@@ -56,7 +48,6 @@ APACHE_RECIPE = StackRecipe(
             remediation_hint="Enable an MPM with: a2enmod mpm_event",
         ),
     ),
-
     variables=(
         StackVariable(
             name="mpm_module",
@@ -77,7 +68,6 @@ APACHE_RECIPE = StackRecipe(
             required=False,
         ),
     ),
-
     presets={
         "dev": {
             "mpm_module": "prefork",
@@ -88,11 +78,9 @@ APACHE_RECIPE = StackRecipe(
             "max_request_workers": "400",
         },
     },
-
     min_ram_mb=128,
     min_disk_gb=1,
     ports_required=(80, 443),
-
     version="1.0.0",
     tags=("web", "http", "apache", "httpd", "server"),
 )

@@ -122,9 +122,7 @@ def _render_suggestions(result: FixitResult) -> list[str]:
     safe_suggestions = [s for s in result.verified_suggestions if s.is_safe]
 
     if not safe_suggestions:
-        lines.append(
-            f"  {Colors.DIM}No verified fixes available.{Colors.RESET}"
-        )
+        lines.append(f"  {Colors.DIM}No verified fixes available.{Colors.RESET}")
         return lines
 
     for i, verified in enumerate(safe_suggestions, 1):
@@ -207,19 +205,12 @@ def _render_footer(result: FixitResult) -> list[str]:
     safe_count = len([s for s in result.verified_suggestions if s.is_safe])
 
     if safe_count > 0:
-        lines.append(
-            f"{Colors.DIM}To apply a fix, copy the command above and run it.{Colors.RESET}"
-        )
+        lines.append(f"{Colors.DIM}To apply a fix, copy the command above and run it.{Colors.RESET}")
     else:
-        lines.append(
-            f"{Colors.DIM}No verified fixes available. "
-            f"Check the error output for more details.{Colors.RESET}"
-        )
+        lines.append(f"{Colors.DIM}No verified fixes available. Check the error output for more details.{Colors.RESET}")
 
     if result.incident_id:
-        lines.append(
-            f"{Colors.DIM}Incident ID: {result.incident_id}{Colors.RESET}"
-        )
+        lines.append(f"{Colors.DIM}Incident ID: {result.incident_id}{Colors.RESET}")
 
     return lines
 
@@ -293,10 +284,7 @@ def render_compact_result(result: FixitResult) -> str:
     diag = result.analysis.diagnosis
     safe_count = len([s for s in result.verified_suggestions if s.is_safe])
 
-    lines = [
-        f"{Colors.BOLD}Diagnosis:{Colors.RESET} "
-        f"{diag.error_category.replace('_', ' ')} - {diag.summary}"
-    ]
+    lines = [f"{Colors.BOLD}Diagnosis:{Colors.RESET} {diag.error_category.replace('_', ' ')} - {diag.summary}"]
 
     if safe_count > 0:
         lines.append(

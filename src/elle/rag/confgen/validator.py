@@ -25,15 +25,17 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 # Paths that should never be modified
-FORBIDDEN_PATHS = frozenset([
-    "/etc/passwd",
-    "/etc/shadow",
-    "/etc/group",
-    "/etc/gshadow",
-    "/etc/sudoers",
-    "/boot/grub/grub.cfg",
-    "/boot/efi",
-])
+FORBIDDEN_PATHS = frozenset(
+    [
+        "/etc/passwd",
+        "/etc/shadow",
+        "/etc/group",
+        "/etc/gshadow",
+        "/etc/sudoers",
+        "/boot/grub/grub.cfg",
+        "/boot/efi",
+    ]
+)
 
 # Path prefixes that require extra caution
 CRITICAL_PREFIXES = (
@@ -107,18 +109,10 @@ class ConfigValidator:
 
         # Determine overall validity
         has_errors = any(i.severity == "error" for i in issues)
-        syntax_valid = not any(
-            i.severity == "error" and "syntax" in i.message.lower()
-            for i in issues
-        )
-        path_valid = not any(
-            i.severity == "error" and "path" in i.message.lower()
-            for i in issues
-        )
+        syntax_valid = not any(i.severity == "error" and "syntax" in i.message.lower() for i in issues)
+        path_valid = not any(i.severity == "error" and "path" in i.message.lower() for i in issues)
         values_valid = not any(
-            i.severity == "error"
-            and ("injection" in i.message.lower() or "value" in i.message.lower())
-            for i in issues
+            i.severity == "error" and ("injection" in i.message.lower() or "value" in i.message.lower()) for i in issues
         )
 
         return ConfigGenValidation(
@@ -247,6 +241,7 @@ class ConfigValidator:
         if result.file_type == "yaml":
             try:
                 import yaml
+
                 yaml.safe_load(content)
             except yaml.YAMLError as e:
                 issues.append(
@@ -261,6 +256,7 @@ class ConfigValidator:
         elif result.file_type == "json":
             try:
                 import json
+
                 json.loads(content)
             except json.JSONDecodeError as e:
                 issues.append(
@@ -273,6 +269,7 @@ class ConfigValidator:
         elif result.file_type == "toml":
             try:
                 import tomllib
+
                 tomllib.loads(content)
             except Exception as e:
                 issues.append(

@@ -61,10 +61,7 @@ class DockerHandler(DomainHandler):
             return True
 
         # Check for Dockerfiles
-        if name == "dockerfile" or name.startswith("dockerfile."):
-            return True
-
-        return False
+        return bool(name == "dockerfile" or name.startswith("dockerfile."))
 
     def get_schema_hint(self, file_path: Path | str) -> dict[str, Any] | None:
         """Get schema hints for Docker configuration files."""
@@ -139,10 +136,7 @@ class DockerHandler(DomainHandler):
         dockerfile_patterns = ["FROM ", "RUN ", "CMD ", "ENTRYPOINT ", "COPY ", "WORKDIR "]
         content_stripped = content.strip()
 
-        is_dockerfile = any(
-            content_stripped.startswith(p) or f"\n{p}" in content
-            for p in dockerfile_patterns
-        )
+        is_dockerfile = any(content_stripped.startswith(p) or f"\n{p}" in content for p in dockerfile_patterns)
 
         if is_dockerfile:
             return self._validate_dockerfile(content)
@@ -288,10 +282,7 @@ class DockerHandler(DomainHandler):
         return ConfigGenValidation(
             valid=not any(i.severity == "error" for i in issues),
             issues=tuple(issues),
-            syntax_valid=not any(
-                i.severity == "error" and "syntax" in i.message.lower()
-                for i in issues
-            ),
+            syntax_valid=not any(i.severity == "error" and "syntax" in i.message.lower() for i in issues),
         )
 
     def get_template(self) -> str | None:

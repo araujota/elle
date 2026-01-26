@@ -107,9 +107,7 @@ class MobileStore:
         with self._connection() as conn:
             conn.executescript(SCHEMA)
             # Check/set schema version
-            cursor = conn.execute(
-                "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1"
-            )
+            cursor = conn.execute("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1")
             row = cursor.fetchone()
             if row is None:
                 conn.execute(
@@ -181,9 +179,7 @@ class MobileStore:
             Device if found, None otherwise.
         """
         with self._connection() as conn:
-            cursor = conn.execute(
-                "SELECT * FROM devices WHERE device_id = ?", (device_id,)
-            )
+            cursor = conn.execute("SELECT * FROM devices WHERE device_id = ?", (device_id,))
             row = cursor.fetchone()
             if row is None:
                 return None
@@ -199,17 +195,13 @@ class MobileStore:
             Device if found, None otherwise.
         """
         with self._connection() as conn:
-            cursor = conn.execute(
-                "SELECT * FROM devices WHERE cert_fingerprint = ?", (fingerprint,)
-            )
+            cursor = conn.execute("SELECT * FROM devices WHERE cert_fingerprint = ?", (fingerprint,))
             row = cursor.fetchone()
             if row is None:
                 return None
             return self._row_to_device(row)
 
-    def list_devices(
-        self, status: DeviceStatus | None = None
-    ) -> list[PairedDevice]:
+    def list_devices(self, status: DeviceStatus | None = None) -> list[PairedDevice]:
         """List all devices, optionally filtered by status.
 
         Args:
@@ -225,9 +217,7 @@ class MobileStore:
                     (status.value,),
                 )
             else:
-                cursor = conn.execute(
-                    "SELECT * FROM devices ORDER BY created_at DESC"
-                )
+                cursor = conn.execute("SELECT * FROM devices ORDER BY created_at DESC")
             return [self._row_to_device(row) for row in cursor.fetchall()]
 
     def update_device(
@@ -295,9 +285,7 @@ class MobileStore:
             True if device was deleted, False if not found.
         """
         with self._connection() as conn:
-            cursor = conn.execute(
-                "DELETE FROM devices WHERE device_id = ?", (device_id,)
-            )
+            cursor = conn.execute("DELETE FROM devices WHERE device_id = ?", (device_id,))
             conn.commit()
             return cursor.rowcount > 0
 
@@ -328,16 +316,8 @@ class MobileStore:
             role=MobileRole(row["role"]),
             status=DeviceStatus(row["status"]),
             cert_fingerprint=row["cert_fingerprint"],
-            paired_at=(
-                datetime.fromisoformat(row["paired_at"])
-                if row["paired_at"]
-                else None
-            ),
-            last_seen_at=(
-                datetime.fromisoformat(row["last_seen_at"])
-                if row["last_seen_at"]
-                else None
-            ),
+            paired_at=(datetime.fromisoformat(row["paired_at"]) if row["paired_at"] else None),
+            last_seen_at=(datetime.fromisoformat(row["last_seen_at"]) if row["last_seen_at"] else None),
             created_at=datetime.fromisoformat(row["created_at"]),
         )
 
@@ -420,9 +400,7 @@ class MobileStore:
             True if any elevations were revoked.
         """
         with self._connection() as conn:
-            cursor = conn.execute(
-                "DELETE FROM elevations WHERE device_id = ?", (device_id,)
-            )
+            cursor = conn.execute("DELETE FROM elevations WHERE device_id = ?", (device_id,))
             conn.commit()
             return cursor.rowcount > 0
 
@@ -434,9 +412,7 @@ class MobileStore:
         """
         now = datetime.utcnow().isoformat()
         with self._connection() as conn:
-            cursor = conn.execute(
-                "DELETE FROM elevations WHERE expires_at <= ?", (now,)
-            )
+            cursor = conn.execute("DELETE FROM elevations WHERE expires_at <= ?", (now,))
             conn.commit()
             return cursor.rowcount
 
@@ -491,9 +467,7 @@ class MobileStore:
             Token if found, None otherwise.
         """
         with self._connection() as conn:
-            cursor = conn.execute(
-                "SELECT * FROM pairing_tokens WHERE token = ?", (token,)
-            )
+            cursor = conn.execute("SELECT * FROM pairing_tokens WHERE token = ?", (token,))
             row = cursor.fetchone()
             if row is None:
                 return None
@@ -509,9 +483,7 @@ class MobileStore:
             True if token was updated, False if not found.
         """
         with self._connection() as conn:
-            cursor = conn.execute(
-                "UPDATE pairing_tokens SET used = 1 WHERE token = ?", (token,)
-            )
+            cursor = conn.execute("UPDATE pairing_tokens SET used = 1 WHERE token = ?", (token,))
             conn.commit()
             return cursor.rowcount > 0
 
@@ -523,9 +495,7 @@ class MobileStore:
         """
         now = datetime.utcnow().isoformat()
         with self._connection() as conn:
-            cursor = conn.execute(
-                "DELETE FROM pairing_tokens WHERE expires_at <= ?", (now,)
-            )
+            cursor = conn.execute("DELETE FROM pairing_tokens WHERE expires_at <= ?", (now,))
             conn.commit()
             return cursor.rowcount
 

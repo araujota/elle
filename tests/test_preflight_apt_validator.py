@@ -1,13 +1,14 @@
 """Tests for preflight apt validator."""
 
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from elle.ops.preflight.apt_validator import (
     AptValidator,
-    create_apt_validator,
-    _parse_size_to_mb,
     _extract_packages,
+    _parse_size_to_mb,
+    create_apt_validator,
 )
 from elle.ops.preflight.models import (
     IssueSeverity,
@@ -54,6 +55,7 @@ class TestExtractPackages:
     def test_single_package(self):
         """Test extracting single package."""
         import re
+
         pattern = re.compile(r"install:\s*\n((?:\s+\S+)+)")
         match = pattern.search("install:\n  nginx")
         result = _extract_packages(match)
@@ -62,6 +64,7 @@ class TestExtractPackages:
     def test_multiple_packages(self):
         """Test extracting multiple packages."""
         import re
+
         pattern = re.compile(r"install:\s*\n((?:\s+\S+)+)")
         match = pattern.search("install:\n  nginx curl vim")
         result = _extract_packages(match)
@@ -154,10 +157,7 @@ class TestAptValidator:
 
         assert result.status == PreflightStatus.BLOCKED
         assert result.can_proceed is False
-        assert any(
-            i.severity == IssueSeverity.ERROR and "not found" in i.message.lower()
-            for i in result.issues
-        )
+        assert any(i.severity == IssueSeverity.ERROR and "not found" in i.message.lower() for i in result.issues)
 
     @patch("elle.ops.preflight.apt_validator.subprocess.run")
     def test_validate_dependency_conflict(self, mock_run):
@@ -177,10 +177,7 @@ class TestAptValidator:
 
         assert result.status == PreflightStatus.BLOCKED
         assert result.can_proceed is False
-        assert any(
-            i.severity == IssueSeverity.ERROR and "dependencies" in i.message.lower()
-            for i in result.issues
-        )
+        assert any(i.severity == IssueSeverity.ERROR and "dependencies" in i.message.lower() for i in result.issues)
 
     @patch("elle.ops.preflight.apt_validator.subprocess.run")
     def test_validate_held_packages(self, mock_run):
@@ -200,18 +197,14 @@ class TestAptValidator:
 
         assert result.status == PreflightStatus.WARNING
         assert result.can_proceed is True
-        assert any(
-            i.severity == IssueSeverity.WARNING and "held" in i.message.lower()
-            for i in result.issues
-        )
+        assert any(i.severity == IssueSeverity.WARNING and "held" in i.message.lower() for i in result.issues)
 
     @patch("elle.ops.preflight.apt_validator.subprocess.run")
     def test_validate_disk_space(self, mock_run):
         """Test validation parses disk space."""
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout="Need to get 5.5 MB of archives.\n"
-                   "After this operation, 15.2 MB of additional disk space",
+            stdout="Need to get 5.5 MB of archives.\nAfter this operation, 15.2 MB of additional disk space",
             stderr="",
         )
 
@@ -261,15 +254,13 @@ class TestAptValidator:
         )
         result = validator.validate(test)
 
-        assert any(
-            i.severity == IssueSeverity.WARNING and "Large operation" in i.message
-            for i in result.issues
-        )
+        assert any(i.severity == IssueSeverity.WARNING and "Large operation" in i.message for i in result.issues)
 
     @patch("elle.ops.preflight.apt_validator.subprocess.run")
     def test_validate_timeout(self, mock_run):
         """Test validation handles timeout."""
         import subprocess
+
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="apt", timeout=60)
 
         validator = AptValidator()

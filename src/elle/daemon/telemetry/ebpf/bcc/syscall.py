@@ -81,9 +81,7 @@ class SyscallProgram(BCCProgram):
         """Get ring buffer map name."""
         return "events"
 
-    def set_syscall_callback(
-        self, callback: Callable[[SyscallEvent], None] | None
-    ) -> None:
+    def set_syscall_callback(self, callback: Callable[[SyscallEvent], None] | None) -> None:
         """Set callback for syscall events.
 
         Args:
@@ -371,9 +369,7 @@ int kretprobe__sys_clone(struct pt_regs *ctx) {
 }
 """
 
-    def _parse_event(
-        self, cpu: int, data: ctypes.Structure, size: int
-    ) -> EBPFRawEvent | None:
+    def _parse_event(self, cpu: int, data: ctypes.Structure, size: int) -> EBPFRawEvent | None:
         """Parse syscall event from ring buffer.
 
         Args:
@@ -413,12 +409,8 @@ int kretprobe__sys_clone(struct pt_regs *ctx) {
                 SYSCALL_TYPE_CLONE: "clone",
             }
 
-            event_type = syscall_type_map.get(
-                event.syscall_type, EBPFEventType.SYSCALL_GENERIC
-            )
-            syscall_name = syscall_name_map.get(
-                event.syscall_type, "unknown"
-            )
+            event_type = syscall_type_map.get(event.syscall_type, EBPFEventType.SYSCALL_GENERIC)
+            syscall_name = syscall_name_map.get(event.syscall_type, "unknown")
 
             # Build data dict
             data_dict = {

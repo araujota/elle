@@ -3,12 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from elle.rag.confgen.generator import LLMConfigGenerator
 from elle.rag.confgen.models import (
     ConfigGenContext,
     ConfigGenOutcome,
@@ -23,7 +19,6 @@ from elle.rag.confgen.service import (
     get_confgen_service,
     reset_confgen_service,
 )
-from elle.rag.confgen.validator import ConfigValidator
 
 
 class MockGenerator:
@@ -55,9 +50,7 @@ class TestConfigGenService:
         result = ConfigGenResult(
             title="Test config",
             explanation="Test explanation",
-            operations=(
-                ConfigOp(kind="set", path="/test", value="value"),
-            ),
+            operations=(ConfigOp(kind="set", path="/test", value="value"),),
             target_path=str(tmp_path / "config.txt"),
         )
 
@@ -284,7 +277,7 @@ class TestConfigGenServiceApply:
             validation=validation,
         )
 
-        service = ConfigGenService()
+        ConfigGenService()
         # Service.apply should still work but success property is False
         assert outcome.success is False
 
@@ -296,9 +289,7 @@ class TestConfigGenServiceApply:
         result = ConfigGenResult(
             title="Update YAML",
             explanation="Add new key",
-            operations=(
-                ConfigOp(kind="set", path="key2", value="value2"),
-            ),
+            operations=(ConfigOp(kind="set", path="key2", value="value2"),),
             target_path=str(target),
             file_type="yaml",
         )
@@ -321,6 +312,7 @@ class TestConfigGenServiceApply:
         assert applied_outcome.applied is True
 
         import yaml
+
         data = yaml.safe_load(target.read_text())
         assert data["key2"] == "value2"
 
@@ -385,9 +377,7 @@ class TestYAMLOperations:
         result = ConfigGenResult(
             title="Update nested",
             explanation="Set nested value",
-            operations=(
-                ConfigOp(kind="set", path="root.child", value="modified"),
-            ),
+            operations=(ConfigOp(kind="set", path="root.child", value="modified"),),
             target_path=str(target),
             file_type="yaml",
         )
@@ -400,9 +390,10 @@ class TestYAMLOperations:
         )
 
         service = ConfigGenService()
-        applied_outcome = service.apply(outcome, backup=False)
+        service.apply(outcome, backup=False)
 
         import yaml
+
         data = yaml.safe_load(target.read_text())
         assert data["root"]["child"] == "modified"
 
@@ -414,9 +405,7 @@ class TestYAMLOperations:
         result = ConfigGenResult(
             title="Create nested",
             explanation="Create new nested path",
-            operations=(
-                ConfigOp(kind="set", path="new.nested.path", value="created"),
-            ),
+            operations=(ConfigOp(kind="set", path="new.nested.path", value="created"),),
             target_path=str(target),
             file_type="yaml",
         )
@@ -429,9 +418,10 @@ class TestYAMLOperations:
         )
 
         service = ConfigGenService()
-        applied_outcome = service.apply(outcome, backup=False)
+        service.apply(outcome, backup=False)
 
         import yaml
+
         data = yaml.safe_load(target.read_text())
         assert data["new"]["nested"]["path"] == "created"
 
@@ -443,9 +433,7 @@ class TestYAMLOperations:
         result = ConfigGenResult(
             title="Remove key",
             explanation="Remove key",
-            operations=(
-                ConfigOp(kind="rm", path="remove"),
-            ),
+            operations=(ConfigOp(kind="rm", path="remove"),),
             target_path=str(target),
             file_type="yaml",
         )
@@ -458,9 +446,10 @@ class TestYAMLOperations:
         )
 
         service = ConfigGenService()
-        applied_outcome = service.apply(outcome, backup=False)
+        service.apply(outcome, backup=False)
 
         import yaml
+
         data = yaml.safe_load(target.read_text())
         assert "keep" in data
         assert "remove" not in data
@@ -473,9 +462,7 @@ class TestYAMLOperations:
         result = ConfigGenResult(
             title="Append item",
             explanation="Append to list",
-            operations=(
-                ConfigOp(kind="append", path="items", value="item2"),
-            ),
+            operations=(ConfigOp(kind="append", path="items", value="item2"),),
             target_path=str(target),
             file_type="yaml",
         )
@@ -488,8 +475,9 @@ class TestYAMLOperations:
         )
 
         service = ConfigGenService()
-        applied_outcome = service.apply(outcome, backup=False)
+        service.apply(outcome, backup=False)
 
         import yaml
+
         data = yaml.safe_load(target.read_text())
         assert "item2" in data["items"]

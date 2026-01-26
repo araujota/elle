@@ -97,9 +97,7 @@ class MobileCrypto:
 
         return paths
 
-    def generate_client_certificate(
-        self, device_id: str, device_name: str
-    ) -> ClientCertificate:
+    def generate_client_certificate(self, device_id: str, device_name: str) -> ClientCertificate:
         """Generate a client certificate for mTLS.
 
         Args:
@@ -122,12 +120,14 @@ class MobileCrypto:
         )
 
         # Build client certificate
-        subject = x509.Name([
-            x509.NameAttribute(NameOID.COUNTRY_NAME, "US"),
-            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "ELLE Mobile Client"),
-            x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, device_name[:64]),
-            x509.NameAttribute(NameOID.COMMON_NAME, f"device-{device_id}"),
-        ])
+        subject = x509.Name(
+            [
+                x509.NameAttribute(NameOID.COUNTRY_NAME, "US"),
+                x509.NameAttribute(NameOID.ORGANIZATION_NAME, "ELLE Mobile Client"),
+                x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, device_name[:64]),
+                x509.NameAttribute(NameOID.COMMON_NAME, f"device-{device_id}"),
+            ]
+        )
 
         now = datetime.utcnow()
         cert = (
@@ -257,11 +257,13 @@ class MobileCrypto:
         )
 
         # Build CA certificate
-        subject = issuer = x509.Name([
-            x509.NameAttribute(NameOID.COUNTRY_NAME, "US"),
-            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "ELLE Mobile Gateway"),
-            x509.NameAttribute(NameOID.COMMON_NAME, "ELLE Mobile CA"),
-        ])
+        subject = issuer = x509.Name(
+            [
+                x509.NameAttribute(NameOID.COUNTRY_NAME, "US"),
+                x509.NameAttribute(NameOID.ORGANIZATION_NAME, "ELLE Mobile Gateway"),
+                x509.NameAttribute(NameOID.COMMON_NAME, "ELLE Mobile CA"),
+            ]
+        )
 
         now = datetime.utcnow()
         ca_cert = (
@@ -326,11 +328,13 @@ class MobileCrypto:
         )
 
         # Build server certificate
-        subject = x509.Name([
-            x509.NameAttribute(NameOID.COUNTRY_NAME, "US"),
-            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "ELLE Mobile Gateway"),
-            x509.NameAttribute(NameOID.COMMON_NAME, "ELLE Mobile Server"),
-        ])
+        subject = x509.Name(
+            [
+                x509.NameAttribute(NameOID.COUNTRY_NAME, "US"),
+                x509.NameAttribute(NameOID.ORGANIZATION_NAME, "ELLE Mobile Gateway"),
+                x509.NameAttribute(NameOID.COMMON_NAME, "ELLE Mobile Server"),
+            ]
+        )
 
         # Build SAN extension
         san_names = [
@@ -350,9 +354,7 @@ class MobileCrypto:
         # Add overlay host if configured
         if self.config.overlay_host:
             try:
-                san_names.append(
-                    x509.IPAddress(ipaddress_from_string(self.config.overlay_host))
-                )
+                san_names.append(x509.IPAddress(ipaddress_from_string(self.config.overlay_host)))
             except ValueError:
                 san_names.append(x509.DNSName(self.config.overlay_host))
 
@@ -395,9 +397,7 @@ class MobileCrypto:
         )
 
         # Write certificate
-        server_cert_path.write_bytes(
-            server_cert.public_bytes(serialization.Encoding.PEM)
-        )
+        server_cert_path.write_bytes(server_cert.public_bytes(serialization.Encoding.PEM))
 
         # Write key with restricted permissions
         server_key_path.write_bytes(

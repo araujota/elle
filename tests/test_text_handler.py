@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from elle.ops.files import (
     MarkdownBuilder,
     TextHandler,
@@ -123,13 +121,7 @@ class TestTextHandler:
         """Test replacing a section between markers."""
         handler = TextHandler()
         file_path = tmp_path / "test.txt"
-        file_path.write_text(
-            "Header\n"
-            "<!-- BEGIN -->\n"
-            "old content\n"
-            "<!-- BEGIN -->\n"
-            "Footer"
-        )
+        file_path.write_text("Header\n<!-- BEGIN -->\nold content\n<!-- BEGIN -->\nFooter")
 
         result = handler.replace_section(
             file_path,
@@ -145,13 +137,7 @@ class TestTextHandler:
         """Test replacing section with different start/end markers."""
         handler = TextHandler()
         file_path = tmp_path / "test.txt"
-        file_path.write_text(
-            "Before\n"
-            "<!-- START -->\n"
-            "old\n"
-            "<!-- END -->\n"
-            "After"
-        )
+        file_path.write_text("Before\n<!-- START -->\nold\n<!-- END -->\nAfter")
 
         result = handler.replace_section(
             file_path,
@@ -259,19 +245,29 @@ class TestMarkdownBuilder:
 
     def test_checkbox_list(self) -> None:
         """Test checkbox list generation."""
-        md = MarkdownBuilder().checkbox_list([
-            ("Done task", True),
-            ("Pending task", False),
-        ]).build()
+        md = (
+            MarkdownBuilder()
+            .checkbox_list(
+                [
+                    ("Done task", True),
+                    ("Pending task", False),
+                ]
+            )
+            .build()
+        )
         assert "- [x] Done task" in md
         assert "- [ ] Pending task" in md
 
     def test_table(self) -> None:
         """Test table generation."""
-        md = MarkdownBuilder().table(
-            headers=["Name", "Age"],
-            rows=[["Alice", "30"], ["Bob", "25"]],
-        ).build()
+        md = (
+            MarkdownBuilder()
+            .table(
+                headers=["Name", "Age"],
+                rows=[["Alice", "30"], ["Bob", "25"]],
+            )
+            .build()
+        )
         assert "| Name | Age |" in md
         assert "| --- | --- |" in md
         assert "| Alice | 30 |" in md
@@ -279,11 +275,15 @@ class TestMarkdownBuilder:
 
     def test_table_with_alignment(self) -> None:
         """Test table with alignment."""
-        md = MarkdownBuilder().table(
-            headers=["Left", "Center", "Right"],
-            rows=[["a", "b", "c"]],
-            alignment=["left", "center", "right"],
-        ).build()
+        md = (
+            MarkdownBuilder()
+            .table(
+                headers=["Left", "Center", "Right"],
+                rows=[["a", "b", "c"]],
+                alignment=["left", "center", "right"],
+            )
+            .build()
+        )
         assert "| --- |" in md
         assert ":---:" in md
         assert "---:" in md
@@ -306,11 +306,15 @@ class TestMarkdownBuilder:
 
     def test_link_with_title(self) -> None:
         """Test link with title."""
-        md = MarkdownBuilder().link(
-            "Click here",
-            "https://example.com",
-            title="Example Site",
-        ).build()
+        md = (
+            MarkdownBuilder()
+            .link(
+                "Click here",
+                "https://example.com",
+                title="Example Site",
+            )
+            .build()
+        )
         assert '[Click here](https://example.com "Example Site")' in md
 
     def test_image(self) -> None:
@@ -335,10 +339,16 @@ class TestMarkdownBuilder:
 
     def test_definition_list(self) -> None:
         """Test definition list."""
-        md = MarkdownBuilder().definition_list([
-            ("Term 1", "Definition 1"),
-            ("Term 2", "Definition 2"),
-        ]).build()
+        md = (
+            MarkdownBuilder()
+            .definition_list(
+                [
+                    ("Term 1", "Definition 1"),
+                    ("Term 2", "Definition 2"),
+                ]
+            )
+            .build()
+        )
         assert "Term 1" in md
         assert ": Definition 1" in md
 
@@ -389,12 +399,7 @@ class TestMarkdownBuilder:
         """Test saving markdown to file."""
         file_path = tmp_path / "doc.md"
 
-        result = (
-            MarkdownBuilder()
-            .heading("Document")
-            .paragraph("Content")
-            .save(file_path)
-        )
+        result = MarkdownBuilder().heading("Document").paragraph("Content").save(file_path)
 
         assert result.success is True
         assert file_path.exists()
@@ -407,11 +412,7 @@ class TestMarkdownBuilder:
         file_path = tmp_path / "existing.md"
         file_path.write_text("Original")
 
-        result = (
-            MarkdownBuilder()
-            .heading("New")
-            .save(file_path, overwrite=False)
-        )
+        result = MarkdownBuilder().heading("New").save(file_path, overwrite=False)
 
         assert result.success is False
 

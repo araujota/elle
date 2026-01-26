@@ -289,25 +289,29 @@ def _parse_apt_conflicts(stderr: str) -> list[ConflictDetail]:
     for line in stderr.splitlines():
         match = depends_pattern.search(line)
         if match:
-            conflicts.append(ConflictDetail(
-                conflicting_package=match.group(1),
-                conflict_type="depends",
-                required_version=match.group(2),
-                installed_version=match.group(3),
-                resolution=f"Upgrade {match.group(1)} to version {match.group(2) or 'required'}",
-            ))
+            conflicts.append(
+                ConflictDetail(
+                    conflicting_package=match.group(1),
+                    conflict_type="depends",
+                    required_version=match.group(2),
+                    installed_version=match.group(3),
+                    resolution=f"Upgrade {match.group(1)} to version {match.group(2) or 'required'}",
+                )
+            )
             continue
 
         match = breaks_pattern.search(line)
         if match:
             conflict_type = match.group(1).lower()
-            conflicts.append(ConflictDetail(
-                conflicting_package=match.group(2),
-                conflict_type=conflict_type if conflict_type in ("breaks", "conflicts") else "conflicts",
-                required_version=match.group(3),
-                installed_version=match.group(4),
-                resolution=f"Remove or upgrade {match.group(2)} to resolve {conflict_type}",
-            ))
+            conflicts.append(
+                ConflictDetail(
+                    conflicting_package=match.group(2),
+                    conflict_type=conflict_type if conflict_type in ("breaks", "conflicts") else "conflicts",
+                    required_version=match.group(3),
+                    installed_version=match.group(4),
+                    resolution=f"Remove or upgrade {match.group(2)} to resolve {conflict_type}",
+                )
+            )
 
     return conflicts
 
@@ -489,9 +493,7 @@ class PackageInstallCapability(BaseCapability):
             checks_performed=(f"dpkg-query -W {input.package}",),
             actual_state={"installed": is_installed, "version": version},
             expected_state={"installed": True},
-            discrepancies=()
-            if is_installed
-            else (f"Package {input.package} not installed",),
+            discrepancies=() if is_installed else (f"Package {input.package} not installed",),
         )
 
     def rollback(
@@ -641,9 +643,7 @@ class PackageRemoveCapability(BaseCapability):
             checks_performed=(f"dpkg-query -W {input.package}",),
             actual_state={"installed": is_installed},
             expected_state={"installed": False},
-            discrepancies=()
-            if not is_installed
-            else (f"Package {input.package} still installed",),
+            discrepancies=() if not is_installed else (f"Package {input.package} still installed",),
         )
 
     def rollback(
@@ -897,16 +897,16 @@ class PackageConflictDetectCapability(BaseCapability):
 
         # Check if target package is held
         if input.package in held_packages:
-            conflicts.append(ConflictDetail(
-                conflicting_package=input.package,
-                conflict_type="held",
-                resolution=f"Unhold package: apt-mark unhold {input.package}",
-            ))
+            conflicts.append(
+                ConflictDetail(
+                    conflicting_package=input.package,
+                    conflict_type="held",
+                    resolution=f"Unhold package: apt-mark unhold {input.package}",
+                )
+            )
 
         if held_packages and input.include_recommendations:
-            recommendations.append(
-                f"Held packages that may block installation: {', '.join(held_packages)}"
-            )
+            recommendations.append(f"Held packages that may block installation: {', '.join(held_packages)}")
 
         # 3. Check dpkg state for broken packages
         broken_deps = _get_broken_packages()

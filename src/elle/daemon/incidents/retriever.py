@@ -87,9 +87,7 @@ def search(
 
         # Tier A: Fingerprint matching
         if search_type in ("fingerprint", "hybrid") and fingerprint:
-            fp_results = _fingerprint_search(
-                fingerprint, domain, k * 4, conn
-            )
+            fp_results = _fingerprint_search(fingerprint, domain, k * 4, conn)
             candidates.extend(fp_results)
 
         # Tier B: Lexical search
@@ -219,11 +217,13 @@ def get_prior_art(
                     actions = get_actions(inc.incident_id, conn=conn)
                     for action in actions:
                         if action.success and action.command:
-                            successful_actions.append({
-                                "command": action.command,
-                                "kind": action.kind,
-                                "exit_code": action.exit_code,
-                            })
+                            successful_actions.append(
+                                {
+                                    "command": action.command,
+                                    "kind": action.kind,
+                                    "exit_code": action.exit_code,
+                                }
+                            )
                 except Exception:
                     pass  # Actions not critical
 
@@ -505,7 +505,7 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
     if len(a) != len(b):
         return 0.0
 
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
     norm_a = sum(x * x for x in a) ** 0.5
     norm_b = sum(x * x for x in b) ** 0.5
 
@@ -587,10 +587,7 @@ def compute_dynamic_outcome_weight(
         # Domain efficacy (if available with sufficient samples)
         if ctx.domain_success_rate is not None:
             confidence = min(1.0, ctx.domain_sample_size / MIN_SAMPLES_FOR_CONFIDENCE)
-            effective_rate = (
-                confidence * ctx.domain_success_rate
-                + (1 - confidence) * PRIOR_SUCCESS_RATE
-            )
+            effective_rate = confidence * ctx.domain_success_rate + (1 - confidence) * PRIOR_SUCCESS_RATE
             weighted_sum += EFFICACY_WEIGHT_DOMAIN * effective_rate
             total_weight += EFFICACY_WEIGHT_DOMAIN
 
@@ -604,10 +601,7 @@ def compute_dynamic_outcome_weight(
         # Approach efficacy (if available with sufficient samples)
         if ctx.approach_success_rate is not None:
             confidence = min(1.0, ctx.approach_sample_size / MIN_SAMPLES_FOR_CONFIDENCE)
-            effective_rate = (
-                confidence * ctx.approach_success_rate
-                + (1 - confidence) * PRIOR_SUCCESS_RATE
-            )
+            effective_rate = confidence * ctx.approach_success_rate + (1 - confidence) * PRIOR_SUCCESS_RATE
             weighted_sum += EFFICACY_WEIGHT_APPROACH * effective_rate
             total_weight += EFFICACY_WEIGHT_APPROACH
 
@@ -701,9 +695,7 @@ def _merge_and_rank(
 
         # Outcome weight (dynamic or static)
         if use_dynamic_weights:
-            outcome_weight = compute_dynamic_outcome_weight(
-                incident, fingerprint, conn=conn
-            )
+            outcome_weight = compute_dynamic_outcome_weight(incident, fingerprint, conn=conn)
         else:
             outcome_weight = STATIC_OUTCOME_WEIGHTS.get(incident.outcome, 0.2)
 
@@ -724,27 +716,21 @@ def _merge_and_rank(
         recency_weight = _compute_recency_weight(incident.updated_at)
 
         # Final score: RRF × outcome × precondition × recency
-        final_score = (
-            data["rrf_score"]
-            * outcome_weight
-            * precond_ratio
-            * recency_weight
-        )
+        final_score = data["rrf_score"] * outcome_weight * precond_ratio * recency_weight
 
         # Determine match type
         match_types = data["match_types"]
-        if len(match_types) > 1:
-            match_type = "hybrid"
-        else:
-            match_type = list(match_types)[0]
+        match_type = "hybrid" if len(match_types) > 1 else list(match_types)[0]
 
-        results.append(IncidentSearchResult(
-            incident=incident,
-            score=final_score,
-            match_type=match_type,  # type: ignore
-            precondition_match_ratio=precond_ratio,
-            outcome_weight=outcome_weight,
-        ))
+        results.append(
+            IncidentSearchResult(
+                incident=incident,
+                score=final_score,
+                match_type=match_type,  # type: ignore
+                precondition_match_ratio=precond_ratio,
+                outcome_weight=outcome_weight,
+            )
+        )
 
     # Sort by final score
     results.sort(key=lambda x: x.score, reverse=True)
@@ -845,23 +831,26 @@ def get_status(
 
         # DB size
         from elle.daemon.incidents.schema import get_db_path
+
         db_path = get_db_path()
         db_size = db_path.stat().st_size if db_path.exists() else 0
 
-        return safe_model_dump(IncidentVaultStatus(
-            total_incidents=total,
-            total_actions=actions,
-            total_snapshots=snapshots,
-            embedded_incidents=embedded,
-            open_count=by_status.get("open", 0),
-            mitigated_count=by_status.get("mitigated", 0),
-            resolved_count=by_status.get("resolved", 0),
-            by_domain=by_domain,
-            by_outcome=by_outcome,
-            db_size_bytes=db_size,
-            oldest_incident=oldest,
-            newest_incident=newest,
-        ))
+        return safe_model_dump(
+            IncidentVaultStatus(
+                total_incidents=total,
+                total_actions=actions,
+                total_snapshots=snapshots,
+                embedded_incidents=embedded,
+                open_count=by_status.get("open", 0),
+                mitigated_count=by_status.get("mitigated", 0),
+                resolved_count=by_status.get("resolved", 0),
+                by_domain=by_domain,
+                by_outcome=by_outcome,
+                db_size_bytes=db_size,
+                oldest_incident=oldest,
+                newest_incident=newest,
+            )
+        )
 
     finally:
         if own_conn:

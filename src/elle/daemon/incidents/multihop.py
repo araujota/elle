@@ -215,7 +215,9 @@ class MultiHopSearch:
 
         # Search events
         events = self._search_events(
-            query, time_start, time_end,
+            query,
+            time_start,
+            time_end,
             entities=list(known_entities)[:5],
             conn=conn,
         )
@@ -236,10 +238,7 @@ class MultiHopSearch:
         )
 
         # Count high-relevance results
-        high_relevance = sum(
-            1 for inc in incidents
-            if inc.score >= self.config.high_relevance_threshold
-        )
+        high_relevance = sum(1 for inc in incidents if inc.score >= self.config.high_relevance_threshold)
 
         return SearchHop(
             iteration=iteration,
@@ -269,10 +268,7 @@ class MultiHopSearch:
                 conn=conn,
             )
             # Filter by time window
-            filtered = [
-                r for r in results
-                if time_start <= r.incident.created_at <= time_end
-            ]
+            filtered = [r for r in results if time_start <= r.incident.created_at <= time_end]
             return filtered
         except Exception:
             return []
@@ -310,7 +306,7 @@ class MultiHopSearch:
             # Convert TelemetryEvent to dict if needed
             event_dicts = []
             for evt in results:
-                if hasattr(evt, 'model_dump') or hasattr(evt, 'dict'):
+                if hasattr(evt, "model_dump") or hasattr(evt, "dict"):
                     event_dicts.append(safe_model_dump(evt))
                 elif isinstance(evt, dict):
                     event_dicts.append(evt)
@@ -322,7 +318,7 @@ class MultiHopSearch:
                 if time_start <= evt_time <= time_end:
                     filtered.append(evt)
 
-            return filtered[:self.config.max_results_per_hop]
+            return filtered[: self.config.max_results_per_hop]
 
         except Exception:
             return []
@@ -337,10 +333,10 @@ class MultiHopSearch:
 
         # Common technical keywords to extract
         keyword_patterns = [
-            r'\b(failed|error|timeout|refused|denied|full|exhausted)\b',
-            r'\b(nginx|apache|mysql|postgres|redis|docker)\b',
-            r'\b(disk|memory|cpu|network|socket)\b',
-            r'\b(service|process|container|mount)\b',
+            r"\b(failed|error|timeout|refused|denied|full|exhausted)\b",
+            r"\b(nginx|apache|mysql|postgres|redis|docker)\b",
+            r"\b(disk|memory|cpu|network|socket)\b",
+            r"\b(service|process|container|mount)\b",
         ]
 
         texts = []
@@ -388,20 +384,24 @@ class MultiHopSearch:
         all_items: list[tuple[datetime, str, str, Any]] = []  # (time, type, id, item)
 
         for iid, result in incidents.items():
-            all_items.append((
-                result.incident.created_at,
-                "incident",
-                iid,
-                result.incident,
-            ))
+            all_items.append(
+                (
+                    result.incident.created_at,
+                    "incident",
+                    iid,
+                    result.incident,
+                )
+            )
 
         for eid, evt in events.items():
-            all_items.append((
-                self._get_event_time(evt),
-                "event",
-                eid,
-                evt,
-            ))
+            all_items.append(
+                (
+                    self._get_event_time(evt),
+                    "event",
+                    eid,
+                    evt,
+                )
+            )
 
         all_items.sort(key=lambda x: x[0])
 
@@ -423,15 +423,19 @@ class MultiHopSearch:
 
             # Determine relationship based on entity overlap and timing
             relationship = self._infer_relationship(
-                curr_type, curr_item,
-                next_type, next_item,
+                curr_type,
+                curr_item,
+                next_type,
+                next_item,
                 delta_sec,
             )
 
             # Calculate confidence based on timing and overlap
             confidence = self._calculate_link_confidence(
-                curr_type, curr_item,
-                next_type, next_item,
+                curr_type,
+                curr_item,
+                next_type,
+                next_item,
                 delta_sec,
             )
 
@@ -596,9 +600,7 @@ def keyword_rerank(
     for result in results:
         # Count keyword matches in incident text
         text = (
-            result.incident.title + " " +
-            result.incident.summary + " " +
-            " ".join(result.incident.symptoms)
+            result.incident.title + " " + result.incident.summary + " " + " ".join(result.incident.symptoms)
         ).lower()
 
         matches = sum(1 for kw in keywords if kw.lower() in text)
@@ -640,9 +642,7 @@ def temporal_rerank(
     """
     reranked = []
     for result in results:
-        delta_hours = abs(
-            (result.incident.created_at - reference_time).total_seconds() / 3600
-        )
+        delta_hours = abs((result.incident.created_at - reference_time).total_seconds() / 3600)
 
         # Temporal decay
         temporal_weight = 0.5 ** (delta_hours / decay_hours)

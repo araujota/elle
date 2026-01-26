@@ -384,7 +384,8 @@ class RecipeMatch(BaseModel):
 
     recipe: StackRecipe = Field(description="Matched recipe")
     confidence: float = Field(
-        ge=0.0, le=1.0,
+        ge=0.0,
+        le=1.0,
         description="Match confidence",
     )
     matched_keywords: tuple[str, ...] = Field(

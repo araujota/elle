@@ -155,10 +155,15 @@ class TestSearch:
         # Need to provide a snapshot that matches the precondition
         # The disk incident has precondition: disk./.used_pct > 95
         from elle.daemon.incidents.models import SystemSnapshot
+
         snapshot = SystemSnapshot(
-            os="Ubuntu", kernel="6.8", uptime_sec=100,
-            cpu_load=(0.5, 0.5, 0.5), mem_total_mb=8192,
-            mem_free_mb=4096, mem_available_mb=6144,
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=100,
+            cpu_load=(0.5, 0.5, 0.5),
+            mem_total_mb=8192,
+            mem_free_mb=4096,
+            mem_available_mb=6144,
             disks=({"mount": "/", "used_pct": 98},),
         )
 
@@ -259,6 +264,7 @@ class TestGenerateCaseText:
         )
 
         from elle.daemon.incidents.store import get_incident
+
         updated = get_incident(incidents[0].incident_id, conn=conn)
 
         text = generate_case_text(updated)
@@ -299,10 +305,9 @@ class TestSearchRanking:
         # Results should exist
         if len(results) >= 2:
             # Check that improved outcomes are preferred
-            outcome_order = ["improved", "partial", "no_change", "unknown", "worse"]
             for i in range(len(results) - 1):
-                curr_outcome = results[i].incident.outcome
-                next_outcome = results[i + 1].incident.outcome
+                results[i].incident.outcome
+                results[i + 1].incident.outcome
                 # At equal similarity, better outcomes should come first
                 # (this is a soft test since similarity also matters)
                 assert results[i].outcome_weight >= 0

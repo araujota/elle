@@ -1,13 +1,12 @@
 """Tests for reboot module CRUD operations."""
 
 import tempfile
-from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from elle.daemon.reboot.models import GRUBState, PendingVerification
-from elle.daemon.reboot.schema import drop_all_tables, get_connection, init_reboot_schema
+from elle.daemon.reboot.schema import get_connection, init_reboot_schema
 from elle.daemon.reboot.store import (
     add_verification,
     cancel_intent,
@@ -321,13 +320,13 @@ class TestGetIntentsByStatus:
     def test_get_by_status(self, conn):
         """Test getting intents by status."""
         # Create intents with different statuses
-        intent1 = create_intent(
+        create_intent(
             goal="Pending 1",
             task_description="Test",
             reason="user_requested",
             conn=conn,
         )
-        intent2 = create_intent(
+        create_intent(
             goal="Pending 2",
             task_description="Test",
             reason="user_requested",
@@ -424,7 +423,7 @@ class TestListIntents:
 
     def test_list_with_filter(self, conn):
         """Test listing with status filter."""
-        intent1 = create_intent(
+        create_intent(
             goal="Pending",
             task_description="Test",
             reason="user_requested",
@@ -458,7 +457,7 @@ class TestListRecentIntents:
         recent = list_recent_intents(days=7, conn=conn)
         assert len(recent) == 1
         # Returns summaries
-        assert hasattr(recent[0], 'goal')
+        assert hasattr(recent[0], "goal")
 
 
 class TestVerificationCRUD:
@@ -512,9 +511,7 @@ class TestVerificationCRUD:
             reason="user_requested",
             conn=conn,
         )
-        verification = add_verification(
-            intent.id, 0, "command", "true", conn=conn
-        )
+        verification = add_verification(intent.id, 0, "command", "true", conn=conn)
 
         updated = update_verification_result(
             verification.id,
@@ -539,12 +536,8 @@ class TestVerificationCRUD:
             reason="user_requested",
             conn=conn,
         )
-        verification = add_verification(
-            intent.id, 0, "command", "true", conn=conn
-        )
-        update_verification_result(
-            verification.id, 0, "out", "", True, conn=conn
-        )
+        verification = add_verification(intent.id, 0, "command", "true", conn=conn)
+        update_verification_result(verification.id, 0, "out", "", True, conn=conn)
 
         # Verify it was updated
         verifications = get_verifications(intent.id, conn=conn)

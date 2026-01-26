@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from elle.capabilities.autogen.models import (
     GeneratedCapabilitySpec,
     InputFieldSpec,
-    TrustLevel,
 )
 from elle.capabilities.autogen.store import AutogenStore
 from elle.capabilities.autogen.versioner import (
@@ -51,9 +49,7 @@ def sample_spec():
         domain="service",
         risk_level="low",
         side_effects=("service_restart",),
-        input_fields=(
-            InputFieldSpec(name="config", field_type="str", description="Config path"),
-        ),
+        input_fields=(InputFieldSpec(name="config", field_type="str", description="Config path"),),
         command_template="nginx -s reload",
         source_command="nginx",
         confidence_score=0.9,
@@ -263,7 +259,7 @@ class TestAutogenStorePackageVersioning:
 
     def test_save_with_package_info(self, store, sample_spec):
         """Test saving capability with package info."""
-        cap_id = store.save(
+        store.save(
             spec=sample_spec,
             input_model_code="class Input: pass",
             output_model_code="class Output: pass",

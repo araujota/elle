@@ -17,12 +17,12 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from elle.common.pydantic_compat import safe_model_dump_json
 from elle.capabilities.autogen.models import (
     GeneratedCapabilitySpec,
     StoredCapability,
     TrustLevel,
 )
+from elle.common.pydantic_compat import safe_model_dump_json
 
 logger = logging.getLogger(__name__)
 
@@ -294,9 +294,7 @@ class AutogenStore:
             List of StoredCapability objects.
         """
         with self._get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT * FROM generated_capabilities ORDER BY capability_name"
-            )
+            cursor = conn.execute("SELECT * FROM generated_capabilities ORDER BY capability_name")
             return [self._row_to_stored(row) for row in cursor.fetchall()]
 
     def list_approved_enabled(self) -> list[StoredCapability]:

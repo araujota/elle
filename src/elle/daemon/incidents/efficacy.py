@@ -30,7 +30,9 @@ class DomainEfficacy(BaseModel):
 
     # Computed success rate (time-decayed)
     success_rate: float = Field(
-        ge=0.0, le=1.0, default=0.5,
+        ge=0.0,
+        le=1.0,
+        default=0.5,
         description="Time-decayed success rate (0.0-1.0)",
     )
 
@@ -150,7 +152,8 @@ class EfficacyContext(BaseModel):
         description="Success rate for this domain",
     )
     domain_sample_size: int = Field(
-        ge=0, default=0,
+        ge=0,
+        default=0,
         description="Number of incidents in domain sample",
     )
 
@@ -166,7 +169,8 @@ class EfficacyContext(BaseModel):
         description="Success rate for matched approach",
     )
     approach_sample_size: int = Field(
-        ge=0, default=0,
+        ge=0,
+        default=0,
         description="Number of uses of matched approach",
     )
 

@@ -14,46 +14,46 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # Reboot reason categories
 RebootReason = Literal[
-    "kernel_update",    # Kernel or module update requiring reboot
-    "driver_update",    # Driver update (GPU, network, etc.)
-    "config_change",    # System config change requiring reboot
+    "kernel_update",  # Kernel or module update requiring reboot
+    "driver_update",  # Driver update (GPU, network, etc.)
+    "config_change",  # System config change requiring reboot
     "service_restart",  # Service that requires full reboot
-    "grub_update",      # GRUB configuration change
-    "user_requested",   # User explicitly requested reboot
+    "grub_update",  # GRUB configuration change
+    "user_requested",  # User explicitly requested reboot
 ]
 
 # Reboot intent lifecycle states
 RebootIntentStatus = Literal[
-    "pending",      # Intent created, reboot not yet started
-    "rebooting",    # Reboot initiated, waiting for boot
-    "verifying",    # Post-boot verification in progress
-    "completed",    # Verification passed, boot confirmed
-    "failed",       # Verification failed, manual intervention needed
+    "pending",  # Intent created, reboot not yet started
+    "rebooting",  # Reboot initiated, waiting for boot
+    "verifying",  # Post-boot verification in progress
+    "completed",  # Verification passed, boot confirmed
+    "failed",  # Verification failed, manual intervention needed
     "rolled_back",  # Automatic rollback occurred
-    "cancelled",    # User cancelled the reboot
+    "cancelled",  # User cancelled the reboot
 ]
 
 # Outcome after reboot
 RebootOutcome = Literal[
-    "improved",     # System healthy after reboot
-    "failed",       # Verification checks failed
+    "improved",  # System healthy after reboot
+    "failed",  # Verification checks failed
     "rolled_back",  # Automatic rollback to previous config
-    "unknown",      # Outcome not yet determined
+    "unknown",  # Outcome not yet determined
 ]
 
 # Verification check types
 VerificationCheckType = Literal[
-    "command",              # Run a command and check exit code
-    "service_active",       # Check if a systemd service is active
-    "file_exists",          # Check if a file exists
-    "port_listening",       # Check if a port is listening
+    "command",  # Run a command and check exit code
+    "service_active",  # Check if a systemd service is active
+    "file_exists",  # Check if a file exists
+    "port_listening",  # Check if a port is listening
     "filesystem_writable",  # Check if a path is writable
-    "mount_exists",         # Check if a mount point is mounted
-    "kernel_module",        # Check if a kernel module is loaded
-    "dmesg_no_errors",      # Check dmesg for error patterns
-    "journal_no_errors",    # Check journald for error patterns
-    "disk_space",           # Check minimum free disk space
-    "network_interface",    # Check network interface is up
+    "mount_exists",  # Check if a mount point is mounted
+    "kernel_module",  # Check if a kernel module is loaded
+    "dmesg_no_errors",  # Check dmesg for error patterns
+    "journal_no_errors",  # Check journald for error patterns
+    "disk_space",  # Check minimum free disk space
+    "network_interface",  # Check network interface is up
 ]
 
 
@@ -396,9 +396,9 @@ CRITICAL_MOUNT_POINTS = (
 
 # Minimum disk space requirements (path, min_mb)
 DISK_SPACE_REQUIREMENTS = (
-    ("/", 500),      # 500MB on root
-    ("/var", 200),   # 200MB on /var
-    ("/boot", 50),   # 50MB on /boot
+    ("/", 500),  # 500MB on root
+    ("/var", 200),  # 200MB on /var
+    ("/boot", 50),  # 50MB on /boot
 )
 
 
@@ -527,10 +527,8 @@ class FailureDiagnostics(BaseModel):
         if self.failed_checks:
             sections.append("\n### Failed Verification Checks")
             for check in self.failed_checks:
-                sections.append(
-                    f"  - [{check.get('check_type')}] {check.get('check_command')}"
-                )
-                if check.get('stderr'):
+                sections.append(f"  - [{check.get('check_type')}] {check.get('check_command')}")
+                if check.get("stderr"):
                     sections.append(f"    stderr: {check.get('stderr')[:200]}")
 
         if self.dmesg_errors:

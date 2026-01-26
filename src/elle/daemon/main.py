@@ -108,15 +108,9 @@ class ElledDaemon:
         """
         from elle.daemon.telemetry.models import QueueStats
 
-        raw_stats = (
-            self.raw_queue.get_stats()
-            if self.raw_queue
-            else QueueStats(name="raw", size=0, max_size=0)
-        )
+        raw_stats = self.raw_queue.get_stats() if self.raw_queue else QueueStats(name="raw", size=0, max_size=0)
         event_stats = (
-            self.event_queue.get_stats()
-            if self.event_queue
-            else QueueStats(name="events", size=0, max_size=0)
+            self.event_queue.get_stats() if self.event_queue else QueueStats(name="events", size=0, max_size=0)
         )
 
         errors: list[str] = []
@@ -508,10 +502,7 @@ class ElledDaemon:
             intent = await manager.check_pending_reboots()
 
             if intent:
-                logger.info(
-                    f"Processed reboot intent: {intent.id} "
-                    f"(status={intent.status}, outcome={intent.outcome})"
-                )
+                logger.info(f"Processed reboot intent: {intent.id} (status={intent.status}, outcome={intent.outcome})")
 
                 # Update incident if linked
                 if intent.incident_id and intent.outcome != "unknown":
@@ -825,9 +816,7 @@ class ElledDaemon:
 
             # Set watched packages for version tracking
             if package_map:
-                self._package_probe.set_watched_packages(
-                    self._capability_versioner.get_watched_packages()
-                )
+                self._package_probe.set_watched_packages(self._capability_versioner.get_watched_packages())
 
             # Set callback for auto-learning new packages
             if detect_new:
@@ -885,9 +874,7 @@ class ElledDaemon:
             )
 
             if result.capabilities_saved > 0:
-                logger.info(
-                    f"Auto-learned {package_name}: {result.capabilities_saved} capabilities saved"
-                )
+                logger.info(f"Auto-learned {package_name}: {result.capabilities_saved} capabilities saved")
 
                 # Add to versioner's watch list
                 if self._capability_versioner and self._package_probe:
@@ -922,9 +909,7 @@ class ElledDaemon:
             return
 
         try:
-            regenerated = await self._capability_versioner.on_package_upgraded(
-                pkg, old_ver, new_ver
-            )
+            regenerated = await self._capability_versioner.on_package_upgraded(pkg, old_ver, new_ver)
             if regenerated:
                 logger.info(f"Regenerated {len(regenerated)} capabilities for {pkg}: {regenerated}")
         except Exception as e:

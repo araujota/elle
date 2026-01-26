@@ -184,17 +184,11 @@ class ReportGenerator:
 
         # Generate report text
         if format == "markdown":
-            report_text = self._render_incident_markdown(
-                incident, actions, narrative, similar
-            )
+            report_text = self._render_incident_markdown(incident, actions, narrative, similar)
         elif format == "json":
-            report_text = self._render_incident_json(
-                incident, actions, narrative, similar
-            )
+            report_text = self._render_incident_json(incident, actions, narrative, similar)
         else:
-            report_text = self._render_incident_text(
-                incident, actions, narrative, similar
-            )
+            report_text = self._render_incident_text(incident, actions, narrative, similar)
 
         return IncidentFullReport(
             incident=incident,
@@ -273,24 +267,23 @@ class ReportGenerator:
         for inc in domain_incidents:
             if inc.incident_id != incident.incident_id:
                 # Count overlapping entities
-                overlap = len(
-                    set(inc.fingerprint.entities) &
-                    set(incident.fingerprint.entities)
-                )
+                overlap = len(set(inc.fingerprint.entities) & set(incident.fingerprint.entities))
                 if overlap > 0 or inc.domain == incident.domain:
-                    similar.append(IncidentReportSummary(
-                        incident_id=inc.incident_id,
-                        title=inc.title,
-                        domain=inc.domain,
-                        severity=inc.severity,
-                        status=inc.status,
-                        outcome=inc.outcome,
-                        created_at=inc.created_at,
-                        time_to_resolve_sec=inc.time_to_resolve_sec,
-                        action_count=0,  # Would need to query
-                        confidence=inc.confidence,
-                        has_narrative=False,
-                    ))
+                    similar.append(
+                        IncidentReportSummary(
+                            incident_id=inc.incident_id,
+                            title=inc.title,
+                            domain=inc.domain,
+                            severity=inc.severity,
+                            status=inc.status,
+                            outcome=inc.outcome,
+                            created_at=inc.created_at,
+                            time_to_resolve_sec=inc.time_to_resolve_sec,
+                            action_count=0,  # Would need to query
+                            confidence=inc.confidence,
+                            has_narrative=False,
+                        )
+                    )
 
         return tuple(similar[:limit])
 
@@ -368,7 +361,11 @@ class ReportGenerator:
             lines.append("| Step | Type | Command | Success |")
             lines.append("|------|------|---------|---------|")
             for action in actions:
-                cmd = action.command[:50] + "..." if action.command and len(action.command) > 50 else (action.command or "-")
+                cmd = (
+                    action.command[:50] + "..."
+                    if action.command and len(action.command) > 50
+                    else (action.command or "-")
+                )
                 success = "Yes" if action.success else "No"
                 lines.append(f"| {action.step_index + 1} | {action.kind} | `{cmd}` | {success} |")
             lines.append("")
@@ -613,10 +610,7 @@ class ReportGenerator:
 
         data = stats.model_dump(mode="json")
         if domain:
-            data["domain_stats"] = [
-                d for d in data.get("domain_stats", [])
-                if d.get("domain") == domain
-            ]
+            data["domain_stats"] = [d for d in data.get("domain_stats", []) if d.get("domain") == domain]
         return json.dumps(data, indent=2, default=str)
 
     def _render_efficacy_text(
@@ -672,10 +666,7 @@ class ReportGenerator:
 
         # Get incidents in range
         incidents = list_incidents(limit=10000, conn=self._conn)
-        incidents_in_range = [
-            i for i in incidents
-            if i.created_at >= from_time
-        ]
+        incidents_in_range = [i for i in incidents if i.created_at >= from_time]
 
         # Aggregate by domain
         by_domain: dict[str, int] = {}
@@ -688,11 +679,7 @@ class ReportGenerator:
             by_outcome[inc.outcome] = by_outcome.get(inc.outcome, 0) + 1
 
         # Compute average time to resolve
-        resolve_times = [
-            inc.time_to_resolve_sec
-            for inc in incidents_in_range
-            if inc.time_to_resolve_sec
-        ]
+        resolve_times = [inc.time_to_resolve_sec for inc in incidents_in_range if inc.time_to_resolve_sec]
         avg_resolve = sum(resolve_times) / len(resolve_times) if resolve_times else None
 
         # Get domain trends
@@ -701,13 +688,11 @@ class ReportGenerator:
         # Generate report text
         if format == "markdown":
             report_text = self._render_trend_markdown(
-                from_time, to_time, incidents_in_range,
-                by_domain, by_outcome, avg_resolve, domain_trends
+                from_time, to_time, incidents_in_range, by_domain, by_outcome, avg_resolve, domain_trends
             )
         else:
             report_text = self._render_trend_text(
-                from_time, to_time, incidents_in_range,
-                by_domain, by_outcome, avg_resolve, domain_trends
+                from_time, to_time, incidents_in_range, by_domain, by_outcome, avg_resolve, domain_trends
             )
 
         return TrendReport(

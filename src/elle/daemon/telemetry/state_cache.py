@@ -54,18 +54,10 @@ class DockerState(BaseModel):
     all_containers: tuple[ContainerInfo, ...] = Field(
         default_factory=tuple, description="All containers (including stopped)"
     )
-    images: tuple[str, ...] = Field(
-        default_factory=tuple, description="Available images (name:tag)"
-    )
-    networks: tuple[str, ...] = Field(
-        default_factory=tuple, description="Docker networks"
-    )
-    volumes: tuple[str, ...] = Field(
-        default_factory=tuple, description="Docker volumes"
-    )
-    compose_services: tuple[str, ...] = Field(
-        default_factory=tuple, description="Compose-managed services"
-    )
+    images: tuple[str, ...] = Field(default_factory=tuple, description="Available images (name:tag)")
+    networks: tuple[str, ...] = Field(default_factory=tuple, description="Docker networks")
+    volumes: tuple[str, ...] = Field(default_factory=tuple, description="Docker volumes")
+    compose_services: tuple[str, ...] = Field(default_factory=tuple, description="Compose-managed services")
     swarm_active: bool = Field(default=False, description="Is swarm mode active")
     collected_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
@@ -80,9 +72,7 @@ class InterfaceInfo(BaseModel):
 
     name: str = Field(description="Interface name (e.g., eth0)")
     state: str = Field(description="Operational state (UP/DOWN)")
-    addresses: tuple[str, ...] = Field(
-        default_factory=tuple, description="IP addresses"
-    )
+    addresses: tuple[str, ...] = Field(default_factory=tuple, description="IP addresses")
     mac: str | None = Field(default=None, description="MAC address")
     mtu: int | None = Field(default=None, description="MTU size")
 
@@ -110,9 +100,7 @@ class FirewallState(BaseModel):
     backend: str = Field(default="unknown", description="Backend (ufw/iptables/nftables)")
     default_incoming: str = Field(default="allow", description="Default incoming policy")
     default_outgoing: str = Field(default="allow", description="Default outgoing policy")
-    rules: tuple[FirewallRule, ...] = Field(
-        default_factory=tuple, description="Firewall rules"
-    )
+    rules: tuple[FirewallRule, ...] = Field(default_factory=tuple, description="Firewall rules")
     collected_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
         description="When this state was collected",
@@ -124,23 +112,13 @@ class NetworkState(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    interfaces: tuple[InterfaceInfo, ...] = Field(
-        default_factory=tuple, description="Network interfaces"
-    )
+    interfaces: tuple[InterfaceInfo, ...] = Field(default_factory=tuple, description="Network interfaces")
     default_gateway: str | None = Field(default=None, description="Default gateway IP")
-    default_interface: str | None = Field(
-        default=None, description="Default interface name"
-    )
-    dns_servers: tuple[str, ...] = Field(
-        default_factory=tuple, description="DNS servers"
-    )
+    default_interface: str | None = Field(default=None, description="Default interface name")
+    dns_servers: tuple[str, ...] = Field(default_factory=tuple, description="DNS servers")
     hostname: str = Field(default="", description="System hostname")
-    wireguard_interfaces: tuple[str, ...] = Field(
-        default_factory=tuple, description="WireGuard interface names"
-    )
-    firewall: FirewallState = Field(
-        default_factory=FirewallState, description="Firewall state"
-    )
+    wireguard_interfaces: tuple[str, ...] = Field(default_factory=tuple, description="WireGuard interface names")
+    firewall: FirewallState = Field(default_factory=FirewallState, description="Firewall state")
     collected_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
         description="When this state was collected",
@@ -167,9 +145,7 @@ class SystemState(BaseModel):
 
     docker: DockerState = Field(default_factory=DockerState)
     network: NetworkState = Field(default_factory=NetworkState)
-    listeners: tuple[Listener, ...] = Field(
-        default_factory=tuple, description="Network listeners"
-    )
+    listeners: tuple[Listener, ...] = Field(default_factory=tuple, description="Network listeners")
     collected_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
         description="When this state was collected",
@@ -315,14 +291,10 @@ class StateCache:
             )
 
             # Get networks
-            networks = await self._get_docker_items(
-                ["docker", "network", "ls", "--format", "{{.Name}}"]
-            )
+            networks = await self._get_docker_items(["docker", "network", "ls", "--format", "{{.Name}}"])
 
             # Get volumes
-            volumes = await self._get_docker_items(
-                ["docker", "volume", "ls", "--format", "{{.Name}}"]
-            )
+            volumes = await self._get_docker_items(["docker", "volume", "ls", "--format", "{{.Name}}"])
 
             # Check for compose services
             compose_services = await self._get_compose_services()
@@ -375,15 +347,17 @@ class StateCache:
                 if line:
                     try:
                         data = json.loads(line)
-                        containers.append(ContainerInfo(
-                            id=data.get("ID", "")[:12],
-                            names=data.get("Names", ""),
-                            image=data.get("Image", ""),
-                            status=data.get("Status", ""),
-                            state=data.get("State", ""),
-                            ports=data.get("Ports", ""),
-                            created=data.get("CreatedAt", ""),
-                        ))
+                        containers.append(
+                            ContainerInfo(
+                                id=data.get("ID", "")[:12],
+                                names=data.get("Names", ""),
+                                image=data.get("Image", ""),
+                                status=data.get("Status", ""),
+                                state=data.get("State", ""),
+                                ports=data.get("Ports", ""),
+                                created=data.get("CreatedAt", ""),
+                            )
+                        )
                     except json.JSONDecodeError:
                         pass
 
@@ -503,19 +477,17 @@ class StateCache:
                     if name in ("lo",):  # Skip loopback
                         continue
 
-                    addresses = tuple(
-                        a.get("local", "")
-                        for a in iface.get("addr_info", [])
-                        if a.get("local")
-                    )
+                    addresses = tuple(a.get("local", "") for a in iface.get("addr_info", []) if a.get("local"))
 
-                    interfaces.append(InterfaceInfo(
-                        name=name,
-                        state=iface.get("operstate", "unknown").upper(),
-                        addresses=addresses,
-                        mac=iface.get("address"),
-                        mtu=iface.get("mtu"),
-                    ))
+                    interfaces.append(
+                        InterfaceInfo(
+                            name=name,
+                            state=iface.get("operstate", "unknown").upper(),
+                            addresses=addresses,
+                            mac=iface.get("address"),
+                            mtu=iface.get("mtu"),
+                        )
+                    )
 
         except (json.JSONDecodeError, FileNotFoundError):
             pass
@@ -657,11 +629,13 @@ class StateCache:
                 if len(parts) >= 3:
                     action = "allow" if "ALLOW" in parts else ("deny" if "DENY" in parts else "reject")
                     port = parts[0] if parts[0] != "Anywhere" else None
-                    rules.append(FirewallRule(
-                        action=action,
-                        direction="in",
-                        port=port,
-                    ))
+                    rules.append(
+                        FirewallRule(
+                            action=action,
+                            direction="in",
+                            port=port,
+                        )
+                    )
 
         return FirewallState(
             active=active,
@@ -712,14 +686,16 @@ class StateCache:
                             if name_match:
                                 process = name_match.group(1)
 
-                        listeners.append(Listener(
-                            port=port,
-                            proto="tcp",
-                            address=addr,
-                            pid=pid,
-                            process=process,
-                            is_wildcard=is_wildcard,
-                        ))
+                        listeners.append(
+                            Listener(
+                                port=port,
+                                proto="tcp",
+                                address=addr,
+                                pid=pid,
+                                process=process,
+                                is_wildcard=is_wildcard,
+                            )
+                        )
 
         except FileNotFoundError:
             pass

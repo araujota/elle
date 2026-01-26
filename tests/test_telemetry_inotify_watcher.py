@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-import pytest
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-import tempfile
 import os
+import tempfile
+from unittest.mock import MagicMock
+
+import pytest
 
 from elle.daemon.telemetry.inotify_watcher import (
     DEFAULT_WATCH_PATHS,
@@ -74,12 +74,8 @@ class TestInotifyWatcher:
     def test_path_matches_pattern_glob(self, watcher):
         """Test glob path matching."""
         pattern = "/home/*/.ssh/authorized_keys"
-        assert watcher._path_matches_pattern(
-            "/home/user/.ssh/authorized_keys", pattern
-        ) is True
-        assert watcher._path_matches_pattern(
-            "/home/user/.ssh/config", pattern
-        ) is False
+        assert watcher._path_matches_pattern("/home/user/.ssh/authorized_keys", pattern) is True
+        assert watcher._path_matches_pattern("/home/user/.ssh/config", pattern) is False
 
     @pytest.mark.asyncio
     async def test_take_snapshot(self, event_queue):

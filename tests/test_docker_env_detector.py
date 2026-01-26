@@ -1,10 +1,7 @@
 """Tests for Docker environment variable detector."""
 
-import io
-import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 import tempfile
+from pathlib import Path
 
 from ruamel.yaml import YAML
 
@@ -90,9 +87,7 @@ class TestDetectFromCommand:
 
     def test_detect_from_command_with_existing_env(self):
         detector = DockerEnvDetector()
-        specs = detector.detect_from_command(
-            "docker run -e POSTGRES_PASSWORD=secret postgres:15"
-        )
+        specs = detector.detect_from_command("docker run -e POSTGRES_PASSWORD=secret postgres:15")
 
         var_names = [s.name for s in specs]
         assert "POSTGRES_PASSWORD" not in var_names

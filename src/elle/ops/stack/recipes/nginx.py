@@ -11,17 +11,9 @@ NGINX_RECIPE = StackRecipe(
     display_name="Nginx Web Server",
     description="Nginx HTTP server with secure defaults and optimized configuration",
     category="web",
-
-    packages=(
-        "nginx",
-    ),
-
-    services=(
-        "nginx",
-    ),
-
+    packages=("nginx",),
+    services=("nginx",),
     config_templates={},
-
     guarantees=(
         StackGuarantee(
             name="service_running",
@@ -56,7 +48,6 @@ NGINX_RECIPE = StackRecipe(
             remediation_hint="Check nginx error logs: journalctl -u nginx",
         ),
     ),
-
     variables=(
         StackVariable(
             name="worker_processes",
@@ -77,7 +68,6 @@ NGINX_RECIPE = StackRecipe(
             required=False,
         ),
     ),
-
     presets={
         "dev": {
             "worker_processes": "1",
@@ -88,11 +78,9 @@ NGINX_RECIPE = StackRecipe(
             "worker_connections": "4096",
         },
     },
-
     min_ram_mb=64,
     min_disk_gb=1,
     ports_required=(80, 443),
-
     version="1.0.0",
     tags=("web", "http", "nginx", "proxy", "server"),
 )

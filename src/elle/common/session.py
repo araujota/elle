@@ -126,10 +126,7 @@ class Session(BaseModel):
     @property
     def has_trace(self) -> bool:
         """Check if a syscall trace is available for the last command."""
-        return (
-            self.last_syscall_trace is not None
-            and self.last_syscall_trace.has_trace
-        )
+        return self.last_syscall_trace is not None and self.last_syscall_trace.has_trace
 
 
 def create_session(cwd: Path | None = None) -> Session:

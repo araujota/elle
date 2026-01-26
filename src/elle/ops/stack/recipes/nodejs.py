@@ -11,21 +11,15 @@ NODEJS_RECIPE = StackRecipe(
     display_name="Node.js with Nginx Reverse Proxy",
     description="Node.js LTS with Nginx reverse proxy, PM2 process manager, and correct proxy headers",
     category="web",
-
     packages=(
         "nginx",
         "nodejs",
         "npm",
     ),
-
-    services=(
-        "nginx",
-    ),
-
+    services=("nginx",),
     config_templates={
         # Nginx proxy config will be generated
     },
-
     guarantees=(
         StackGuarantee(
             name="nginx_running",
@@ -60,7 +54,6 @@ NODEJS_RECIPE = StackRecipe(
             remediation_hint="PM2 not installed. Install with: npm install -g pm2",
         ),
     ),
-
     variables=(
         StackVariable(
             name="app_port",
@@ -82,7 +75,6 @@ NODEJS_RECIPE = StackRecipe(
             required=False,
         ),
     ),
-
     presets={
         "dev": {
             "app_port": "3000",
@@ -95,11 +87,9 @@ NODEJS_RECIPE = StackRecipe(
             "server_name": "_",
         },
     },
-
     min_ram_mb=256,
     min_disk_gb=1,
     ports_required=(80,),
-
     version="1.0.0",
     tags=("web", "nodejs", "node", "javascript", "nginx", "proxy"),
 )

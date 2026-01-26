@@ -34,11 +34,13 @@ def temp_db(tmp_path):
 
     # Patch the store to use temp DB
     with patch("elle.reactive.store.get_connection") as mock:
+
         def get_temp_conn():
             c = sqlite3.connect(db_path)
             c.row_factory = sqlite3.Row
             ensure_schema(c)
             return c
+
         mock.side_effect = get_temp_conn
         yield db_path
 
@@ -86,12 +88,8 @@ def sample_function():
             type="event",
             event=EventTrigger(category="disk"),
         ),
-        condition=Condition(
-            expression={"gte": ["{event.raw.used_pct}", 90]}
-        ),
-        actions=(
-            ActionSpec(capability="notify.send", input={"title": "Disk alert"}),
-        ),
+        condition=Condition(expression={"gte": ["{event.raw.used_pct}", 90]}),
+        actions=(ActionSpec(capability="notify.send", input={"title": "Disk alert"}),),
         policy=PolicySpec(max_frequency="5m", max_daily_executions=100),
     )
 
@@ -196,6 +194,7 @@ class TestRateLimiting:
         """Test rate limit check with no prior executions."""
         with patch("elle.reactive.engine.get_rate_limit_state") as mock:
             from elle.reactive.models import RateLimitState
+
             mock.return_value = RateLimitState(function_id=sample_function.id)
             result = engine._check_rate_limit(sample_function)
             assert result is True
@@ -204,6 +203,7 @@ class TestRateLimiting:
         """Test rate limit blocks within interval."""
         with patch("elle.reactive.engine.get_rate_limit_state") as mock:
             from elle.reactive.models import RateLimitState
+
             mock.return_value = RateLimitState(
                 function_id=sample_function.id,
                 last_execution=datetime.utcnow(),
@@ -217,6 +217,7 @@ class TestRateLimiting:
         """Test rate limit allows after interval."""
         with patch("elle.reactive.engine.get_rate_limit_state") as mock:
             from elle.reactive.models import RateLimitState
+
             mock.return_value = RateLimitState(
                 function_id=sample_function.id,
                 last_execution=datetime.utcnow() - timedelta(hours=1),
@@ -236,6 +237,7 @@ class TestRateLimiting:
         )
         with patch("elle.reactive.engine.get_rate_limit_state") as mock:
             from elle.reactive.models import RateLimitState
+
             mock.return_value = RateLimitState(
                 function_id=func.id,
                 last_execution=datetime.utcnow() - timedelta(hours=1),
@@ -323,8 +325,10 @@ class TestDryRun:
     @pytest.mark.asyncio
     async def test_dry_run_condition_pass(self, engine, sample_function):
         """Test dry run with passing condition."""
-        with patch.object(engine, "_probe_state", return_value={}), \
-             patch.object(engine, "_get_system_metrics", return_value={}):
+        with (
+            patch.object(engine, "_probe_state", return_value={}),
+            patch.object(engine, "_get_system_metrics", return_value={}),
+        ):
             # Create mock event
             event = MagicMock()
             event.event_id = "test"
@@ -337,16 +341,16 @@ class TestDryRun:
             event.fingerprint = None
             event.raw = {"used_pct": 95}
 
-            result, explanation, context = await engine.dry_run(
-                sample_function, event=event
-            )
+            result, explanation, context = await engine.dry_run(sample_function, event=event)
             assert result is True
 
     @pytest.mark.asyncio
     async def test_dry_run_condition_fail(self, engine, sample_function):
         """Test dry run with failing condition."""
-        with patch.object(engine, "_probe_state", return_value={}), \
-             patch.object(engine, "_get_system_metrics", return_value={}):
+        with (
+            patch.object(engine, "_probe_state", return_value={}),
+            patch.object(engine, "_get_system_metrics", return_value={}),
+        ):
             # Create mock event with low usage
             event = MagicMock()
             event.event_id = "test"
@@ -359,9 +363,7 @@ class TestDryRun:
             event.fingerprint = None
             event.raw = {"used_pct": 50}
 
-            result, explanation, context = await engine.dry_run(
-                sample_function, event=event
-            )
+            result, explanation, context = await engine.dry_run(sample_function, event=event)
             assert result is False
 
     @pytest.mark.asyncio
@@ -372,8 +374,10 @@ class TestDryRun:
             trigger=Trigger(type="manual"),
             actions=(ActionSpec(capability="notify.send"),),
         )
-        with patch.object(engine, "_probe_state", return_value={}), \
-             patch.object(engine, "_get_system_metrics", return_value={}):
+        with (
+            patch.object(engine, "_probe_state", return_value={}),
+            patch.object(engine, "_get_system_metrics", return_value={}),
+        ):
             result, explanation, context = await engine.dry_run(func)
             assert result is True
             assert "No condition" in explanation

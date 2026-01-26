@@ -1,7 +1,5 @@
 """Tests for WireGuard domain handler and key management."""
 
-import pytest
-
 from elle.rag.confgen.wireguard import WireguardHandler
 
 

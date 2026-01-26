@@ -324,10 +324,12 @@ class FileHandler:
         shutil.move(str(source), str(dest))
 
         # Record for rollback
-        self._rollback_stack.append((
-            FileOp(kind="move", source=str(dest), dest=str(source)),
-            None,
-        ))
+        self._rollback_stack.append(
+            (
+                FileOp(kind="move", source=str(dest), dest=str(source)),
+                None,
+            )
+        )
 
         logger.info(f"Moved {source} -> {dest}")
 
@@ -378,10 +380,12 @@ class FileHandler:
             shutil.copy2(str(source), str(dest))
 
         # Record for rollback (delete the copy)
-        self._rollback_stack.append((
-            FileOp(kind="delete", source=str(dest), recursive=source.is_dir()),
-            None,
-        ))
+        self._rollback_stack.append(
+            (
+                FileOp(kind="delete", source=str(dest), recursive=source.is_dir()),
+                None,
+            )
+        )
 
         logger.info(f"Copied {source} -> {dest}")
 
@@ -428,10 +432,12 @@ class FileHandler:
             source.unlink()
 
         # Record for rollback
-        self._rollback_stack.append((
-            FileOp(kind="copy", source=backup_path, dest=str(source), recursive=True),
-            backup_path,
-        ))
+        self._rollback_stack.append(
+            (
+                FileOp(kind="copy", source=backup_path, dest=str(source), recursive=True),
+                backup_path,
+            )
+        )
 
         logger.info(f"Deleted {source}")
 
@@ -467,10 +473,12 @@ class FileHandler:
         source.rename(dest)
 
         # Record for rollback
-        self._rollback_stack.append((
-            FileOp(kind="rename", source=str(dest), dest=str(source)),
-            None,
-        ))
+        self._rollback_stack.append(
+            (
+                FileOp(kind="rename", source=str(dest), dest=str(source)),
+                None,
+            )
+        )
 
         logger.info(f"Renamed {source} -> {dest}")
 
@@ -510,10 +518,12 @@ class FileHandler:
         source.mkdir(parents=True, exist_ok=True)
 
         # Record for rollback
-        self._rollback_stack.append((
-            FileOp(kind="delete", source=str(source)),
-            None,
-        ))
+        self._rollback_stack.append(
+            (
+                FileOp(kind="delete", source=str(source)),
+                None,
+            )
+        )
 
         logger.info(f"Created directory {source}")
 
@@ -622,16 +632,20 @@ class FileHandler:
         # Record for rollback
         if source_existed:
             # Rollback: restore from backup
-            self._rollback_stack.append((
-                FileOp(kind="copy", source=backup_path, dest=str(source), overwrite=True),
-                backup_path,
-            ))
+            self._rollback_stack.append(
+                (
+                    FileOp(kind="copy", source=backup_path, dest=str(source), overwrite=True),
+                    backup_path,
+                )
+            )
         else:
             # Rollback: delete the new file
-            self._rollback_stack.append((
-                FileOp(kind="delete", source=str(source)),
-                None,
-            ))
+            self._rollback_stack.append(
+                (
+                    FileOp(kind="delete", source=str(source)),
+                    None,
+                )
+            )
 
         logger.info(f"Wrote {source} ({bytes_written} bytes)")
 
@@ -670,9 +684,8 @@ class FileHandler:
                             shutil.rmtree(str(source))
                         else:
                             source.unlink()
-                elif rollback_op.kind == "rename":
-                    if source.exists() and dest:
-                        source.rename(dest)
+                elif rollback_op.kind == "rename" and source.exists() and dest:
+                    source.rename(dest)
 
                 # Clean up backup
                 if backup_path:
@@ -776,9 +789,7 @@ def move_file(
         FileResult with outcome.
     """
     request = FileRequest(
-        operations=(
-            FileOp(kind="move", source=str(source), dest=str(dest), overwrite=overwrite),
-        ),
+        operations=(FileOp(kind="move", source=str(source), dest=str(dest), overwrite=overwrite),),
         description=f"Move {source} to {dest}",
     )
     return get_handler().execute(request)
@@ -830,9 +841,7 @@ def delete_file(
         FileResult with outcome.
     """
     request = FileRequest(
-        operations=(
-            FileOp(kind="delete", source=str(path), recursive=recursive),
-        ),
+        operations=(FileOp(kind="delete", source=str(path), recursive=recursive),),
         description=f"Delete {path}",
     )
     return get_handler().execute(request)

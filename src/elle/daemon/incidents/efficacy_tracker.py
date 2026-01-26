@@ -38,12 +38,14 @@ def _parse_datetime(s: str) -> datetime:
 def _json_dumps(obj: Any) -> str:
     """Serialize object to JSON string."""
     import json
+
     return json.dumps(obj, default=str)
 
 
 def _json_loads(s: str | None) -> Any:
     """Parse JSON string."""
     import json
+
     if not s:
         return []
     return json.loads(s)
@@ -140,9 +142,7 @@ def _update_domain_efficacy(
         last_updated = now
 
     # Compute decayed success rate
-    success_rate = _compute_decayed_rate(
-        improved, partial, no_change, worse, total, last_updated, now
-    )
+    success_rate = _compute_decayed_rate(improved, partial, no_change, worse, total, last_updated, now)
 
     cursor.execute(
         """
@@ -152,8 +152,14 @@ def _update_domain_efficacy(
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            domain, total, improved, partial,
-            no_change, worse, success_rate, _serialize_datetime(now),
+            domain,
+            total,
+            improved,
+            partial,
+            no_change,
+            worse,
+            success_rate,
+            _serialize_datetime(now),
         ),
     )
 
@@ -188,9 +194,7 @@ def _update_entity_efficacy(
         worse = 1 if outcome == "worse" else 0
         last_updated = now
 
-    success_rate = _compute_decayed_rate(
-        improved, partial, no_change, worse, total, last_updated, now
-    )
+    success_rate = _compute_decayed_rate(improved, partial, no_change, worse, total, last_updated, now)
 
     cursor.execute(
         """
@@ -200,8 +204,14 @@ def _update_entity_efficacy(
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            entity, total, improved, partial,
-            no_change, worse, success_rate, _serialize_datetime(now),
+            entity,
+            total,
+            improved,
+            partial,
+            no_change,
+            worse,
+            success_rate,
+            _serialize_datetime(now),
         ),
     )
 
@@ -252,9 +262,7 @@ def _update_approach_efficacy(
         last_used = now
         avg_time = time_to_resolve
 
-    success_rate = _compute_decayed_rate(
-        improved, partial, no_change, worse, total, last_used, now
-    )
+    success_rate = _compute_decayed_rate(improved, partial, no_change, worse, total, last_used, now)
 
     cursor.execute(
         """
@@ -265,9 +273,18 @@ def _update_approach_efficacy(
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            approach_signature, domain, precondition_summary, _json_dumps(list(key_commands)),
-            total, improved, partial, no_change, worse,
-            success_rate, avg_time, _serialize_datetime(now),
+            approach_signature,
+            domain,
+            precondition_summary,
+            _json_dumps(list(key_commands)),
+            total,
+            improved,
+            partial,
+            no_change,
+            worse,
+            success_rate,
+            avg_time,
+            _serialize_datetime(now),
         ),
     )
 
@@ -416,9 +433,8 @@ def _normalize_command(cmd: str) -> str | None:
         return f"rm {' '.join(flags)}" if flags else "rm"
     elif base == "chmod" or base == "chown":
         return base
-    elif base == "docker":
-        if len(parts) >= 2:
-            return f"docker {parts[1]}"
+    elif base == "docker" and len(parts) >= 2:
+        return f"docker {parts[1]}"
 
     # Default: just the base command
     return base
@@ -649,22 +665,22 @@ def get_all_domain_efficacy(
 
     try:
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT * FROM domain_efficacy ORDER BY total_incidents DESC"
-        )
+        cursor.execute("SELECT * FROM domain_efficacy ORDER BY total_incidents DESC")
 
         results = []
         for row in cursor.fetchall():
-            results.append(DomainEfficacy(
-                domain=row["domain"],
-                total_incidents=row["total_incidents"],
-                improved_count=row["improved_count"],
-                partial_count=row["partial_count"],
-                no_change_count=row["no_change_count"],
-                worse_count=row["worse_count"],
-                success_rate=row["success_rate"],
-                last_updated=_parse_datetime(row["last_updated"]),
-            ))
+            results.append(
+                DomainEfficacy(
+                    domain=row["domain"],
+                    total_incidents=row["total_incidents"],
+                    improved_count=row["improved_count"],
+                    partial_count=row["partial_count"],
+                    no_change_count=row["no_change_count"],
+                    worse_count=row["worse_count"],
+                    success_rate=row["success_rate"],
+                    last_updated=_parse_datetime(row["last_updated"]),
+                )
+            )
 
         return results
 
@@ -693,9 +709,7 @@ def get_efficacy_stats(
         cursor = conn.cursor()
 
         # Overall stats
-        cursor.execute(
-            "SELECT SUM(total_incidents) as total FROM domain_efficacy"
-        )
+        cursor.execute("SELECT SUM(total_incidents) as total FROM domain_efficacy")
         row = cursor.fetchone()
         total_finalized = row["total"] if row["total"] else 0
 
@@ -723,16 +737,18 @@ def get_efficacy_stats(
         )
         top_entities = []
         for row in cursor.fetchall():
-            top_entities.append(EntityEfficacy(
-                entity=row["entity"],
-                total_incidents=row["total_incidents"],
-                improved_count=row["improved_count"],
-                partial_count=row["partial_count"],
-                no_change_count=row["no_change_count"],
-                worse_count=row["worse_count"],
-                success_rate=row["success_rate"],
-                last_updated=_parse_datetime(row["last_updated"]),
-            ))
+            top_entities.append(
+                EntityEfficacy(
+                    entity=row["entity"],
+                    total_incidents=row["total_incidents"],
+                    improved_count=row["improved_count"],
+                    partial_count=row["partial_count"],
+                    no_change_count=row["no_change_count"],
+                    worse_count=row["worse_count"],
+                    success_rate=row["success_rate"],
+                    last_updated=_parse_datetime(row["last_updated"]),
+                )
+            )
 
         # Top approaches (by success rate with min 3 uses)
         cursor.execute(
@@ -745,20 +761,22 @@ def get_efficacy_stats(
         )
         top_approaches = []
         for row in cursor.fetchall():
-            top_approaches.append(SolutionApproachEfficacy(
-                approach_signature=row["approach_signature"],
-                domain=row["domain"],
-                precondition_summary=row["precondition_summary"] or "",
-                key_commands=tuple(_json_loads(row["key_commands_json"])),
-                total_uses=row["total_uses"],
-                improved_count=row["improved_count"],
-                partial_count=row["partial_count"],
-                no_change_count=row["no_change_count"],
-                worse_count=row["worse_count"],
-                success_rate=row["success_rate"],
-                avg_time_to_resolve_sec=row["avg_time_to_resolve_sec"],
-                last_used=_parse_datetime(row["last_used"]),
-            ))
+            top_approaches.append(
+                SolutionApproachEfficacy(
+                    approach_signature=row["approach_signature"],
+                    domain=row["domain"],
+                    precondition_summary=row["precondition_summary"] or "",
+                    key_commands=tuple(_json_loads(row["key_commands_json"])),
+                    total_uses=row["total_uses"],
+                    improved_count=row["improved_count"],
+                    partial_count=row["partial_count"],
+                    no_change_count=row["no_change_count"],
+                    worse_count=row["worse_count"],
+                    success_rate=row["success_rate"],
+                    avg_time_to_resolve_sec=row["avg_time_to_resolve_sec"],
+                    last_used=_parse_datetime(row["last_used"]),
+                )
+            )
 
         return EfficacyStats(
             total_finalized_incidents=total_finalized,

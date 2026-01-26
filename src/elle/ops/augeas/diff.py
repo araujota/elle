@@ -133,9 +133,7 @@ class DiffGenerator:
         colored = self.colored(unified) if has_changes else ""
 
         # Generate side-by-side view
-        side_by_side = self.side_by_side_lines(
-            original_lines, modified_lines
-        ) if has_changes else ""
+        side_by_side = self.side_by_side_lines(original_lines, modified_lines) if has_changes else ""
 
         # Calculate statistics
         stats = self._calculate_stats(original_lines, modified_lines)
@@ -247,15 +245,13 @@ class DiffGenerator:
                 # Removed line (show on left)
                 left = self._truncate(text, col_width)
                 lines.append(
-                    f"{Colors.RED}{left:<{col_width}}{Colors.RESET} | "
-                    f"{Colors.DIM}{'':<{col_width}}{Colors.RESET}"
+                    f"{Colors.RED}{left:<{col_width}}{Colors.RESET} | {Colors.DIM}{'':<{col_width}}{Colors.RESET}"
                 )
             elif code == "+":
                 # Added line (show on right)
                 right = self._truncate(text, col_width)
                 lines.append(
-                    f"{Colors.DIM}{'':<{col_width}}{Colors.RESET} | "
-                    f"{Colors.GREEN}{right:<{col_width}}{Colors.RESET}"
+                    f"{Colors.DIM}{'':<{col_width}}{Colors.RESET} | {Colors.GREEN}{right:<{col_width}}{Colors.RESET}"
                 )
             elif code == "?":
                 # Hint line (for character-level changes) - skip
@@ -295,9 +291,9 @@ class DiffGenerator:
                     char_diff = self._char_diff(old_line, new_line)
                     lines.append(f"{Colors.YELLOW}~ {char_diff}{Colors.RESET}")
                 # Handle remaining lines if counts differ
-                for line in original_lines[i1 + (j2 - j1):i2]:
+                for line in original_lines[i1 + (j2 - j1) : i2]:
                     lines.append(f"{Colors.RED}- {line}{Colors.RESET}")
-                for line in modified_lines[j1 + (i2 - i1):j2]:
+                for line in modified_lines[j1 + (i2 - i1) : j2]:
                     lines.append(f"{Colors.GREEN}+ {line}{Colors.RESET}")
             elif tag == "delete":
                 for line in original_lines[i1:i2]:

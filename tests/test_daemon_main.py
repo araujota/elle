@@ -3,7 +3,6 @@
 import asyncio
 import sys
 import tempfile
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -17,6 +16,7 @@ def _reset_singletons():
     # Reset notification service
     try:
         import elle.daemon.notifications.service as notif_svc
+
         if notif_svc._service is not None:
             notif_svc._service._running = False
             notif_svc._service = None
@@ -26,6 +26,7 @@ def _reset_singletons():
     # Reset reboot manager
     try:
         import elle.daemon.reboot.manager as reboot_mgr
+
         reboot_mgr._manager = None
     except (ImportError, AttributeError):
         pass
@@ -109,6 +110,7 @@ class TestElledDaemon:
     @pytest.mark.asyncio
     async def test_daemon_run_with_shutdown(self, daemon):
         """Daemon run should respond to shutdown signal."""
+
         async def trigger_shutdown():
             await asyncio.sleep(0.2)
             daemon.shutdown.set()

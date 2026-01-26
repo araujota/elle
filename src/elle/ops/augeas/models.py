@@ -28,9 +28,7 @@ class AugeasOp(BaseModel):
     kind: Literal["set", "rm", "ins", "mv"] = Field(
         description="Type of operation: set (create/modify), rm (delete), ins (insert), mv (move)"
     )
-    path: str = Field(
-        description="Augeas path expression, e.g., /files/etc/fstab/1/spec"
-    )
+    path: str = Field(description="Augeas path expression, e.g., /files/etc/fstab/1/spec")
     value: str | None = Field(
         default=None,
         description="Value for set operations, destination for mv operations",
@@ -82,9 +80,7 @@ class AugeasEditRequest(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    file_path: str = Field(
-        description="Absolute path to the config file, e.g., /etc/fstab"
-    )
+    file_path: str = Field(description="Absolute path to the config file, e.g., /etc/fstab")
     lens: str | None = Field(
         default=None,
         description="Augeas lens to use. Auto-detected if None.",
@@ -402,9 +398,7 @@ class AugeasValidationError(AugeasError):
         self.file_path = file_path
         self.validator = validator
         self.output = output
-        super().__init__(
-            f"Validation failed for {file_path} using {validator}: {output}"
-        )
+        super().__init__(f"Validation failed for {file_path} using {validator}: {output}")
 
 
 class AugeasBackupError(AugeasError):

@@ -90,8 +90,7 @@ def handle_mobile_command(user_input: str, session: Session) -> tuple[str, bool]
         return handler(parts, session)
 
     return (
-        f"{Colors.RED}Unknown subcommand: {subcommand}{Colors.RESET}\n"
-        f"Use '/mobile help' for available commands.",
+        f"{Colors.RED}Unknown subcommand: {subcommand}{Colors.RESET}\nUse '/mobile help' for available commands.",
         False,
     )
 
@@ -332,7 +331,7 @@ def _mobile_devices(session: Session) -> tuple[str, bool]:
             # Role with elevation check
             elevation_status = elevation_mgr.get_elevation_status(device.device_id)
             if elevation_status.get("elevated"):
-                eff_role = elevation_status['effective_role']
+                eff_role = elevation_status["effective_role"]
                 role_display = f"{Colors.CYAN}{eff_role}{Colors.RESET} (elevated)"
             else:
                 role_display = device.role.value
@@ -395,11 +394,7 @@ def _mobile_revoke(device_id: str | None, session: Session) -> tuple[str, bool]:
 
         # Confirm revocation
         try:
-            response = (
-                input(f"{Colors.YELLOW}Revoke access for '{device.name}'? [y/N]: {Colors.RESET}")
-                .strip()
-                .lower()
-            )
+            response = input(f"{Colors.YELLOW}Revoke access for '{device.name}'? [y/N]: {Colors.RESET}").strip().lower()
         except (EOFError, KeyboardInterrupt):
             return f"{Colors.DIM}Cancelled.{Colors.RESET}", False
 
@@ -411,8 +406,7 @@ def _mobile_revoke(device_id: str | None, session: Session) -> tuple[str, bool]:
         elevation_mgr.revoke_elevation(device.device_id)
 
         return (
-            f"\n{Colors.GREEN}Revoked access for: {device.name}{Colors.RESET}\n"
-            f"Device ID: {device.device_id}\n",
+            f"\n{Colors.GREEN}Revoked access for: {device.name}{Colors.RESET}\nDevice ID: {device.device_id}\n",
             True,
         )
 

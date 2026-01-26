@@ -78,9 +78,7 @@ class PairingManager:
         self.store = store or MobileStore(self.config)
         self.crypto = crypto or MobileCrypto(self.config)
 
-    def initiate_pairing(
-        self, role: MobileRole | None = None
-    ) -> tuple[QRPayload, PairingToken]:
+    def initiate_pairing(self, role: MobileRole | None = None) -> tuple[QRPayload, PairingToken]:
         """Initiate a new pairing flow.
 
         Generates a one-time token and returns QR payload.
@@ -98,8 +96,7 @@ class PairingManager:
         paired_count = self.store.count_devices(DeviceStatus.PAIRED)
         if paired_count >= self.config.max_paired_devices:
             raise PairingError(
-                f"Maximum paired devices ({self.config.max_paired_devices}) reached. "
-                "Revoke an existing device first."
+                f"Maximum paired devices ({self.config.max_paired_devices}) reached. Revoke an existing device first."
             )
 
         # Determine role
@@ -108,9 +105,7 @@ class PairingManager:
 
         # Generate secure token
         token_value = secrets.token_hex(TOKEN_BYTES)
-        expires_at = datetime.utcnow() + timedelta(
-            seconds=self.config.pairing_token_ttl_seconds
-        )
+        expires_at = datetime.utcnow() + timedelta(seconds=self.config.pairing_token_ttl_seconds)
 
         token = PairingToken(
             token=token_value,
@@ -141,9 +136,7 @@ class PairingManager:
 
         return payload, token
 
-    def complete_pairing(
-        self, token_value: str, device_name: str
-    ) -> PairingResult:
+    def complete_pairing(self, token_value: str, device_name: str) -> PairingResult:
         """Complete pairing with a valid token.
 
         Validates the token, generates client certificate, and creates device.
@@ -219,10 +212,7 @@ class PairingManager:
             ImportError: If qrcode library not available.
         """
         if not QRCODE_AVAILABLE:
-            raise ImportError(
-                "qrcode library required for QR generation. "
-                "Install with: pip install 'elle[mobile]'"
-            )
+            raise ImportError("qrcode library required for QR generation. Install with: pip install 'elle[mobile]'")
 
         qr = qrcode.QRCode(
             version=None,  # Auto-size
@@ -240,11 +230,7 @@ class PairingManager:
         for r in range(0, qr.modules_count, 2):
             for c in range(qr.modules_count):
                 top = qr.modules[r][c] if r < qr.modules_count else False
-                bottom = (
-                    qr.modules[r + 1][c]
-                    if r + 1 < qr.modules_count
-                    else False
-                )
+                bottom = qr.modules[r + 1][c] if r + 1 < qr.modules_count else False
 
                 if top and bottom:
                     output.write("\u2588")  # Full block
@@ -268,10 +254,7 @@ class PairingManager:
             Simple ASCII QR code using # and spaces.
         """
         if not QRCODE_AVAILABLE:
-            raise ImportError(
-                "qrcode library required for QR generation. "
-                "Install with: pip install 'elle[mobile]'"
-            )
+            raise ImportError("qrcode library required for QR generation. Install with: pip install 'elle[mobile]'")
 
         qr = qrcode.QRCode(
             version=None,

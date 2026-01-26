@@ -11,19 +11,11 @@ REDIS_RECIPE = StackRecipe(
     display_name="Redis Cache Server",
     description="Redis with localhost-only binding, memory management, and optional persistence",
     category="data",
-
-    packages=(
-        "redis-server",
-    ),
-
-    services=(
-        "redis-server",
-    ),
-
+    packages=("redis-server",),
+    services=("redis-server",),
     config_templates={
         # Redis will use system defaults with localhost binding
     },
-
     guarantees=(
         StackGuarantee(
             name="localhost_only",
@@ -58,7 +50,6 @@ REDIS_RECIPE = StackRecipe(
             remediation_hint="Consider setting maxmemory and maxmemory-policy in /etc/redis/redis.conf",
         ),
     ),
-
     variables=(
         StackVariable(
             name="maxmemory",
@@ -79,7 +70,6 @@ REDIS_RECIPE = StackRecipe(
             required=False,
         ),
     ),
-
     presets={
         "cache": {
             "maxmemory": "256mb",
@@ -92,11 +82,9 @@ REDIS_RECIPE = StackRecipe(
             "appendonly": "yes",
         },
     },
-
     min_ram_mb=128,
     min_disk_gb=1,
     ports_required=(6379,),
-
     version="1.0.0",
     tags=("cache", "redis", "data", "memory"),
 )

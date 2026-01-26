@@ -1,18 +1,16 @@
 """Tests for syscall summarizer."""
 
-import pytest
 from pathlib import Path
 
 from elle.daemon.telemetry.ebpf.syscall_models import (
     SyscallEvent,
-    SyscallSummary,
 )
 from elle.daemon.telemetry.ebpf.syscall_summarizer import (
     SyscallSummarizer,
+    _normalize_path,
+    _should_include_path,
     create_summarizer,
     summarize_events,
-    _should_include_path,
-    _normalize_path,
 )
 
 

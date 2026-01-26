@@ -1,20 +1,21 @@
 """Tests for preflight nspawn validator."""
 
-import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, patch
 
-from elle.ops.preflight.nspawn_validator import (
-    NspawnValidator,
-    create_nspawn_validator,
-    _get_package_services,
-    PACKAGE_SERVICE_MAP,
-)
+import pytest
+
 from elle.ops.preflight.models import (
     IssueSeverity,
     NspawnConfig,
     PreflightStatus,
     PreflightTest,
+)
+from elle.ops.preflight.nspawn_validator import (
+    PACKAGE_SERVICE_MAP,
+    NspawnValidator,
+    _get_package_services,
+    create_nspawn_validator,
 )
 
 
@@ -133,10 +134,7 @@ class TestNspawnValidator:
 
         assert result.status == PreflightStatus.BLOCKED
         assert result.can_proceed is False
-        assert any(
-            "not available" in i.message.lower()
-            for i in result.issues
-        )
+        assert any("not available" in i.message.lower() for i in result.issues)
 
     def test_validate_base_image_preparation_failure(self):
         """Test validation when base image preparation fails."""
@@ -154,10 +152,7 @@ class TestNspawnValidator:
 
                     assert result.status == PreflightStatus.BLOCKED
                     assert result.can_proceed is False
-                    assert any(
-                        "base image" in i.message.lower()
-                        for i in result.issues
-                    )
+                    assert any("base image" in i.message.lower() for i in result.issues)
 
     def test_validate_install_success(self):
         """Test successful package validation."""
@@ -194,10 +189,14 @@ class TestNspawnValidator:
             with patch.object(type(validator), "has_base_image", new_callable=lambda: property(lambda self: True)):
                 with patch.object(validator, "_create_ephemeral_container", return_value=mock_container_cm):
                     # apt update succeeds, apt install fails
-                    with patch.object(validator, "_run_in_container", side_effect=[
-                        (0, "Updated", ""),  # apt update
-                        (1, "", "Package not found"),  # apt install
-                    ]):
+                    with patch.object(
+                        validator,
+                        "_run_in_container",
+                        side_effect=[
+                            (0, "Updated", ""),  # apt update
+                            (1, "", "Package not found"),  # apt install
+                        ],
+                    ):
                         test = PreflightTest(
                             packages=("nonexistent-package",),
                             operation="install",
@@ -206,10 +205,7 @@ class TestNspawnValidator:
 
                         assert result.status == PreflightStatus.BLOCKED
                         assert result.can_proceed is False
-                        assert any(
-                            i.severity == IssueSeverity.ERROR
-                            for i in result.issues
-                        )
+                        assert any(i.severity == IssueSeverity.ERROR for i in result.issues)
 
     def test_validate_service_start_failure(self):
         """Test validation when service fails to start."""
@@ -223,11 +219,15 @@ class TestNspawnValidator:
             with patch.object(type(validator), "has_base_image", new_callable=lambda: property(lambda self: True)):
                 with patch.object(validator, "_create_ephemeral_container", return_value=mock_container_cm):
                     # apt update succeeds, apt install succeeds, service start fails
-                    with patch.object(validator, "_run_in_container", side_effect=[
-                        (0, "Updated", ""),  # apt update
-                        (0, "Installed", ""),  # apt install
-                        (1, "", "Service failed to start"),  # systemctl start
-                    ]):
+                    with patch.object(
+                        validator,
+                        "_run_in_container",
+                        side_effect=[
+                            (0, "Updated", ""),  # apt update
+                            (0, "Installed", ""),  # apt install
+                            (1, "", "Service failed to start"),  # systemctl start
+                        ],
+                    ):
                         test = PreflightTest(
                             packages=("nginx",),
                             operation="install",
@@ -236,10 +236,7 @@ class TestNspawnValidator:
 
                         assert result.status == PreflightStatus.BLOCKED
                         assert result.can_proceed is False
-                        assert any(
-                            "failed to start" in i.message.lower()
-                            for i in result.issues
-                        )
+                        assert any("failed to start" in i.message.lower() for i in result.issues)
 
     def test_validate_container_exception(self):
         """Test validation when container creation fails."""
@@ -247,7 +244,9 @@ class TestNspawnValidator:
 
         with patch.object(type(validator), "is_available", new_callable=lambda: property(lambda self: True)):
             with patch.object(type(validator), "has_base_image", new_callable=lambda: property(lambda self: True)):
-                with patch.object(validator, "_create_ephemeral_container", side_effect=RuntimeError("Container creation failed")):
+                with patch.object(
+                    validator, "_create_ephemeral_container", side_effect=RuntimeError("Container creation failed")
+                ):
                     test = PreflightTest(
                         packages=("nginx",),
                         operation="install",
@@ -256,10 +255,7 @@ class TestNspawnValidator:
 
                     assert result.status == PreflightStatus.BLOCKED
                     assert result.can_proceed is False
-                    assert any(
-                        "error" in i.message.lower()
-                        for i in result.issues
-                    )
+                    assert any("error" in i.message.lower() for i in result.issues)
 
     def test_prepare_base_image_debootstrap_not_found(self):
         """Test base image preparation when debootstrap not found."""

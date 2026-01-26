@@ -135,27 +135,33 @@ def build_generation_prompt(man_page: ParsedManPage) -> str:
 
     # Add synopsis
     if man_page.synopsis:
-        prompt_parts.extend([
-            "### SYNOPSIS",
-            "```",
-            man_page.synopsis.raw,
-            "```",
-            "",
-        ])
+        prompt_parts.extend(
+            [
+                "### SYNOPSIS",
+                "```",
+                man_page.synopsis.raw,
+                "```",
+                "",
+            ]
+        )
 
     # Add description
     if man_page.description:
-        prompt_parts.extend([
-            "### DESCRIPTION",
-            man_page.description[:500],
-            "",
-        ])
+        prompt_parts.extend(
+            [
+                "### DESCRIPTION",
+                man_page.description[:500],
+                "",
+            ]
+        )
 
     # Add flags (limit to most important)
     if man_page.flags:
-        prompt_parts.extend([
-            "### OPTIONS (partial list)",
-        ])
+        prompt_parts.extend(
+            [
+                "### OPTIONS (partial list)",
+            ]
+        )
         for flag in man_page.flags[:20]:  # Limit to 20 flags
             if flag.long:
                 flag_str = f"{flag.short}, {flag.long}" if flag.short else flag.long
@@ -170,9 +176,11 @@ def build_generation_prompt(man_page: ParsedManPage) -> str:
 
     # Add examples
     if man_page.examples:
-        prompt_parts.extend([
-            "### EXAMPLES",
-        ])
+        prompt_parts.extend(
+            [
+                "### EXAMPLES",
+            ]
+        )
         for ex in man_page.examples[:5]:  # Limit to 5 examples
             prompt_parts.append("```")
             prompt_parts.append(ex.command)
@@ -182,18 +190,20 @@ def build_generation_prompt(man_page: ParsedManPage) -> str:
         prompt_parts.append("")
 
     # Add generation instructions
-    prompt_parts.extend([
-        "## Instructions",
-        "",
-        "1. Analyze the command's purpose and typical use cases",
-        "2. Identify the most common and useful operation(s)",
-        "3. Generate a capability spec for the PRIMARY use case",
-        "4. Assign appropriate risk level based on potential for damage",
-        "5. Include only necessary input fields",
-        "6. Set confidence_score based on how well-defined the command is",
-        "",
-        "Respond with ONLY the JSON specification, no explanation.",
-    ])
+    prompt_parts.extend(
+        [
+            "## Instructions",
+            "",
+            "1. Analyze the command's purpose and typical use cases",
+            "2. Identify the most common and useful operation(s)",
+            "3. Generate a capability spec for the PRIMARY use case",
+            "4. Assign appropriate risk level based on potential for damage",
+            "5. Include only necessary input fields",
+            "6. Set confidence_score based on how well-defined the command is",
+            "",
+            "Respond with ONLY the JSON specification, no explanation.",
+        ]
+    )
 
     return "\n".join(prompt_parts)
 
@@ -227,27 +237,33 @@ def build_subcommand_prompt(
 
     # Add synopsis
     if man_page.synopsis:
-        prompt_parts.extend([
-            "### SYNOPSIS",
-            "```",
-            man_page.synopsis.raw,
-            "```",
-            "",
-        ])
+        prompt_parts.extend(
+            [
+                "### SYNOPSIS",
+                "```",
+                man_page.synopsis.raw,
+                "```",
+                "",
+            ]
+        )
 
     # Add description
     if man_page.description:
-        prompt_parts.extend([
-            "### DESCRIPTION",
-            man_page.description[:300],
-            "",
-        ])
+        prompt_parts.extend(
+            [
+                "### DESCRIPTION",
+                man_page.description[:300],
+                "",
+            ]
+        )
 
     # Add relevant flags
     if man_page.flags:
-        prompt_parts.extend([
-            "### OPTIONS",
-        ])
+        prompt_parts.extend(
+            [
+                "### OPTIONS",
+            ]
+        )
         for flag in man_page.flags[:15]:
             if flag.long:
                 flag_str = f"{flag.short}, {flag.long}" if flag.short else flag.long
@@ -256,14 +272,16 @@ def build_subcommand_prompt(
             prompt_parts.append(f"- `{flag_str}`: {flag.description[:80]}")
         prompt_parts.append("")
 
-    prompt_parts.extend([
-        "## Instructions",
-        "",
-        f"Generate a capability spec specifically for `{man_page.name} {subcommand}`.",
-        f"The capability name should be `{man_page.name}.{subcommand.replace('-', '_')}`.",
-        "",
-        "Respond with ONLY the JSON specification.",
-    ])
+    prompt_parts.extend(
+        [
+            "## Instructions",
+            "",
+            f"Generate a capability spec specifically for `{man_page.name} {subcommand}`.",
+            f"The capability name should be `{man_page.name}.{subcommand.replace('-', '_')}`.",
+            "",
+            "Respond with ONLY the JSON specification.",
+        ]
+    )
 
     return "\n".join(prompt_parts)
 

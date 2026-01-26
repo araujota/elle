@@ -21,14 +21,14 @@ class OOMEvent(ctypes.Structure):
     """C struct for OOM events from ring buffer."""
 
     _fields_ = [
-        ("ts_ns", ctypes.c_uint64),       # Kernel timestamp
-        ("pid", ctypes.c_uint32),          # Process ID being killed
-        ("tgid", ctypes.c_uint32),         # Thread group ID
-        ("uid", ctypes.c_uint32),          # User ID
-        ("oom_score_adj", ctypes.c_int16), # OOM score adjustment
-        ("comm", ctypes.c_char * 16),      # Process name
-        ("totalpages", ctypes.c_uint64),   # Total pages in system
-        ("freepages", ctypes.c_uint64),    # Free pages when OOM occurred
+        ("ts_ns", ctypes.c_uint64),  # Kernel timestamp
+        ("pid", ctypes.c_uint32),  # Process ID being killed
+        ("tgid", ctypes.c_uint32),  # Thread group ID
+        ("uid", ctypes.c_uint32),  # User ID
+        ("oom_score_adj", ctypes.c_int16),  # OOM score adjustment
+        ("comm", ctypes.c_char * 16),  # Process name
+        ("totalpages", ctypes.c_uint64),  # Total pages in system
+        ("freepages", ctypes.c_uint64),  # Free pages when OOM occurred
     ]
 
 
@@ -106,9 +106,7 @@ TRACEPOINT_PROBE(oom, mark_victim) {
 }
 """
 
-    def _parse_event(
-        self, cpu: int, data: ctypes.Structure, size: int
-    ) -> EBPFRawEvent | None:
+    def _parse_event(self, cpu: int, data: ctypes.Structure, size: int) -> EBPFRawEvent | None:
         """Parse OOM event from ring buffer.
 
         Args:

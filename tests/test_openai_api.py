@@ -11,9 +11,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from elle.daemon.api.app import create_app
-from elle.daemon.api.auth import ANONYMOUS_AUTH, AuthContext
 from elle.daemon.api.engine_adapter import EngineAdapter, EngineResponse
-from elle.daemon.api.openai_models import ExecutionMode
 from elle.daemon.config import ApiAuthConfig, ApiConfig, Config
 from elle.daemon.main import ElledDaemon
 from elle.daemon.telemetry.models import DaemonStatus, QueueStats

@@ -158,15 +158,9 @@ class AptValidator:
             exit_code = result.returncode
 
             # Parse the output
-            packages_to_install = _extract_packages(
-                PATTERN_TO_INSTALL.search(output)
-            )
-            packages_to_upgrade = _extract_packages(
-                PATTERN_TO_UPGRADE.search(output)
-            )
-            packages_to_remove = _extract_packages(
-                PATTERN_TO_REMOVE.search(output)
-            )
+            packages_to_install = _extract_packages(PATTERN_TO_INSTALL.search(output))
+            packages_to_upgrade = _extract_packages(PATTERN_TO_UPGRADE.search(output))
+            packages_to_remove = _extract_packages(PATTERN_TO_REMOVE.search(output))
 
             # Check for held packages
             held = _extract_packages(PATTERN_HELD.search(output))
@@ -240,22 +234,16 @@ class AptValidator:
             download_size_mb = 0.0
             download_match = PATTERN_DOWNLOAD_SIZE.search(output)
             if download_match:
-                download_size_mb = _parse_size_to_mb(
-                    download_match.group(1), download_match.group(2)
-                )
+                download_size_mb = _parse_size_to_mb(download_match.group(1), download_match.group(2))
 
             disk_space_mb = 0.0
             disk_match = PATTERN_DISK_SPACE.search(output)
             if disk_match:
-                disk_space_mb = _parse_size_to_mb(
-                    disk_match.group(1), disk_match.group(2)
-                )
+                disk_space_mb = _parse_size_to_mb(disk_match.group(1), disk_match.group(2))
 
             freed_match = PATTERN_DISK_FREED.search(output)
             if freed_match:
-                disk_space_mb = -_parse_size_to_mb(
-                    freed_match.group(1), freed_match.group(2)
-                )
+                disk_space_mb = -_parse_size_to_mb(freed_match.group(1), freed_match.group(2))
 
             # Warn on large operations
             if len(packages_to_install) + len(packages_to_upgrade) > 50:
@@ -279,15 +267,10 @@ class AptValidator:
                 )
 
             # Determine status
-            if exit_code != 0 and any(
-                i.severity in (IssueSeverity.ERROR, IssueSeverity.CRITICAL)
-                for i in issues
-            ):
+            if exit_code != 0 and any(i.severity in (IssueSeverity.ERROR, IssueSeverity.CRITICAL) for i in issues):
                 status = PreflightStatus.BLOCKED
                 can_proceed = False
-            elif issues and any(
-                i.severity == IssueSeverity.WARNING for i in issues
-            ):
+            elif issues and any(i.severity == IssueSeverity.WARNING for i in issues):
                 status = PreflightStatus.WARNING
                 can_proceed = True
             else:

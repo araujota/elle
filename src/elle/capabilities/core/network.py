@@ -8,6 +8,7 @@ Provides typed, policy-governed operations for network management:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
 import subprocess
@@ -110,10 +111,8 @@ def _parse_wg_show(output: str) -> dict[str, Any]:
         elif line.startswith("private key:"):
             data["private_key"] = line.split(":", 1)[1].strip()
         elif line.startswith("listening port:"):
-            try:
+            with contextlib.suppress(ValueError):
                 data["listening_port"] = int(line.split(":", 1)[1].strip())
-            except ValueError:
-                pass
         elif line.startswith("peer:"):
             if current_peer:
                 data["peers"].append(current_peer)
@@ -367,7 +366,7 @@ class WireGuardRestartCapability(BaseCapability):
             estimated_risk="medium",
             requires_confirmation=True,
             preview_text=f"Would restart WireGuard interface '{input.interface}' "
-                         f"({'currently up' if was_up else 'currently down'})",
+            f"({'currently up' if was_up else 'currently down'})",
             is_valid=True,
         )
 
@@ -665,16 +664,18 @@ class WireGuardStatusCapability(BaseCapability):
                 if is_stale:
                     any_stale = True
 
-                peers.append(PeerStatus(
-                    public_key=peer_data.get("public_key", "")[:20] + "...",
-                    endpoint=peer_data.get("endpoint"),
-                    allowed_ips=tuple(peer_data.get("allowed_ips", [])),
-                    latest_handshake=hs,
-                    handshake_age_sec=hs_age,
-                    transfer_rx=peer_data.get("transfer_rx", "0"),
-                    transfer_tx=peer_data.get("transfer_tx", "0"),
-                    is_stale=is_stale,
-                ))
+                peers.append(
+                    PeerStatus(
+                        public_key=peer_data.get("public_key", "")[:20] + "...",
+                        endpoint=peer_data.get("endpoint"),
+                        allowed_ips=tuple(peer_data.get("allowed_ips", [])),
+                        latest_handshake=hs,
+                        handshake_age_sec=hs_age,
+                        transfer_rx=peer_data.get("transfer_rx", "0"),
+                        transfer_tx=peer_data.get("transfer_tx", "0"),
+                        is_stale=is_stale,
+                    )
+                )
 
             # Check routes if requested
             has_routes = False
@@ -855,14 +856,16 @@ class NetworkListenersCapability(BaseCapability):
                     inode = parts[9]
                     pid, proc_name = self._get_process_for_inode(inode)
 
-                    listeners.append(ListenerInfo(
-                        port=port,
-                        protocol=protocol,
-                        address=address,
-                        pid=pid,
-                        process_name=proc_name,
-                        is_wildcard=is_wildcard,
-                    ))
+                    listeners.append(
+                        ListenerInfo(
+                            port=port,
+                            protocol=protocol,
+                            address=address,
+                            pid=pid,
+                            process_name=proc_name,
+                            is_wildcard=is_wildcard,
+                        )
+                    )
 
             except Exception as e:
                 logger.warning(f"Failed to read {proc_file}: {e}")
@@ -889,7 +892,7 @@ class NetworkListenersCapability(BaseCapability):
         """
         if len(hex_str) == 8:
             # IPv4
-            octets = [str(int(hex_str[i:i+2], 16)) for i in range(0, 8, 2)]
+            octets = [str(int(hex_str[i : i + 2], 16)) for i in range(0, 8, 2)]
             return ".".join(reversed(octets))
         else:
             # IPv6
@@ -1207,9 +1210,7 @@ class WireGuardRotateKeysCapability(BaseCapability):
                             ),
                         ),
                     ),
-                    warnings=(
-                        f"Peers must be updated with new public key: {result.new_public_key}",
-                    ),
+                    warnings=(f"Peers must be updated with new public key: {result.new_public_key}",),
                     execution_time_ms=int((time.time() - start_time) * 1000),
                     evidence=CapabilityEvidence(
                         commands_executed=result.steps_completed,

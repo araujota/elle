@@ -1,14 +1,12 @@
 """Tests for EBPFWatcher."""
 
 import asyncio
-from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from elle.daemon.telemetry.ebpf.models import (
     EBPFEventType,
-    EBPFProgramStatus,
     EBPFRawEvent,
     EBPFWatcherStatus,
 )
@@ -36,9 +34,7 @@ class TestEBPFWatcherInit:
     def test_init_default_programs(self, mock_queue, shutdown_event):
         """Test initialization with default programs."""
         watcher = EBPFWatcher(mock_queue, shutdown_event)
-        assert watcher._requested_programs == [
-            "oom", "block_io", "process", "thermal", "net_drops"
-        ]
+        assert watcher._requested_programs == ["oom", "block_io", "process", "thermal", "net_drops"]
 
     def test_init_custom_programs(self, mock_queue, shutdown_event):
         """Test initialization with custom program list."""
@@ -73,23 +69,25 @@ class TestEBPFWatcherStatus:
 
     def test_get_status_enabled(self, mock_queue, shutdown_event):
         """Test status when eBPF is available."""
-        with patch(
-            "elle.daemon.telemetry.ebpf.watcher.can_use_ebpf",
-            return_value=(True, "Running as root"),
-        ):
-            with patch(
+        with (
+            patch(
+                "elle.daemon.telemetry.ebpf.watcher.can_use_ebpf",
+                return_value=(True, "Running as root"),
+            ),
+            patch(
                 "elle.daemon.telemetry.ebpf.capabilities.check_capabilities",
-            ) as mock_check:
-                mock_check.return_value = MagicMock(available=True)
-                with patch(
-                    "elle.daemon.telemetry.ebpf.capabilities.get_missing_capabilities",
-                    return_value=[],
-                ):
-                    watcher = EBPFWatcher(mock_queue, shutdown_event)
-                    status = watcher.get_status()
+            ) as mock_check,
+        ):
+            mock_check.return_value = MagicMock(available=True)
+            with patch(
+                "elle.daemon.telemetry.ebpf.capabilities.get_missing_capabilities",
+                return_value=[],
+            ):
+                watcher = EBPFWatcher(mock_queue, shutdown_event)
+                status = watcher.get_status()
 
-                    assert status.enabled is True
-                    assert status.backend == "bcc"
+                assert status.enabled is True
+                assert status.backend == "bcc"
 
 
 class TestEBPFWatcherEventHandling:

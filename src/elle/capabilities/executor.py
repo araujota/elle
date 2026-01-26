@@ -98,6 +98,7 @@ class CapabilityExecutor:
         """Get the dependency checker (lazy initialization)."""
         if self._dependency_checker is None:
             from elle.capabilities.dependencies.checker import get_checker
+
             self._dependency_checker = get_checker()
         return self._dependency_checker
 
@@ -147,9 +148,7 @@ class CapabilityExecutor:
         if spec.input_schema_name:
             # Input should already be validated by Pydantic
             if not isinstance(input, BaseModel):
-                raise CapabilityInputError(
-                    f"Input must be a Pydantic model, got {type(input)}"
-                )
+                raise CapabilityInputError(f"Input must be a Pydantic model, got {type(input)}")
 
         # 3. Check policy
         policy_result = evaluate_capability(capability, input)
@@ -184,13 +183,10 @@ class CapabilityExecutor:
             )
 
         # 5. Confirmation
-        needs_confirm = (
-            require_confirmation
-            and (
-                getattr(policy_result, "requires_confirmation", False)
-                or capability_requires_confirmation(spec)
-                or dry_run_result.requires_confirmation
-            )
+        needs_confirm = require_confirmation and (
+            getattr(policy_result, "requires_confirmation", False)
+            or capability_requires_confirmation(spec)
+            or dry_run_result.requires_confirmation
         )
 
         if needs_confirm:
@@ -203,14 +199,10 @@ class CapabilityExecutor:
                     raise
                 except Exception as e:
                     logger.error(f"Confirmation callback failed: {e}")
-                    raise CapabilityCancelledError(
-                        f"Confirmation failed: {e}"
-                    ) from e
+                    raise CapabilityCancelledError(f"Confirmation failed: {e}") from e
             else:
                 # No callback provided but confirmation required
-                logger.warning(
-                    f"Capability {spec.name} requires confirmation but no callback provided"
-                )
+                logger.warning(f"Capability {spec.name} requires confirmation but no callback provided")
 
         # 6. Execute
         try:
@@ -256,17 +248,13 @@ class CapabilityExecutor:
 
             # 8. Auto-rollback on verification failure (optional)
             if not verification.passed and auto_rollback_on_verify_fail:
-                logger.warning(
-                    f"Verification failed for {spec.name}, attempting rollback"
-                )
+                logger.warning(f"Verification failed for {spec.name}, attempting rollback")
                 try:
                     rollback_result = capability.rollback(input, result)
                     if rollback_result.success:
                         logger.info(f"Rollback succeeded for {spec.name}")
                     else:
-                        logger.error(
-                            f"Rollback failed for {spec.name}: {rollback_result.error}"
-                        )
+                        logger.error(f"Rollback failed for {spec.name}: {rollback_result.error}")
                 except Exception as e:
                     logger.exception(f"Rollback failed with exception: {e}")
 
@@ -328,9 +316,7 @@ class CapabilityExecutor:
                 preview_text=result.preview_text,
                 diff=result.diff,
                 is_valid=False,  # Cannot proceed with missing deps
-                validation_errors=result.validation_errors + (
-                    f"Missing dependencies: {', '.join(missing_deps)}",
-                ),
+                validation_errors=result.validation_errors + (f"Missing dependencies: {', '.join(missing_deps)}",),
                 missing_dependencies=missing_deps,
             )
 

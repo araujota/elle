@@ -160,9 +160,7 @@ class UIExecutor:
             if result.adapted:
                 adaptations_made += 1
                 method = result.adaptation_method or "unknown"
-                adaptation_notes.append(
-                    f"Action {i+1}: Found '{action.target_name}' via {method}"
-                )
+                adaptation_notes.append(f"Action {i + 1}: Found '{action.target_name}' via {method}")
 
             if not result.success:
                 failed = True
@@ -170,9 +168,7 @@ class UIExecutor:
 
                 # Attach failure to incident
                 if incident_id:
-                    await self._attach_action_to_incident(
-                        incident_id, result, failed=True
-                    )
+                    await self._attach_action_to_incident(incident_id, result, failed=True)
 
                 break
 
@@ -222,9 +218,7 @@ class UIExecutor:
             await self._finalize_incident(incident_id, outcome, success)
 
         # Generate user explanation
-        user_explanation = self._generate_explanation(
-            plan, action_results, outcome, adaptation_notes
-        )
+        user_explanation = self._generate_explanation(plan, action_results, outcome, adaptation_notes)
 
         return ExecutionResult(
             task_id=plan.task_id,
@@ -269,9 +263,7 @@ class UIExecutor:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
-        return loop.run_until_complete(
-            self.execute_plan(plan, adapt_on_failure, dry_run)
-        )
+        return loop.run_until_complete(self.execute_plan(plan, adapt_on_failure, dry_run))
 
     async def _execute_action(
         self,
@@ -395,9 +387,7 @@ class UIExecutor:
             state_after = self.client.get_state(accessible)
 
             if action.verify_state:
-                verification_passed = action.verify_state.lower() in [
-                    s.lower() for s in state_after
-                ]
+                verification_passed = action.verify_state.lower() in [s.lower() for s in state_after]
                 if not verification_passed:
                     # Check for common variations
                     if action.verify_state.lower() == "unchecked" or action.verify_state.lower() == "off":
