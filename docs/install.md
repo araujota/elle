@@ -19,11 +19,19 @@ The APT repository provides automatic updates and proper system integration.
 ### 1. Add the Repository
 
 ```bash
-# Download and install the GPG key
-curl -fsSL https://apt.elle.dev/gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/elle-archive-keyring.gpg
+# Add the GPG key
+curl -fsSL https://repo.agentelle.org/elle.gpg \
+  | sudo gpg --dearmor -o /usr/share/keyrings/elle-archive-keyring.gpg
 
-# Add the repository
-echo "deb [signed-by=/usr/share/keyrings/elle-archive-keyring.gpg] https://apt.elle.dev stable main" | sudo tee /etc/apt/sources.list.d/elle.list
+# Add the repository (DEB822 format)
+sudo tee /etc/apt/sources.list.d/elle.sources > /dev/null <<EOF
+Types: deb
+URIs: https://repo.agentelle.org
+Suites: jammy
+Components: main
+Architectures: amd64
+Signed-By: /usr/share/keyrings/elle-archive-keyring.gpg
+EOF
 ```
 
 ### 2. Install ELLE

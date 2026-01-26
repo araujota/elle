@@ -191,9 +191,19 @@ elle> in settings, enable dark mode</code></pre>
 ## Quick Start
 
 ```bash
-# Add the ELLE repository
-curl -fsSL https://apt.elle.dev/gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/elle-archive-keyring.gpg
-echo "deb [signed-by=/usr/share/keyrings/elle-archive-keyring.gpg] https://apt.elle.dev stable main" | sudo tee /etc/apt/sources.list.d/elle.list
+# Add the GPG key
+curl -fsSL https://repo.agentelle.org/elle.gpg \
+  | sudo gpg --dearmor -o /usr/share/keyrings/elle-archive-keyring.gpg
+
+# Add the repository (DEB822 format)
+sudo tee /etc/apt/sources.list.d/elle.sources > /dev/null <<EOF
+Types: deb
+URIs: https://repo.agentelle.org
+Suites: jammy
+Components: main
+Architectures: amd64
+Signed-By: /usr/share/keyrings/elle-archive-keyring.gpg
+EOF
 
 # Install ELLE
 sudo apt update && sudo apt install elle

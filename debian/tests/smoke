@@ -1,0 +1,71 @@
+#!/bin/bash
+# ELLE autopkgtest smoke test
+# Verifies basic installation and functionality
+
+set -e
+
+echo "=== ELLE Smoke Test ==="
+echo ""
+
+# Test 1: CLI command exists and is executable
+echo "[1/6] Testing 'elle' command availability..."
+if ! command -v elle &> /dev/null; then
+    echo "FAIL: 'elle' command not found"
+    exit 1
+fi
+echo "  OK: elle command found at $(which elle)"
+
+# Test 2: Daemon command exists and is executable
+echo "[2/6] Testing 'elled' command availability..."
+if ! command -v elled &> /dev/null; then
+    echo "FAIL: 'elled' command not found"
+    exit 1
+fi
+echo "  OK: elled command found at $(which elled)"
+
+# Test 3: Python module imports work
+echo "[3/6] Testing Python imports..."
+if ! python3 -c "from elle.cli.oneshot import main" 2>&1; then
+    echo "FAIL: Cannot import elle.cli.oneshot"
+    exit 1
+fi
+if ! python3 -c "from elle.daemon.main import main" 2>&1; then
+    echo "FAIL: Cannot import elle.daemon.main"
+    exit 1
+fi
+echo "  OK: Python imports successful"
+
+# Test 4: Version can be queried (help output)
+echo "[4/6] Testing CLI help output..."
+if ! elle --help &> /dev/null; then
+    echo "FAIL: 'elle --help' failed"
+    exit 1
+fi
+echo "  OK: elle --help works"
+
+# Test 5: Config directory can be created
+echo "[5/6] Testing config directory creation..."
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/elle"
+mkdir -p "$CONFIG_DIR"
+if [[ ! -d "$CONFIG_DIR" ]]; then
+    echo "FAIL: Could not create config directory"
+    exit 1
+fi
+echo "  OK: Config directory exists at $CONFIG_DIR"
+
+# Test 6: Data directory can be created
+echo "[6/6] Testing data directory creation..."
+DATA_DIR="/var/lib/elle"
+if [[ ! -d "$DATA_DIR" ]]; then
+    mkdir -p "$DATA_DIR" 2>/dev/null || true
+fi
+# Even if we can't create it (non-root), check if postinst did
+if [[ -d "$DATA_DIR" ]]; then
+    echo "  OK: Data directory exists at $DATA_DIR"
+else
+    echo "  WARN: Data directory not created (may require root)"
+fi
+
+echo ""
+echo "=== All smoke tests passed ==="
+exit 0

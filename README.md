@@ -87,6 +87,30 @@ ollama pull phi3.5:3.8b-mini-instruct-q8_0  # SLM for classification
 
 ### 2. Install ELLE
 
+#### From APT Repository (Recommended)
+
+```bash
+# Add the GPG key
+curl -fsSL https://repo.agentelle.org/elle.gpg \
+  | sudo gpg --dearmor -o /usr/share/keyrings/elle-archive-keyring.gpg
+
+# Add the repository (DEB822 format)
+sudo tee /etc/apt/sources.list.d/elle.sources > /dev/null <<EOF
+Types: deb
+URIs: https://repo.agentelle.org
+Suites: jammy
+Components: main
+Architectures: amd64
+Signed-By: /usr/share/keyrings/elle-archive-keyring.gpg
+EOF
+
+# Install ELLE
+sudo apt update
+sudo apt install elle
+```
+
+#### From Source (Development)
+
 ```bash
 # Clone the repository
 git clone https://github.com/araujota/elle.git

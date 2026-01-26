@@ -3,7 +3,7 @@
 
 .PHONY: help install install-dev test lint format typecheck check clean \
         build-deb publish-deb docs serve-docs \
-        venv run run-daemon
+        venv run run-daemon dist
 
 # Default target
 help:
@@ -179,6 +179,12 @@ build-deb: clean-deb build-wheel
 	@echo ""
 	@echo "Package built: build/$(DEB_NAME)"
 	@echo "To install: sudo dpkg -i build/$(DEB_NAME) && sudo apt-get install -f"
+
+# Convenience alias: copy deb to dist/ for CI compatibility
+dist: build-deb
+	mkdir -p dist
+	cp build/$(DEB_NAME) dist/
+	@echo "Package copied to: dist/$(DEB_NAME)"
 
 clean-deb:
 	rm -rf $(DEB_BUILD_DIR)
