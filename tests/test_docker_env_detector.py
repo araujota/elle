@@ -1,10 +1,12 @@
 """Tests for Docker environment variable detector."""
 
+import io
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 import tempfile
-import yaml
+
+from ruamel.yaml import YAML
 
 from elle.cli.docker.env_detector import (
     DockerEnvDetector,
@@ -114,7 +116,8 @@ class TestDetectFromCompose:
         }
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
-            yaml.dump(compose_content, f)
+            yml = YAML()
+            yml.dump(compose_content, f)
             f.flush()
             path = Path(f.name)
 
@@ -141,7 +144,8 @@ class TestDetectFromCompose:
         }
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
-            yaml.dump(compose_content, f)
+            yml = YAML()
+            yml.dump(compose_content, f)
             f.flush()
             path = Path(f.name)
 
@@ -169,7 +173,8 @@ class TestDetectFromCompose:
         }
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
-            yaml.dump(compose_content, f)
+            yml = YAML()
+            yml.dump(compose_content, f)
             f.flush()
             path = Path(f.name)
 

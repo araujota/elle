@@ -224,12 +224,21 @@ jobs:
           path: build/
 
       - name: Install piuparts
+        id: install-piuparts
         run: |
           sudo add-apt-repository -y universe
           sudo apt-get update
-          sudo apt-get install -y piuparts debootstrap
+          # piuparts may not be available in all Ubuntu versions
+          if apt-cache show piuparts &> /dev/null; then
+            sudo apt-get install -y piuparts debootstrap
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::piuparts not available in this Ubuntu version, skipping"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Run piuparts
+        if: steps.install-piuparts.outputs.available == 'true'
         run: |
           DEB_FILE=$(ls build/elle_*.deb | head -1)
           echo "Running piuparts on $DEB_FILE"
@@ -251,7 +260,7 @@ jobs:
 
       - name: Upload piuparts logs
         uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && steps.install-piuparts.outputs.available == 'true'
         with:
           name: piuparts-logs
           path: |

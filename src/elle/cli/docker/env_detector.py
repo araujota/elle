@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import yaml
+from ruamel.yaml import YAML, YAMLError
 
 from elle.cli.docker.env_models import EnvVarSpec
 from elle.cli.docker.env_profiles import (
@@ -143,9 +143,11 @@ class DockerEnvDetector:
         result: dict[str, tuple[EnvVarSpec, ...]] = {}
 
         try:
+            yml = YAML()
+            yml.preserve_quotes = True
             with path.open() as f:
-                compose = yaml.safe_load(f)
-        except (OSError, yaml.YAMLError):
+                compose = yml.load(f)
+        except (OSError, YAMLError):
             return result
 
         if not compose or "services" not in compose:
