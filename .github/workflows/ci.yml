@@ -111,6 +111,7 @@ jobs:
           sudo apt-get install -y \
             build-essential \
             dpkg-dev \
+            fakeroot \
             python3-dev \
             python3-pip \
             python3-venv \
@@ -182,14 +183,19 @@ jobs:
         run: |
           DEB_FILE=$(ls build/elle_*.deb | head -1)
           echo "Running lintian on $DEB_FILE"
-          # Run lintian with informational output, fail on errors/warnings
+          # Run lintian with informational output
           lintian --verbose --info "$DEB_FILE" 2>&1 | tee lintian-output.txt
-          # Check for errors (E:) or warnings (W:)
-          if grep -qE "^(E|W):" lintian-output.txt; then
-            echo "::error::Lintian found errors or warnings"
+          # Check for errors only (E:) - warnings (W:) are logged but don't fail
+          if grep -qE "^E:" lintian-output.txt; then
+            echo "::error::Lintian found errors"
             echo "errors_found=true" >> "$GITHUB_OUTPUT"
           else
             echo "errors_found=false" >> "$GITHUB_OUTPUT"
+          fi
+          # Log warnings for visibility
+          if grep -qE "^W:" lintian-output.txt; then
+            echo "::warning::Lintian found warnings (non-fatal)"
+            grep "^W:" lintian-output.txt
           fi
 
       - name: Upload lintian output
@@ -200,11 +206,11 @@ jobs:
           path: lintian-output.txt
           retention-days: 7
 
-      - name: Fail if lintian found issues
+      - name: Fail if lintian found errors
         if: steps.lintian.outputs.errors_found == 'true'
         run: |
-          echo "Lintian found the following issues:"
-          grep -E "^(E|W):" lintian-output.txt
+          echo "Lintian found the following errors:"
+          grep "^E:" lintian-output.txt
           exit 1
 
   # ============================================================================

@@ -136,6 +136,7 @@ build-deb: clean-deb build-wheel
 	mkdir -p $(DEB_STAGING)/usr/share/elle
 	mkdir -p $(DEB_STAGING)/usr/share/man/man1
 	mkdir -p $(DEB_STAGING)/usr/share/man/man8
+	mkdir -p $(DEB_STAGING)/usr/share/doc/elle
 
 	# Extract wheel
 	cd $(DEB_STAGING)/usr/lib/python3/dist-packages && unzip -o -q $(CURDIR)/dist/elle-$(VERSION)-py3-none-any.whl
@@ -149,8 +150,14 @@ build-deb: clean-deb build-wheel
 	cp packaging/systemd/elled.service $(DEB_STAGING)/lib/systemd/system/
 	cp packaging/polkit/com.elle.policy $(DEB_STAGING)/usr/share/polkit-1/actions/
 	cp packaging/elle.toml.example $(DEB_STAGING)/usr/share/elle/
-	cp packaging/man/elle.1 $(DEB_STAGING)/usr/share/man/man1/
-	cp packaging/man/elled.8 $(DEB_STAGING)/usr/share/man/man8/
+
+	# Copy and compress man pages
+	gzip -9 -c packaging/man/elle.1 > $(DEB_STAGING)/usr/share/man/man1/elle.1.gz
+	gzip -9 -c packaging/man/elled.8 > $(DEB_STAGING)/usr/share/man/man8/elled.8.gz
+
+	# Copy documentation (changelog and copyright)
+	gzip -9 -c packaging/debian/changelog > $(DEB_STAGING)/usr/share/doc/elle/changelog.Debian.gz
+	cp packaging/debian/copyright $(DEB_STAGING)/usr/share/doc/elle/
 
 	# Create DEBIAN control file
 	@echo "Package: elle" > $(DEB_STAGING)/DEBIAN/control
@@ -158,7 +165,7 @@ build-deb: clean-deb build-wheel
 	@echo "Section: admin" >> $(DEB_STAGING)/DEBIAN/control
 	@echo "Priority: optional" >> $(DEB_STAGING)/DEBIAN/control
 	@echo "Architecture: all" >> $(DEB_STAGING)/DEBIAN/control
-	@echo "Depends: python3 (>= 3.11), python3-pip, python3-httpx, python3-ruamel.yaml, python3-rich, python3-prompt-toolkit, python3-toml, libaugeas0, augeas-tools" >> $(DEB_STAGING)/DEBIAN/control
+	@echo "Depends: python3 (>= 3.11), python3-pip, python3-httpx, python3-ruamel.yaml, python3-rich, python3-prompt-toolkit, python3-toml, libaugeas0, augeas-tools, adduser" >> $(DEB_STAGING)/DEBIAN/control
 	@echo "Recommends: ollama, python3-fastapi, python3-uvicorn" >> $(DEB_STAGING)/DEBIAN/control
 	@echo "Suggests: python3-bcc" >> $(DEB_STAGING)/DEBIAN/control
 	@echo "Maintainer: ELLE Contributors <elle@example.com>" >> $(DEB_STAGING)/DEBIAN/control
@@ -168,13 +175,16 @@ build-deb: clean-deb build-wheel
 	@echo " kernel-level telemetry into natural language insight and safe" >> $(DEB_STAGING)/DEBIAN/control
 	@echo " system operations." >> $(DEB_STAGING)/DEBIAN/control
 
-	# Copy maintainer scripts
-	cp packaging/debian/postinst $(DEB_STAGING)/DEBIAN/ && chmod 755 $(DEB_STAGING)/DEBIAN/postinst
-	cp packaging/debian/postrm $(DEB_STAGING)/DEBIAN/ && chmod 755 $(DEB_STAGING)/DEBIAN/postrm
-	cp packaging/debian/prerm $(DEB_STAGING)/DEBIAN/ && chmod 755 $(DEB_STAGING)/DEBIAN/prerm
+	# Copy maintainer scripts (removing debhelper tokens)
+	sed '/#DEBHELPER#/d' packaging/debian/postinst > $(DEB_STAGING)/DEBIAN/postinst && chmod 755 $(DEB_STAGING)/DEBIAN/postinst
+	sed '/#DEBHELPER#/d' packaging/debian/postrm > $(DEB_STAGING)/DEBIAN/postrm && chmod 755 $(DEB_STAGING)/DEBIAN/postrm
+	sed '/#DEBHELPER#/d' packaging/debian/prerm > $(DEB_STAGING)/DEBIAN/prerm && chmod 755 $(DEB_STAGING)/DEBIAN/prerm
 
-	# Build the deb
-	dpkg-deb --build $(DEB_STAGING) build/$(DEB_NAME)
+	# Fix file ownership (must be root:root for deb packages)
+	fakeroot chown -R root:root $(DEB_STAGING)
+
+	# Build the deb with fakeroot
+	fakeroot dpkg-deb --build $(DEB_STAGING) build/$(DEB_NAME)
 
 	@echo ""
 	@echo "Package built: build/$(DEB_NAME)"
