@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from elle.common.pydantic_compat import safe_model_dump
 from elle.ops.augeas.lenses import detect_domain
 from elle.ops.augeas.models import (
     AugeasBackupError,
@@ -486,7 +487,7 @@ class BackupManager:
         """
         metadata_file = backup_dir / "metadata.json"
         with open(metadata_file, "w") as f:
-            json.dump(record.model_dump(), f, indent=2, default=str)
+            json.dump(safe_model_dump(record), f, indent=2, default=str)
 
 
 # =============================================================================

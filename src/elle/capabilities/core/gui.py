@@ -10,6 +10,7 @@ Provides typed, policy-governed capabilities for UI automation:
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Any, Literal
 
@@ -25,6 +26,9 @@ from elle.capabilities.models import (
     VerificationResult,
 )
 from elle.capabilities.protocol import Capability
+from elle.common.pydantic_compat import safe_model_dump
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Input/Output Models
@@ -256,7 +260,7 @@ class GuiLearnCapability(Capability):
 
             return CapabilityResult(
                 success=True,
-                output=output.model_dump(),
+                output=safe_model_dump(output),
                 execution_time_ms=_elapsed_ms(start_time),
                 evidence=CapabilityEvidence(
                     verification_passed=True,
@@ -420,10 +424,10 @@ class GuiClickCapability(Capability):
             if not result.found:
                 return CapabilityResult(
                     success=False,
-                    output=GuiClickOutput(
+                    output=safe_model_dump(GuiClickOutput(
                         clicked=False,
                         element_found=False,
-                    ).model_dump(),
+                    )),
                     error=result.error,
                     execution_time_ms=_elapsed_ms(start_time),
                 )
@@ -447,7 +451,7 @@ class GuiClickCapability(Capability):
 
             return CapabilityResult(
                 success=clicked,
-                output=output.model_dump(),
+                output=safe_model_dump(output),
                 execution_time_ms=_elapsed_ms(start_time),
             )
 
@@ -568,10 +572,10 @@ class GuiTypeCapability(Capability):
             if not result.found:
                 return CapabilityResult(
                     success=False,
-                    output=GuiTypeOutput(
+                    output=safe_model_dump(GuiTypeOutput(
                         typed=False,
                         element_found=False,
-                    ).model_dump(),
+                    )),
                     error=result.error,
                     execution_time_ms=_elapsed_ms(start_time),
                 )
@@ -586,7 +590,7 @@ class GuiTypeCapability(Capability):
 
             return CapabilityResult(
                 success=typed,
-                output=output.model_dump(),
+                output=safe_model_dump(output),
                 execution_time_ms=_elapsed_ms(start_time),
             )
 
@@ -708,10 +712,10 @@ class GuiNavigateCapability(Capability):
             if not result.found:
                 return CapabilityResult(
                     success=False,
-                    output=GuiNavigateOutput(
+                    output=safe_model_dump(GuiNavigateOutput(
                         focused=False,
                         element_found=False,
-                    ).model_dump(),
+                    )),
                     error=result.error,
                     execution_time_ms=_elapsed_ms(start_time),
                 )
@@ -727,7 +731,7 @@ class GuiNavigateCapability(Capability):
 
             return CapabilityResult(
                 success=True,  # Navigation succeeds if element found
-                output=output.model_dump(),
+                output=safe_model_dump(output),
                 execution_time_ms=_elapsed_ms(start_time),
             )
 
@@ -838,7 +842,7 @@ class GuiExecuteTaskCapability(Capability):
 
             return CapabilityResult(
                 success=result.success,
-                output=output.model_dump(),
+                output=safe_model_dump(output),
                 execution_time_ms=_elapsed_ms(start_time),
                 evidence=CapabilityEvidence(
                     verification_passed=result.success,
@@ -940,8 +944,8 @@ def _get_main_window(client: Any, app: Any) -> Any | None:
                     return child
         if n_children > 0:
             return app.get_child_at_index(0)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"AT-SPI error getting main window: {e}")
     return None
 
 

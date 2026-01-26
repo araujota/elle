@@ -121,6 +121,7 @@ class Icons:
     CITATION: Final[str] = "📌"
     HISTORY: Final[str] = "📜"
     BRAIN: Final[str] = "🧠"
+    SETTINGS: Final[str] = "⚙"
 
     @classmethod
     def domain_icon(cls, domain: str) -> str:

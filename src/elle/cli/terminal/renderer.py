@@ -22,7 +22,7 @@ from elle.cli.ui import (
 )
 
 if TYPE_CHECKING:
-    from elle.common.models import CommandPlan, ExecutionResult
+    from elle.common.models import CommandPlan
     from elle.common.session import Session
 
 
@@ -108,19 +108,6 @@ def render_prompt_plain(
     elif session.last_exit == 0:
         return f"elle {PROMPT_SUCCESS} {PROMPT_IDLE} "
     return f"elle {PROMPT_IDLE} "
-
-
-def render_output(result: ExecutionResult) -> str:
-    """Render an execution result for terminal display.
-
-    Args:
-        result: The execution result to render.
-
-    Returns:
-        Formatted string for terminal output.
-    """
-    # TODO: Implement using new UI system
-    raise NotImplementedError
 
 
 def render_plan_preview(plan: CommandPlan) -> str:

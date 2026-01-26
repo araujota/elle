@@ -17,6 +17,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+from elle.common.pydantic_compat import safe_model_dump
 from elle.mobile.audit import MobileAuditStore
 from elle.mobile.auth import (
     AuthenticationError,
@@ -122,15 +123,25 @@ def create_mobile_gateway(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         """Application lifespan handler."""
+        from elle.daemon.notifications.mobile_push import get_mobile_notifier
+
         # Startup
         logger.info("Mobile Gateway starting")
         deps.crypto.ensure_certificates()
         deps.audit.log_gateway_start(f"{config.bind_host}:{config.bind_port}")
 
+        # Enable mobile push notifications
+        notifier = get_mobile_notifier()
+        notifier.set_gateway_available(True)
+
         yield
 
         # Shutdown
         logger.info("Mobile Gateway stopping")
+
+        # Disable mobile push notifications
+        notifier.set_gateway_available(False)
+
         await deps.proxy.close()
         deps.audit.log_gateway_stop(f"{config.bind_host}:{config.bind_port}")
 
@@ -390,7 +401,7 @@ def create_mobile_gateway(
         devices = deps.store.list_devices()
         return {
             "devices": [
-                DeviceResponse(
+                safe_model_dump(DeviceResponse(
                     device_id=d.device_id,
                     name=d.name,
                     role=d.role.value,
@@ -399,7 +410,7 @@ def create_mobile_gateway(
                     last_seen_at=(
                         d.last_seen_at.isoformat() if d.last_seen_at else None
                     ),
-                ).model_dump()
+                ))
                 for d in devices
             ]
         }
@@ -493,7 +504,7 @@ def create_mobile_gateway(
         elevation_status = deps.elevation.get_elevation_status(device_id)
 
         return {
-            "device": DeviceResponse(
+            "device": safe_model_dump(DeviceResponse(
                 device_id=device.device_id,
                 name=device.name,
                 role=device.role.value,
@@ -502,7 +513,7 @@ def create_mobile_gateway(
                 last_seen_at=(
                     device.last_seen_at.isoformat() if device.last_seen_at else None
                 ),
-            ).model_dump(),
+            )),
             "elevation": elevation_status,
         }
 
@@ -525,6 +536,75 @@ def create_mobile_gateway(
                 }
                 for e in entries
             ]
+        }
+
+    # ========================================================================
+    # Server-Sent Events (SSE) for Push Notifications
+    # ========================================================================
+
+    @app.get("/events")
+    async def event_stream(
+        request: Request,
+        auth: MobileAuthContext = Depends(get_auth),  # noqa: B008
+    ):
+        """Subscribe to real-time notifications via Server-Sent Events.
+
+        Mobile clients connect to this endpoint to receive push notifications
+        for incidents, health alerts, plan/diff reviews, and other events.
+
+        The connection is kept alive with periodic heartbeats. Events are
+        pushed in real-time as they occur.
+
+        Returns:
+            StreamingResponse with SSE content.
+        """
+        from elle.daemon.notifications.mobile_push import get_mobile_notifier
+
+        notifier = get_mobile_notifier()
+
+        # Register this client
+        client = await notifier.connect(auth.device_id, auth.device_name)
+
+        deps.audit.log_request(
+            device_id=auth.device_id,
+            device_name=auth.device_name,
+            endpoint="/events",
+            execution_mode="subscribe",
+            ip_address=auth.client_ip,
+            success=True,
+        )
+
+        async def event_generator():
+            """Generate SSE events for this client."""
+            try:
+                async for event in client.events():
+                    # Check if client disconnected
+                    if await request.is_disconnected():
+                        break
+                    yield event
+            finally:
+                await notifier.disconnect(auth.device_id)
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",  # Disable nginx buffering
+            },
+        )
+
+    @app.get("/events/status", dependencies=[Depends(require_localhost)])
+    async def events_status():
+        """Get status of the event stream (localhost only)."""
+        from elle.daemon.notifications.mobile_push import get_mobile_notifier
+
+        notifier = get_mobile_notifier()
+        return {
+            "available": notifier.is_available(),
+            "client_count": notifier.client_count(),
+            "gateway_available": notifier._gateway_available,
         }
 
     return app

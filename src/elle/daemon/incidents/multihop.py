@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any
 
+from elle.common.pydantic_compat import safe_model_dump
 from elle.daemon.incidents.models import (
     IncidentReport,
     IncidentSearchResult,
@@ -309,8 +310,8 @@ class MultiHopSearch:
             # Convert TelemetryEvent to dict if needed
             event_dicts = []
             for evt in results:
-                if hasattr(evt, 'model_dump'):
-                    event_dicts.append(evt.model_dump())
+                if hasattr(evt, 'model_dump') or hasattr(evt, 'dict'):
+                    event_dicts.append(safe_model_dump(evt))
                 elif isinstance(evt, dict):
                     event_dicts.append(evt)
 

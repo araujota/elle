@@ -17,6 +17,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
+from elle.common.pydantic_compat import safe_model_dump_json
 from elle.capabilities.autogen.models import (
     GeneratedCapabilitySpec,
     StoredCapability,
@@ -167,7 +168,7 @@ class AutogenStore:
         """
         cap_id = str(uuid.uuid4())
         man_page_hash = hashlib.sha256(man_page_text.encode()).hexdigest()[:16]
-        spec_json = spec.model_dump_json()
+        spec_json = safe_model_dump_json(spec)
 
         with self._get_connection() as conn:
             # Check for existing capability

@@ -12,6 +12,7 @@ from elle.daemon.telemetry.journal import JournalWatcher, watch_journal
 from elle.daemon.telemetry.kernel import KernelWatcher, watch_kernel
 from elle.daemon.telemetry.models import DaemonStatus, ProbeResult, QueueStats, TelemetryEvent
 from elle.daemon.telemetry.normalizer import Normalizer, normalize_event, normalize_events
+from elle.daemon.telemetry.package_probe import PackageProbe
 from elle.daemon.telemetry.probes import (
     BaseProbe,
     DiskProbe,
@@ -51,4 +52,6 @@ __all__ = [
     "ProbeResult",
     "QueueStats",
     "DaemonStatus",
+    # Package Probe
+    "PackageProbe",
 ]

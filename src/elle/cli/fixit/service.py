@@ -439,8 +439,13 @@ class FixitService:
 
             # Update legacy decision info (for backwards compatibility)
             if result.analysis:
+                # Pydantic v1/v2 compatibility
+                try:
+                    diagnosis_dict = result.analysis.diagnosis.model_dump()
+                except AttributeError:
+                    diagnosis_dict = result.analysis.diagnosis.dict()
                 decision = {
-                    "diagnosis": result.analysis.diagnosis.model_dump(),
+                    "diagnosis": diagnosis_dict,
                     "suggestions_count": len(result.analysis.suggestions),
                     "used_fallback": result.used_fallback,
                 }

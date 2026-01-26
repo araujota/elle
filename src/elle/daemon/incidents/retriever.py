@@ -12,6 +12,7 @@ import sqlite3
 from datetime import datetime
 from typing import Any
 
+from elle.common.pydantic_compat import safe_model_dump
 from elle.daemon.incidents.models import (
     Fingerprint,
     IncidentReport,
@@ -847,7 +848,7 @@ def get_status(
         db_path = get_db_path()
         db_size = db_path.stat().st_size if db_path.exists() else 0
 
-        return IncidentVaultStatus(
+        return safe_model_dump(IncidentVaultStatus(
             total_incidents=total,
             total_actions=actions,
             total_snapshots=snapshots,
@@ -860,7 +861,7 @@ def get_status(
             db_size_bytes=db_size,
             oldest_incident=oldest,
             newest_incident=newest,
-        ).model_dump()
+        ))
 
     finally:
         if own_conn:

@@ -18,6 +18,8 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 
+from elle.common.pydantic_compat import safe_model_dump_json
+
 logger = logging.getLogger(__name__)
 
 
@@ -514,7 +516,7 @@ Output valid JSON only."""
                     capability_class_code=cap_code,
                     man_page_text=context,
                     trust_level=validation.trust_level,
-                    validation_json=validation.model_dump_json(),
+                    validation_json=safe_model_dump_json(validation),
                     source_package=intel.metadata.name,
                     package_version=intel.metadata.version,
                     binary_path=None,

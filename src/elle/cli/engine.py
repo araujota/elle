@@ -449,21 +449,25 @@ class Engine:
             return self._handle_history(session)
         elif lower == "logs":
             return EngineResult(
-                output=f"{Colors.DIM}[Log viewer not yet implemented]{Colors.RESET}",
+                output=(
+                    f"{Colors.DIM}Use 'journalctl' to view system logs "
+                    f"or check /var/log/ for application logs{Colors.RESET}"
+                ),
                 session=session,
             )
         elif lower == "events":
-            return EngineResult(
-                output=f"{Colors.DIM}[Event viewer not yet implemented]{Colors.RESET}",
-                session=session,
-            )
+            return self._handle_events(session)
         elif lower == "man" or lower.startswith("man "):
             return self._handle_man_command(user_input, session)
         elif lower == "search" or lower.startswith("search "):
-            return EngineResult(
-                output=f"{Colors.DIM}[Search not yet implemented]{Colors.RESET}",
-                session=session,
-            )
+            # Direct to man vault search
+            query = user_input[6:].strip() if lower.startswith("search ") else ""
+            if not query:
+                return EngineResult(
+                    output=f"{Colors.DIM}Usage: search <query> - searches man pages{Colors.RESET}",
+                    session=session,
+                )
+            return self._handle_man_command(f"man -k {query}", session)
         elif lower.startswith("/preflight") or lower == "preflight":
             return self._handle_preflight_command(user_input, session)
         elif lower.startswith("/map"):
@@ -1077,7 +1081,10 @@ Validates package operations before execution to detect potential issues.
         intent_result: IntentResult,
         session: Session,
     ) -> EngineResult:
-        """Handle system questions (RAG-powered).
+        """Handle system questions (LLM-powered).
+
+        Uses the LLM to answer questions about the system, Linux administration,
+        and general technical topics.
 
         Args:
             user_input: The question.
@@ -1085,30 +1092,75 @@ Validates package operations before execution to detect potential issues.
             session: Current session state.
 
         Returns:
-            EngineResult with answer (placeholder for now).
+            EngineResult with LLM-generated answer.
         """
         # Extract the actual question (remove /ask prefix if present)
         question = user_input
         if question.startswith("/ask "):
             question = question[5:]
 
-        lines = [
-            f"{Colors.BOLD}Question:{Colors.RESET} {question}",
-            "",
-            f"{Colors.DIM}[RAG engine not yet implemented. "
-            f"This will provide context-aware answers about your system.]{Colors.RESET}",
-        ]
+        # Try to use LLM to answer the question
+        try:
+            from elle.rag.llm import get_llm
 
-        if intent_result.entities:
-            lines.extend([
-                "",
-                f"{Colors.DIM}Detected entities: {', '.join(intent_result.entities)}{Colors.RESET}",
+            llm = get_llm()
+            if not llm.is_available():
+                return EngineResult(
+                    output=(
+                        f"{Colors.BOLD}Question:{Colors.RESET} {question}\n\n"
+                        f"{Colors.YELLOW}LLM not available. "
+                        f"Ensure Ollama is running with a suitable model.{Colors.RESET}"
+                    ),
+                    session=session,
+                    success=False,
+                )
+
+            # Build system prompt for answering questions
+            system_prompt = (
+                "You are ELLE, an AI assistant for Linux system administration. "
+                "Answer questions clearly and concisely about system administration, "
+                "Linux commands, troubleshooting, and general technical topics. "
+                "When relevant, provide example commands. "
+                "If you don't know something, say so rather than guessing."
+            )
+
+            # Generate response
+            response = llm.chat([
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": question},
             ])
 
-        return EngineResult(
-            output="\n".join(lines),
-            session=session,
-        )
+            if response:
+                lines = [
+                    f"{Colors.BOLD}Question:{Colors.RESET} {question}",
+                    "",
+                    response,
+                ]
+                return EngineResult(
+                    output="\n".join(lines),
+                    session=session,
+                    success=True,
+                )
+            else:
+                return EngineResult(
+                    output=(
+                        f"{Colors.BOLD}Question:{Colors.RESET} {question}\n\n"
+                        f"{Colors.YELLOW}No response from LLM.{Colors.RESET}"
+                    ),
+                    session=session,
+                    success=False,
+                )
+
+        except Exception as e:
+            logger.warning(f"Failed to generate response: {e}")
+            return EngineResult(
+                output=(
+                    f"{Colors.BOLD}Question:{Colors.RESET} {question}\n\n"
+                    f"{Colors.YELLOW}Failed to generate response: {e}{Colors.RESET}"
+                ),
+                session=session,
+                success=False,
+            )
 
     def _handle_system_task(
         self,
@@ -1231,10 +1283,7 @@ Validates package operations before execution to detect potential issues.
                     action=EngineAction.CLEAR,
                 )
             case "config":
-                return EngineResult(
-                    output=f"{Colors.DIM}[Configuration not yet implemented]{Colors.RESET}",
-                    session=session,
-                )
+                return self._handle_config(session)
             case "about":
                 return EngineResult(
                     output=self._about_text(),
@@ -1666,6 +1715,92 @@ Validates package operations before execution to detect potential issues.
             output="\n".join(lines),
             session=session,
         )
+
+    def _handle_events(self, session: Session) -> EngineResult:
+        """Display recent telemetry events.
+
+        Args:
+            session: Current session state.
+
+        Returns:
+            EngineResult with recent events.
+        """
+        try:
+            from elle.daemon.telemetry.store import list_events
+
+            events = list_events(limit=10)
+            if not events:
+                return EngineResult(
+                    output=f"{Colors.DIM}No recent events{Colors.RESET}",
+                    session=session,
+                )
+
+            lines = [f"{Colors.BOLD}Recent Events:{Colors.RESET}", ""]
+            for evt in events:
+                ts = evt.get("ts", "")
+                severity = evt.get("severity", "info")
+                message = evt.get("message", "")[:80]
+                color = {
+                    "info": Colors.DIM,
+                    "warning": Colors.YELLOW,
+                    "error": Colors.RED,
+                    "critical": Colors.BOLD_RED,
+                }.get(severity, Colors.DIM)
+                lines.append(f"  {color}{ts} [{severity}] {message}{Colors.RESET}")
+
+            return EngineResult(
+                output="\n".join(lines),
+                session=session,
+            )
+        except ImportError:
+            return EngineResult(
+                output=f"{Colors.DIM}Telemetry store not available{Colors.RESET}",
+                session=session,
+            )
+        except Exception as e:
+            return EngineResult(
+                output=f"{Colors.RED}Error loading events: {e}{Colors.RESET}",
+                session=session,
+                success=False,
+            )
+
+    def _handle_config(self, session: Session) -> EngineResult:
+        """Display current configuration.
+
+        Args:
+            session: Current session state.
+
+        Returns:
+            EngineResult with configuration info.
+        """
+        try:
+            from elle.common.config import get_config
+
+            config = get_config()
+            lines = [f"{Colors.BOLD}Current Configuration:{Colors.RESET}", ""]
+
+            # Show key settings
+            lines.append(f"  LLM model: {config.llm.model}")
+            lines.append(f"  SLM model: {config.slm.model}")
+            lines.append(f"  Ollama URL: {config.ollama.base_url}")
+            lines.append("")
+            lines.append(f"{Colors.DIM}Config file: ~/.config/elle/config.toml{Colors.RESET}")
+
+            return EngineResult(
+                output="\n".join(lines),
+                session=session,
+            )
+        except ImportError:
+            return EngineResult(
+                output=f"{Colors.DIM}Configuration not loaded{Colors.RESET}",
+                session=session,
+            )
+        except Exception as e:
+            return EngineResult(
+                output=f"{Colors.RED}Error loading config: {e}{Colors.RESET}",
+                session=session,
+                success=False,
+            )
 
     def _format_command_output(
         self,

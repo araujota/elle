@@ -160,7 +160,10 @@ class TestNotificationTemplates:
             incident_id="inc-123",
             summary="CPU at 95%",
         )
-        assert "High CPU usage" in n.body
+        # Title should reflect the incident
+        assert "High CPU usage" in n.title
+        # Body should contain summary or formatted metrics
+        assert "CPU" in n.body or "95%" in n.body
         assert n.context_id == "inc-123"
         assert n.context_type == "incident"
         assert n.category == NotificationCategory.INCIDENT_DETECTED

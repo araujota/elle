@@ -12,6 +12,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
+from elle.common.pydantic_compat import safe_model_dump_json
+
 
 class MobileRole(str, Enum):
     """Access roles for mobile devices.
@@ -157,7 +159,7 @@ class QRPayload(BaseModel):
 
     def to_json(self) -> str:
         """Serialize to JSON for QR encoding."""
-        return self.model_dump_json()
+        return safe_model_dump_json(self)
 
 
 class MobileAuditAction(str, Enum):

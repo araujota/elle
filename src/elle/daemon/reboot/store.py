@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from elle.common.pydantic_compat import safe_model_dump
 from elle.daemon.reboot.models import (
     GRUBState,
     PendingVerification,
@@ -131,7 +132,7 @@ def create_intent(
                 boot_id,
                 grub_entry,
                 grub_default_saved,
-                _json_dumps(grub_state.model_dump()) if grub_state else None,
+                _json_dumps(safe_model_dump(grub_state)) if grub_state else None,
                 "{}",
                 0,
                 "unknown",

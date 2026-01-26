@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TextIO
 
+from elle.common.pydantic_compat import safe_model_validate
 from elle.policy.models import (
     PolicyAuditEntry,
     PolicyEvaluationRequest,
@@ -111,8 +112,12 @@ class PolicyAuditLogger:
             if self._file is None:
                 return
 
-            # Serialize to JSON
-            json_str = entry.model_dump_json()
+            # Serialize to JSON (Pydantic v1/v2 compatibility)
+            try:
+                json_str = entry.model_dump_json()
+            except AttributeError:
+                import json
+                json_str = json.dumps(entry.dict())
             self._file.write(json_str + "\n")
             self._file.flush()
 
@@ -223,7 +228,7 @@ class PolicyAuditLogger:
             for line in reversed(lines[start:end]):
                 try:
                     data = json.loads(line)
-                    entry = PolicyAuditEntry.model_validate(data)
+                    entry = safe_model_validate(PolicyAuditEntry, data)
                     entries.append(entry)
                 except Exception:
                     continue  # Skip malformed entries
@@ -265,7 +270,7 @@ class PolicyAuditLogger:
 
                     try:
                         data = json.loads(line)
-                        entry = PolicyAuditEntry.model_validate(data)
+                        entry = safe_model_validate(PolicyAuditEntry, data)
 
                         # Apply filters
                         if command and (

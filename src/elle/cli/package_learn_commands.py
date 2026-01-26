@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
+from elle.common.pydantic_compat import safe_model_dump_json
+
 if TYPE_CHECKING:
     from elle.common.session import Session
 
@@ -320,7 +322,7 @@ Output valid JSON only."""
                     capability_class_code=cap_code,
                     man_page_text=context,  # Use context as content hash source
                     trust_level=validation.trust_level,
-                    validation_json=validation.model_dump_json(),
+                    validation_json=safe_model_dump_json(validation),
                     source_package=intel.metadata.name,
                     package_version=intel.metadata.version,
                     binary_path=binary.path if binary else None,

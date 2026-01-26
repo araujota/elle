@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from elle.common.pydantic_compat import safe_model_dump
 from elle.daemon.incidents.models import (
     ConfidenceBreakdown,
     ConfigFileState,
@@ -139,12 +140,12 @@ def create_incident_draft(
                 _json_dumps(list(incident.log_snippets)),
                 _json_dumps(incident.metrics),
                 _json_dumps(incident.decision),
-                _json_dumps([p.model_dump() for p in incident.preconditions]),
+                _json_dumps([safe_model_dump(p) for p in incident.preconditions]),
                 incident.outcome,
                 _json_dumps(list(incident.verification_steps)),
                 incident.time_to_mitigate_sec,
                 incident.time_to_resolve_sec,
-                _json_dumps(incident.fingerprint.model_dump()),
+                _json_dumps(safe_model_dump(incident.fingerprint)),
                 _json_dumps(list(incident.tags)),
                 incident.confidence,
                 incident.trigger_source,
@@ -233,7 +234,7 @@ def update_incident(
             values.append(_json_dumps(decision))
         if preconditions is not None:
             updates.append("preconditions_json = ?")
-            values.append(_json_dumps([p.model_dump() for p in preconditions]))
+            values.append(_json_dumps([safe_model_dump(p) for p in preconditions]))
         if outcome is not None:
             updates.append("outcome = ?")
             values.append(outcome)
@@ -248,7 +249,7 @@ def update_incident(
             values.append(time_to_resolve_sec)
         if fingerprint is not None:
             updates.append("fingerprint_json = ?")
-            values.append(_json_dumps(fingerprint.model_dump()))
+            values.append(_json_dumps(safe_model_dump(fingerprint)))
         if tags is not None:
             updates.append("tags_json = ?")
             values.append(_json_dumps(tags))
@@ -644,7 +645,7 @@ def attach_snapshot(
             (
                 incident_id,
                 which,
-                _json_dumps(snapshot.model_dump()),
+                _json_dumps(safe_model_dump(snapshot)),
                 _serialize_datetime(now),
             ),
         )
@@ -1216,8 +1217,8 @@ def store_decision_record(
         cursor = conn.cursor()
 
         # Serialize nested models
-        confidence_json = _json_dumps(decision_record.confidence.model_dump())
-        provenance_json = _json_dumps(decision_record.provenance.model_dump())
+        confidence_json = _json_dumps(safe_model_dump(decision_record.confidence))
+        provenance_json = _json_dumps(safe_model_dump(decision_record.provenance))
         planned_commands_json = _json_dumps(list(decision_record.planned_commands))
 
         cursor.execute(

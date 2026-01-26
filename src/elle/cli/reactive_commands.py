@@ -398,10 +398,13 @@ def _react_create(prompt: str | None, session: Session) -> tuple[str, bool]:
                 True,
             )
         elif response in ("e", "edit"):
+            # Save the function, then inform user they can recreate it if needed
+            create_function(func)
             return (
-                f"\n{Colors.DIM}Edit mode not yet implemented. "
-                f"Use '/react show {func.name}' after creating to see full details.{Colors.RESET}",
-                False,
+                f"\n{Colors.GREEN}Created reactive function: {func.name}{Colors.RESET}\n"
+                f"\n{Colors.DIM}To modify, delete with '/react delete {func.name}' "
+                f"and recreate.{Colors.RESET}",
+                True,
             )
         else:
             return f"\n{Colors.DIM}Cancelled.{Colors.RESET}", False

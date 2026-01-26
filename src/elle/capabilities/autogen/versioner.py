@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from elle.common.pydantic_compat import safe_model_dump_json
 from elle.capabilities.autogen.discovery import discover_binary
 from elle.capabilities.autogen.factory import create_capability_from_spec
 from elle.capabilities.autogen.generator import generate_capability_spec
@@ -255,7 +256,7 @@ class CapabilityVersioner:
                 capability_class_code=cap_code,
                 man_page_text=man_page.raw_text,
                 trust_level=validation.trust_level,
-                validation_json=validation.model_dump_json(),
+                validation_json=safe_model_dump_json(validation),
                 source_package=binary.package,
                 package_version=new_version,
                 binary_path=binary.path,

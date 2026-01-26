@@ -9,6 +9,7 @@ import sqlite3
 from datetime import datetime
 from typing import Any
 
+from elle.common.pydantic_compat import safe_model_dump
 from elle.reactive.models import (
     ActionResult,
     ActionSpec,
@@ -92,11 +93,11 @@ def create_function(
                 _serialize_datetime(func.created_at),
                 _serialize_datetime(func.updated_at),
                 func.created_by,
-                _json_dumps(func.trigger.model_dump()),
-                _json_dumps(func.condition.model_dump()) if func.condition else None,
-                _json_dumps([a.model_dump() for a in func.actions]),
-                _json_dumps(func.policy.model_dump()),
-                _json_dumps({k: v.model_dump() for k, v in func.state.items()})
+                _json_dumps(safe_model_dump(func.trigger)),
+                _json_dumps(safe_model_dump(func.condition)) if func.condition else None,
+                _json_dumps([safe_model_dump(a) for a in func.actions]),
+                _json_dumps(safe_model_dump(func.policy)),
+                _json_dumps({k: safe_model_dump(v) for k, v in func.state.items()})
                 if func.state
                 else None,
                 _json_dumps(list(func.tags)) if func.tags else None,
@@ -158,19 +159,19 @@ def update_function(
             values.append(1 if enabled else 0)
         if trigger is not None:
             updates.append("trigger_json = ?")
-            values.append(_json_dumps(trigger.model_dump()))
+            values.append(_json_dumps(safe_model_dump(trigger)))
         if condition is not None:
             updates.append("condition_json = ?")
-            values.append(_json_dumps(condition.model_dump()))
+            values.append(_json_dumps(safe_model_dump(condition)))
         if actions is not None:
             updates.append("actions_json = ?")
-            values.append(_json_dumps([a.model_dump() for a in actions]))
+            values.append(_json_dumps([safe_model_dump(a) for a in actions]))
         if policy is not None:
             updates.append("policy_json = ?")
-            values.append(_json_dumps(policy.model_dump()))
+            values.append(_json_dumps(safe_model_dump(policy)))
         if state is not None:
             updates.append("state_json = ?")
-            values.append(_json_dumps({k: v.model_dump() for k, v in state.items()}))
+            values.append(_json_dumps({k: safe_model_dump(v) for k, v in state.items()}))
         if tags is not None:
             updates.append("tags_json = ?")
             values.append(_json_dumps(list(tags)))
@@ -551,7 +552,7 @@ def record_execution(
                 1 if record.condition_result else 0,
                 record.condition_explanation,
                 _json_dumps(list(record.actions_executed)),
-                _json_dumps([r.model_dump() for r in record.actions_results]),
+                _json_dumps([safe_model_dump(r) for r in record.actions_results]),
                 1 if record.success else 0,
                 record.error,
                 record.execution_time_ms,

@@ -39,9 +39,10 @@ SLM_FALLBACK_MODELS = (
     "qwen2.5:1.5b",
 )
 
-# Keep SLM warm indefinitely (-1 = never unload)
+# Keep SLM warm indefinitely (never unload)
 # Critical for instant classification response (<100ms)
-SLM_KEEP_ALIVE = "-1"
+# Note: Ollama requires duration format - use very large value for "indefinite"
+SLM_KEEP_ALIVE = "24h"
 
 # Smaller context window for classification (reduces memory)
 SLM_NUM_CTX = 2048

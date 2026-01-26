@@ -654,7 +654,8 @@ class IntentClassifier:
         for pattern in _COMPILED_SHELL_PATTERNS:
             if pattern.search(text):
                 # Extract the command name
-                first_word = text.split()[0] if text.split() else text
+                parts = text.split()
+                first_word = parts[0] if parts else text
                 return IntentResult(
                     intent=Intent.SHELL_PASSTHROUGH,
                     confidence=0.85,
@@ -842,9 +843,14 @@ class IntentClassifier:
                 latency_ms=latency_ms,
             )
 
-            # Append to log file
+            # Append to log file (Pydantic v1/v2 compatibility)
+            try:
+                json_str = log_entry.model_dump_json()
+            except AttributeError:
+                import json
+                json_str = json.dumps(log_entry.dict())
             with open(self._log_file, "a") as f:
-                f.write(log_entry.model_dump_json() + "\n")
+                f.write(json_str + "\n")
 
         except Exception as e:
             # Don't fail classification due to logging errors

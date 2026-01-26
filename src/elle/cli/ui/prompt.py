@@ -372,6 +372,47 @@ class EllePrompt:
             if response in ("n", "no"):
                 return False
 
+    def prompt_confirm_with_back(
+        self,
+        message: str,
+        *,
+        default: bool = False,
+        allow_back: bool = True,
+    ) -> bool | str:
+        """Display a yes/no confirmation prompt with optional back option.
+
+        Args:
+            message: Confirmation message
+            default: Default answer
+            allow_back: Whether to allow 'back' response
+
+        Returns:
+            True if confirmed, False if declined, "back" if user wants to go back
+        """
+        if allow_back:
+            suffix = " [Y/n/b] " if default else " [y/N/b] "
+        else:
+            suffix = " [Y/n] " if default else " [y/N] "
+
+        while True:
+            response = (
+                self.session.prompt(
+                    FormattedText([("class:prompt", message + suffix)]),
+                    bottom_toolbar=self._get_bottom_toolbar,
+                )
+                .strip()
+                .lower()
+            )
+
+            if not response:
+                return default
+            if response in ("y", "yes"):
+                return True
+            if response in ("n", "no"):
+                return False
+            if allow_back and response in ("b", "back"):
+                return "back"
+
     def prompt_choice(
         self,
         message: str,

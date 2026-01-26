@@ -434,9 +434,10 @@ def _should_send(notification: Notification) -> bool:
 
 
 def send(notification: Notification) -> NotificationResult:
-    """Send a notification to the desktop.
+    """Send a notification to the desktop and mobile devices.
 
     Tries libnotify first (full action support), falls back to notify-send.
+    Also pushes to connected mobile devices if the gateway is active.
 
     Args:
         notification: The notification to send.
@@ -452,6 +453,9 @@ def send(notification: Notification) -> NotificationResult:
             method="rate_limit",
         )
 
+    # Try to push to mobile devices (non-blocking)
+    _push_to_mobile(notification)
+
     # Try libnotify first (supports actions)
     if _gi_available:
         result = _send_via_libnotify(notification)
@@ -461,6 +465,23 @@ def send(notification: Notification) -> NotificationResult:
 
     # Fall back to notify-send
     return _send_via_notify_send(notification)
+
+
+def _push_to_mobile(notification: Notification) -> None:
+    """Push notification to mobile devices if gateway is active.
+
+    Args:
+        notification: The notification to push.
+    """
+    try:
+        from elle.daemon.notifications.mobile_push import get_mobile_notifier
+
+        notifier = get_mobile_notifier()
+        if notifier.is_available():
+            # Run async push in background
+            asyncio.create_task(notifier.push_notification(notification))
+    except Exception as e:
+        logger.debug(f"Mobile push failed: {e}")
 
 
 def notify(
@@ -528,9 +549,42 @@ def notify_incident(
     domain: str,
     incident_id: str,
     summary: str | None = None,
+    *,
+    symptoms: list[str] | tuple[str, ...] | None = None,
+    metrics: dict[str, Any] | None = None,
+    entities: list[str] | tuple[str, ...] | None = None,
+    suspected_causes: list[str] | tuple[str, ...] | None = None,
+    entity: str | None = None,
 ) -> NotificationResult:
-    """Send an incident detection notification."""
-    notification = incident_notification(title, severity, domain, incident_id, summary)
+    """Send an incident detection notification with rich context.
+
+    Args:
+        title: Incident title.
+        severity: Incident severity (info, warning, error, critical).
+        domain: Incident domain (disk, net, oom, service, etc.).
+        incident_id: Incident UUID for context linking.
+        summary: Optional incident summary.
+        symptoms: Optional list of symptom descriptions.
+        metrics: Optional metrics dictionary (disk_pct, mem_pressure, etc.).
+        entities: Optional list of affected entities.
+        suspected_causes: Optional list of suspected causes.
+        entity: Primary affected entity (e.g., "service:nginx").
+
+    Returns:
+        NotificationResult with status.
+    """
+    notification = incident_notification(
+        title,
+        severity,
+        domain,
+        incident_id,
+        summary,
+        symptoms=symptoms,
+        metrics=metrics,
+        entities=entities,
+        suspected_causes=suspected_causes,
+        entity=entity,
+    )
     return send(notification)
 
 
@@ -559,18 +613,23 @@ def notify_health(
     component: str,
     message: str,
     severity: str = "warning",
+    *,
+    metrics: dict[str, Any] | None = None,
 ) -> NotificationResult:
-    """Send a system health notification.
+    """Send a system health notification with context.
 
     Args:
         component: System component (disk, memory, network, etc.).
         message: Health message.
         severity: One of 'warning', 'critical', 'recovered'.
+        metrics: Optional metrics for context (used_pct, available_mb, etc.).
 
     Returns:
         NotificationResult with status.
     """
-    notification = health_notification(severity, component, message, severity)
+    notification = health_notification(
+        severity, component, message, severity, metrics=metrics
+    )
     return send(notification)
 
 

@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from elle.common.pydantic_compat import safe_model_dump
 from elle.ops.augeas.backup import BackupManager
 from elle.ops.augeas.backup import get_manager as get_backup_manager
 from elle.ops.augeas.diff import DiffGenerator, generate_diff
@@ -394,7 +395,7 @@ class EditController:
                         payload={
                             "file_path": request.file_path,
                             "description": request.description,
-                            "changes": [c.model_dump() for c in changes],
+                            "changes": [safe_model_dump(c) for c in changes],
                         },
                         stdout=diff_result.unified,
                         success=True,

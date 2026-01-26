@@ -6,6 +6,7 @@ for user-friendly desktop notifications.
 
 from datetime import datetime
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -232,22 +233,68 @@ def incident_notification(
     domain: str,
     incident_id: str,
     summary: str | None = None,
+    *,
+    symptoms: tuple[str, ...] | list[str] | None = None,
+    metrics: dict[str, Any] | None = None,
+    entities: tuple[str, ...] | list[str] | None = None,
+    suspected_causes: tuple[str, ...] | list[str] | None = None,
+    entity: str | None = None,
 ) -> Notification:
-    """Create an incident detection notification."""
-    urgency = NotificationUrgency.CRITICAL if severity in ("critical", "error") else NotificationUrgency.NORMAL
+    """Create an incident detection notification with rich context.
+
+    Args:
+        title: Incident title.
+        severity: Incident severity (info, warning, error, critical).
+        domain: Incident domain (disk, net, oom, service, etc.).
+        incident_id: Incident UUID for context linking.
+        summary: Optional incident summary.
+        symptoms: Optional list of symptom descriptions.
+        metrics: Optional metrics dictionary (disk_pct, mem_pressure, etc.).
+        entities: Optional list of affected entities.
+        suspected_causes: Optional list of suspected causes.
+        entity: Primary affected entity (e.g., "service:nginx").
+
+    Returns:
+        Notification configured for the incident.
+    """
+    from elle.daemon.notifications.formatters import (
+        format_incident_body,
+        format_incident_title,
+    )
+
+    urgency = (
+        NotificationUrgency.CRITICAL
+        if severity in ("critical", "error")
+        else NotificationUrgency.NORMAL
+    )
     category = (
         NotificationCategory.INCIDENT_ESCALATED
         if severity == "critical"
         else NotificationCategory.INCIDENT_DETECTED
     )
 
-    body_parts = [f"[{domain.upper()}] {title}"]
-    if summary:
-        body_parts.append(summary[:100])
+    # Format title with context
+    formatted_title = format_incident_title(domain, title, severity, entity)
+
+    # Format body with available context
+    formatted_body = format_incident_body(
+        domain=domain,
+        summary=summary,
+        symptoms=list(symptoms) if symptoms else None,
+        metrics=metrics,
+        entities=list(entities) if entities else None,
+        suspected_causes=list(suspected_causes) if suspected_causes else None,
+    )
+
+    # Fallback if formatters return empty
+    if not formatted_body:
+        formatted_body = f"[{domain.upper()}] {title}"
+        if summary:
+            formatted_body += f"\n{summary[:100]}"
 
     return Notification(
-        title=f"Incident Detected ({severity})",
-        body="\n".join(body_parts),
+        title=formatted_title,
+        body=formatted_body,
         category=category,
         urgency=urgency,
         context_id=incident_id,
@@ -325,21 +372,43 @@ def health_notification(
     component: str,
     message: str,
     severity: str = "warning",
+    *,
+    metrics: dict[str, Any] | None = None,
 ) -> Notification:
-    """Create a system health notification."""
+    """Create a system health notification with context.
+
+    Args:
+        status: Health status (warning, critical, recovered).
+        component: System component (disk, memory, cpu, network, etc.).
+        message: Health message.
+        severity: Alert severity.
+        metrics: Optional metrics for context (used_pct, available_mb, etc.).
+
+    Returns:
+        Notification configured for the health alert.
+    """
+    from elle.daemon.notifications.formatters import (
+        format_health_body,
+        format_health_title,
+    )
+
     category_map = {
         "warning": NotificationCategory.HEALTH_WARNING,
         "critical": NotificationCategory.HEALTH_CRITICAL,
         "recovered": NotificationCategory.HEALTH_RECOVERED,
     }
 
+    # Format title with severity context
+    formatted_title = format_health_title(component, severity)
+
+    # Format body with metrics context
+    formatted_body = format_health_body(component, message, metrics)
+
     return Notification(
-        title=f"System Health: {component}",
-        body=message,
+        title=formatted_title,
+        body=formatted_body,
         category=category_map.get(severity, NotificationCategory.HEALTH_WARNING),
         timeout_ms=0 if severity == "critical" else 8000,
-        actions=(
-            NotificationAction(id="open", label="View Status"),
-        ),
+        actions=(NotificationAction(id="open", label="View Status"),),
         default_action="open",
     )

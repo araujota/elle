@@ -6,11 +6,24 @@ Runs on first launch and can be re-run via /reconfigure or /policies.
 
 from __future__ import annotations
 
+import asyncio
+import logging
+import shutil
+import subprocess
+import time
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from rich.panel import Panel
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+)
 from rich.text import Text
 
 from elle.cli.setup.models import (
@@ -41,6 +54,16 @@ from elle.cli.ui import (
 if TYPE_CHECKING:
     from elle.cli.ui.prompt import EllePrompt
 
+logger = logging.getLogger(__name__)
+
+
+class StepResult(str, Enum):
+    """Result of a wizard step."""
+
+    CONTINUE = "continue"  # Move to next step
+    BACK = "back"  # Go back to previous step
+    CANCEL = "cancel"  # Cancel the wizard
+
 
 # Config file paths
 USER_CONFIG_DIR = Path.home() / ".config" / "elle"
@@ -68,7 +91,8 @@ def is_first_run() -> bool:
 
         setup = config.get("setup", {})
         return not setup.get("completed", False)
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Error checking first run status: {e}")
         return True
 
 
@@ -98,7 +122,8 @@ def load_setup_state() -> SetupState:
             version=setup_data.get("version", "0.1.0"),
             preferences=prefs,
         )
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Error loading setup state: {e}")
         return SetupState()
 
 
@@ -121,15 +146,21 @@ def save_setup_state(state: SetupState) -> None:
 
             with open(USER_CONFIG_FILE, "rb") as f:
                 config = tomllib.load(f)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Error loading existing config: {e}")
 
     # Update setup section
+    # Pydantic v1/v2 compatibility: try model_dump() first, fall back to dict()
+    try:
+        prefs_dict = state.preferences.model_dump()
+    except AttributeError:
+        prefs_dict = state.preferences.dict()
+
     config["setup"] = {
         "completed": state.completed,
         "completed_at": state.completed_at.isoformat() if state.completed_at else None,
         "version": state.version,
-        "preferences": state.preferences.model_dump(),
+        "preferences": prefs_dict,
     }
 
     # Update daemon section based on preferences
@@ -332,13 +363,13 @@ def _build_policy_yaml(prefs: SetupPreferences) -> str:
         "# Default effect when no rules match",
     ]
 
-    # Set default effect based on safety level
+    # Set default effect based on safety level (must be lowercase)
     if prefs.safety_level == SafetyLevel.CAUTIOUS:
-        lines.append("default_effect: REQUIRE_CONFIRMATION")
+        lines.append("default_effect: require_confirmation")
     elif prefs.safety_level == SafetyLevel.MINIMAL:
-        lines.append("default_effect: ALLOW")
+        lines.append("default_effect: allow")
     else:
-        lines.append("default_effect: ALLOW")
+        lines.append("default_effect: allow")
 
     lines.extend(["", "rules:"])
 
@@ -351,7 +382,7 @@ def _build_policy_yaml(prefs: SetupPreferences) -> str:
                 "    conditions:",
                 "      - intent: system_task",
                 "        match_type: exact",
-                "    effect: REQUIRE_CONFIRMATION",
+                "    effect: require_confirmation",
                 "    message: Please confirm this operation",
                 "    priority: 50",
                 "",
@@ -367,7 +398,7 @@ def _build_policy_yaml(prefs: SetupPreferences) -> str:
                 "        match_type: exact",
                 "      - risk_level: medium",
                 "        match_type: exact",
-                "    effect: ALLOW",
+                "    effect: allow",
                 "    priority: 40",
                 "",
             ]
@@ -382,7 +413,7 @@ def _build_policy_yaml(prefs: SetupPreferences) -> str:
                 "    conditions:",
                 "      - path: /etc/*",
                 "        match_type: glob",
-                "    effect: REQUIRE_PREVIEW",
+                "    effect: require_preview",
                 "    message: Review changes before applying",
                 "    priority: 45",
                 "",
@@ -398,7 +429,7 @@ def _build_policy_yaml(prefs: SetupPreferences) -> str:
                 "    conditions:",
                 "      - command: systemctl restart*",
                 "        match_type: glob",
-                "    effect: REQUIRE_CONFIRMATION",
+                "    effect: require_confirmation",
                 "    message: Restarting services may cause brief interruptions",
                 "    priority: 55",
                 "",
@@ -407,7 +438,7 @@ def _build_policy_yaml(prefs: SetupPreferences) -> str:
                 "    conditions:",
                 "      - command: apt install*",
                 "        match_type: glob",
-                "    effect: REQUIRE_CONFIRMATION",
+                "    effect: require_confirmation",
                 "    message: Review packages before installation",
                 "    priority: 55",
                 "",
@@ -444,42 +475,56 @@ class SetupWizard:
             True if setup completed successfully, False if cancelled.
         """
         try:
+            # Hide cursor during wizard for cleaner UI
+            console.show_cursor(False)
+
             if reconfigure:
                 self._show_reconfigure_intro()
             else:
                 self._show_welcome()
 
-            # Step 1: Check environment
-            if not self._check_environment():
-                return False
+            # Define steps (step function, can_go_back)
+            steps = [
+                (self._check_environment, False),  # Can't go back from first step
+                (self._configure_safety, True),
+                (self._configure_telemetry, True),
+                (self._configure_features, True),
+                (self._configure_privileges, True),
+                (self._review_and_confirm, True),
+            ]
 
-            # Step 2: Safety and confirmation preferences
-            if not self._configure_safety():
-                return False
+            # Run steps with back navigation support
+            current_step = 0
+            while current_step < len(steps):
+                step_func, can_go_back = steps[current_step]
+                result = step_func(can_go_back=can_go_back)
 
-            # Step 3: Telemetry sources
-            if not self._configure_telemetry():
-                return False
-
-            # Step 4: Optional features
-            if not self._configure_features():
-                return False
-
-            # Step 5: Privilege configuration
-            if not self._configure_privileges():
-                return False
-
-            # Step 6: Review and confirm
-            if not self._review_and_confirm():
-                return False
+                if result == StepResult.CONTINUE:
+                    current_step += 1
+                elif result == StepResult.BACK:
+                    if current_step > 0:
+                        current_step -= 1
+                        console.print()
+                        print_muted("Going back to previous step...")
+                        console.print()
+                elif result == StepResult.CANCEL:
+                    console.show_cursor(True)
+                    return False
 
             # Save configuration
             self._save_configuration()
 
+            # Step 7: Start services (Ollama, models, daemon)
+            if not self._start_services():
+                # User skipped or services failed, but config is saved
+                print_warning("Services not started. You can start them manually later.")
+
             self._show_completion()
+            console.show_cursor(True)
             return True
 
         except (KeyboardInterrupt, EOFError):
+            console.show_cursor(True)
             console.print()
             print_warning("Setup cancelled. You can run /reconfigure later.")
             return False
@@ -509,9 +554,16 @@ class SetupWizard:
         print_muted("Let's update your ELLE settings. Current values are shown as defaults.")
         console.print()
 
-    def _check_environment(self) -> bool:
-        """Check the runtime environment and Ollama availability."""
-        console.print(section_rule("Environment Check"))
+    def _check_environment(self, can_go_back: bool = False) -> StepResult:
+        """Check the runtime environment and Ollama availability.
+
+        Args:
+            can_go_back: Whether to show back option (ignored for first step).
+
+        Returns:
+            StepResult indicating how to proceed.
+        """
+        console.print(section_rule("Step 1: Environment Check"))
         console.print()
 
         checks = []
@@ -545,37 +597,85 @@ class SetupWizard:
             checks.append(f"{Icons.WARNING} Ollama is not installed")
             self.prefs.ollama_verified = False
 
+        # Check daemon
+        daemon_running = self._check_daemon_running()
+        if daemon_running:
+            checks.append(f"{Icons.SUCCESS} ELLE daemon is running")
+        else:
+            checks.append(f"{Icons.WARNING} ELLE daemon is not running")
+
         for check in checks:
             console.print(f"  {check}")
 
         console.print()
 
+        # Handle Ollama not running
         if not ollama_status["running"]:
             if ollama_status["installed"]:
-                # Ollama is installed but not running
+                # Ollama is installed but not running - offer to start it
                 print_warning("Ollama is installed but the server isn't running.")
                 console.print()
-                console.print(
-                    Text.from_markup(
-                        "[bold]To start Ollama:[/bold]\n"
-                        "  [cyan]ollama serve[/cyan]  (run in a terminal)\n"
-                        "  [dim]or[/dim]\n"
-                        "  [cyan]systemctl --user start ollama[/cyan]  (if installed as service)"
+
+                if self.prompt.prompt_confirm("Would you like to start Ollama now?", default=True):
+                    console.print()
+                    console.print(f"  {Icons.INFO} Starting Ollama...")
+                    if self._start_ollama():
+                        print_success("Ollama started successfully!")
+                        self.prefs.ollama_verified = True
+                        ollama_status["running"] = True
+                    else:
+                        print_warning("Failed to start Ollama automatically.")
+                        console.print()
+                        console.print(
+                            Text.from_markup(
+                                "[bold]To start Ollama manually:[/bold]\n"
+                                "  [cyan]ollama serve[/cyan]  (run in a terminal)\n"
+                                "  [dim]or[/dim]\n"
+                                "  [cyan]systemctl --user start ollama[/cyan]  "
+                                "(if installed as service)"
+                            )
+                        )
+                else:
+                    console.print()
+                    print_muted(
+                        "You can continue setup, but AI features won't work until "
+                        "Ollama is running."
                     )
-                )
             else:
                 # Ollama is not installed
                 print_warning("ELLE requires Ollama for AI features. Install it from ollama.ai")
+                console.print()
+                print_muted(
+                    "You can continue setup, but AI features won't work until "
+                    "Ollama is installed."
+                )
+
             console.print()
-            print_muted(
-                "You can continue setup, but AI features won't work until Ollama is running."
-            )
+            if not self.prompt.prompt_confirm(
+                "Continue setup without Ollama running?", default=True
+            ):
+                return StepResult.CANCEL
+
+        # Handle daemon not running (only ask if Ollama is running, otherwise defer to end)
+        if not daemon_running and ollama_status["running"]:
+            console.print()
+            print_muted("The ELLE daemon provides background monitoring and the API.")
             console.print()
 
-            if not self.prompt.prompt_confirm("Continue setup without Ollama?", default=True):
-                return False
+            if self.prompt.prompt_confirm(
+                "Would you like to start the ELLE daemon now?", default=True
+            ):
+                console.print()
+                console.print(f"  {Icons.INFO} Starting ELLE daemon...")
+                daemon_result = self._start_daemon()
+                if daemon_result["success"]:
+                    print_success(f"Daemon started ({daemon_result['method']})")
+                else:
+                    print_warning(f"Failed to start daemon: {daemon_result['error']}")
+                    print_muted("The daemon will be started at the end of setup.")
 
-        return True
+        console.print()
+        return StepResult.CONTINUE
 
     def _check_ollama(self) -> dict:
         """Check if Ollama is available and list models.
@@ -636,14 +736,23 @@ class SetupWizard:
                 result["models"] = [m["name"] for m in data.get("models", [])]
                 result["running"] = True
                 result["available"] = True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ollama check failed: {e}")
 
         return result
 
-    def _configure_safety(self) -> bool:
-        """Configure safety level and confirmation preferences."""
-        console.print(section_rule("Safety Settings"))
+    def _configure_safety(self, can_go_back: bool = True) -> StepResult:
+        """Configure safety level and confirmation preferences.
+
+        Args:
+            can_go_back: Whether to show back option.
+
+        Returns:
+            StepResult indicating how to proceed.
+        """
+        console.print(section_rule("Step 2: Safety Settings"))
+        if can_go_back:
+            print_muted("(Press Esc to go back)")
         console.print()
 
         # Explain what this section is about
@@ -671,6 +780,8 @@ class SetupWizard:
             default_index=default_idx,
         )
 
+        if choice is None and can_go_back:
+            return StepResult.BACK
         if choice:
             self.prefs.safety_level = SafetyLevel(choice)
 
@@ -691,6 +802,8 @@ class SetupWizard:
             default_index=conf_default_idx,
         )
 
+        if conf_choice is None and can_go_back:
+            return StepResult.BACK
         if conf_choice:
             self.prefs.confirmation_preference = ConfirmationPreference(conf_choice)
 
@@ -703,11 +816,20 @@ class SetupWizard:
         )
 
         console.print()
-        return True
+        return StepResult.CONTINUE
 
-    def _configure_telemetry(self) -> bool:
-        """Configure which telemetry sources to enable."""
-        console.print(section_rule("Telemetry Sources"))
+    def _configure_telemetry(self, can_go_back: bool = True) -> StepResult:
+        """Configure which telemetry sources to enable.
+
+        Args:
+            can_go_back: Whether to show back option.
+
+        Returns:
+            StepResult indicating how to proceed.
+        """
+        console.print(section_rule("Step 3: Telemetry Sources"))
+        if can_go_back:
+            print_muted("(Press Esc to go back)")
         console.print()
 
         # Build multi-select options
@@ -749,6 +871,9 @@ class SetupWizard:
             telemetry_options,
         )
 
+        if selected is None and can_go_back:
+            return StepResult.BACK
+
         if selected is not None:
             self.prefs.journal_enabled = "journal" in selected
             self.prefs.kernel_enabled = "kernel" in selected
@@ -757,11 +882,20 @@ class SetupWizard:
             self.prefs.ebpf_enabled = "ebpf" in selected
 
         console.print()
-        return True
+        return StepResult.CONTINUE
 
-    def _configure_features(self) -> bool:
-        """Configure optional features."""
-        console.print(section_rule("Optional Features"))
+    def _configure_features(self, can_go_back: bool = True) -> StepResult:
+        """Configure optional features.
+
+        Args:
+            can_go_back: Whether to show back option.
+
+        Returns:
+            StepResult indicating how to proceed.
+        """
+        console.print(section_rule("Step 4: Optional Features"))
+        if can_go_back:
+            print_muted("(Press Esc to go back)")
         console.print()
 
         # Build multi-select options for features
@@ -791,17 +925,29 @@ class SetupWizard:
             feature_options,
         )
 
+        if selected is None and can_go_back:
+            return StepResult.BACK
+
         if selected is not None:
             self.prefs.api_enabled = "api" in selected
             self.prefs.gui_automation_enabled = "gui_automation" in selected
             self.prefs.auto_learn_packages = "auto_learn_packages" in selected
 
         console.print()
-        return True
+        return StepResult.CONTINUE
 
-    def _configure_privileges(self) -> bool:
-        """Configure Polkit privilege level."""
-        console.print(section_rule("Privilege Configuration"))
+    def _configure_privileges(self, can_go_back: bool = True) -> StepResult:
+        """Configure Polkit privilege level.
+
+        Args:
+            can_go_back: Whether to show back option.
+
+        Returns:
+            StepResult indicating how to proceed.
+        """
+        console.print(section_rule("Step 5: Privilege Configuration"))
+        if can_go_back:
+            print_muted("(Press Esc to go back)")
         console.print()
 
         console.print(
@@ -832,6 +978,8 @@ class SetupWizard:
             default_index=priv_default_idx,
         )
 
+        if priv_choice is None and can_go_back:
+            return StepResult.BACK
         if priv_choice:
             self.prefs.privilege_level = PrivilegeLevel(priv_choice)
 
@@ -887,11 +1035,20 @@ class SetupWizard:
                 print_muted("Reverted to secure (password) mode.")
                 console.print()
 
-        return True
+        return StepResult.CONTINUE
 
-    def _review_and_confirm(self) -> bool:
-        """Show summary and confirm settings."""
-        console.print(section_rule("Review Settings"))
+    def _review_and_confirm(self, can_go_back: bool = True) -> StepResult:
+        """Show summary and confirm settings.
+
+        Args:
+            can_go_back: Whether to allow going back.
+
+        Returns:
+            StepResult indicating how to proceed.
+        """
+        console.print(section_rule("Step 6: Review Settings"))
+        if can_go_back:
+            print_muted("(Enter 'b' or 'back' to go back)")
         console.print()
 
         # Build summary
@@ -941,7 +1098,19 @@ class SetupWizard:
         console.print(summary)
         console.print()
 
-        return self.prompt.prompt_confirm("Save these settings?", default=True)
+        # Use a custom prompt that accepts back
+        response = self.prompt.prompt_confirm_with_back(
+            "Save these settings?",
+            default=True,
+            allow_back=can_go_back,
+        )
+
+        if response == "back":
+            return StepResult.BACK
+        elif response:
+            return StepResult.CONTINUE
+        else:
+            return StepResult.CANCEL
 
     def _save_configuration(self) -> None:
         """Save the configuration to files."""
@@ -971,11 +1140,471 @@ class SetupWizard:
             self.state.preferences = self.prefs
             save_setup_state(self.state)
 
+    def _start_services(self) -> bool:
+        """Start Ollama, pull models, and start the daemon.
+
+        Returns:
+            True if all services started successfully.
+        """
+        console.print(section_rule("Starting Services"))
+        console.print()
+
+        console.print(
+            Text.from_markup(
+                "[bold]ELLE needs these services running to work properly:[/bold]\n"
+                "  1. Ollama (local AI inference server)\n"
+                "  2. Language models (SLM for classification, LLM for generation)\n"
+                "  3. The ELLE daemon (telemetry and API)\n"
+            )
+        )
+        console.print()
+
+        if not self.prompt.prompt_confirm("Start these services now?", default=True):
+            return False
+
+        console.print()
+        success = True
+
+        # Step 1: Start Ollama if needed
+        ollama_status = self._check_ollama()
+        if not ollama_status["running"]:
+            if ollama_status["installed"]:
+                console.print(f"  {Icons.INFO} Starting Ollama...")
+                if self._start_ollama():
+                    print_success("Ollama started")
+                    ollama_status["running"] = True
+                    self.prefs.ollama_verified = True
+                else:
+                    print_warning("Failed to start Ollama. You may need to start it manually.")
+                    success = False
+            else:
+                print_warning("Ollama is not installed. Install from https://ollama.ai")
+                success = False
+        else:
+            console.print(f"  {Icons.SUCCESS} Ollama is already running")
+            self.prefs.ollama_verified = True
+
+        console.print()
+
+        # Step 2: Pull and warm models (only if Ollama is running)
+        if ollama_status.get("running"):
+            if not self._setup_models():
+                print_warning("Model setup incomplete. Some AI features may be unavailable.")
+                success = False
+        else:
+            print_warning("Skipping model setup - Ollama is not running")
+
+        console.print()
+
+        # Step 3: Start the daemon
+        console.print(f"  {Icons.INFO} Starting ELLE daemon...")
+        daemon_result = self._start_daemon()
+        if daemon_result["success"]:
+            print_success(f"Daemon started ({daemon_result['method']})")
+        else:
+            print_warning(f"Failed to start daemon: {daemon_result['error']}")
+            console.print()
+            print_muted("You can start it manually with: elled")
+            success = False
+
+        console.print()
+        return success
+
+    def _start_ollama(self) -> bool:
+        """Start the Ollama service.
+
+        Returns:
+            True if Ollama started successfully.
+        """
+        # Try systemctl first (user service)
+        try:
+            result = subprocess.run(
+                ["systemctl", "--user", "start", "ollama"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0:
+                # Wait for it to be ready
+                return self._wait_for_ollama(timeout=30)
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        # Try systemctl (system service)
+        try:
+            result = subprocess.run(
+                ["systemctl", "start", "ollama"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0:
+                return self._wait_for_ollama(timeout=30)
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        # Try running ollama serve in background
+        ollama_path = shutil.which("ollama")
+        if not ollama_path:
+            for path in ["/usr/local/bin/ollama", "/usr/bin/ollama"]:
+                if Path(path).exists():
+                    ollama_path = path
+                    break
+
+        if ollama_path:
+            try:
+                # Start in background (nohup-style)
+                subprocess.Popen(
+                    [ollama_path, "serve"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+                return self._wait_for_ollama(timeout=30)
+            except Exception as e:
+                logger.debug(f"Failed to start Ollama: {e}")
+
+        return False
+
+    def _wait_for_ollama(self, timeout: int = 30) -> bool:
+        """Wait for Ollama to become available.
+
+        Args:
+            timeout: Maximum seconds to wait.
+
+        Returns:
+            True if Ollama is responding.
+        """
+        import httpx
+
+        start = time.time()
+        while time.time() - start < timeout:
+            try:
+                response = httpx.get("http://localhost:11434/api/tags", timeout=2.0)
+                if response.status_code == 200:
+                    return True
+            except httpx.RequestError:
+                pass
+            time.sleep(1)
+        return False
+
+    def _setup_models(self) -> bool:
+        """Pull and warm up required LLM models.
+
+        Returns:
+            True if models are ready.
+        """
+        from elle.rag.constants import LLM_MODEL, SLM_MODEL
+
+        console.print(f"  {Icons.INFO} Setting up language models...")
+        console.print()
+
+        # Run async setup in sync context
+        try:
+            return asyncio.get_event_loop().run_until_complete(
+                self._setup_models_async(SLM_MODEL, LLM_MODEL)
+            )
+        except RuntimeError:
+            # No event loop running, create one
+            return asyncio.run(self._setup_models_async(SLM_MODEL, LLM_MODEL))
+
+    async def _setup_models_async(self, slm_model: str, llm_model: str) -> bool:
+        """Async implementation of model setup.
+
+        Args:
+            slm_model: SLM model name.
+            llm_model: LLM model name.
+
+        Returns:
+            True if models are ready.
+        """
+        from elle.rag.model_warmup import ModelWarmupService
+
+        warmup = ModelWarmupService()
+
+        try:
+            # Check which models are already available
+            available = await warmup.list_models()
+            slm_exists = any(slm_model in m for m in available)
+            llm_exists = any(llm_model in m for m in available)
+
+            # Pull models with progress
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                console=console,
+            ) as progress:
+                # Pull SLM if needed
+                if not slm_exists:
+                    task = progress.add_task(f"Pulling {slm_model}...", total=None)
+                    success = await self._pull_model_with_progress(slm_model, progress, task)
+                    if success:
+                        desc = f"[green]{Icons.SUCCESS}[/green] {slm_model}"
+                        progress.update(task, description=desc)
+                    else:
+                        desc = f"[red]{Icons.ERROR}[/red] Failed: {slm_model}"
+                        progress.update(task, description=desc)
+                        return False
+                else:
+                    console.print(f"    {Icons.SUCCESS} {slm_model} already available")
+
+                # Pull LLM if needed
+                if not llm_exists:
+                    task = progress.add_task(f"Pulling {llm_model}...", total=None)
+                    success = await self._pull_model_with_progress(llm_model, progress, task)
+                    if success:
+                        desc = f"[green]{Icons.SUCCESS}[/green] {llm_model}"
+                        progress.update(task, description=desc)
+                    else:
+                        desc = f"[red]{Icons.ERROR}[/red] Failed: {llm_model}"
+                        progress.update(task, description=desc)
+                        return False
+                else:
+                    console.print(f"    {Icons.SUCCESS} {llm_model} already available")
+
+            console.print()
+
+            # Warm up models
+            console.print(f"    {Icons.INFO} Warming up models (this may take a moment)...")
+
+            # Warm SLM (always)
+            slm_result = await warmup.warm_slm()
+            if slm_result.success:
+                console.print(f"    {Icons.SUCCESS} SLM ready ({slm_result.duration_ms:.0f}ms)")
+            else:
+                console.print(f"    {Icons.WARNING} SLM warmup failed: {slm_result.error}")
+
+            # Warm LLM if sufficient VRAM
+            if warmup.has_sufficient_vram():
+                llm_result = await warmup.warm_llm()
+                if llm_result.success:
+                    console.print(f"    {Icons.SUCCESS} LLM ready ({llm_result.duration_ms:.0f}ms)")
+                else:
+                    console.print(f"    {Icons.WARNING} LLM warmup failed: {llm_result.error}")
+            else:
+                console.print(f"    {Icons.INFO} LLM will load on-demand (limited VRAM)")
+
+            return True
+
+        except Exception as e:
+            console.print(f"    {Icons.ERROR} Model setup error: {e}")
+            return False
+        finally:
+            await warmup.close()
+
+    async def _pull_model_with_progress(
+        self,
+        model: str,
+        progress: Progress,
+        task_id: int,
+    ) -> bool:
+        """Pull a model with progress updates.
+
+        Args:
+            model: Model name to pull.
+            progress: Rich Progress instance.
+            task_id: Progress task ID.
+
+        Returns:
+            True if pull succeeded.
+        """
+        import json
+
+        import httpx
+
+        try:
+            client = httpx.AsyncClient(timeout=httpx.Timeout(600.0))
+            async with (
+                client,
+                client.stream(
+                    "POST",
+                    "http://localhost:11434/api/pull",
+                    json={"name": model, "stream": True},
+                ) as response,
+            ):
+                if response.status_code != 200:
+                    return False
+
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+
+                    try:
+                        data = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+
+                    # Update progress based on response
+                    status = data.get("status", "")
+                    if "total" in data and "completed" in data:
+                        progress.update(
+                            task_id,
+                            total=data["total"],
+                            completed=data["completed"],
+                            description=f"Pulling {model}: {status}",
+                        )
+                    elif status:
+                        desc = f"Pulling {model}: {status}"
+                        progress.update(task_id, description=desc)
+
+                    # Check for completion
+                    if data.get("status") == "success":
+                        total = progress.tasks[task_id].total or 100
+                        progress.update(task_id, completed=total)
+                        return True
+
+                return True
+
+        except Exception:
+            return False
+
+    def _start_daemon(self) -> dict:
+        """Start the ELLE daemon.
+
+        Returns:
+            Dict with keys:
+                - success: bool
+                - method: str (how it was started)
+                - error: str | None
+        """
+        # Try systemctl first (if installed as system service)
+        try:
+            result = subprocess.run(
+                ["systemctl", "status", "elled"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            # Service exists
+            if result.returncode in (0, 3):  # 0=running, 3=stopped
+                if result.returncode == 0:
+                    # Already running
+                    return {"success": True, "method": "systemd (already running)", "error": None}
+
+                # Try to start it
+                start_result = subprocess.run(
+                    ["sudo", "systemctl", "start", "elled"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                if start_result.returncode == 0:
+                    return {"success": True, "method": "systemd", "error": None}
+                else:
+                    return {
+                        "success": False,
+                        "method": "systemd",
+                        "error": start_result.stderr.strip() or "Failed to start",
+                    }
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        # Try user systemd service
+        try:
+            result = subprocess.run(
+                ["systemctl", "--user", "status", "elled"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode in (0, 3):
+                if result.returncode == 0:
+                    return {
+                        "success": True,
+                        "method": "systemd --user (already running)",
+                        "error": None,
+                    }
+
+                start_result = subprocess.run(
+                    ["systemctl", "--user", "start", "elled"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                if start_result.returncode == 0:
+                    return {
+                        "success": True,
+                        "method": "systemd --user",
+                        "error": None,
+                    }
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        # Try running elled directly in background
+        elled_path = shutil.which("elled")
+        if not elled_path:
+            # Check if we can run it via python module
+            try:
+                subprocess.Popen(
+                    ["python3", "-m", "elle.daemon.main"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+                # Wait a moment and check if API is responding
+                time.sleep(2)
+                if self._check_daemon_running():
+                    return {"success": True, "method": "python module", "error": None}
+            except Exception as e:
+                return {"success": False, "method": "python module", "error": str(e)}
+
+        if elled_path:
+            try:
+                subprocess.Popen(
+                    [elled_path],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+                time.sleep(2)
+                if self._check_daemon_running():
+                    return {"success": True, "method": "elled binary", "error": None}
+            except Exception as e:
+                return {"success": False, "method": "elled binary", "error": str(e)}
+
+        return {"success": False, "method": "none", "error": "No method available to start daemon"}
+
+    def _check_daemon_running(self) -> bool:
+        """Check if the daemon API is responding.
+
+        Returns:
+            True if daemon is running.
+        """
+        import httpx
+
+        try:
+            response = httpx.get("http://localhost:8377/health", timeout=2.0)
+            return response.status_code == 200
+        except httpx.RequestError:
+            return False
+
     def _show_completion(self) -> None:
         """Show completion message."""
         console.print()
         print_success("Setup complete!")
         console.print()
+
+        # Check what's actually running now
+        ollama_status = self._check_ollama()
+        daemon_running = self._check_daemon_running()
+
+        if ollama_status["running"] and daemon_running:
+            console.print(
+                Text.from_markup(
+                    "[bold green]ELLE is ready![/bold green] All services are running.\n"
+                )
+            )
+        else:
+            issues = []
+            if not ollama_status["running"]:
+                issues.append("Ollama is not running")
+            if not daemon_running:
+                issues.append("Daemon is not running")
+            console.print(
+                Text.from_markup(f"[bold yellow]Partial setup:[/bold yellow] {', '.join(issues)}\n")
+            )
 
         next_steps = [
             "Type a question to get started (e.g., 'how much disk space is left?')",
@@ -987,16 +1616,15 @@ class SetupWizard:
         console.print(numbered_list(next_steps))
         console.print()
 
-        if not self.prefs.ollama_verified:
-            # Re-check ollama status for accurate tip
-            ollama_status = self._check_ollama()
-            if ollama_status["running"]:
-                # User started it during setup
-                console.print(tip("Ollama is now running. You're ready to go!"))
-            elif ollama_status["installed"]:
+        if not ollama_status["running"]:
+            if ollama_status["installed"]:
                 console.print(tip("Start Ollama with: ollama serve"))
             else:
                 console.print(tip("Install Ollama from ollama.ai to enable AI features"))
+            console.print()
+
+        if not daemon_running:
+            console.print(tip("Start the daemon with: elled"))
             console.print()
 
         if self.prefs.privilege_level == PrivilegeLevel.CONVENIENT and self.prefs.polkit_configured:

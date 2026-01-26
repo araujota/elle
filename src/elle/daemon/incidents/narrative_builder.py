@@ -10,6 +10,7 @@ import sqlite3
 from datetime import datetime
 from typing import Any
 
+from elle.common.pydantic_compat import safe_model_dump
 from elle.daemon.incidents.narrative import (
     CausalChain,
     CausalLink,
@@ -418,7 +419,7 @@ Focus on:
                 _json_dumps(list(narrative.timeline)),
                 narrative.explanation,
                 _json_dumps(list(narrative.keywords)),
-                _json_dumps(narrative.chain.model_dump()),
+                _json_dumps(safe_model_dump(narrative.chain)),
                 narrative.generated_at.isoformat(),
                 narrative.model_used,
             ),

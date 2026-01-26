@@ -11,7 +11,7 @@ import uuid
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ExecutionMode(str, Enum):
@@ -100,9 +100,16 @@ class ChatCompletionRequest(BaseModel):
         description="Model ID determining execution mode"
     )
     messages: tuple[ChatMessage, ...] = Field(
-        description="Conversation history",
-        min_length=1,
+        description="Conversation history (at least one message required)",
     )
+
+    @field_validator("messages")
+    @classmethod
+    def messages_not_empty(cls, v: tuple[ChatMessage, ...]) -> tuple[ChatMessage, ...]:
+        """Ensure at least one message is provided."""
+        if not v:
+            raise ValueError("At least one message is required")
+        return v
     stream: bool = Field(
         default=False,
         description="Whether to stream the response via SSE",
@@ -178,9 +185,16 @@ class ChatCompletionResponse(BaseModel):
     )
     model: str = Field(description="Model used for the completion")
     choices: tuple[ChatChoice, ...] = Field(
-        description="List of completion choices",
-        min_length=1,
+        description="List of completion choices (at least one required)",
     )
+
+    @field_validator("choices")
+    @classmethod
+    def choices_not_empty(cls, v: tuple[ChatChoice, ...]) -> tuple[ChatChoice, ...]:
+        """Ensure at least one choice is provided."""
+        if not v:
+            raise ValueError("At least one choice is required")
+        return v
     usage: UsageStats = Field(description="Token usage statistics")
 
     # ELLE extensions
@@ -259,16 +273,16 @@ ELLE_MODELS: tuple[ModelInfo, ...] = (
     ModelInfo(
         id="elle",
         execution_mode="execute",
-        description="Full execution mode with policy gates. High-risk actions require confirmation.",
+        description="Full execution with policy gates. High-risk actions need confirmation.",
     ),
     ModelInfo(
         id="elle.readonly",
         execution_mode="readonly",
-        description="Read-only mode. Can read system state and propose plans but cannot make changes.",
+        description="Read-only mode. Can read state and propose plans but cannot change.",
     ),
     ModelInfo(
         id="elle.capabilities_only",
         execution_mode="capabilities_only",
-        description="Returns capability tool_calls without execution. Client can execute externally.",
+        description="Returns capability tool_calls without execution. Execute externally.",
     ),
 )

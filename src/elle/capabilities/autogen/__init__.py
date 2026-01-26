@@ -28,6 +28,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from elle.common.pydantic_compat import safe_model_dump_json
+
 from elle.capabilities.autogen.discovery import (
     DiscoveryResult,
     InstalledBinary,
@@ -89,6 +91,11 @@ from elle.capabilities.autogen.validator import (
     validate_flags,
     validate_package_coherence,
     validate_sandbox,
+)
+from elle.capabilities.autogen.versioner import (
+    CapabilityVersioner,
+    get_versioner,
+    reset_versioner,
 )
 
 if TYPE_CHECKING:
@@ -192,7 +199,7 @@ async def generate_and_save(
         capability_class_code=cap_code,
         man_page_text=man_page.raw_text,
         trust_level=validation.trust_level,
-        validation_json=validation.model_dump_json(),
+        validation_json=safe_model_dump_json(validation),
         source_package=binary.package if binary else None,
         package_version=binary.version if binary else None,
         binary_path=binary.path if binary else None,
@@ -386,4 +393,8 @@ __all__ = [
     "approve_capability",
     "disable_capability",
     "delete_capability",
+    # Versioner
+    "CapabilityVersioner",
+    "get_versioner",
+    "reset_versioner",
 ]
