@@ -234,9 +234,8 @@ jobs:
         run: |
           sudo add-apt-repository -y universe
           sudo apt-get update
-          # piuparts may not be available in all Ubuntu versions
-          if apt-cache show piuparts &> /dev/null; then
-            sudo apt-get install -y piuparts debootstrap
+          # piuparts may not be available in all Ubuntu versions (not in noble)
+          if sudo apt-get install -y piuparts debootstrap 2>&1; then
             echo "available=true" >> "$GITHUB_OUTPUT"
           else
             echo "::warning::piuparts not available in this Ubuntu version, skipping"
