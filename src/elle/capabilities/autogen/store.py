@@ -9,6 +9,7 @@ Stores:
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import logging
 import sqlite3
@@ -46,7 +47,11 @@ CREATE TABLE IF NOT EXISTS generated_capabilities (
     trust_level TEXT DEFAULT 'third_party',
     approved INTEGER DEFAULT 0,
     enabled INTEGER DEFAULT 1,
-    validation_json TEXT
+    validation_json TEXT,
+    -- Package versioning columns
+    source_package TEXT,
+    package_version TEXT,
+    binary_path TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_capability_name ON generated_capabilities(capability_name);
@@ -54,7 +59,24 @@ CREATE INDEX IF NOT EXISTS idx_source_command ON generated_capabilities(source_c
 CREATE INDEX IF NOT EXISTS idx_trust_level ON generated_capabilities(trust_level);
 CREATE INDEX IF NOT EXISTS idx_approved ON generated_capabilities(approved);
 CREATE INDEX IF NOT EXISTS idx_enabled ON generated_capabilities(enabled);
+CREATE INDEX IF NOT EXISTS idx_source_package ON generated_capabilities(source_package);
 """
+
+# Migration for existing databases
+MIGRATIONS = [
+    """
+    ALTER TABLE generated_capabilities ADD COLUMN source_package TEXT;
+    """,
+    """
+    ALTER TABLE generated_capabilities ADD COLUMN package_version TEXT;
+    """,
+    """
+    ALTER TABLE generated_capabilities ADD COLUMN binary_path TEXT;
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_source_package ON generated_capabilities(source_package);
+    """,
+]
 
 
 # =============================================================================
@@ -83,8 +105,29 @@ class AutogenStore:
             with sqlite3.connect(self.db_path) as conn:
                 conn.executescript(SCHEMA)
                 conn.commit()
+
+                # Run migrations for existing databases
+                self._run_migrations(conn)
         except Exception as e:
             logger.error(f"Failed to initialize autogen store: {e}")
+
+    def _run_migrations(self, conn: sqlite3.Connection) -> None:
+        """Run schema migrations for existing databases."""
+        # Get existing columns
+        cursor = conn.execute("PRAGMA table_info(generated_capabilities)")
+        existing_columns = {row[1] for row in cursor.fetchall()}
+
+        # Apply migrations if columns are missing
+        new_columns = {"source_package", "package_version", "binary_path"}
+        missing_columns = new_columns - existing_columns
+
+        if missing_columns:
+            for migration in MIGRATIONS:
+                with contextlib.suppress(sqlite3.OperationalError):
+                    # Column already exists or index already exists
+                    conn.execute(migration)
+            conn.commit()
+            logger.info(f"Applied autogen store migrations for columns: {missing_columns}")
 
     def _get_connection(self) -> sqlite3.Connection:
         """Get database connection."""
@@ -101,6 +144,9 @@ class AutogenStore:
         man_page_text: str,
         trust_level: TrustLevel = TrustLevel.THIRD_PARTY,
         validation_json: str | None = None,
+        source_package: str | None = None,
+        package_version: str | None = None,
+        binary_path: str | None = None,
     ) -> str:
         """Save a generated capability.
 
@@ -112,6 +158,9 @@ class AutogenStore:
             man_page_text: Raw man page text (for hash).
             trust_level: Assigned trust level.
             validation_json: Optional validation results JSON.
+            source_package: dpkg package name providing the binary.
+            package_version: Package version at generation time.
+            binary_path: Full path to source binary.
 
         Returns:
             Capability ID.
@@ -140,7 +189,10 @@ class AutogenStore:
                         man_page_hash = ?,
                         generated_at = ?,
                         trust_level = ?,
-                        validation_json = ?
+                        validation_json = ?,
+                        source_package = ?,
+                        package_version = ?,
+                        binary_path = ?
                     WHERE capability_name = ?
                     """,
                     (
@@ -152,6 +204,9 @@ class AutogenStore:
                         datetime.utcnow().isoformat(),
                         trust_level.value,
                         validation_json,
+                        source_package,
+                        package_version,
+                        binary_path,
                         spec.name,
                     ),
                 )
@@ -163,8 +218,9 @@ class AutogenStore:
                     INSERT INTO generated_capabilities (
                         id, capability_name, spec_json, input_model_code,
                         output_model_code, capability_class_code, source_command,
-                        man_page_hash, generated_at, trust_level, validation_json
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        man_page_hash, generated_at, trust_level, validation_json,
+                        source_package, package_version, binary_path
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         cap_id,
@@ -178,6 +234,9 @@ class AutogenStore:
                         datetime.utcnow().isoformat(),
                         trust_level.value,
                         validation_json,
+                        source_package,
+                        package_version,
+                        binary_path,
                     ),
                 )
 
@@ -291,6 +350,43 @@ class AutogenStore:
             )
             return [self._row_to_stored(row) for row in cursor.fetchall()]
 
+    def list_by_package(self, package_name: str) -> list[StoredCapability]:
+        """List capabilities derived from a package.
+
+        Args:
+            package_name: dpkg package name (e.g., 'nginx').
+
+        Returns:
+            List of StoredCapability objects for that package.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT * FROM generated_capabilities
+                WHERE source_package = ?
+                ORDER BY capability_name
+                """,
+                (package_name,),
+            )
+            return [self._row_to_stored(row) for row in cursor.fetchall()]
+
+    def list_packages_with_capabilities(self) -> list[tuple[str, str | None]]:
+        """List all packages that have generated capabilities.
+
+        Returns:
+            List of (package_name, package_version) tuples.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT DISTINCT source_package, package_version
+                FROM generated_capabilities
+                WHERE source_package IS NOT NULL
+                ORDER BY source_package
+                """
+            )
+            return [(row[0], row[1]) for row in cursor.fetchall()]
+
     def approve(self, capability_name: str) -> bool:
         """Approve a capability for use.
 
@@ -389,6 +485,13 @@ class AutogenStore:
         Returns:
             StoredCapability object.
         """
+        # Handle optional package versioning columns (may be None in older records)
+        # Note: Using dict() conversion because sqlite3.Row doesn't support .get()
+        row_dict = dict(row)
+        source_package = row_dict.get("source_package")
+        package_version = row_dict.get("package_version")
+        binary_path = row_dict.get("binary_path")
+
         return StoredCapability(
             id=row["id"],
             capability_name=row["capability_name"],
@@ -402,6 +505,9 @@ class AutogenStore:
             trust_level=TrustLevel(row["trust_level"]),
             approved=bool(row["approved"]),
             enabled=bool(row["enabled"]),
+            source_package=source_package,
+            package_version=package_version,
+            binary_path=binary_path,
         )
 
 

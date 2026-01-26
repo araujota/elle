@@ -72,9 +72,7 @@ class ApiAuthConfig:
 
     # Path to the API keys database
     # If None, API key authentication is disabled
-    api_keys_db_path: Path | None = field(
-        default_factory=lambda: Path("/var/lib/elle/api_keys.db")
-    )
+    api_keys_db_path: Path | None = field(default_factory=lambda: Path("/var/lib/elle/api_keys.db"))
 
     # UID of the elle user (for UDS peer auth)
     # Users with this UID get full access like root
@@ -155,6 +153,16 @@ class Config:
     # Port probe configuration
     port_probe_interval: int = 60  # seconds
 
+    # Capability versioning
+    capability_versioning_enabled: bool = True  # Auto-regenerate on package upgrade
+    package_probe_interval: int = 300  # 5 minutes
+
+    # Capability bootstrap
+    capability_bootstrap_enabled: bool = True  # Generate caps for core packages on first run
+
+    # Auto-learn new packages
+    auto_learn_new_packages: bool = True  # Generate caps when new packages are installed
+
 
 def _deep_get(d: dict[str, Any], *keys: str, default: Any = None) -> Any:
     """Get nested dictionary value safely."""
@@ -231,12 +239,8 @@ def load_config(config_path: Path | None = None) -> Config:
 
     # Database paths
     db_path = Path(daemon_section.get("db_path", "/var/lib/elle/elle.db"))
-    incidents_db_path = Path(
-        daemon_section.get("incidents_db_path", "/var/lib/elle/incidents.db")
-    )
-    manvault_db_path = Path(
-        daemon_section.get("manvault_db_path", "/var/lib/elle/manvault.db")
-    )
+    incidents_db_path = Path(daemon_section.get("incidents_db_path", "/var/lib/elle/incidents.db"))
+    manvault_db_path = Path(daemon_section.get("manvault_db_path", "/var/lib/elle/manvault.db"))
 
     # Override with environment
     db_path = Path(_get_env("DB_PATH", str(db_path)))
@@ -287,17 +291,13 @@ def load_config(config_path: Path | None = None) -> Config:
 
     # API auth config
     api_auth_section = _deep_get(data, "daemon", "api_auth", default={})
-    api_keys_db_path_str = api_auth_section.get(
-        "api_keys_db_path", "/var/lib/elle/api_keys.db"
-    )
+    api_keys_db_path_str = api_auth_section.get("api_keys_db_path", "/var/lib/elle/api_keys.db")
     api_auth = ApiAuthConfig(
         allow_anonymous=_get_env(
             "API_AUTH_ALLOW_ANONYMOUS",
             api_auth_section.get("allow_anonymous", True),
         ),
-        api_keys_db_path=(
-            Path(api_keys_db_path_str) if api_keys_db_path_str else None
-        ),
+        api_keys_db_path=(Path(api_keys_db_path_str) if api_keys_db_path_str else None),
         elle_uid=api_auth_section.get("elle_uid"),
     )
 
@@ -355,10 +355,13 @@ def load_config(config_path: Path | None = None) -> Config:
 
     # Inotify watch paths
     inotify_section = _deep_get(data, "daemon", "inotify", default={})
-    inotify_watch_paths = inotify_section.get("watch_paths", [
-        "/root/.ssh/authorized_keys",
-        "/etc/ssh/sshd_config",
-    ])
+    inotify_watch_paths = inotify_section.get(
+        "watch_paths",
+        [
+            "/root/.ssh/authorized_keys",
+            "/etc/ssh/sshd_config",
+        ],
+    )
     if isinstance(inotify_watch_paths, list):
         inotify_watch_paths = tuple(inotify_watch_paths)
 
@@ -367,6 +370,23 @@ def load_config(config_path: Path | None = None) -> Config:
     port_probe_interval = _get_env(
         "PORT_PROBE_INTERVAL",
         port_probe_section.get("interval", 60),
+    )
+
+    # Capability versioning
+    capability_versioning_enabled = _get_env(
+        "CAPABILITY_VERSIONING_ENABLED",
+        daemon_section.get("capability_versioning_enabled", True),
+    )
+    package_probe_section = _deep_get(data, "daemon", "package_probe", default={})
+    package_probe_interval = _get_env(
+        "PACKAGE_PROBE_INTERVAL",
+        package_probe_section.get("interval", 300),
+    )
+
+    # Auto-learn new packages
+    auto_learn_new_packages = _get_env(
+        "AUTO_LEARN_NEW_PACKAGES",
+        daemon_section.get("auto_learn_new_packages", True),
     )
 
     # eBPF config
@@ -402,6 +422,9 @@ def load_config(config_path: Path | None = None) -> Config:
         port_probe_enabled=port_probe_enabled,
         inotify_watch_paths=inotify_watch_paths,
         port_probe_interval=port_probe_interval,
+        capability_versioning_enabled=capability_versioning_enabled,
+        package_probe_interval=package_probe_interval,
+        auto_learn_new_packages=auto_learn_new_packages,
     )
 
 

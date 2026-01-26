@@ -242,6 +242,8 @@ class Engine:
                 return self._handle_fix(session, interactive=stream_output)
             case Intent.EXPLAIN_COMMAND:
                 return self._handle_explain_command(user_input, session)
+            case Intent.LEARN_PACKAGE:
+                return self._handle_learn_package(user_input, intent_result, session)
             case _:
                 # Fallback to shell passthrough
                 return self._handle_shell_command(user_input, session, stream_output)
@@ -464,6 +466,8 @@ class Engine:
             )
         elif lower.startswith("/preflight") or lower == "preflight":
             return self._handle_preflight_command(user_input, session)
+        elif lower.startswith("/map"):
+            return self._handle_map_command(user_input, session)
         elif self._is_incident_command(lower):
             return self._handle_incidents(user_input, session)
         elif self._is_reboot_command(lower):
@@ -508,6 +512,116 @@ class Engine:
             logger.exception("Failed to handle reboot command")
             return EngineResult(
                 output=f"{Colors.RED}Error handling reboot command: {e}{Colors.RESET}",
+                session=session,
+                success=False,
+            )
+
+    def _handle_map_command(self, user_input: str, session: Session) -> EngineResult:
+        """Handle /map command for GUI tree traces.
+
+        Args:
+            user_input: The map command.
+            session: Current session state.
+
+        Returns:
+            EngineResult for the map action.
+        """
+        import asyncio
+
+        try:
+            from elle.cli.map_commands import handle_map_command
+
+            # Extract args (remove /map prefix)
+            args = user_input.strip()
+            if args.startswith("/map"):
+                args = args[4:].strip()
+
+            # Run async handler
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            output = loop.run_until_complete(handle_map_command(args))
+            return EngineResult(
+                output=output,
+                session=session,
+                success=True,
+            )
+
+        except Exception as e:
+            logger.exception("Failed to handle map command")
+            return EngineResult(
+                output=f"{Colors.RED}Error handling map command: {e}{Colors.RESET}",
+                session=session,
+                success=False,
+            )
+
+    def _handle_learn_package(
+        self,
+        user_input: str,
+        intent_result: IntentResult,
+        session: Session,
+    ) -> EngineResult:
+        """Handle package learning command.
+
+        Gathers intelligence from multiple sources and generates capabilities.
+
+        Args:
+            user_input: The learn command or natural language request.
+            intent_result: Classification result with extracted entities.
+            session: Current session state.
+
+        Returns:
+            EngineResult with learning results.
+        """
+        import asyncio
+
+        try:
+            from elle.cli.package_learn_commands import handle_learn_command
+
+            # Extract package name from input
+            args = user_input.strip()
+
+            # Handle /learn prefix
+            if args.startswith("/learn"):
+                args = args[6:].strip()
+            # Handle natural language - extract package from entities
+            elif intent_result.entities:
+                args = intent_result.entities[0]
+            else:
+                # Try to extract from natural language patterns
+                import re
+                patterns = [
+                    r"(?:learn|figure out|understand)\s+(?:how to (?:use|work with)\s+)?(\w[\w\-\.]+)",
+                    r"(?:what can|how do I use)\s+(\w[\w\-\.]+)",
+                    r"teach me (?:about\s+)?(\w[\w\-\.]+)",
+                ]
+                for pattern in patterns:
+                    match = re.search(pattern, args, re.IGNORECASE)
+                    if match:
+                        args = match.group(1)
+                        break
+
+            # Run async handler
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            output = loop.run_until_complete(handle_learn_command(args, session))
+            return EngineResult(
+                output=output,
+                session=session,
+                success=True,
+            )
+
+        except Exception as e:
+            logger.exception("Failed to handle learn package command")
+            return EngineResult(
+                output=f"{Colors.RED}Error learning package: {e}{Colors.RESET}",
                 session=session,
                 success=False,
             )

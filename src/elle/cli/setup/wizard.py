@@ -143,6 +143,7 @@ def save_setup_state(state: SetupState) -> None:
     config["daemon"]["probes_enabled"] = prefs.probes_enabled
     config["daemon"]["ebpf_enabled"] = prefs.ebpf_enabled
     config["daemon"]["docker_enabled"] = prefs.docker_enabled
+    config["daemon"]["auto_learn_new_packages"] = prefs.auto_learn_packages
 
     if "daemon.api" not in config:
         config["daemon"]["api"] = {}
@@ -344,67 +345,75 @@ def _build_policy_yaml(prefs: SetupPreferences) -> str:
 
     # Add confirmation rules based on preference
     if prefs.confirmation_preference == ConfirmationPreference.ALWAYS:
-        lines.extend([
-            "  - id: confirm-all-tasks",
-            "    name: Require confirmation for all tasks",
-            "    conditions:",
-            "      - intent: system_task",
-            "        match_type: exact",
-            "    effect: REQUIRE_CONFIRMATION",
-            "    message: Please confirm this operation",
-            "    priority: 50",
-            "",
-        ])
+        lines.extend(
+            [
+                "  - id: confirm-all-tasks",
+                "    name: Require confirmation for all tasks",
+                "    conditions:",
+                "      - intent: system_task",
+                "        match_type: exact",
+                "    effect: REQUIRE_CONFIRMATION",
+                "    message: Please confirm this operation",
+                "    priority: 50",
+                "",
+            ]
+        )
     elif prefs.confirmation_preference == ConfirmationPreference.NEVER:
-        lines.extend([
-            "  - id: skip-confirmation",
-            "    name: Skip confirmation for low-risk tasks",
-            "    conditions:",
-            "      - risk_level: low",
-            "        match_type: exact",
-            "      - risk_level: medium",
-            "        match_type: exact",
-            "    effect: ALLOW",
-            "    priority: 40",
-            "",
-        ])
+        lines.extend(
+            [
+                "  - id: skip-confirmation",
+                "    name: Skip confirmation for low-risk tasks",
+                "    conditions:",
+                "      - risk_level: low",
+                "        match_type: exact",
+                "      - risk_level: medium",
+                "        match_type: exact",
+                "    effect: ALLOW",
+                "    priority: 40",
+                "",
+            ]
+        )
 
     # Add preview requirement for config changes
     if prefs.require_preview_for_configs:
-        lines.extend([
-            "  - id: preview-config-changes",
-            "    name: Show preview before config changes",
-            "    conditions:",
-            "      - path: /etc/*",
-            "        match_type: glob",
-            "    effect: REQUIRE_PREVIEW",
-            "    message: Review changes before applying",
-            "    priority: 45",
-            "",
-        ])
+        lines.extend(
+            [
+                "  - id: preview-config-changes",
+                "    name: Show preview before config changes",
+                "    conditions:",
+                "      - path: /etc/*",
+                "        match_type: glob",
+                "    effect: REQUIRE_PREVIEW",
+                "    message: Review changes before applying",
+                "    priority: 45",
+                "",
+            ]
+        )
 
     # Add stricter rules for cautious mode
     if prefs.safety_level == SafetyLevel.CAUTIOUS:
-        lines.extend([
-            "  - id: cautious-service-restart",
-            "    name: Confirm service restarts",
-            "    conditions:",
-            "      - command: systemctl restart*",
-            "        match_type: glob",
-            "    effect: REQUIRE_CONFIRMATION",
-            "    message: Restarting services may cause brief interruptions",
-            "    priority: 55",
-            "",
-            "  - id: cautious-package-install",
-            "    name: Confirm package installations",
-            "    conditions:",
-            "      - command: apt install*",
-            "        match_type: glob",
-            "    effect: REQUIRE_CONFIRMATION",
-            "    message: Review packages before installation",
-            "    priority: 55",
-            "",
-        ])
+        lines.extend(
+            [
+                "  - id: cautious-service-restart",
+                "    name: Confirm service restarts",
+                "    conditions:",
+                "      - command: systemctl restart*",
+                "        match_type: glob",
+                "    effect: REQUIRE_CONFIRMATION",
+                "    message: Restarting services may cause brief interruptions",
+                "    priority: 55",
+                "",
+                "  - id: cautious-package-install",
+                "    name: Confirm package installations",
+                "    conditions:",
+                "      - command: apt install*",
+                "        match_type: glob",
+                "    effect: REQUIRE_CONFIRMATION",
+                "    message: Review packages before installation",
+                "    priority: 55",
+                "",
+            ]
+        )
 
     return "\n".join(lines)
 
@@ -510,6 +519,7 @@ class SetupWizard:
 
         # Check Python version
         import sys
+
         py_version = f"{sys.version_info.major}.{sys.version_info.minor}"
         checks.append(f"{Icons.SUCCESS} Python {py_version}")
 
@@ -537,9 +547,7 @@ class SetupWizard:
         console.print()
 
         if not ollama_status["available"]:
-            print_warning(
-                "ELLE requires Ollama for AI features. Install it from ollama.ai"
-            )
+            print_warning("ELLE requires Ollama for AI features. Install it from ollama.ai")
             console.print()
             print_muted(
                 "You can continue setup, but AI features won't work until Ollama is installed."
@@ -600,9 +608,11 @@ class SetupWizard:
 
         default_level = self.prefs.safety_level.value
         while True:
-            choice = self.prompt.session.prompt(
-                f"Choose safety level [{default_level}]: "
-            ).strip().lower()
+            choice = (
+                self.prompt.session.prompt(f"Choose safety level [{default_level}]: ")
+                .strip()
+                .lower()
+            )
 
             if not choice:
                 choice = default_level
@@ -628,9 +638,11 @@ class SetupWizard:
 
         default_conf = self.prefs.confirmation_preference.value
         while True:
-            choice = self.prompt.session.prompt(
-                f"Choose confirmation preference [{default_conf}]: "
-            ).strip().lower()
+            choice = (
+                self.prompt.session.prompt(f"Choose confirmation preference [{default_conf}]: ")
+                .strip()
+                .lower()
+            )
 
             if not choice:
                 choice = default_conf
@@ -730,6 +742,16 @@ class SetupWizard:
         )
 
         console.print()
+
+        # Auto-learn packages
+        info = FEATURE_INFO["auto_learn_packages"]
+        console.print(f"  [dim]{info['description']}[/dim]")
+        self.prefs.auto_learn_packages = self.prompt.prompt_confirm(
+            f"Enable {info['name']}?",
+            default=self.prefs.auto_learn_packages,
+        )
+
+        console.print()
         return True
 
     def _configure_privileges(self) -> bool:
@@ -768,9 +790,11 @@ class SetupWizard:
 
         default_level = self.prefs.privilege_level.value
         while True:
-            choice = self.prompt.session.prompt(
-                f"Choose privilege level [{default_level}]: "
-            ).strip().lower()
+            choice = (
+                self.prompt.session.prompt(f"Choose privilege level [{default_level}]: ")
+                .strip()
+                .lower()
+            )
 
             if not choice:
                 choice = default_level
@@ -869,6 +893,8 @@ class SetupWizard:
             features_enabled.append("API")
         if self.prefs.gui_automation_enabled:
             features_enabled.append("GUI")
+        if self.prefs.auto_learn_packages:
+            features_enabled.append("Auto-Learn")
 
         summary_items.append(f"Features: {', '.join(features_enabled) or 'None'}")
 
@@ -910,9 +936,7 @@ class SetupWizard:
                 print_success(message)
             else:
                 print_warning(f"Polkit configuration failed: {message}")
-                print_muted(
-                    "You can retry later with: sudo elle configure-polkit"
-                )
+                print_muted("You can retry later with: sudo elle configure-polkit")
             # Re-save state with polkit_configured flag
             self.state.preferences = self.prefs
             save_setup_state(self.state)
@@ -937,15 +961,8 @@ class SetupWizard:
             console.print(tip("Install Ollama from ollama.ai to enable AI features"))
             console.print()
 
-        if (
-            self.prefs.privilege_level == PrivilegeLevel.CONVENIENT
-            and self.prefs.polkit_configured
-        ):
-            console.print(
-                tip(
-                    "Log out and back in for group-based authentication to take effect"
-                )
-            )
+        if self.prefs.privilege_level == PrivilegeLevel.CONVENIENT and self.prefs.polkit_configured:
+            console.print(tip("Log out and back in for group-based authentication to take effect"))
             console.print()
 
 

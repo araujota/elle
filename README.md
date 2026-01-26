@@ -33,8 +33,15 @@ A local-first, agentic system layer for Ubuntu 24.04 LTS that converts kernel-le
 - **WireGuard Config** - VPN tunnel configuration from natural language
 - **Network Diagnosis** - Connectivity testing, firewall explanation, lockdown suggestions
 
+### Capability Auto-Generation
+- **Package Learning** - `/learn <package>` generates typed capabilities from installed packages
+- **Multi-Source Intelligence** - Extracts from dpkg metadata, shell completions, man pages, systemd units
+- **Bootstrap on Install** - Core package capabilities generated automatically after ELLE installation
+- **Auto-Learn New Packages** - Automatically generates capabilities when new packages are installed
+- **Batch Learning** - `/learn --all` generates capabilities for all installed packages
+
 ### GUI Automation (AT-SPI)
-- **Application Learning** - `elle learn <appname>` captures UI structure via accessibility APIs
+- **Application Learning** - `/map <appname>` captures UI structure via accessibility APIs
 - **Natural Language Control** - "disable bluetooth in settings" executed as UI actions
 - **Self-Healing** - Automatically adapts when UI elements move or change names
 - **Recipe Storage** - Versioned UI "recipes" stored locally for reliable automation
@@ -333,13 +340,55 @@ elle > lock postgres to localhost only
 # Suggests ufw rules for service isolation
 ```
 
+### Package Capability Learning
+
+ELLE can automatically generate typed capabilities from installed packages:
+
+```bash
+# Learn a specific package
+elle > /learn ffmpeg
+Gathering intelligence for 'ffmpeg'...
+  Sources: dpkg, bash-completion, man pages
+  Extracted: 47 flags, 3 subcommands
+Generating capabilities...
+  Created: ffmpeg.convert, ffmpeg.probe, ffmpeg.stream
+Capabilities saved: 3 (pending approval)
+
+# Learn all installed packages (batch mode)
+elle > /learn --all --dry-run
+Would learn 127 packages (out of 1,432 total installed)
+  - ffmpeg, nginx, docker.io, systemctl...
+
+elle > /learn --all
+Learning all 127 packages...
+  Complete! 119 succeeded, 8 failed
+  Capabilities generated: 342
+
+# List packages with capabilities
+elle > /learn list
+Packages with generated capabilities:
+  ffmpeg     (3 caps, 2 approved)
+  nginx      (5 caps, 5 approved)
+  docker.io  (12 caps, 10 approved)
+
+# Approve a capability for use
+elle > /learn approve ffmpeg.convert
+```
+
+**Auto-learning:** When enabled (default), ELLE automatically generates capabilities for newly installed packages. Configure in setup wizard or `~/.config/elle/elle.toml`:
+
+```toml
+[daemon]
+auto_learn_new_packages = true  # Default: enabled
+```
+
 ### GUI Automation
 
 Control desktop applications using natural language:
 
 ```bash
-# Learn an application's UI structure
-elle > /learn gnome-control-center
+# Learn an application's UI structure (renamed to /map)
+elle > /map gnome-control-center
 Learning 'gnome-control-center'...
   Elements: 127
   Navigation targets: 23
@@ -355,13 +404,13 @@ Execute? [y/n]: y
 ✓ Bluetooth disabled
 
 # List learned applications
-elle > /learn list
+elle > /map list
 Learned applications:
   gnome-control-center  v1 (100% conf, 5/5 success)
   nautilus              v2 (95% conf, 18/19 success)
 
 # Show recipe details
-elle > /learn show gnome-control-center
+elle > /map show gnome-control-center
 ```
 
 **Note:** GUI automation requires AT-SPI accessibility to be enabled:
@@ -400,6 +449,7 @@ User ──▶ elle (terminal / CLI)
          ├─▶ Incident Vault (decision memory + prior art)
          ├─▶ Config Generator (natural language → config)
          ├─▶ Capabilities (typed operations with policy)
+         ├─▶ Capability Auto-Generator (package → capabilities)
          ├─▶ Reactive Engine (event-driven automations)
          ├─▶ Policy Engine (rule-based access control)
          ├─▶ GUI Automation (AT-SPI application control)
@@ -409,9 +459,11 @@ User ──▶ elle (terminal / CLI)
                 ├─▶ Docker Watcher (container state)
                 ├─▶ Inotify Watcher (file changes)
                 ├─▶ Port Probe (network ports)
+                ├─▶ Package Probe (new installs + upgrades)
                 ├─▶ eBPF Probes (OOM, I/O, network, thermal)
                 ├─▶ Periodic Probes (SMART, sensors, df)
                 ├─▶ Reactive Scheduler (cron triggers)
+                ├─▶ Capability Bootstrap (first-run learning)
                 ├─▶ Reboot Manager (GRUB, verification)
                 └─▶ Notifications (ntfy)
 ```
@@ -563,10 +615,12 @@ Every natural language message follows this flow through ELLE's processing pipel
 | Incident Vault | Decision memory storing incidents and outcomes |
 | Config Generator | LLM-driven config from natural language |
 | Capabilities | Typed system operations with risk levels and side effects |
+| Capability Auto-Gen | Generate capabilities from packages via multi-source intelligence |
 | Policy Engine | Rule-based access control for capabilities |
 | Reactive Engine | Event-driven automation execution |
 | Augeas Controller | Safe config editing with preview/rollback |
-| GUI Automation | AT-SPI application control with self-healing |
+| GUI Automation | AT-SPI application control with self-healing (`/map` command) |
+| Package Probe | Monitor package installs/upgrades, trigger auto-learning |
 | eBPF Watcher | Kernel-level telemetry probes |
 | Reboot Manager | GRUB/kernel management with verification |
 

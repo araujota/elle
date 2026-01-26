@@ -221,6 +221,7 @@ class ValidationStage(str, Enum):
     DRY_RUN = "dry_run"  # Test dry_run() method
     SANDBOX = "sandbox"  # Run in isolated environment
     TRUST_ASSIGN = "trust_assign"  # Assign trust level
+    PACKAGE_COHERENCE = "package_coherence"  # Verify against PackageIntelligence
 
 
 class ValidationResult(BaseModel, frozen=True):
@@ -263,6 +264,20 @@ class StoredCapability(BaseModel, frozen=True):
     trust_level: TrustLevel = Field(TrustLevel.THIRD_PARTY)
     approved: bool = Field(False, description="Whether approved for use")
     enabled: bool = Field(True, description="Whether enabled")
+
+    # Package versioning (copied from InstalledBinary during save)
+    source_package: str | None = Field(
+        default=None,
+        description="dpkg package name providing the source binary",
+    )
+    package_version: str | None = Field(
+        default=None,
+        description="Package version at capability generation time",
+    )
+    binary_path: str | None = Field(
+        default=None,
+        description="Full path to source binary",
+    )
 
 
 # Well-known core commands that get CORE trust level

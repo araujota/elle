@@ -295,6 +295,98 @@ When working with systemd services:
 
 
 # =============================================================================
+# Package Capability Generation Segment
+# =============================================================================
+
+PACKAGE_CAPABILITY_GENERATION_SEGMENT = PromptSegment(
+    id="package_capability_generation",
+    intent="learn_package",
+    priority=100,
+    content='''## Package Capability Generation
+
+You are generating capabilities for a package based on extracted intelligence.
+Output MUST be valid JSON matching this exact schema - no other text:
+
+{
+  "capabilities": [
+    {
+      "name": "command.action",
+      "display_name": "Human Readable Name",
+      "description": "What this capability does in one sentence",
+      "domain": "service|file|config|network|package|docker|auth|media|text|system",
+      "risk_level": "none|low|medium|high|critical",
+      "side_effects": ["file_write", "network_access", "process_spawn", "config_change", "service_restart"],
+      "input_fields": [
+        {
+          "name": "field_name",
+          "field_type": "str|int|bool|Path|list[str]",
+          "description": "Field description",
+          "required": true,
+          "default": null
+        }
+      ],
+      "output_fields": [
+        {
+          "name": "result",
+          "field_type": "str",
+          "description": "Output description"
+        }
+      ],
+      "command_template": "command --flag {input_field} {another_field}",
+      "verify_command": "optional verification command",
+      "rollback_command": "optional rollback command",
+      "source_command": "original_command",
+      "confidence_score": 0.95
+    }
+  ],
+  "package_summary": "Brief summary of the package purpose",
+  "recommended_capabilities": ["list", "of", "capability.names", "for", "common", "use", "cases"]
+}
+
+### Rules
+
+1. **One capability per distinct operation** - Don't combine unrelated operations
+2. **Risk assessment**:
+   - `none`: Read-only operations (list, show, status)
+   - `low`: Local file operations in user space
+   - `medium`: Configuration changes, network access
+   - `high`: Service operations, system-wide changes
+   - `critical`: Destructive operations, security-sensitive
+3. **Include ALL side effects** - Be exhaustive about what the capability does
+4. **Command templates use {input_name} placeholders** - Match input_fields exactly
+5. **Verify commands** - Include where possible to check operation success
+6. **Rollback commands** - Include for reversible operations
+7. **Confidence scores**: 0.9+ for well-documented flags, 0.7-0.9 for inferred, <0.7 for uncertain
+
+### Capability Naming
+
+Use `package.action` or `package.subcommand.action` format:
+- `ffmpeg.convert` - Convert media files
+- `ffmpeg.extract_audio` - Extract audio track
+- `docker.container.run` - Run a container
+- `systemctl.restart` - Restart a service
+
+### Input Field Types
+
+- `str`: String input
+- `int`: Integer
+- `bool`: Boolean flag
+- `Path`: File or directory path
+- `list[str]`: Multiple string values
+- `Literal["opt1", "opt2"]`: Constrained choices
+
+### Focus Areas
+
+Generate capabilities for:
+1. **Common operations** - What users do most often
+2. **Safe operations first** - Prefer read-only/reversible
+3. **Well-documented flags** - Only use flags from the intelligence
+4. **Composable operations** - Can be chained by the planner
+''',
+)
+
+
+# =============================================================================
 # GUI Automation Segment
 # =============================================================================
 
@@ -387,4 +479,5 @@ DEFAULT_SEGMENTS: tuple[PromptSegment, ...] = (
     WIREGUARD_SEGMENT,
     SERVICE_MANAGEMENT_SEGMENT,
     GUI_AUTOMATION_SEGMENT,
+    PACKAGE_CAPABILITY_GENERATION_SEGMENT,
 )

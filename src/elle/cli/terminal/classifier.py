@@ -80,7 +80,8 @@ PREFIX_COMMANDS = {
     "/fix": Intent.FIXIT,
     "/sh": Intent.SHELL_PASSTHROUGH,
     "/run": Intent.SHELL_PASSTHROUGH,
-    "/learn": Intent.NAVIGATION,  # GUI learning command
+    "/map": Intent.NAVIGATION,  # GUI mapping/tree trace command (renamed from /learn)
+    "/learn": Intent.LEARN_PACKAGE,  # Package capability learning
     "/trace": Intent.SHELL_PASSTHROUGH,  # Execute with syscall tracing
     "/explain": Intent.EXPLAIN_COMMAND,  # Explain last traced command
     "/preflight": Intent.NAVIGATION,  # Pre-flight package validation
@@ -278,6 +279,22 @@ GUI_TASK_PATTERNS = [
 _COMPILED_GUI_PATTERNS = [(re.compile(p, re.IGNORECASE), i, c) for p, i, c in GUI_TASK_PATTERNS]
 
 
+# Package learning patterns (learn_package)
+PACKAGE_LEARN_PATTERNS = [
+    # Explicit learning requests
+    (r"^(?:learn|figure\s+out|understand)\s+(?:how\s+to\s+(?:use|work\s+with)\s+)?(\w[\w\-\.]+)$", "learn_package", 0.92),
+    (r"^(?:what\s+can|how\s+do\s+I\s+use)\s+(\w[\w\-\.]+)", "learn_package", 0.88),
+    (r"^teach\s+me\s+(?:about\s+)?(\w[\w\-\.]+)$", "learn_package", 0.90),
+    # Discovery requests
+    (r"^(?:discover|explore)\s+(?:the\s+)?(?:capabilities?\s+(?:of\s+)?)?(\w[\w\-\.]+)$", "learn_package", 0.88),
+    (r"^(?:what\s+(?:does|can))\s+(\w[\w\-\.]+)\s+do\??$", "learn_package", 0.85),
+    # Generate capabilities
+    (r"^generate\s+(?:capabilities?\s+(?:for|from)\s+)?(\w[\w\-\.]+)$", "learn_package", 0.90),
+]
+
+_COMPILED_PACKAGE_LEARN_PATTERNS = [(re.compile(p, re.IGNORECASE), i, c) for p, i, c in PACKAGE_LEARN_PATTERNS]
+
+
 # =============================================================================
 # SLM Prompt Template
 # =============================================================================
@@ -295,13 +312,14 @@ Return ONLY valid JSON matching this exact schema - no other text:
 
 INTENTS (use exactly these values):
 - "meta": help, exit, config, about, clear, version
-- "navigation": status, events, logs, man pages, searching docs
+- "navigation": status, events, logs, man pages, searching docs, /map (GUI mapping)
 - "fixit": user wants to fix a failed command or understand an error
 - "system_question": user asks why/how/what about system state (not a command)
 - "system_task": user requests a system change in natural language
 - "shell_passthrough": user is entering a shell command to execute directly
 - "gui_task": user wants to interact with a GUI application (click, toggle, enable/disable in settings)
 - "explain_command": user wants to understand what a command did (what did that do, explain)
+- "learn_package": user wants to learn about a package/binary, discover its capabilities, understand how to use it
 
 RULES:
 - Known keyword (help, exit, status) -> meta/navigation, confidence >= 0.9
@@ -311,8 +329,9 @@ RULES:
 - GUI interaction (click X in app, toggle Y in settings) -> gui_task
 - Mentions previous failure or error -> fixit
 - "what did that do", "explain", "what happened" -> explain_command
+- "learn ffmpeg", "figure out how to use X", "teach me about X" -> learn_package
 - Keep rationale to ONE short sentence
-- entities: extract command names, file paths, service names, port numbers, app names
+- entities: extract command names, file paths, service names, port numbers, app names, package names
 - If confidence < 0.55, set requires_clarification to true"""
 
 
@@ -609,6 +628,22 @@ class IntentClassifier:
                     confidence=confidence,
                     rationale="GUI automation task detected",
                     entities=["gui"],
+                    classified_by="rule",
+                )
+
+        # Package learning patterns (high confidence)
+        for pattern, intent_str, confidence in _COMPILED_PACKAGE_LEARN_PATTERNS:
+            match = pattern.search(text)
+            if match:
+                intent = Intent.from_label(intent_str)
+                # Extract the package name from the match
+                package_name = match.group(1) if match.groups() else None
+                entities = [package_name] if package_name else []
+                return IntentResult(
+                    intent=intent,
+                    confidence=confidence,
+                    rationale="Package learning request detected",
+                    entities=entities,
                     classified_by="rule",
                 )
 

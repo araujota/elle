@@ -87,6 +87,7 @@ from elle.capabilities.autogen.validator import (
     validate_capability,
     validate_dry_run,
     validate_flags,
+    validate_package_coherence,
     validate_sandbox,
 )
 
@@ -163,6 +164,9 @@ async def generate_and_save(
     Returns:
         Capability ID or None on failure.
     """
+    # Discover binary for package info
+    binary = discover_binary(command)
+
     # Parse man page
     man_page = parse_man_page(command)
     if not man_page:
@@ -179,7 +183,7 @@ async def generate_and_save(
     # Generate code
     input_code, output_code, cap_code = create_capability_from_spec(spec)
 
-    # Save
+    # Save with package versioning info
     store = get_store()
     cap_id = store.save(
         spec=spec,
@@ -189,11 +193,24 @@ async def generate_and_save(
         man_page_text=man_page.raw_text,
         trust_level=validation.trust_level,
         validation_json=validation.model_dump_json(),
+        source_package=binary.package if binary else None,
+        package_version=binary.version if binary else None,
+        binary_path=binary.path if binary else None,
     )
 
     # Auto-approve core commands
     if auto_approve_core and validation.trust_level == TrustLevel.CORE:
         store.approve(spec.name)
+
+    # Update versioner if available
+    if binary and binary.package:
+        try:
+            from elle.capabilities.autogen.versioner import get_versioner
+
+            versioner = get_versioner()
+            versioner.add_capability_mapping(binary.package, spec.name)
+        except Exception:
+            pass  # Versioner not initialized yet
 
     return cap_id
 
@@ -342,6 +359,7 @@ __all__ = [
     "validate_flags",
     "validate_dry_run",
     "validate_sandbox",
+    "validate_package_coherence",
     "assign_trust_level",
     "ValidationResult",
     "ValidationStage",

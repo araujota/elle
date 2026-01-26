@@ -70,6 +70,10 @@ class ElledDaemon:
         self._inotify_watcher: InotifyWatcher | None = None
         self._port_probe: PortListenerProbe | None = None
 
+        # Package versioning components
+        self._package_probe: Any = None
+        self._capability_versioner: Any = None
+
         # State cache for CLI queries
         self._state_cache: StateCache | None = None
 
@@ -144,15 +148,9 @@ class ElledDaemon:
             started_at=self.started_at or datetime.now(UTC),
             uptime_sec=self.uptime_sec,
             pid=os.getpid(),
-            journal_active=bool(
-                self._journal_watcher and self._journal_watcher.running
-            ),
-            kernel_active=bool(
-                self._kernel_watcher and self._kernel_watcher.running
-            ),
-            probes_active=bool(
-                self._probe_runner and self._probe_runner.running
-            ),
+            journal_active=bool(self._journal_watcher and self._journal_watcher.running),
+            kernel_active=bool(self._kernel_watcher and self._kernel_watcher.running),
+            probes_active=bool(self._probe_runner and self._probe_runner.running),
             api_active=self.config.api.enabled,
             raw_queue=raw_stats,
             event_queue=event_stats,
@@ -282,6 +280,10 @@ class ElledDaemon:
                 )
             )
 
+        # Start capability versioning (package probe + versioner)
+        if self.config.capability_versioning_enabled:
+            await self._start_capability_versioning()
+
         # Start state cache for CLI state queries
         self._state_cache = StateCache(
             docker_refresh_sec=30,
@@ -299,6 +301,15 @@ class ElledDaemon:
             logger.info("Man Vault service started")
         except Exception as e:
             logger.warning(f"Failed to start Man Vault service: {e}")
+
+        # Schedule capability bootstrap in background (after other services ready)
+        if self.config.capability_bootstrap_enabled:
+            self._tasks.append(
+                asyncio.create_task(
+                    self._run_capability_bootstrap(),
+                    name="capability_bootstrap",
+                )
+            )
 
         # Start normalizer task
         self._tasks.append(
@@ -334,6 +345,7 @@ class ElledDaemon:
             f"docker={self.config.docker_enabled}, "
             f"inotify={self.config.inotify_enabled}, "
             f"port_probe={self.config.port_probe_enabled}, "
+            f"capability_versioning={self.config.capability_versioning_enabled}, "
             f"api={self.config.api.enabled})"
         )
 
@@ -369,6 +381,9 @@ class ElledDaemon:
             await self._inotify_watcher.stop()
         if self._port_probe:
             await self._port_probe.stop()
+        if self._package_probe:
+            # Package probe uses ProbeRunner pattern, no explicit stop needed
+            pass
         if self._state_cache:
             await self._state_cache.stop()
         if self._manvault_service:
@@ -382,10 +397,7 @@ class ElledDaemon:
         # Stop notification service
         await self._stop_notification_service()
 
-        logger.info(
-            f"elled stopped (uptime: {self.uptime_sec}s, "
-            f"events: {self._events_total})"
-        )
+        logger.info(f"elled stopped (uptime: {self.uptime_sec}s, events: {self._events_total})")
 
     async def run(self) -> None:
         """Run the daemon until shutdown."""
@@ -620,6 +632,15 @@ class ElledDaemon:
                 except Exception as e:
                     logger.error(f"Failed to route events: {e}")
 
+                # Handle package upgrade events for capability versioning
+                if self.config.capability_versioning_enabled:
+                    for event in events:
+                        if event.category == "pkg":
+                            try:
+                                await self._handle_package_event(event)
+                            except Exception as e:
+                                logger.debug(f"Failed to handle package event: {e}")
+
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -722,11 +743,196 @@ class ElledDaemon:
         except Exception as e:
             logger.debug(f"Failed to send incident notification: {e}")
 
+    async def _run_capability_bootstrap(self) -> None:
+        """Run capability bootstrap for core packages if needed.
+
+        Runs in the background after daemon startup. Only runs if:
+        - Bootstrap hasn't completed yet, or
+        - ELLE version changed since last run
+
+        This generates capabilities for core system packages and
+        ELLE dependencies so they're available out-of-box.
+        """
+        # Wait a bit for other services to stabilize
+        await asyncio.sleep(10)
+
+        try:
+            from elle.capabilities.autogen.bootstrap import (
+                run_bootstrap,
+                set_bootstrap_complete,
+                should_run_bootstrap,
+            )
+
+            if not should_run_bootstrap():
+                logger.debug("Capability bootstrap already complete")
+                return
+
+            logger.info("Starting capability bootstrap for core packages...")
+
+            def log_progress(current: int, total: int, pkg_name: str) -> None:
+                if current % 5 == 0 or current == total:
+                    logger.info(f"Bootstrap: {current}/{total} - {pkg_name}")
+
+            result = await run_bootstrap(
+                include_core=True,
+                include_optional=True,
+                include_dependencies=True,
+                skip_existing=True,
+                progress_callback=log_progress,
+            )
+
+            set_bootstrap_complete(result)
+
+            logger.info(
+                f"Capability bootstrap complete: "
+                f"{result.packages_succeeded}/{result.packages_attempted} packages, "
+                f"{result.capabilities_saved} capabilities saved "
+                f"({result.duration_seconds:.1f}s)"
+            )
+
+            if result.failed_packages:
+                logger.warning(f"Bootstrap: {len(result.failed_packages)} packages failed")
+
+        except ImportError as e:
+            logger.debug(f"Capability bootstrap not available: {e}")
+        except asyncio.CancelledError:
+            logger.debug("Capability bootstrap cancelled")
+        except Exception as e:
+            logger.error(f"Capability bootstrap failed: {e}")
+
+    async def _start_capability_versioning(self) -> None:
+        """Initialize capability versioning components.
+
+        Sets up the package probe and capability versioner to detect
+        package upgrades and regenerate affected capabilities.
+        Also enables auto-learning for newly installed packages if configured.
+        """
+        try:
+            from elle.capabilities.autogen.store import get_store
+            from elle.capabilities.autogen.versioner import CapabilityVersioner
+            from elle.daemon.telemetry.package_probe import PackageProbe
+
+            store = get_store()
+
+            # Create versioner and build package map
+            self._capability_versioner = CapabilityVersioner(store)
+            package_map = self._capability_versioner.build_package_map()
+
+            # Create package probe
+            detect_new = self.config.auto_learn_new_packages
+            self._package_probe = PackageProbe(detect_new_packages=detect_new)
+            self._package_probe.interval = self.config.package_probe_interval
+
+            # Set watched packages for version tracking
+            if package_map:
+                self._package_probe.set_watched_packages(
+                    self._capability_versioner.get_watched_packages()
+                )
+
+            # Set callback for auto-learning new packages
+            if detect_new:
+                self._package_probe.set_new_package_callback(self._on_new_package_installed)
+
+            # Add to probe runner if available
+            if self._probe_runner:
+                self._probe_runner.add_probe(self._package_probe)
+                logger.info(
+                    f"Capability versioning enabled: monitoring {len(package_map)} packages"
+                    + (", auto-learning new packages" if detect_new else "")
+                )
+            else:
+                logger.warning("Probe runner not available, capability versioning disabled")
+
+        except ImportError as e:
+            logger.debug(f"Capability versioning not available: {e}")
+        except Exception as e:
+            logger.warning(f"Failed to start capability versioning: {e}")
+
+    def _on_new_package_installed(self, package_name: str, version: str) -> None:
+        """Callback when a new package is installed.
+
+        Schedules background capability learning for the new package.
+
+        Args:
+            package_name: Name of the newly installed package.
+            version: Version of the package.
+        """
+        logger.info(f"New package detected: {package_name} {version}")
+
+        # Schedule learning in background (don't block the probe)
+        asyncio.create_task(
+            self._auto_learn_package(package_name, version),
+            name=f"auto_learn_{package_name}",
+        )
+
+    async def _auto_learn_package(self, package_name: str, version: str) -> None:
+        """Auto-learn capabilities for a newly installed package.
+
+        Args:
+            package_name: Package name.
+            version: Package version.
+        """
+        try:
+            # Import here to avoid circular dependencies
+            from elle.cli.package_learn_commands import _learn_package
+
+            logger.info(f"Auto-learning package: {package_name}")
+
+            result = await _learn_package(
+                package_name,
+                force_refresh=False,
+                dry_run=False,
+            )
+
+            if result.capabilities_saved > 0:
+                logger.info(
+                    f"Auto-learned {package_name}: {result.capabilities_saved} capabilities saved"
+                )
+
+                # Add to versioner's watch list
+                if self._capability_versioner and self._package_probe:
+                    self._capability_versioner.add_capability_mapping(package_name, package_name)
+                    self._package_probe.add_watched_package(package_name)
+
+            elif result.errors:
+                logger.warning(f"Auto-learn {package_name} failed: {result.errors[0]}")
+            else:
+                logger.debug(f"Auto-learn {package_name}: no capabilities generated")
+
+        except Exception as e:
+            logger.warning(f"Failed to auto-learn {package_name}: {e}")
+
+    async def _handle_package_event(self, event: TelemetryEvent) -> None:
+        """Handle package upgrade events from the package probe.
+
+        Triggers capability regeneration when watched packages are upgraded.
+
+        Args:
+            event: TelemetryEvent with category="pkg".
+        """
+        if not self._capability_versioner:
+            return
+
+        raw = event.raw
+        pkg = raw.get("package_name")
+        old_ver = raw.get("old_version")
+        new_ver = raw.get("new_version")
+
+        if not pkg or not new_ver:
+            return
+
+        try:
+            regenerated = await self._capability_versioner.on_package_upgraded(
+                pkg, old_ver, new_ver
+            )
+            if regenerated:
+                logger.info(f"Regenerated {len(regenerated)} capabilities for {pkg}: {regenerated}")
+        except Exception as e:
+            logger.error(f"Failed to handle package upgrade for {pkg}: {e}")
+
     async def _run_api(self) -> None:
         """Run the FastAPI server."""
-        logger.info(
-            f"Starting API server on {self.config.api.host}:{self.config.api.port}"
-        )
+        logger.info(f"Starting API server on {self.config.api.host}:{self.config.api.port}")
 
         try:
             # Import here to make fastapi optional
@@ -809,12 +1015,14 @@ def main() -> int:
         description="ELLE Daemon - Local System Intelligence",
     )
     parser.add_argument(
-        "-c", "--config",
+        "-c",
+        "--config",
         type=Path,
         help="Configuration file path",
     )
     parser.add_argument(
-        "-l", "--log-level",
+        "-l",
+        "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         default="INFO",
         help="Log level",

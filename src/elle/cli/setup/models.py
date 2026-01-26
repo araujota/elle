@@ -54,6 +54,9 @@ class SetupPreferences(BaseModel):
     gui_automation_enabled: bool = False  # AT-SPI requires additional setup
     api_enabled: bool = True
 
+    # Capability learning
+    auto_learn_packages: bool = True  # Auto-generate caps for newly installed packages
+
     # Privilege configuration
     privilege_level: PrivilegeLevel = PrivilegeLevel.SECURE
     polkit_configured: bool = False
@@ -158,6 +161,15 @@ FEATURE_INFO = {
         "description": (
             "OpenAI-compatible API endpoint for external integrations. "
             "Bound to localhost by default."
+        ),
+        "default": True,
+    },
+    "auto_learn_packages": {
+        "name": "Auto-Learn Packages",
+        "description": (
+            "Automatically generate capabilities when new packages are "
+            "installed. ELLE will monitor for package changes and learn "
+            "them in the background."
         ),
         "default": True,
     },

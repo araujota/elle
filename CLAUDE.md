@@ -33,12 +33,15 @@ src/elle/
     docker/                # Container diagnostics, compose conversion, env detection
     network/               # Connectivity diagnosis, firewall explanation
     reactive_commands.py   # /react REPL commands
-    learn_commands.py      # /learn REPL commands for GUI automation
+    map_commands.py        # /map REPL commands for GUI automation (renamed from learn)
+    package_learn_commands.py  # /learn REPL commands for package capability generation
+    setup/                 # Setup wizard (models.py, wizard.py)
   daemon/
     telemetry/             # Journal/kernel watchers, probes, eBPF
       docker_watcher.py    # Container state change monitoring
       inotify_watcher.py   # File system change monitoring
       port_probe.py        # Network port status monitoring
+      package_probe.py     # Package install/upgrade detection, auto-learning trigger
     manvault/              # Man page indexing, search, embeddings
     incidents/             # Incident reports, snapshots, semantic_diff
     notifications/         # ntfy alerts
@@ -65,6 +68,21 @@ src/elle/
     executor.py            # UI action execution with incident integration
   capabilities/            # Typed operations with policy enforcement
     core/gui.py            # GUI capabilities (gui.learn, gui.click, gui.type, etc.)
+    autogen/               # Capability auto-generation from packages
+      __init__.py          # High-level API (generate_and_save, load_capabilities)
+      discovery.py         # Binary and package discovery
+      parser.py            # Man page parsing
+      generator.py         # LLM-based capability spec generation
+      factory.py           # Code generation for capability classes
+      validator.py         # Validation stages including package coherence
+      store.py             # SQLite storage for generated capabilities
+      loader.py            # Load and register capabilities at runtime
+      versioner.py         # Package version tracking, capability regeneration
+      bootstrap.py         # Core package capability generation on first run
+      intelligence/        # Multi-source intelligence extraction
+        models.py          # PackageIntelligence, ExtractedFlag, etc.
+        extractors.py      # dpkg, bash/zsh completion, man, systemd extractors
+        aggregator.py      # Combine sources with token budget
   policy/                  # Rule-based access control engine
   reactive/                # Event-driven automation system
   security/                # Polkit integration
@@ -212,13 +230,14 @@ Every input classified into exactly one intent before execution:
 | `system_question` | Explanation/diagnosis request |
 | `system_task` | Requested system change |
 | `gui_task` | GUI automation request (AT-SPI) |
+| `learn_package` | Package capability learning (`/learn`, "figure out how to use ffmpeg") |
 | `fixit` | Repair a failed command |
-| `navigation` | `status`, `events`, `logs`, `/learn` |
+| `navigation` | `status`, `events`, `logs`, `/map` |
 | `meta` | `help`, `exit`, `config` |
 
 **Classification precedence:**
 1. Hard keyword routes (exact matches)
-2. Prefix commands (`/ask`, `/do`, `/sh`, `/fix`, `!`)
+2. Prefix commands (`/ask`, `/do`, `/sh`, `/fix`, `/learn`, `/map`, `!`)
 3. Pattern matching (regex)
 4. SLM classification (Ollama fallback)
 5. Safety overrides (reduce confidence for dangerous commands)
@@ -287,6 +306,8 @@ class CapabilitySpec(BaseModel):
 - Reactive Functions: `/var/lib/elle/reactive.db`
 - Policy Rules: `/var/lib/elle/policy.db`
 - UI Recipes: `/var/lib/elle/recipes.db`
+- Generated Capabilities: `/var/lib/elle/autogen.db`
+- Bootstrap State: `/var/lib/elle/bootstrap_state.json`
 - Docker Env Store: `/var/lib/elle/docker_env.db`
 - Config backups: `/var/lib/elle/backups/<domain>/<timestamp>/`
 
@@ -361,6 +382,125 @@ Typed, policy-governed operations replacing raw shell commands.
 
 **Pattern:** Capabilities are registered in `CapabilityRegistry`, executed via `CapabilityExecutor` which enforces policy.
 
+## Capability Auto-Generation (`capabilities/autogen/`)
+
+Automatic capability generation from installed packages using multi-source intelligence extraction.
+
+### Architecture
+
+```
+/learn <package>
+        │
+        ▼
+┌─────────────────────┐
+│ PackageIntelligence │  ← Multi-source extraction
+│     Aggregator      │
+└─────────────────────┘
+        │
+┌───────┴───────────────────────────┐
+│       │       │       │           │
+▼       ▼       ▼       ▼           ▼
+dpkg  bash/zsh  man    systemd    --help
+meta  completions page  units     output
+        │
+        ▼
+┌─────────────────────┐
+│  LLM Generation     │  ← PACKAGE_CAPABILITY_GENERATION_SEGMENT
+│  (with schema)      │
+└─────────────────────┘
+        │
+        ▼
+┌─────────────────────┐
+│  Validator          │  ← Includes PACKAGE_COHERENCE stage
+└─────────────────────┘
+        │
+        ▼
+┌─────────────────────┐
+│  AutogenStore       │  ← SQLite with approval workflow
+└─────────────────────┘
+```
+
+### Extractors (by priority)
+
+| Extractor | Priority | Source | Signal Quality |
+|-----------|----------|--------|----------------|
+| DpkgMetadataExtractor | 10 | dpkg-query | Metadata |
+| FileManifestExtractor | 20 | dpkg -L | File paths |
+| BashCompletionExtractor | 30 | /usr/share/bash-completion | HIGH |
+| ZshCompletionExtractor | 31 | /usr/share/zsh/vendor-completions | HIGH |
+| ManPageExtractor | 40 | Existing parser | Medium |
+| SystemdUnitExtractor | 50 | /lib/systemd/** | Medium |
+| HelpOutputExtractor | 70 | --help fallback | Low |
+
+### Key Models
+
+```python
+class ExtractedFlag(BaseModel):
+    flag: str                    # e.g., "-v", "--verbose"
+    long_form: str | None
+    description: str
+    takes_value: bool
+    value_type: str | None       # "file", "int", "string"
+    source: str                  # "man", "completion", "help"
+    confidence: float
+
+class PackageIntelligence(BaseModel):
+    package_name: str
+    metadata: PackageMetadata
+    manifest: FileManifest
+    all_flags: tuple[ExtractedFlag, ...]
+    subcommands: tuple[ExtractedSubcommand, ...]
+    completions: ShellCompletions | None
+    systemd_units: tuple[SystemdUnitInfo, ...]
+    extraction_sources: tuple[str, ...]
+    token_estimate: int
+```
+
+### Validation Stages
+
+`ValidationStage` enum includes:
+- `FLAGS` - Verify flags exist in man page
+- `DRY_RUN` - Test --dry-run/--check options
+- `SANDBOX` - Test in restricted environment
+- `PACKAGE_COHERENCE` - Validate against PackageIntelligence
+
+### Bootstrap & Auto-Learning
+
+**Bootstrap:** On daemon startup, if `capability_bootstrap_enabled` (default: True):
+- Runs once per ELLE version
+- Generates capabilities for ~30 core + ~25 optional packages
+- State stored in `/var/lib/elle/bootstrap_state.json`
+
+**Auto-Learn:** When `auto_learn_new_packages` (default: True):
+- PackageProbe detects new package installations
+- Triggers `_auto_learn_package()` callback
+- Runs learning in background without blocking
+
+### REPL Commands
+
+```bash
+/learn <package>        # Learn specific package
+/learn --all            # Learn ALL installed packages
+/learn --all --dry-run  # Preview what would be learned
+/learn list             # List packages with capabilities
+/learn show <package>   # Show capabilities for package
+/learn approve <name>   # Approve capability for use
+/learn bootstrap        # Run core package bootstrap
+/learn status           # Show bootstrap status
+```
+
+### Configuration
+
+```toml
+[daemon]
+capability_versioning_enabled = true   # Regenerate on package upgrade
+package_probe_interval = 300           # 5 minutes
+capability_bootstrap_enabled = true    # Bootstrap on first run
+auto_learn_new_packages = true         # Auto-learn new installs
+```
+
+Environment variables: `ELLE_CAPABILITY_VERSIONING_ENABLED`, `ELLE_AUTO_LEARN_NEW_PACKAGES`
+
 ## Policy Engine (`policy/`)
 
 Rule-based access control for capability execution.
@@ -414,7 +554,9 @@ GUI automation via Linux accessibility APIs (AT-SPI2).
 5. `role_search` - Find by role and partial name (0.75 confidence)
 6. `tree_search` - Full tree traversal (0.65 confidence)
 
-**REPL commands:** `/learn <app>`, `/learn list`, `/learn show <app>`, `/learn rebuild <app>`, `/learn delete <app>`
+**REPL commands:** `/map <app>`, `/map list`, `/map show <app>`, `/map rebuild <app>`, `/map delete <app>`
+
+**Note:** GUI learning was renamed from `/learn` to `/map`. The `/learn` command is now used for package capability generation.
 
 **GUI task patterns** (in classifier):
 - `(?:open|launch|start)\s+(\w+)\s+and\s+(.+)` → gui_task
@@ -432,6 +574,7 @@ Intent-specific prompt augmentation system.
 **Default segments:**
 - `reactive_function` - Reactive function creation guidance
 - `capability_discovery` - Capability system explanation
+- `package_capability_generation` - Package capability generation with strict JSON schema
 - `config_generation` - Config editing guidelines
 - `docker_operations` - Docker best practices
 - `fixit` - Command repair guidance

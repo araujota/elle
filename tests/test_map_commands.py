@@ -1,10 +1,13 @@
-"""Tests for /learn REPL commands."""
+"""Tests for /map REPL commands (GUI tree traces).
+
+Renamed from test_learn_commands.py as part of the /learn -> /map rename.
+"""
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from elle.cli.learn_commands import (
-    handle_learn_command,
+from elle.cli.map_commands import (
+    handle_map_command,
     _get_help,
     _handle_list,
     _handle_show,
@@ -12,14 +15,14 @@ from elle.cli.learn_commands import (
 )
 
 
-class TestLearnCommandHelp:
-    """Tests for /learn help."""
+class TestMapCommandHelp:
+    """Tests for /map help."""
 
     def test_get_help(self):
         """Test help text generation."""
         help_text = _get_help()
 
-        assert "/learn" in help_text
+        assert "/map" in help_text
         assert "Usage:" in help_text
         assert "Examples:" in help_text
         assert "gnome-control-center" in help_text
@@ -27,33 +30,33 @@ class TestLearnCommandHelp:
     @pytest.mark.asyncio
     async def test_empty_args_returns_help(self):
         """Test that empty args returns help."""
-        result = await handle_learn_command("")
+        result = await handle_map_command("")
 
-        assert "/learn" in result
+        assert "/map" in result
         assert "Usage:" in result
 
 
-class TestLearnCommandRouting:
+class TestMapCommandRouting:
     """Tests for command routing."""
 
     @pytest.mark.asyncio
     async def test_help_subcommand(self):
-        """Test /learn help subcommand."""
-        result = await handle_learn_command("help")
+        """Test /map help subcommand."""
+        result = await handle_map_command("help")
 
         assert "Usage:" in result
 
     @pytest.mark.asyncio
     async def test_list_subcommand_empty(self):
-        """Test /learn list with no recipes."""
+        """Test /map list with no recipes."""
         with patch("elle.atspi.list_recipes", return_value=[]):
             result = await _handle_list("")
 
-            assert "No learned applications" in result
+            assert "No mapped applications" in result
 
     @pytest.mark.asyncio
     async def test_list_subcommand_with_recipes(self):
-        """Test /learn list with recipes."""
+        """Test /map list with recipes."""
         mock_recipe = MagicMock()
         mock_recipe.app_name = "gnome-settings"
         mock_recipe.version = 1
@@ -64,19 +67,19 @@ class TestLearnCommandRouting:
         with patch("elle.atspi.list_recipes", return_value=[mock_recipe]):
             result = await _handle_list("")
 
-            assert "Learned applications" in result
+            assert "Mapped applications" in result
             assert "gnome-settings" in result
 
     @pytest.mark.asyncio
     async def test_show_no_args(self):
-        """Test /learn show without app name."""
+        """Test /map show without app name."""
         result = await _handle_show("")
 
         assert "Usage:" in result
 
     @pytest.mark.asyncio
     async def test_show_not_found(self):
-        """Test /learn show for non-existent app."""
+        """Test /map show for non-existent app."""
         with patch("elle.atspi.get_recipe_by_app", return_value=None):
             result = await _handle_show("nonexistent")
 
@@ -84,43 +87,43 @@ class TestLearnCommandRouting:
 
     @pytest.mark.asyncio
     async def test_delete_no_args(self):
-        """Test /learn delete without app name."""
+        """Test /map delete without app name."""
         result = await _handle_delete("")
 
         assert "Usage:" in result
 
     @pytest.mark.asyncio
     async def test_delete_not_found(self):
-        """Test /learn delete for non-existent app."""
+        """Test /map delete for non-existent app."""
         with patch("elle.atspi.get_recipe_by_app", return_value=None):
             result = await _handle_delete("nonexistent")
 
             assert "No recipe found" in result
 
 
-class TestLearnCommandLearn:
-    """Tests for learning applications."""
+class TestMapCommandMap:
+    """Tests for mapping applications."""
 
     @pytest.mark.asyncio
-    async def test_learn_atspi_unavailable(self):
-        """Test learning when AT-SPI is not available."""
+    async def test_map_atspi_unavailable(self):
+        """Test mapping when AT-SPI is not available."""
         with patch("elle.atspi.is_atspi_available", return_value=False):
-            result = await handle_learn_command("gnome-settings")
+            result = await handle_map_command("gnome-settings")
 
             assert "AT-SPI is not available" in result
 
     @pytest.mark.asyncio
-    async def test_learn_app_not_found(self):
-        """Test learning when app is not found."""
+    async def test_map_app_not_found(self):
+        """Test mapping when app is not found."""
         with patch("elle.atspi.is_atspi_available", return_value=True):
             with patch("elle.atspi.learn_application", return_value=None):
-                result = await handle_learn_command("nonexistent-app")
+                result = await handle_map_command("nonexistent-app")
 
                 assert "Could not find application" in result
 
     @pytest.mark.asyncio
-    async def test_learn_success(self):
-        """Test successful learning."""
+    async def test_map_success(self):
+        """Test successful mapping."""
         mock_recipe = MagicMock()
         mock_recipe.app_name = "gnome-settings"
         mock_recipe.recipe_id = "recipe-123"
@@ -131,15 +134,15 @@ class TestLearnCommandLearn:
 
         with patch("elle.atspi.is_atspi_available", return_value=True):
             with patch("elle.atspi.learn_application", return_value=mock_recipe):
-                result = await handle_learn_command("gnome-settings")
+                result = await handle_map_command("gnome-settings")
 
-                assert "Learned" in result
+                assert "Mapped" in result
                 assert "gnome-settings" in result
                 assert "Elements: 3" in result
 
     @pytest.mark.asyncio
-    async def test_learn_passive_mode(self):
-        """Test learning with --passive flag."""
+    async def test_map_passive_mode(self):
+        """Test mapping with --passive flag."""
         mock_recipe = MagicMock()
         mock_recipe.app_name = "test"
         mock_recipe.recipe_id = "id"
@@ -149,16 +152,16 @@ class TestLearnCommandLearn:
         mock_recipe.confidence = 1.0
 
         with patch("elle.atspi.is_atspi_available", return_value=True):
-            with patch("elle.atspi.learn_application", return_value=mock_recipe) as mock_learn:
-                await handle_learn_command("test --passive")
+            with patch("elle.atspi.learn_application", return_value=mock_recipe) as mock_map:
+                await handle_map_command("test --passive")
 
                 # Verify passive mode was used
-                mock_learn.assert_called_once()
-                assert mock_learn.call_args[1].get("mode") == "passive" or \
-                       mock_learn.call_args[0][1] == "passive"
+                mock_map.assert_called_once()
+                assert mock_map.call_args[1].get("mode") == "passive" or \
+                       mock_map.call_args[0][1] == "passive"
 
 
-class TestLearnCommandShow:
+class TestMapCommandShow:
     """Tests for showing recipe details."""
 
     @pytest.mark.asyncio
@@ -195,39 +198,39 @@ class TestLearnCommandShow:
             assert "Confidence: 95%" in result
 
 
-class TestLearnCommandExportImport:
+class TestMapCommandExportImport:
     """Tests for export/import functionality."""
 
     @pytest.mark.asyncio
     async def test_export_no_args(self):
         """Test export without app name."""
-        result = await handle_learn_command("export")
+        result = await handle_map_command("export")
 
         assert "Usage:" in result
 
     @pytest.mark.asyncio
     async def test_import_no_file(self):
         """Test import without file path."""
-        result = await handle_learn_command("import")
+        result = await handle_map_command("import")
 
         assert "Usage:" in result
 
     @pytest.mark.asyncio
     async def test_import_file_not_found(self):
         """Test import with non-existent file."""
-        result = await handle_learn_command("import /nonexistent/file.json")
+        result = await handle_map_command("import /nonexistent/file.json")
 
         assert "File not found" in result
 
 
-class TestLearnCommandRebuild:
+class TestMapCommandRebuild:
     """Tests for rebuild functionality."""
 
     @pytest.mark.asyncio
     async def test_rebuild_no_args(self):
         """Test rebuild without app name."""
         with patch("elle.atspi.is_atspi_available", return_value=True):
-            result = await handle_learn_command("rebuild")
+            result = await handle_map_command("rebuild")
 
             assert "Usage:" in result
 
@@ -236,6 +239,6 @@ class TestLearnCommandRebuild:
         """Test rebuild when no existing recipe."""
         with patch("elle.atspi.is_atspi_available", return_value=True):
             with patch("elle.atspi.get_recipe_by_app", return_value=None):
-                result = await handle_learn_command("rebuild nonexistent")
+                result = await handle_map_command("rebuild nonexistent")
 
                 assert "No existing recipe" in result
