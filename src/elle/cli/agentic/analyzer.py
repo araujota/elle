@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any
 
 from elle.cli.agentic.models import InformationCategory, InformationNeed
 
@@ -47,7 +46,12 @@ PATTERNS: list[tuple[str, InformationCategory, tuple[str, ...], int]] = [
     (r"(\w+) container(?: status)?", "docker", ("status",), 1),
     (r"(?:show|get)(?: me)?(?: the)? (\w+) container logs?", "docker", ("logs",), 1),
     # === Network Patterns ===
-    (r"(?:what(?:'s| is)|show)(?: me)?(?: the)? (?:listening|open) (?:ports?|connections?)", "network", ("listeners",), 0),
+    (
+        r"(?:what(?:'s| is)|show)(?: me)?(?: the)? (?:listening|open) (?:ports?|connections?)",
+        "network",
+        ("listeners",),
+        0,
+    ),
     (r"(?:what(?:'s| is)|show)(?: me)?(?: all)?(?: the)? listening(?: ports?)?", "network", ("listeners",), 0),
     (r"(?:what(?:'s| is))(?: listening)? on port (\d+)\??", "network", ("listeners",), 1),
     (r"port (\d+)(?: status)?", "network", ("listeners",), 1),
@@ -56,7 +60,12 @@ PATTERNS: list[tuple[str, InformationCategory, tuple[str, ...], int]] = [
     (r"(?:show|read)(?: me)?(?: the)? (\w+) config(?:uration)?", "config", ("content",), 1),
     (r"(\w+) config(?:uration)?(?: file)?", "config", ("content",), 1),
     # === System Patterns ===
-    (r"(?:what(?:'s| is)|show)(?: me)?(?: the)? (?:system )?(?:info(?:rmation)?|resources?)", "system", ("info", "resources"), 0),
+    (
+        r"(?:what(?:'s| is)|show)(?: me)?(?: the)? (?:system )?(?:info(?:rmation)?|resources?)",
+        "system",
+        ("info", "resources"),
+        0,
+    ),
     (r"(?:how much )?(?:memory|ram|cpu|disk)(?: usage)?", "system", ("resources",), 0),
     (r"(?:system )?(?:load|uptime)", "system", ("resources",), 0),
 ]

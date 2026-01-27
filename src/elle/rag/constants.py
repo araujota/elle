@@ -53,8 +53,10 @@ SLM_TEMPERATURE = 0.1
 # Max tokens for classification responses
 SLM_MAX_TOKENS = 150
 
-# Timeout for SLM requests (should be fast when warm)
-SLM_TIMEOUT = 30.0
+# Timeout for SLM requests
+# 120s to allow for cold starts (model loading into VRAM)
+# Once warm, classification is typically <100ms
+SLM_TIMEOUT = 120.0
 
 
 # =============================================================================

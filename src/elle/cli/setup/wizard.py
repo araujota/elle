@@ -1392,25 +1392,80 @@ class SetupWizard:
 
             console.print()
 
-            # Warm up models
-            console.print(f"    {Icons.INFO} Warming up models (this may take a moment)...")
+            # Warm up models with progress spinner
+            console.print(f"    {Icons.INFO} Warming up models (first load can take 1-2 minutes)...")
+            console.print("    [dim]Press Ctrl+C to skip warmup - models will load on first use[/dim]")
+            console.print()
 
-            # Warm SLM (always)
-            slm_result = await warmup.warm_slm()
-            if slm_result.success:
-                console.print(f"    {Icons.SUCCESS} SLM ready ({slm_result.duration_ms:.0f}ms)")
-            else:
-                console.print(f"    {Icons.WARNING} SLM warmup failed: {slm_result.error}")
+            warmup_skipped = False
+            try:
+                # Warm SLM with spinner
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    console=console,
+                    transient=True,
+                ) as progress:
+                    slm_task = progress.add_task(f"    Loading {slm_model}...", total=None)
 
-            # Warm LLM if sufficient VRAM
-            if warmup.has_sufficient_vram():
-                llm_result = await warmup.warm_llm()
-                if llm_result.success:
-                    console.print(f"    {Icons.SUCCESS} LLM ready ({llm_result.duration_ms:.0f}ms)")
+                    # Run warmup with timeout handling
+                    try:
+                        slm_result = await asyncio.wait_for(warmup.warm_slm(), timeout=300.0)
+                    except TimeoutError:
+                        from elle.rag.model_warmup import WarmupResult
+                        slm_result = WarmupResult(
+                            success=False,
+                            model=slm_model,
+                            message="Warmup timed out after 5 minutes",
+                            error="timeout",
+                        )
+
+                    progress.remove_task(slm_task)
+
+                if slm_result.success:
+                    console.print(f"    {Icons.SUCCESS} SLM ready ({slm_result.duration_ms:.0f}ms)")
                 else:
-                    console.print(f"    {Icons.WARNING} LLM warmup failed: {llm_result.error}")
-            else:
-                console.print(f"    {Icons.INFO} LLM will load on-demand (limited VRAM)")
+                    console.print(f"    {Icons.WARNING} SLM warmup failed: {slm_result.error}")
+                    console.print(f"    {Icons.INFO} SLM will load on first use (may be slow)")
+
+                # Warm LLM if sufficient VRAM
+                if warmup.has_sufficient_vram():
+                    with Progress(
+                        SpinnerColumn(),
+                        TextColumn("[progress.description]{task.description}"),
+                        console=console,
+                        transient=True,
+                    ) as progress:
+                        llm_task = progress.add_task(f"    Loading {llm_model}...", total=None)
+
+                        try:
+                            llm_result = await asyncio.wait_for(warmup.warm_llm(), timeout=300.0)
+                        except TimeoutError:
+                            from elle.rag.model_warmup import WarmupResult
+                            llm_result = WarmupResult(
+                                success=False,
+                                model=llm_model,
+                                message="Warmup timed out after 5 minutes",
+                                error="timeout",
+                            )
+
+                        progress.remove_task(llm_task)
+
+                    if llm_result.success:
+                        console.print(f"    {Icons.SUCCESS} LLM ready ({llm_result.duration_ms:.0f}ms)")
+                    else:
+                        console.print(f"    {Icons.WARNING} LLM warmup failed: {llm_result.error}")
+                        console.print(f"    {Icons.INFO} LLM will load on first use (may be slow)")
+                else:
+                    console.print(f"    {Icons.INFO} LLM will load on-demand (limited VRAM)")
+
+            except (KeyboardInterrupt, asyncio.CancelledError):
+                warmup_skipped = True
+                console.print()
+                console.print(f"    {Icons.INFO} Warmup skipped - models will load on first use")
+
+            if warmup_skipped:
+                console.print(f"    {Icons.INFO} This may cause a delay on your first query")
 
             return True
 

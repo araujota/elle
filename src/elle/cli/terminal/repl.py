@@ -161,7 +161,7 @@ class REPL:
         """Display the startup banner."""
         # Collect system status
         model = self._get_model_name()
-        daemon_status = self._get_daemon_status()
+        daemon_status, api_port = self._get_daemon_status()
         vault_docs = self._get_vault_docs()
         incidents_open = self._get_open_incidents()
 
@@ -177,6 +177,7 @@ class REPL:
         print_banner(
             model=model,
             daemon_status=daemon_status,
+            api_port=api_port,
             vault_docs=vault_docs,
             incidents_open=incidents_open,
         )
@@ -228,17 +229,33 @@ class REPL:
             pass
         return None
 
-    def _get_daemon_status(self) -> str | None:
-        """Get the daemon status."""
+    def _get_daemon_status(self) -> tuple[str | None, int | None]:
+        """Get the daemon status and API port by checking the API health endpoint.
+
+        Returns:
+            Tuple of (status, api_port). Status is "running", "starting", or "stopped".
+            api_port is only set when status is "running".
+        """
+        # Default API port
+        api_port = 8377
+
         try:
-            # Check if daemon is running via PID file or socket
-            pid_file = Path("/run/elle/elled.pid")
-            if pid_file.exists():
-                return "running"
-            return "stopped"
+            import httpx
+
+            # Check if daemon API is responding
+            response = httpx.get(f"http://localhost:{api_port}/health", timeout=2.0)
+            if response.status_code == 200:
+                return ("running", api_port)
+            return ("stopped", None)
         except Exception:
-            pass
-        return None
+            # API not responding - check PID file as fallback
+            try:
+                pid_file = Path("/run/elle/elled.pid")
+                if pid_file.exists():
+                    return ("starting", None)  # PID exists but API not ready
+            except Exception:
+                pass
+            return ("stopped", None)
 
     def _get_vault_docs(self) -> int | None:
         """Get the number of indexed Man Vault documents."""

@@ -744,19 +744,44 @@ class IntentClassifier:
 
         try:
             # Call SLM with JSON mode and optimized settings
+            import sys
             import time
 
             start = time.time()
 
-            response_data = self.client.generate_json(
-                self.model,
-                prompt,
-                system=CLASSIFIER_SYSTEM_PROMPT,
-                max_tokens=self._max_tokens,
-                temperature=self._temperature,
-                keep_alive=self._keep_alive,
-                num_ctx=self._num_ctx,
-            )
+            # Show loading indicator if this takes more than 1 second
+            # (indicates model is being loaded into VRAM)
+            loading_shown = False
+
+            def show_loading() -> None:
+                nonlocal loading_shown
+                if not loading_shown and time.time() - start > 1.0:
+                    sys.stderr.write("\r\033[K[Loading model...] ")
+                    sys.stderr.flush()
+                    loading_shown = True
+
+            # Check if model is loaded before making request
+            # If not, show loading message
+            import threading
+
+            loading_timer = threading.Timer(1.0, show_loading)
+            loading_timer.start()
+
+            try:
+                response_data = self.client.generate_json(
+                    self.model,
+                    prompt,
+                    system=CLASSIFIER_SYSTEM_PROMPT,
+                    max_tokens=self._max_tokens,
+                    temperature=self._temperature,
+                    keep_alive=self._keep_alive,
+                    num_ctx=self._num_ctx,
+                )
+            finally:
+                loading_timer.cancel()
+                if loading_shown:
+                    sys.stderr.write("\r\033[K")  # Clear loading message
+                    sys.stderr.flush()
 
             latency_ms = (time.time() - start) * 1000
             logger.debug(f"SLM classification took {latency_ms:.0f}ms")
@@ -884,8 +909,14 @@ class IntentClassifier:
                 json_str = log_entry.model_dump_json()
             except AttributeError:
                 import json
+                from datetime import datetime as dt
 
-                json_str = json.dumps(log_entry.dict())
+                def json_serializer(value: object) -> str:
+                    if isinstance(value, dt):
+                        return value.isoformat()
+                    return str(value)
+
+                json_str = json.dumps(log_entry.dict(), default=json_serializer)
             with open(self._log_file, "a") as f:
                 f.write(json_str + "\n")
 

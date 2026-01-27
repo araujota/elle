@@ -1087,11 +1087,11 @@ Validates package operations before execution to detect potential issues.
         intent_result: IntentResult,
         session: Session,
     ) -> EngineResult:
-        """Handle system questions (agentic + LLM-powered).
+        """Handle system questions through unified agentic handler.
 
-        First tries to answer the question by gathering actual system information
-        using the agentic handler. Falls back to pure LLM response for general
-        questions that don't require system state.
+        Uses the unified agentic handler to gather information and generate
+        a response. Falls back to pure LLM for general questions that don't
+        require system state.
 
         Args:
             user_input: The question.
@@ -1099,31 +1099,37 @@ Validates package operations before execution to detect potential issues.
             session: Current session state.
 
         Returns:
-            EngineResult with answer (from agentic handler or LLM).
+            EngineResult with answer.
         """
         # Extract the actual question (remove /ask prefix if present)
         question = user_input
         if question.startswith("/ask "):
             question = question[5:]
 
-        # Try agentic handling first for questions about system state
-        agentic_result = self._try_agentic_handling(question, session)
+        # Try unified agentic handling first
+        agentic_result = self._try_unified_agentic_handling(question, session)
         if agentic_result is not None:
             return agentic_result
 
         # Fall back to LLM-only approach for general questions
         return self._handle_system_question_legacy(question, session)
 
-    def _try_agentic_handling(
+    def _try_unified_agentic_handling(
         self,
-        question: str,
+        user_input: str,
         session: Session,
+        *,
+        is_task: bool = False,
     ) -> EngineResult | None:
-        """Try to answer using the agentic handler.
+        """Try to handle using the unified agentic handler.
+
+        This is the new unified path that handles both questions and tasks
+        through capability execution.
 
         Args:
-            question: The question to answer.
+            user_input: The user's input.
             session: Current session state.
+            is_task: Whether this is a task (vs question).
 
         Returns:
             EngineResult if agentic handling succeeded, None if should fallback.
@@ -1131,13 +1137,13 @@ Validates package operations before execution to detect potential issues.
         import asyncio
 
         try:
-            from elle.cli.agentic import get_agentic_handler
+            from elle.cli.agentic import get_unified_handler
 
-            handler = get_agentic_handler()
+            handler = get_unified_handler()
 
-            # Check if this question can be handled agentically
-            if not handler.can_handle(question):
-                logger.debug("Question not suitable for agentic handling")
+            # Check if this can be handled agentically
+            if not handler.can_handle(user_input):
+                logger.debug("Input not suitable for unified agentic handling")
                 return None
 
             # Run async handler in sync context
@@ -1147,27 +1153,81 @@ Validates package operations before execution to detect potential issues.
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
 
-            response = loop.run_until_complete(handler.handle(question))
+            # Create confirmation callback for tasks
+            async def confirm_callback(title: str, preview: str) -> bool:
+                """Get user confirmation for actions."""
+                print(f"\n{Colors.BOLD}{title}{Colors.RESET}")
+                print(preview)
+                try:
+                    response = input(f"\n{Colors.BOLD}Proceed? [y/N]: {Colors.RESET}").strip().lower()
+                    return response in ("y", "yes")
+                except (EOFError, KeyboardInterrupt):
+                    return False
+
+            response = loop.run_until_complete(
+                handler.handle(
+                    user_input,
+                    confirm_callback=confirm_callback if is_task else None,
+                    skip_confirmation=not is_task,  # Skip for questions
+                )
+            )
 
             # Build output with evidence attribution
-            output = self._format_agentic_response(response, verbose=False)
+            output = self._format_unified_agentic_response(response, verbose=False)
 
             return EngineResult(
                 output=output,
                 session=session,
-                success=response.confidence > 0.0,
+                success=response.success,
             )
 
         except Exception as e:
-            logger.warning(f"Agentic handling failed: {e}")
+            logger.warning(f"Unified agentic handling failed: {e}")
             return None
+
+    def _try_agentic_handling(
+        self,
+        question: str,
+        session: Session,
+    ) -> EngineResult | None:
+        """Try to answer using the agentic handler (legacy wrapper).
+
+        DEPRECATED: This wraps _try_unified_agentic_handling for backwards
+        compatibility. Use _try_unified_agentic_handling directly.
+
+        Args:
+            question: The question to answer.
+            session: Current session state.
+
+        Returns:
+            EngineResult if agentic handling succeeded, None if should fallback.
+        """
+        return self._try_unified_agentic_handling(question, session, is_task=False)
 
     def _format_agentic_response(
         self,
         response: Any,  # AgenticResponse, but avoid import for type
         verbose: bool = False,
     ) -> str:
-        """Format an agentic response for display.
+        """Format an agentic response for display (legacy).
+
+        DEPRECATED: Use _format_unified_agentic_response for new code.
+
+        Args:
+            response: The AgenticResponse to format.
+            verbose: Whether to include evidence details.
+
+        Returns:
+            Formatted output string.
+        """
+        return self._format_unified_agentic_response(response, verbose)
+
+    def _format_unified_agentic_response(
+        self,
+        response: Any,  # AgenticResponse, but avoid import for type
+        verbose: bool = False,
+    ) -> str:
+        """Format a unified agentic response for display.
 
         Args:
             response: The AgenticResponse to format.
@@ -1180,6 +1240,18 @@ Validates package operations before execution to detect potential issues.
 
         # Main answer
         parts.append(response.answer)
+
+        # Actions taken (if any)
+        if hasattr(response, 'actions_taken') and response.actions_taken:
+            parts.append("")
+            parts.append(f"{Colors.BOLD}Actions taken:{Colors.RESET}")
+            for action in response.actions_taken:
+                if "success" in action:
+                    parts.append(f"  {Colors.GREEN}✓{Colors.RESET} {action}")
+                elif "failed" in action:
+                    parts.append(f"  {Colors.RED}✗{Colors.RESET} {action}")
+                else:
+                    parts.append(f"  - {action}")
 
         # Evidence attribution (brief mode)
         if response.evidence and not verbose:
@@ -1199,6 +1271,10 @@ Validates package operations before execution to detect potential issues.
         # Follow-up suggestions
         if response.follow_up_suggestions:
             parts.append(f"\n{Colors.DIM}Try: {response.follow_up_suggestions[0]}{Colors.RESET}")
+
+        # Iteration count (if multiple)
+        if hasattr(response, 'iterations') and response.iterations > 1:
+            parts.append(f"{Colors.DIM}(Completed in {response.iterations} iterations){Colors.RESET}")
 
         return "\n".join(parts)
 
@@ -1283,10 +1359,10 @@ Validates package operations before execution to detect potential issues.
         session: Session,
         interactive: bool = True,
     ) -> EngineResult:
-        """Handle system task requests (planner-powered).
+        """Handle system task requests through unified agentic handler.
 
-        Generates a verified command plan for the task request,
-        presents it for approval, and executes with rollback support.
+        First tries the unified agentic handler which executes capabilities
+        directly. Falls back to the planner for complex multi-step tasks.
 
         Args:
             user_input: The task request.
@@ -1295,13 +1371,42 @@ Validates package operations before execution to detect potential issues.
             interactive: Whether to use interactive UI.
 
         Returns:
-            EngineResult with plan execution results.
+            EngineResult with execution results.
         """
         # Extract the actual task (remove /do prefix if present)
         task = user_input
         if task.startswith("/do "):
             task = task[4:]
 
+        # Try unified agentic handling first for capability-based tasks
+        agentic_result = self._try_unified_agentic_handling(task, session, is_task=True)
+        if agentic_result is not None:
+            return agentic_result
+
+        # Fall back to planner for complex multi-step tasks
+        return self._handle_system_task_planner(task, intent_result, session, interactive)
+
+    def _handle_system_task_planner(
+        self,
+        task: str,
+        intent_result: IntentResult,
+        session: Session,
+        interactive: bool = True,
+    ) -> EngineResult:
+        """Handle system task requests using the planner (fallback).
+
+        Generates a verified command plan for the task request,
+        presents it for approval, and executes with rollback support.
+
+        Args:
+            task: The task request (already cleaned).
+            intent_result: Classification result with entities.
+            session: Current session state.
+            interactive: Whether to use interactive UI.
+
+        Returns:
+            EngineResult with plan execution results.
+        """
         # Import planner
         from elle.cli.planner import (
             PlanOutcome,

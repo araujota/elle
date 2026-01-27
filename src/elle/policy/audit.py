@@ -116,9 +116,13 @@ class PolicyAuditLogger:
             try:
                 json_str = entry.model_dump_json()
             except AttributeError:
-                import json
+                # Fallback for Pydantic v1 - need custom serializer for datetime
+                def json_serializer(obj: object) -> str:
+                    if isinstance(obj, datetime):
+                        return obj.isoformat()
+                    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
-                json_str = json.dumps(entry.dict())
+                json_str = json.dumps(entry.dict(), default=json_serializer)
             self._file.write(json_str + "\n")
             self._file.flush()
 

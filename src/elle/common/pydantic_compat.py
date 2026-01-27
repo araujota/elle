@@ -60,8 +60,15 @@ def safe_model_dump_json(obj: BaseModel, **kwargs: Any) -> str:
     # Pydantic v2
     if hasattr(obj, "model_dump_json"):
         return obj.model_dump_json(**kwargs)
-    # Pydantic v1 fallback
-    return json.dumps(obj.dict(**kwargs))
+    # Pydantic v1 fallback - need custom serializer for datetime
+    from datetime import datetime
+
+    def json_serializer(value: object) -> str:
+        if isinstance(value, datetime):
+            return value.isoformat()
+        raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+    return json.dumps(obj.dict(**kwargs), default=json_serializer)
 
 
 def safe_model_validate(cls: type[T], data: Any) -> T:

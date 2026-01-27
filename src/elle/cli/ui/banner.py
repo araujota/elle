@@ -58,6 +58,7 @@ def _build_status_line(
     *,
     model: str | None = None,
     daemon_status: str | None = None,
+    api_port: int | None = None,
     vault_docs: int | None = None,
     incidents_open: int | None = None,
 ) -> Text:
@@ -68,10 +69,13 @@ def _build_status_line(
     if model:
         parts.append((f"Model: {model}", "muted"))
 
-    # Daemon
+    # Daemon + API
     if daemon_status:
         color = "success" if daemon_status == "running" else "warning"
-        parts.append((f"Daemon: {daemon_status}", color))
+        if daemon_status == "running" and api_port:
+            parts.append((f"Daemon: {daemon_status} (API :{api_port})", color))
+        else:
+            parts.append((f"Daemon: {daemon_status}", color))
 
     # Vault
     if vault_docs is not None:
@@ -96,6 +100,7 @@ def render_banner(
     *,
     model: str | None = None,
     daemon_status: str | None = None,
+    api_port: int | None = None,
     vault_docs: int | None = None,
     incidents_open: int | None = None,
     show_tips: bool = True,
@@ -105,6 +110,7 @@ def render_banner(
     Args:
         model: Current LLM model name
         daemon_status: "running", "stopped", etc.
+        api_port: Port the API is listening on (if running)
         vault_docs: Number of indexed man pages
         incidents_open: Number of open incidents
         show_tips: Whether to show helpful tips
@@ -119,6 +125,7 @@ def render_banner(
     subtitle = _build_status_line(
         model=model,
         daemon_status=daemon_status,
+        api_port=api_port,
         vault_docs=vault_docs,
         incidents_open=incidents_open,
     )
@@ -144,6 +151,7 @@ def print_banner(
     *,
     model: str | None = None,
     daemon_status: str | None = None,
+    api_port: int | None = None,
     vault_docs: int | None = None,
     incidents_open: int | None = None,
     show_tips: bool = True,
@@ -153,6 +161,7 @@ def print_banner(
     Args:
         model: Current LLM model name
         daemon_status: "running", "stopped", etc.
+        api_port: Port the API is listening on (if running)
         vault_docs: Number of indexed man pages
         incidents_open: Number of open incidents
         show_tips: Whether to show helpful tips
@@ -160,6 +169,7 @@ def print_banner(
     panel = render_banner(
         model=model,
         daemon_status=daemon_status,
+        api_port=api_port,
         vault_docs=vault_docs,
         incidents_open=incidents_open,
         show_tips=show_tips,

@@ -27,31 +27,33 @@ logger = logging.getLogger(__name__)
 
 # Capabilities that are safe for autonomous execution (no system mutations)
 # These must have risk level 'none' or 'low' and no destructive side effects
-READ_ONLY_CAPABILITIES: frozenset[str] = frozenset({
-    # Service domain
-    "service.status",
-    "service.logs",
-    # File domain
-    "file.read",
-    "file.stat",
-    "file.diff",
-    "file.watch_snapshot",
-    # Package domain
-    "package.info",
-    "package.detect-conflicts",
-    # Docker domain
-    "docker.list",
-    "docker.inspect",
-    "docker.logs",
-    # Network domain
-    "network.listeners",
-    "network.connections",
-    # Config domain
-    "config.preview",
-    # System domain
-    "system.info",
-    "system.resources",
-})
+READ_ONLY_CAPABILITIES: frozenset[str] = frozenset(
+    {
+        # Service domain
+        "service.status",
+        "service.logs",
+        # File domain
+        "file.read",
+        "file.stat",
+        "file.diff",
+        "file.watch_snapshot",
+        # Package domain
+        "package.info",
+        "package.detect-conflicts",
+        # Docker domain
+        "docker.list",
+        "docker.inspect",
+        "docker.logs",
+        # Network domain
+        "network.listeners",
+        "network.connections",
+        # Config domain
+        "config.preview",
+        # System domain
+        "system.info",
+        "system.resources",
+    }
+)
 
 
 # =============================================================================
