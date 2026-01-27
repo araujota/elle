@@ -11,16 +11,81 @@ The incident record includes:
 
 This is ESSENTIAL for the Spine architecture:
     DAEMON -> SIGNALS -> INCIDENT REPORT -> AGENT LOOP -> CAPABILITIES -> OUTCOME -> INCIDENT MEMORY
+
+Key functions:
+- record_execution_to_incident(): Full execution recording
+- record_arm_action(): Simplified recording for standalone modules
+- RecordingResult: Structured result with error handling
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import time
+from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Recording Result Types
+# =============================================================================
+
+
+@dataclass
+class RecordingResult:
+    """Result from a recording operation."""
+
+    success: bool
+    incident_id: str | None = None
+    error: str | None = None
+    recoverable: bool = True
+
+    def __bool__(self) -> bool:
+        return self.success
+
+
+def _with_retry(
+    func: Any,
+    max_retries: int = 2,
+    base_delay: float = 0.1,
+) -> RecordingResult:
+    """Execute a recording function with retry and exponential backoff.
+
+    Args:
+        func: Callable that returns an incident_id or raises.
+        max_retries: Maximum number of retries.
+        base_delay: Base delay between retries (doubles each retry).
+
+    Returns:
+        RecordingResult with outcome.
+    """
+    last_error: str | None = None
+
+    for attempt in range(max_retries + 1):
+        try:
+            result = func()
+            return RecordingResult(
+                success=True,
+                incident_id=result,
+            )
+        except Exception as e:
+            last_error = str(e)
+            if attempt < max_retries:
+                delay = base_delay * (2 ** attempt)
+                logger.debug(f"Recording attempt {attempt + 1} failed, retrying in {delay}s: {e}")
+                time.sleep(delay)
+            else:
+                logger.warning(f"Recording failed after {max_retries + 1} attempts: {e}")
+
+    return RecordingResult(
+        success=False,
+        error=last_error,
+        recoverable=True,  # Database errors are typically recoverable
+    )
 
 
 def record_execution_to_incident(
@@ -495,7 +560,7 @@ def record_arm_action(
             },
         )
     """
-    try:
+    def _do_record() -> str:
         from elle.daemon.incidents.store import (
             append_action,
             create_incident_draft,
@@ -562,6 +627,9 @@ def record_arm_action(
         logger.debug(f"Recorded arm action to incident {incident_id}: {arm_name}.{action}")
         return incident_id
 
-    except Exception as e:
-        logger.warning(f"Failed to record arm action: {e}")
+    result = _with_retry(_do_record, max_retries=2)
+    if result.success:
+        return result.incident_id
+    else:
+        logger.warning(f"Failed to record arm action after retries: {result.error}")
         return None

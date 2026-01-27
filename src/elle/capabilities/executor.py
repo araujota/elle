@@ -287,12 +287,11 @@ class CapabilityExecutor:
                 except Exception as e:
                     logger.exception(f"Rollback failed with exception: {e}")
 
-        # 9. Record to incident vault
-        if self.incident_store and incident_id:
-            try:
-                await self._record_action(incident_id, capability, input, result)
-            except Exception as e:
-                logger.warning(f"Failed to record action to incident vault: {e}")
+        # 9. Record to incident vault (always record, not just when incident_store is set)
+        try:
+            await self._record_action_via_context(incident_id, capability, input, result)
+        except Exception as e:
+            logger.warning(f"Failed to record action to incident vault: {e}")
 
         # 10. Update autonomy tracking (for earned autonomy)
         try:
@@ -424,6 +423,68 @@ class CapabilityExecutor:
             logger.debug("Incident store not available")
         except Exception as e:
             logger.warning(f"Failed to record action: {e}")
+
+    async def _record_action_via_context(
+        self,
+        incident_id: str | None,
+        capability: Capability[Any, Any],
+        input: BaseModel,
+        result: CapabilityResult,
+    ) -> None:
+        """Record capability execution using IncidentContext.
+
+        This ensures all capability executions are recorded to the incident vault,
+        even when no explicit incident_id is provided.
+
+        Args:
+            incident_id: Optional parent incident ID.
+            capability: The capability that was executed.
+            input: The input parameters.
+            result: The execution result.
+        """
+        spec = capability.spec
+
+        try:
+            from elle.cli.agentic.incident_context import IncidentContext, RecordingMode
+
+            # If we have a parent incident, just append to it
+            if incident_id:
+                await self._record_action(incident_id, capability, input, result)
+                return
+
+            # Otherwise, create a standalone incident for this capability
+            async with IncidentContext.for_capability(
+                capability_name=spec.name,
+                parent_incident_id=incident_id,
+                recording_mode=RecordingMode.BEST_EFFORT,
+            ) as ctx:
+                await ctx.record_action(
+                    kind="capability",
+                    command=spec.name,
+                    payload={
+                        "input": input.model_dump() if hasattr(input, "model_dump") else {},
+                        "spec_domain": spec.domain,
+                        "spec_risk": spec.risk,
+                    },
+                    success=result.success,
+                    output=result.output or "",
+                    error=result.error,
+                    duration_ms=result.execution_time_ms,
+                )
+                ctx.set_outcome(
+                    success=result.success,
+                    summary=f"Executed {spec.name}",
+                )
+
+        except ImportError:
+            # Fallback to direct recording if IncidentContext not available
+            if incident_id:
+                await self._record_action(incident_id, capability, input, result)
+        except Exception as e:
+            logger.warning(f"Failed to record capability via context: {e}")
+            # Try fallback
+            if incident_id:
+                await self._record_action(incident_id, capability, input, result)
 
 
 # =============================================================================

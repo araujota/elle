@@ -327,44 +327,114 @@ class ReactiveEngine:
             logger.debug(f"Function {func.name} condition not met: {condition_explanation}")
             return None
 
-        # 5. Execute actions
+        # 5. Execute actions with incident recording
         actions_executed: list[str] = []
         actions_results: list[ActionResult] = []
         overall_success = True
         overall_error: str | None = None
         incident_id: str | None = None
 
-        for action in func.actions:
-            try:
-                action_result = await self._execute_action(action, context, incident_id)
-                actions_executed.append(action.capability)
-                actions_results.append(action_result)
+        # Use IncidentContext to ensure all actions are recorded
+        try:
+            from elle.cli.agentic.incident_context import IncidentContext, RecordingMode
 
-                if not action_result.success:
+            async with IncidentContext.for_reactive_function(
+                function_id=func.id,
+                function_name=func.name,
+                trigger_event=_event_to_dict(event) if event else None,
+                recording_mode=RecordingMode.BEST_EFFORT,
+            ) as ctx:
+                incident_id = ctx.incident_id
+
+                for action in func.actions:
+                    try:
+                        action_result = await self._execute_action(action, context, incident_id)
+                        actions_executed.append(action.capability)
+                        actions_results.append(action_result)
+
+                        # Record the action to incident context
+                        await ctx.record_action(
+                            kind="capability",
+                            command=action.capability,
+                            payload=action.input,
+                            success=action_result.success,
+                            output=action_result.output or "",
+                            error=action_result.error,
+                            duration_ms=action_result.execution_time_ms or 0,
+                        )
+
+                        if not action_result.success:
+                            overall_success = False
+                            overall_error = action_result.error
+
+                            if action.on_failure == "stop":
+                                break
+                            elif action.on_failure == "rollback":
+                                # TODO: Implement rollback logic
+                                break
+
+                    except Exception as e:
+                        logger.exception(f"Action {action.capability} failed: {e}")
+                        actions_executed.append(action.capability)
+                        actions_results.append(
+                            ActionResult(
+                                capability=action.capability,
+                                success=False,
+                                error=str(e),
+                            )
+                        )
+                        overall_success = False
+                        overall_error = str(e)
+
+                        # Record the failure
+                        await ctx.record_action(
+                            kind="capability",
+                            command=action.capability,
+                            payload=action.input,
+                            success=False,
+                            error=str(e),
+                        )
+
+                        if action.on_failure == "stop":
+                            break
+
+                # Set outcome on the context
+                ctx.set_outcome(
+                    success=overall_success,
+                    summary=f"Executed {len(actions_executed)} actions",
+                )
+
+        except ImportError:
+            # Fallback if incident_context not available
+            for action in func.actions:
+                try:
+                    action_result = await self._execute_action(action, context, incident_id)
+                    actions_executed.append(action.capability)
+                    actions_results.append(action_result)
+
+                    if not action_result.success:
+                        overall_success = False
+                        overall_error = action_result.error
+
+                        if action.on_failure in ("stop", "rollback"):
+                            # TODO: Implement rollback logic for "rollback" case
+                            break
+
+                except Exception as e:
+                    logger.exception(f"Action {action.capability} failed: {e}")
+                    actions_executed.append(action.capability)
+                    actions_results.append(
+                        ActionResult(
+                            capability=action.capability,
+                            success=False,
+                            error=str(e),
+                        )
+                    )
                     overall_success = False
-                    overall_error = action_result.error
+                    overall_error = str(e)
 
                     if action.on_failure == "stop":
                         break
-                    elif action.on_failure == "rollback":
-                        # TODO: Implement rollback logic
-                        break
-
-            except Exception as e:
-                logger.exception(f"Action {action.capability} failed: {e}")
-                actions_executed.append(action.capability)
-                actions_results.append(
-                    ActionResult(
-                        capability=action.capability,
-                        success=False,
-                        error=str(e),
-                    )
-                )
-                overall_success = False
-                overall_error = str(e)
-
-                if action.on_failure == "stop":
-                    break
 
         # 6. Update rate limit state
         if not skip_rate_limit:

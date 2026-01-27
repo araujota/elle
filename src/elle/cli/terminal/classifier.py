@@ -814,6 +814,15 @@ class IntentClassifier:
         The SLM is configured with keep_alive=-1 to stay warm indefinitely,
         enabling sub-100ms classification responses.
         """
+        # Check Ollama availability via dependency registry
+        try:
+            from elle.cli.engine import is_llm_available
+            if not is_llm_available():
+                logger.info("LLM marked unavailable by dependency check, using fallback")
+                return self._fallback_classification(text, session)
+        except ImportError:
+            pass  # Dependency module not available, proceed with direct check
+
         if not self.client.is_available():
             logger.warning("Ollama not available, using fallback classification")
             return self._fallback_classification(text, session)

@@ -260,13 +260,22 @@ class UnifiedRetrievalPipeline:
                 sources_queried=(),
             )
 
-        # Run all searches in parallel
-        results = await asyncio.gather(
-            self._search_incidents(query, input.domain_hint),
-            self._search_man_vault(query),
-            self._search_capabilities(query, input.domain_hint),
-            return_exceptions=True,
-        )
+        # Run all searches in parallel with timeout
+        # Default timeout of 30 seconds prevents hanging on slow sources
+        retrieval_timeout = 30.0
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(
+                    self._search_incidents(query, input.domain_hint),
+                    self._search_man_vault(query),
+                    self._search_capabilities(query, input.domain_hint),
+                    return_exceptions=True,
+                ),
+                timeout=retrieval_timeout,
+            )
+        except TimeoutError:
+            logger.warning(f"Retrieval pipeline timed out after {retrieval_timeout}s")
+            results = ((), (), ())
 
         # Unpack results, handling exceptions
         incidents = results[0] if isinstance(results[0], tuple) else ()

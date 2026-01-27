@@ -34,8 +34,6 @@ def get_llm() -> LLM:
     return _get_llm()
 
 
-import contextlib
-
 from elle.cli.planner.models import (
     CheckResult,
     CommandPlan,
@@ -278,6 +276,18 @@ class PlannerService:
         assert plan is not None  # checked above with `if not result.plan:`
         all_succeeded = True
 
+        # Ensure we have an incident for recording (critical for Spine architecture)
+        if not result.incident_id and self.use_incident_vault:
+            try:
+                context = result.context or PlanContext(request="Plan execution")
+                incident_id = self._create_incident(
+                    context.request if context else plan.title,
+                    context,
+                )
+                result = result.with_incident_id(incident_id)
+            except Exception as e:
+                logger.warning(f"Failed to create incident for execution: {e}")
+
         # Run preflight validation for package operations
         if not skip_preflight and self.use_preflight:
             can_proceed, preflight_msg = self.run_preflight_for_plan(plan)
@@ -292,16 +302,13 @@ class PlannerService:
             step_result = self._execute_step(step, i, session)
             result = result.with_step_result(step_result)
 
-            # Record action in incident
-            if result.incident_id and step.command:
-                try:
-                    self._record_action(
-                        result.incident_id,
-                        step.command,
-                        step_result,
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to record action: {e}")
+            # Record action in incident (always attempt if we have an incident_id)
+            if step.command:
+                self._record_action_safe(
+                    result.incident_id,
+                    step.command,
+                    step_result,
+                )
 
             if not step_result.success:
                 all_succeeded = False
@@ -354,15 +361,13 @@ class PlannerService:
             rb_result = self._execute_rollback_step(rb, i, session)
             rollback_results.append(rb_result)
 
-            # Record rollback action
-            if result.incident_id:
-                with contextlib.suppress(Exception):
-                    self._record_action(
-                        result.incident_id,
-                        rb.command,
-                        rb_result,
-                        is_rollback=True,
-                    )
+            # Record rollback action (using safe method)
+            self._record_action_safe(
+                result.incident_id,
+                rb.command,
+                rb_result,
+                is_rollback=True,
+            )
 
         result = result.with_rollback_results(tuple(rollback_results))
         result = result.with_outcome(PlanOutcome.ROLLED_BACK)
@@ -1228,6 +1233,41 @@ class PlannerService:
             stderr=step_result.stderr[:500],
             success=step_result.success,
         )
+
+    def _record_action_safe(
+        self,
+        incident_id: str | None,
+        command: str,
+        step_result: StepResult,
+        is_rollback: bool = False,
+    ) -> None:
+        """Safely record an action, handling missing incident_id.
+
+        Uses direct recording if incident_id is available, otherwise
+        logs a warning but doesn't fail execution.
+
+        Args:
+            incident_id: Optional incident ID.
+            command: The command executed.
+            step_result: Result of execution.
+            is_rollback: Whether this is a rollback action.
+        """
+        if not incident_id:
+            logger.debug(
+                f"No incident_id for action recording: {command} "
+                f"(success={step_result.success})"
+            )
+            return
+
+        try:
+            self._record_action(
+                incident_id,
+                command,
+                step_result,
+                is_rollback=is_rollback,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record action '{command}': {e}")
 
     def _finalize_incident(self, result: PlanResult) -> None:
         """Finalize the incident with outcome and provenance.

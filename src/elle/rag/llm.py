@@ -1343,13 +1343,16 @@ class LLMSession:
         stream_callback: Callable[[str], None],
         timeout: float,
     ) -> ToolCallResponse:
-        """Streaming chat request."""
+        """Streaming chat request with completion verification."""
         start_time = time.time()
         collected_content = ""
         tool_calls: list[ToolCall] = []
         model = self.llm.model
         prompt_tokens = None
         completion_tokens = None
+        stream_done = False
+        last_chunk_time = time.time()
+        chunk_timeout = 30.0  # Max time between chunks
 
         # Use httpx streaming
         with self.llm._client.stream(
@@ -1363,6 +1366,15 @@ class LLMSession:
             for line in response.iter_lines():
                 if not line:
                     continue
+
+                # Check for stalled stream
+                current_time = time.time()
+                if current_time - last_chunk_time > chunk_timeout:
+                    logger.warning(
+                        f"Stream stalled for {chunk_timeout}s, possible truncation"
+                    )
+                    break
+                last_chunk_time = current_time
 
                 try:
                     chunk = json.loads(line)
@@ -1395,11 +1407,25 @@ class LLMSession:
 
                 # Get model and token counts from final chunk
                 if chunk.get("done"):
+                    stream_done = True
                     model = chunk.get("model", model)
                     prompt_tokens = chunk.get("prompt_eval_count")
                     completion_tokens = chunk.get("eval_count")
 
         duration_ms = (time.time() - start_time) * 1000
+
+        # Verify stream completion
+        if not stream_done:
+            logger.warning(
+                "Stream ended without completion signal - response may be truncated"
+            )
+
+        # Check for truncation indicators
+        min_response_length = 10
+        if len(collected_content.strip()) < min_response_length and not tool_calls:
+            logger.warning(
+                f"Response too short ({len(collected_content)} chars) - possible truncation"
+            )
 
         # Add assistant message to history
         self.add_assistant_message(collected_content, tool_calls if tool_calls else None)
@@ -1407,7 +1433,7 @@ class LLMSession:
         return ToolCallResponse(
             content=collected_content,
             tool_calls=tuple(tool_calls),
-            done=True,
+            done=stream_done,
             model=model,
             duration_ms=duration_ms,
             prompt_tokens=prompt_tokens,

@@ -2846,3 +2846,70 @@ def get_engine() -> Engine:
     if _engine is None:
         _engine = Engine()
     return _engine
+
+
+# =============================================================================
+# Startup Dependency Checking
+# =============================================================================
+
+
+_system_capabilities = None
+
+
+async def initialize_engine() -> Any:
+    """Initialize the engine with dependency checking.
+
+    Runs startup health checks and returns system capabilities.
+    Call this during ELLE initialization to determine available features.
+
+    Returns:
+        SystemCapabilities with current state.
+    """
+    global _system_capabilities
+
+    try:
+        from elle.cli.dependencies import check_startup_dependencies
+
+        capabilities = await check_startup_dependencies()
+        _system_capabilities = capabilities
+
+        # Log any warnings
+        for message in capabilities.messages:
+            logger.warning(message)
+
+        return capabilities
+
+    except Exception as e:
+        logger.error(f"Failed to check startup dependencies: {e}")
+        return None
+
+
+def get_system_capabilities() -> Any:
+    """Get the cached system capabilities.
+
+    Returns:
+        SystemCapabilities or None if not yet initialized.
+    """
+    return _system_capabilities
+
+
+def is_llm_available() -> bool:
+    """Check if LLM is available.
+
+    Returns:
+        True if LLM features can be used.
+    """
+    if _system_capabilities is None:
+        return True  # Assume available if not checked
+    return _system_capabilities.llm_available
+
+
+def is_daemon_available() -> bool:
+    """Check if daemon is available.
+
+    Returns:
+        True if daemon features can be used.
+    """
+    if _system_capabilities is None:
+        return True  # Assume available if not checked
+    return _system_capabilities.daemon_available
