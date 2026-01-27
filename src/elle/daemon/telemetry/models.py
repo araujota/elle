@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 TelemetrySeverity = Literal["debug", "info", "notice", "warning", "error", "critical"]
 
 # Telemetry source types
-TelemetrySource = Literal["journal", "kernel", "probe", "ebpf"]
+TelemetrySource = Literal["journal", "kernel", "probe", "ebpf", "docker", "inotify"]
 
 # Category types for event classification
 TelemetryCategory = Literal[

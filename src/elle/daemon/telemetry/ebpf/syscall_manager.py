@@ -55,6 +55,10 @@ class SyscallManager:
 
         Returns:
             True if initialized successfully.
+
+        Note:
+            BCC-based syscall tracing was removed when telemetry moved to the C daemon.
+            This always returns False until syscall tracing is re-implemented.
         """
         if self._initialized:
             return True
@@ -62,35 +66,12 @@ class SyscallManager:
         if self._init_error:
             return False
 
-        try:
-            from elle.daemon.telemetry.ebpf.bcc.syscall import create_syscall_program
-
-            self._program = create_syscall_program()
-
-            if not self._program.load():
-                self._init_error = "Failed to load eBPF program"
-                return False
-
-            if not self._program.attach():
-                self._init_error = "Failed to attach eBPF program"
-                return False
-
-            if not self._program.setup_ring_buffer():
-                self._init_error = "Failed to setup ring buffer"
-                return False
-
-            self._initialized = True
-            logger.info("Syscall manager initialized")
-            return True
-
-        except ImportError as e:
-            self._init_error = f"BCC not available: {e}"
-            logger.warning(f"Syscall tracing unavailable: {self._init_error}")
-            return False
-        except Exception as e:
-            self._init_error = f"Initialization failed: {e}"
-            logger.error(f"Syscall manager initialization failed: {e}")
-            return False
+        # BCC syscall tracing module was removed - telemetry now uses C daemon
+        self._init_error = (
+            "Syscall tracing unavailable: BCC modules removed. Telemetry is now handled by elled-telemetryd."
+        )
+        logger.info(self._init_error)
+        return False
 
     @property
     def is_available(self) -> bool:

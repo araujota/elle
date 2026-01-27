@@ -20,9 +20,9 @@ import logging
 import socket
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from elle.daemon.telemetry.models import TelemetryEvent
+from elle.daemon.telemetry.models import TelemetryEvent, TelemetrySource
 from elle.daemon.telemetry.queue import TelemetryQueue
 
 logger = logging.getLogger(__name__)
@@ -305,15 +305,12 @@ class TelemetrydWatcher:
                 ts = datetime.now(UTC)
 
             # Map source string to source type
-            source_map = {
-                "journal": "journal",
-                "kernel": "kernel",
-                "probe": "probe",
-                "ebpf": "ebpf",
-                "docker": "docker",
-                "inotify": "inotify",
-            }
-            source = source_map.get(raw.get("source", ""), "journal")
+            raw_source = raw.get("source", "journal")
+            valid_sources = {"journal", "kernel", "probe", "ebpf", "docker", "inotify"}
+            source: TelemetrySource = cast(
+                TelemetrySource,
+                raw_source if raw_source in valid_sources else "journal",
+            )
 
             return TelemetryEvent(
                 ts=ts,
