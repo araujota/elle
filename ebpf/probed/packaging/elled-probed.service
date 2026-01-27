@@ -1,0 +1,35 @@
+[Unit]
+Description=ELLE Ground Truth Monitoring Daemon
+Documentation=https://github.com/anthropics/elle
+After=network.target
+Wants=elled.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/elled-probed
+Restart=on-failure
+RestartSec=5s
+
+# Run as root for system access
+User=root
+Group=root
+
+# Minimal capabilities needed
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_DAC_READ_SEARCH CAP_SYS_PTRACE
+AmbientCapabilities=CAP_NET_ADMIN CAP_DAC_READ_SEARCH CAP_SYS_PTRACE
+
+# Security hardening
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+MemoryDenyWriteExecute=yes
+
+# Allow write to /run/elle for socket
+ReadWritePaths=/run/elle
+
+# Allow read access to system info
+ReadOnlyPaths=/proc /sys /etc/resolv.conf
+
+[Install]
+WantedBy=multi-user.target

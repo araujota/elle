@@ -1,0 +1,12 @@
+# Build artifacts
+build/
+
+# Generated vmlinux header (expensive to regenerate)
+bpf/vmlinux.h
+
+# Object files
+*.o
+
+# Editor backups
+*~
+*.swp

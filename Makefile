@@ -3,7 +3,10 @@
 
 .PHONY: help install install-dev test lint format typecheck check clean \
         build-deb publish-deb docs serve-docs \
-        venv run run-daemon dist
+        venv run run-daemon dist \
+        build-ebpf clean-ebpf install-ebpf \
+        build-probed clean-probed install-probed \
+        build-collectors clean-collectors install-collectors
 
 # Default target
 help:
@@ -22,6 +25,16 @@ help:
 	@echo "  make format        Format code (ruff)"
 	@echo "  make typecheck     Run type checker (mypy)"
 	@echo "  make check         Run all checks (lint, typecheck, test)"
+	@echo ""
+	@echo "C Collectors:"
+	@echo "  make build-ebpf       Build C-based eBPF collector"
+	@echo "  make clean-ebpf       Clean eBPF build artifacts"
+	@echo "  make install-ebpf     Install eBPF collector and systemd service"
+	@echo "  make build-probed     Build C-based userspace probe collector"
+	@echo "  make clean-probed     Clean probed build artifacts"
+	@echo "  make install-probed   Install probed collector and systemd service"
+	@echo "  make build-collectors Build both eBPF and probed collectors"
+	@echo "  make install-collectors Install both collectors"
 	@echo ""
 	@echo "Packaging:"
 	@echo "  make build-deb     Build Debian package"
@@ -83,6 +96,58 @@ run:
 
 run-daemon:
 	$(PYTHON) -m elle.daemon.main
+
+# =============================================================================
+# eBPF Collector
+# =============================================================================
+
+# Build C-based eBPF collector
+build-ebpf:
+	@echo "Building eBPF collector..."
+	$(MAKE) -C ebpf vmlinux
+	$(MAKE) -C ebpf
+
+# Clean eBPF build artifacts
+clean-ebpf:
+	$(MAKE) -C ebpf clean
+
+# Install eBPF collector
+install-ebpf:
+	$(MAKE) -C ebpf install
+	install -D -m 0644 ebpf/packaging/elled-ebpfd.service /lib/systemd/system/
+	systemctl daemon-reload
+
+# =============================================================================
+# Probed Collector (Userspace Polling)
+# =============================================================================
+
+# Build C-based probed collector
+build-probed:
+	@echo "Building probed collector..."
+	$(MAKE) -C ebpf/probed
+
+# Clean probed build artifacts
+clean-probed:
+	$(MAKE) -C ebpf/probed clean
+
+# Install probed collector
+install-probed:
+	$(MAKE) -C ebpf/probed install
+	install -D -m 0644 ebpf/probed/packaging/elled-probed.service /lib/systemd/system/
+	systemctl daemon-reload
+
+# =============================================================================
+# Combined Collector Targets
+# =============================================================================
+
+# Build both collectors
+build-collectors: build-ebpf build-probed
+
+# Clean both collectors
+clean-collectors: clean-ebpf clean-probed
+
+# Install both collectors
+install-collectors: install-ebpf install-probed
 
 # =============================================================================
 # Testing & Quality

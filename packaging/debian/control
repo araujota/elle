@@ -7,7 +7,17 @@ Build-Depends: debhelper-compat (= 13),
                python3 (>= 3.11),
                python3-setuptools,
                python3-pip,
-               python3-venv
+               python3-venv,
+               clang,
+               llvm,
+               libbpf-dev,
+               bpftool,
+               libelf-dev,
+               zlib1g-dev,
+               libjansson-dev,
+               libsystemd-dev,
+               libpcre2-dev,
+               libssl-dev
 Standards-Version: 4.6.2
 Homepage: https://araujota.github.io/elle
 Rules-Requires-Root: no
@@ -29,7 +39,8 @@ Depends: ${misc:Depends},
          systemd
 Recommends: ollama,
             python3-fastapi,
-            python3-uvicorn
+            python3-uvicorn,
+            elled-telemetryd
 Suggests: python3-bcc,
           libgirepository1.0-dev,
           gir1.2-atspi-2.0
@@ -47,3 +58,93 @@ Description: Enabling Layer Learning Everything
  .
  Requires Ollama for local LLM inference (recommended, not required
  for package installation).
+
+Package: elled-ebpfd
+Architecture: amd64
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+         libbpf1,
+         libjansson4
+Recommends: elle
+Description: ELLE eBPF Telemetry Collector
+ CO-RE (Compile Once - Run Everywhere) eBPF collector for ELLE.
+ Provides high-performance kernel-level telemetry using libbpf.
+ .
+ Features:
+  - OOM kill tracing
+  - Process execution tracing
+  - Block I/O latency tracking
+  - TCP retransmission monitoring
+  - Capability denial tracing
+  - File permission denial tracing
+  - Mount operation monitoring
+ .
+ This package is optional. If not installed, ELLE falls back to
+ the BCC-Python eBPF implementation.
+
+Package: elled-probed
+Architecture: amd64
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+         libjansson4,
+         libsystemd0
+Recommends: elle
+Description: ELLE Userspace Probe Collector (deprecated)
+ Userspace polling collector for ELLE providing ground truth
+ telemetry from system interfaces.
+ .
+ NOTE: This package is deprecated. Use elled-telemetryd instead,
+ which provides all functionality in a unified daemon.
+ .
+ Features:
+  - PSI pressure monitoring (memory, CPU, I/O stalls)
+  - Systemd unit state tracking with crash loop detection
+  - DNS health probing
+  - Conntrack statistics and exhaustion detection
+  - Hardware error monitoring (EDAC memory errors)
+  - Authentication failure aggregation
+ .
+ This package complements elled-ebpfd by providing userspace
+ telemetry that cannot be captured via eBPF.
+
+Package: elled-telemetryd
+Architecture: amd64
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+         libjansson4,
+         libsystemd0,
+         libpcre2-8-0,
+         libssl3
+Recommends: elle
+Suggests: libbpf1
+Conflicts: elled-ebpfd, elled-probed
+Replaces: elled-ebpfd, elled-probed
+Description: ELLE Unified Telemetry Daemon
+ Unified telemetry collector for ELLE that combines eBPF tracing,
+ journald monitoring, and userspace probes into a single daemon.
+ .
+ Features:
+  - eBPF tracing (optional, requires libbpf):
+    * OOM kill tracing
+    * Process execution tracing
+    * Block I/O latency tracking
+    * TCP retransmission monitoring
+    * Capability denial tracing
+    * File permission denial tracing
+    * Mount operation monitoring
+  - Journald and kernel log streaming
+  - Docker container event monitoring
+  - File system change monitoring (inotify)
+  - Periodic probes:
+    * PSI pressure monitoring
+    * Memory and swap usage
+    * Disk space monitoring
+    * Network interface errors
+    * Thermal monitoring
+    * Package change detection
+    * Port listener detection
+  - Event normalization with 58 category patterns
+  - Deduplication with 60-second window
+ .
+ This package replaces elled-ebpfd and elled-probed, providing
+ all functionality in a unified, lower-memory daemon (<20MB).

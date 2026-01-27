@@ -1,0 +1,193 @@
+{
+  "description": "Test cases for category pattern matching",
+  "test_cases": [
+    {
+      "message": "Out of memory: Killed process 1234 (nginx)",
+      "expected_category": "oom"
+    },
+    {
+      "message": "Memory cgroup out of memory: Kill process 5678",
+      "expected_category": "oom"
+    },
+    {
+      "message": "OOM killer invoked on process mysql",
+      "expected_category": "oom"
+    },
+    {
+      "message": "Kernel panic - not syncing: VFS: Unable to mount root fs",
+      "expected_category": "kernel_panic"
+    },
+    {
+      "message": "BUG: kernel NULL pointer dereference",
+      "expected_category": "kernel_panic"
+    },
+    {
+      "message": "EXT4-fs error (device sda1): ext4_journal_check_start",
+      "expected_category": "disk"
+    },
+    {
+      "message": "I/O error, dev sdb, sector 12345",
+      "expected_category": "disk"
+    },
+    {
+      "message": "Buffer I/O error on dev sdc1, logical block 0",
+      "expected_category": "disk"
+    },
+    {
+      "message": "ata1: SATA link down (SStatus 0 SControl 300)",
+      "expected_category": "disk"
+    },
+    {
+      "message": "BTRFS: error (device dm-0) in btrfs_commit_transaction",
+      "expected_category": "disk"
+    },
+    {
+      "message": "XFS (sda2): Mounting filesystem with errors",
+      "expected_category": "disk"
+    },
+    {
+      "message": "mce: [Hardware Error]: Machine check events logged",
+      "expected_category": "disk"
+    },
+    {
+      "message": "TCP: request_sock_TCP: Possible SYN flooding on port 80",
+      "expected_category": "net"
+    },
+    {
+      "message": "nf_conntrack: table full, dropping packet",
+      "expected_category": "net"
+    },
+    {
+      "message": "Connection refused to 192.168.1.1:22",
+      "expected_category": "net"
+    },
+    {
+      "message": "Link is down for interface eth0",
+      "expected_category": "net"
+    },
+    {
+      "message": "network is unreachable",
+      "expected_category": "net"
+    },
+    {
+      "message": "TCP retransmit: 192.168.1.100:443 -> 10.0.0.50:54321",
+      "expected_category": "net"
+    },
+    {
+      "message": "PAM authentication failure for user admin from 192.168.1.50",
+      "expected_category": "auth"
+    },
+    {
+      "message": "Failed password for invalid user root from 10.0.0.1",
+      "expected_category": "auth"
+    },
+    {
+      "message": "sudo: user NOT in sudoers; TTY=pts/0",
+      "expected_category": "auth"
+    },
+    {
+      "message": "sshd[1234]: Invalid user admin from 192.168.1.1",
+      "expected_category": "auth"
+    },
+    {
+      "message": "polkit: denied action org.freedesktop.systemd1.manage-units",
+      "expected_category": "auth"
+    },
+    {
+      "message": "Permission denied: /etc/shadow",
+      "expected_category": "auth"
+    },
+    {
+      "message": "Capability CAP_NET_BIND_SERVICE denied",
+      "expected_category": "auth"
+    },
+    {
+      "message": "nginx.service: Main process exited, code=exited, status=1/FAILURE",
+      "expected_category": "service"
+    },
+    {
+      "message": "systemd[1]: Started MySQL Server",
+      "expected_category": "service"
+    },
+    {
+      "message": "systemd[1]: nginx.service: Failed with result 'exit-code'",
+      "expected_category": "service"
+    },
+    {
+      "message": "Job for apache2.service failed because the control process exited",
+      "expected_category": "service"
+    },
+    {
+      "message": "Temperature above threshold, cpu clock throttled",
+      "expected_category": "thermal"
+    },
+    {
+      "message": "CPU temperature above critical threshold (90C)",
+      "expected_category": "thermal"
+    },
+    {
+      "message": "thermal thermal_zone0: critical temperature reached",
+      "expected_category": "thermal"
+    },
+    {
+      "message": "smartd: Device /dev/sda: FAILED SMART",
+      "expected_category": "smart"
+    },
+    {
+      "message": "SMART Health Status: FAILED",
+      "expected_category": "smart"
+    },
+    {
+      "message": "Reallocated sector count: 100",
+      "expected_category": "smart"
+    },
+    {
+      "message": "apt-get install nginx completed successfully",
+      "expected_category": "pkg"
+    },
+    {
+      "message": "dpkg: status installed nginx:amd64 1.18.0-1",
+      "expected_category": "pkg"
+    },
+    {
+      "message": "Package nginx upgraded from 1.17.0 to 1.18.0",
+      "expected_category": "pkg"
+    },
+    {
+      "message": "Container web-1 started",
+      "expected_category": "docker"
+    },
+    {
+      "message": "docker: container nginx-proxy exited with code 137",
+      "expected_category": "docker"
+    },
+    {
+      "message": "Container web-app is crashlooping (5 restarts in 5m)",
+      "expected_category": "docker"
+    },
+    {
+      "message": "File /etc/passwd modified",
+      "expected_category": "fs"
+    },
+    {
+      "message": "inotify: /root/.ssh/authorized_keys changed",
+      "expected_category": "fs"
+    },
+    {
+      "message": "Mount: /dev/sda1 mounted on /mnt/data",
+      "expected_category": "fs"
+    },
+    {
+      "message": "Filesystem remounted read-only: /var",
+      "expected_category": "fs"
+    },
+    {
+      "message": "Just a regular log message with nothing special",
+      "expected_category": "other"
+    },
+    {
+      "message": "Application startup complete",
+      "expected_category": "other"
+    }
+  ]
+}

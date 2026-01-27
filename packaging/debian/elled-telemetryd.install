@@ -1,0 +1,2 @@
+ebpf/telemetryd/build/elled-telemetryd usr/bin
+ebpf/telemetryd/elled-telemetryd.service lib/systemd/system

@@ -27,10 +27,31 @@ case "$1" in
             fi
         fi
 
-        # Step 4: Reload systemd and enable daemon
+        # Step 4: Reload systemd and enable daemons
         if [ -d /run/systemd/system ]; then
             systemctl daemon-reload
             systemctl enable elled.service
+
+            # Enable unified telemetry daemon if available (preferred)
+            if [ -f /lib/systemd/system/elled-telemetryd.service ]; then
+                systemctl enable elled-telemetryd.service
+                # Disable legacy daemons if present
+                if [ -f /lib/systemd/system/elled-ebpfd.service ]; then
+                    systemctl disable elled-ebpfd.service 2>/dev/null || true
+                fi
+                if [ -f /lib/systemd/system/elled-probed.service ]; then
+                    systemctl disable elled-probed.service 2>/dev/null || true
+                fi
+            else
+                # Fall back to legacy daemons if telemetryd not installed
+                if [ -f /lib/systemd/system/elled-ebpfd.service ]; then
+                    systemctl enable elled-ebpfd.service
+                fi
+                if [ -f /lib/systemd/system/elled-probed.service ]; then
+                    systemctl enable elled-probed.service
+                fi
+            fi
+
             # Don't auto-start - user needs to configure Ollama first
             echo "ELLE installed. Configure Ollama, then run: systemctl start elled"
         fi

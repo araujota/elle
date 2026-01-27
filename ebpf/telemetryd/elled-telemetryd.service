@@ -1,0 +1,79 @@
+[Unit]
+Description=ELLE Unified Telemetry Daemon
+Documentation=https://araujota.github.io/elle
+
+# Start before elled so socket is ready when daemon starts
+Before=elled.service
+After=local-fs.target network.target
+After=docker.service
+Wants=docker.service
+
+# Replaces separate ebpfd and probed daemons
+Conflicts=elled-ebpfd.service elled-probed.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/elled-telemetryd
+Restart=on-failure
+RestartSec=5
+
+# Run as root (required for eBPF and system access)
+User=root
+Group=root
+
+# Security hardening - capabilities for eBPF and journal access
+CapabilityBoundingSet=CAP_BPF CAP_PERFMON CAP_SYS_RESOURCE CAP_NET_ADMIN CAP_DAC_READ_SEARCH CAP_SYS_ADMIN
+AmbientCapabilities=CAP_BPF CAP_PERFMON CAP_SYS_RESOURCE CAP_NET_ADMIN CAP_DAC_READ_SEARCH CAP_SYS_ADMIN
+
+# Prevent privilege escalation
+NoNewPrivileges=true
+
+# Filesystem protection
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+PrivateDevices=false
+ProtectKernelTunables=false
+ProtectKernelModules=true
+ProtectKernelLogs=false
+ProtectControlGroups=true
+ProtectProc=default
+
+# Allow access to required paths
+ReadWritePaths=/run/elle
+ReadOnlyPaths=/var/lib/dpkg
+ReadOnlyPaths=/var/log/journal
+ReadOnlyPaths=/run/log/journal
+ReadOnlyPaths=/proc
+ReadOnlyPaths=/sys
+
+# Docker socket access (for docker watcher)
+ReadWritePaths=/var/run/docker.sock
+
+# Memory limit - unified daemon uses more than individual ones
+MemoryMax=32M
+MemoryHigh=24M
+
+# CPU limit (low priority)
+CPUWeight=20
+Nice=5
+
+# IO scheduling (low priority)
+IOWeight=20
+
+# Network access (needed for network probes)
+PrivateNetwork=false
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=elled-telemetryd
+
+# Watchdog
+WatchdogSec=60
+
+# Startup timeout (for eBPF loading)
+TimeoutStartSec=30
+
+[Install]
+WantedBy=multi-user.target

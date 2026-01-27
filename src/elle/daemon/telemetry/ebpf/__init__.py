@@ -1,12 +1,17 @@
 """eBPF telemetry subsystem.
 
-Provides low-latency kernel event capture using eBPF with BCC backend.
+NOTE: eBPF telemetry is now handled by elled-telemetryd (C daemon).
+This module provides capability checking and syscall analysis utilities.
 
-This module includes:
-- EBPFWatcher: Main async watcher that polls ring buffers
-- BCC programs: OOM, Block I/O, Network, Process, Thermal
-- Capability checking for CAP_BPF/CAP_PERFMON
-- Extended normalizer for eBPF events
+For eBPF event capture, use elled-telemetryd instead of this module.
+The C daemon provides:
+- OOM kill tracing
+- Process execution tracing
+- Block I/O latency tracking
+- TCP retransmission monitoring
+- Capability denial tracing
+- File permission denial tracing
+- Mount operation monitoring
 """
 
 from elle.daemon.telemetry.ebpf.capabilities import (
@@ -24,14 +29,6 @@ from elle.daemon.telemetry.ebpf.models import (
     EBPFRawEvent,
     EBPFWatcherStatus,
 )
-from elle.daemon.telemetry.ebpf.normalizer import (
-    is_ebpf_event,
-    normalize_ebpf_event,
-)
-from elle.daemon.telemetry.ebpf.watcher import (
-    EBPFWatcher,
-    watch_ebpf,
-)
 
 __all__ = [
     # Models
@@ -48,10 +45,4 @@ __all__ = [
     "check_capabilities",
     "get_missing_capabilities",
     "get_kernel_version_string",
-    # Watcher
-    "EBPFWatcher",
-    "watch_ebpf",
-    # Normalizer
-    "is_ebpf_event",
-    "normalize_ebpf_event",
 ]

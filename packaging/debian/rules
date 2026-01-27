@@ -6,6 +6,18 @@
 override_dh_auto_build:
 	dh_auto_build
 	# Man pages are pre-built in packaging/man/
+	# Build elled-telemetryd (unified C telemetry daemon)
+	$(MAKE) -C ebpf/telemetryd clean
+	$(MAKE) -C ebpf/telemetryd
+	# Optionally build with eBPF support if libbpf is available
+	-$(MAKE) -C ebpf/telemetryd clean
+	-$(MAKE) -C ebpf/telemetryd ENABLE_EBPF=1 2>/dev/null || $(MAKE) -C ebpf/telemetryd
+
+override_dh_auto_clean:
+	dh_auto_clean
+	# Clean C telemetryd build artifacts
+	-$(MAKE) -C ebpf/telemetryd clean 2>/dev/null || true
 
 override_dh_installsystemd:
 	dh_installsystemd --name=elled --no-start
+	dh_installsystemd --name=elled-telemetryd --no-start

@@ -598,12 +598,19 @@ class SetupWizard:
             checks.append(f"{Icons.WARNING} Ollama is not installed")
             self.prefs.ollama_verified = False
 
-        # Check daemon
+        # Check telemetryd (C daemon) - REQUIRED for elled
+        telemetryd_running = self._check_telemetryd_running()
+        if telemetryd_running:
+            checks.append(f"{Icons.SUCCESS} elled-telemetryd is running")
+        else:
+            checks.append(f"{Icons.WARNING} elled-telemetryd not running (required for elled)")
+
+        # Check daemon (Python)
         daemon_running = self._check_daemon_running()
         if daemon_running:
-            checks.append(f"{Icons.SUCCESS} ELLE daemon is running")
+            checks.append(f"{Icons.SUCCESS} elled (Python daemon) is running")
         else:
-            checks.append(f"{Icons.WARNING} ELLE daemon is not running")
+            checks.append(f"{Icons.WARNING} elled (Python daemon) is not running")
 
         for check in checks:
             console.print(f"  {check}")
@@ -649,21 +656,36 @@ class SetupWizard:
             if not self.prompt.prompt_confirm("Continue setup without Ollama running?", default=True):
                 return StepResult.CANCEL
 
-        # Handle daemon not running (only ask if Ollama is running, otherwise defer to end)
-        if not daemon_running and ollama_status["running"]:
+        # Handle daemons not running (only ask if Ollama is running, otherwise defer to end)
+        if (not daemon_running or not telemetryd_running) and ollama_status["running"]:
             console.print()
-            print_muted("The ELLE daemon provides background monitoring and the API.")
+            print_muted("ELLE requires two daemons (start order matters):")
+            print_muted("  1. elled-telemetryd: C daemon for telemetry collection (must start first)")
+            print_muted("  2. elled: Python daemon for API and event processing")
             console.print()
 
-            if self.prompt.prompt_confirm("Would you like to start the ELLE daemon now?", default=True):
-                console.print()
-                console.print(f"  {Icons.INFO} Starting ELLE daemon...")
-                daemon_result = self._start_daemon()
-                if daemon_result["success"]:
-                    print_success(f"Daemon started ({daemon_result['method']})")
-                else:
-                    print_warning(f"Failed to start daemon: {daemon_result['error']}")
-                    print_muted("The daemon will be started at the end of setup.")
+            if self.prompt.prompt_confirm("Would you like to start the ELLE daemons now?", default=True):
+                # Start telemetryd first
+                if not telemetryd_running:
+                    console.print()
+                    console.print(f"  {Icons.INFO} Starting elled-telemetryd...")
+                    telemetryd_result = self._start_telemetryd()
+                    if telemetryd_result["success"]:
+                        print_success(f"elled-telemetryd started ({telemetryd_result['method']})")
+                    else:
+                        print_muted(f"elled-telemetryd not available: {telemetryd_result['error']}")
+                        print_muted("elled will use Python fallback watchers")
+
+                # Then start elled
+                if not daemon_running:
+                    console.print()
+                    console.print(f"  {Icons.INFO} Starting elled...")
+                    daemon_result = self._start_daemon()
+                    if daemon_result["success"]:
+                        print_success(f"elled started ({daemon_result['method']})")
+                    else:
+                        print_warning(f"Failed to start elled: {daemon_result['error']}")
+                        print_muted("The daemon will be started at the end of setup.")
 
         console.print()
         return StepResult.CONTINUE
@@ -1128,7 +1150,7 @@ class SetupWizard:
             save_setup_state(self.state)
 
     def _start_services(self) -> bool:
-        """Start Ollama, pull models, and start the daemon.
+        """Start Ollama, pull models, and start the daemons.
 
         Returns:
             True if all services started successfully.
@@ -1141,7 +1163,8 @@ class SetupWizard:
                 "[bold]ELLE needs these services running to work properly:[/bold]\n"
                 "  1. Ollama (local AI inference server)\n"
                 "  2. Language models (SLM for classification, LLM for generation)\n"
-                "  3. The ELLE daemon (telemetry and API)\n"
+                "  3. elled-telemetryd (C telemetry daemon - collects system events)\n"
+                "  4. elled (Python daemon - API and event processing)\n"
             )
         )
         console.print()
@@ -1183,15 +1206,33 @@ class SetupWizard:
 
         console.print()
 
-        # Step 3: Start the daemon
-        console.print(f"  {Icons.INFO} Starting ELLE daemon...")
+        # Step 3: Start elled-telemetryd (C daemon for telemetry collection)
+        # This is REQUIRED - elled depends on telemetryd for event collection
+        telemetryd_running = self._check_telemetryd_running()
+        if not telemetryd_running:
+            console.print(f"  {Icons.INFO} Starting elled-telemetryd (C telemetry daemon)...")
+            telemetryd_result = self._start_telemetryd()
+            if telemetryd_result["success"]:
+                print_success(f"elled-telemetryd started ({telemetryd_result['method']})")
+                telemetryd_running = True
+            else:
+                print_warning(f"Failed to start elled-telemetryd: {telemetryd_result['error']}")
+                print_muted("elled requires telemetryd for event collection")
+                success = False
+        else:
+            console.print(f"  {Icons.SUCCESS} elled-telemetryd is already running")
+
+        console.print()
+
+        # Step 4: Start elled (Python daemon)
+        console.print(f"  {Icons.INFO} Starting elled (Python daemon)...")
         daemon_result = self._start_daemon()
         if daemon_result["success"]:
-            print_success(f"Daemon started ({daemon_result['method']})")
+            print_success(f"elled started ({daemon_result['method']})")
         else:
-            print_warning(f"Failed to start daemon: {daemon_result['error']}")
+            print_warning(f"Failed to start elled: {daemon_result['error']}")
             console.print()
-            print_muted("You can start it manually with: elled")
+            print_muted("You can start it manually with: sudo systemctl start elled")
             success = False
 
         console.print()
@@ -1445,8 +1486,72 @@ class SetupWizard:
         except Exception:
             return False
 
+    def _start_telemetryd(self) -> dict[str, Any]:
+        """Start the elled-telemetryd C daemon.
+
+        Returns:
+            Dict with keys:
+                - success: bool
+                - method: str (how it was started)
+                - error: str | None
+        """
+        # Try systemctl first (if installed as system service)
+        try:
+            result = subprocess.run(
+                ["systemctl", "status", "elled-telemetryd"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            # Service exists
+            if result.returncode in (0, 3):  # 0=running, 3=stopped
+                if result.returncode == 0:
+                    # Already running
+                    return {"success": True, "method": "systemd (already running)", "error": None}
+
+                # Try to start it
+                start_result = subprocess.run(
+                    ["sudo", "systemctl", "start", "elled-telemetryd"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                if start_result.returncode == 0:
+                    # Wait for socket to be ready
+                    time.sleep(1)
+                    if self._check_telemetryd_running():
+                        return {"success": True, "method": "systemd", "error": None}
+                    else:
+                        return {"success": False, "method": "systemd", "error": "Started but socket not ready"}
+                else:
+                    return {
+                        "success": False,
+                        "method": "systemd",
+                        "error": start_result.stderr.strip() or "Failed to start",
+                    }
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        # Try running elled-telemetryd directly
+        telemetryd_path = shutil.which("elled-telemetryd")
+        if telemetryd_path:
+            try:
+                subprocess.Popen(
+                    [telemetryd_path],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+                time.sleep(2)
+                if self._check_telemetryd_running():
+                    return {"success": True, "method": "elled-telemetryd binary", "error": None}
+            except Exception as e:
+                return {"success": False, "method": "elled-telemetryd binary", "error": str(e)}
+
+        return {"success": False, "method": "none", "error": "elled-telemetryd not installed"}
+
     def _start_daemon(self) -> dict[str, Any]:
-        """Start the ELLE daemon.
+        """Start the ELLE daemon (elled).
 
         Returns:
             Dict with keys:
@@ -1565,6 +1670,28 @@ class SetupWizard:
         except httpx.RequestError:
             return False
 
+    def _check_telemetryd_running(self) -> bool:
+        """Check if the elled-telemetryd C daemon is running.
+
+        Returns:
+            True if telemetryd socket exists and is connectable.
+        """
+        from pathlib import Path
+        import socket
+
+        socket_path = Path("/run/elle/telemetry.sock")
+        if not socket_path.exists():
+            return False
+
+        try:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.settimeout(1.0)
+            sock.connect(str(socket_path))
+            sock.close()
+            return True
+        except (socket.error, OSError):
+            return False
+
     def _show_completion(self) -> None:
         """Show completion message."""
         console.print()
@@ -1574,15 +1701,18 @@ class SetupWizard:
         # Check what's actually running now
         ollama_status = self._check_ollama()
         daemon_running = self._check_daemon_running()
+        telemetryd_running = self._check_telemetryd_running()
 
-        if ollama_status["running"] and daemon_running:
+        if ollama_status["running"] and daemon_running and telemetryd_running:
             console.print(Text.from_markup("[bold green]ELLE is ready![/bold green] All services are running.\n"))
         else:
             issues = []
             if not ollama_status["running"]:
                 issues.append("Ollama is not running")
+            if not telemetryd_running:
+                issues.append("elled-telemetryd not running")
             if not daemon_running:
-                issues.append("Daemon is not running")
+                issues.append("elled is not running")
             console.print(Text.from_markup(f"[bold yellow]Partial setup:[/bold yellow] {', '.join(issues)}\n"))
 
         next_steps = [
@@ -1603,7 +1733,7 @@ class SetupWizard:
             console.print()
 
         if not daemon_running:
-            console.print(tip("Start the daemon with: elled"))
+            console.print(tip("Start the daemons with: sudo systemctl start elled-telemetryd elled"))
             console.print()
 
         if self.prefs.privilege_level == PrivilegeLevel.CONVENIENT and self.prefs.polkit_configured:

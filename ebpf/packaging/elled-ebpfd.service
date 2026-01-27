@@ -1,0 +1,63 @@
+[Unit]
+Description=ELLE eBPF Telemetry Collector
+Documentation=https://araujota.github.io/elle
+
+# Start before elled so socket is ready when daemon starts
+Before=elled.service
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/elled-ebpfd
+Restart=on-failure
+RestartSec=5
+
+# Run as root (required for eBPF)
+User=root
+Group=root
+
+# Security hardening - minimal capabilities for eBPF
+CapabilityBoundingSet=CAP_BPF CAP_PERFMON CAP_SYS_RESOURCE CAP_NET_ADMIN
+AmbientCapabilities=CAP_BPF CAP_PERFMON CAP_SYS_RESOURCE CAP_NET_ADMIN
+
+# Prevent privilege escalation
+NoNewPrivileges=true
+
+# Filesystem protection
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=false
+ProtectKernelTunables=false
+ProtectKernelModules=true
+ProtectKernelLogs=false
+ProtectControlGroups=true
+ProtectProc=default
+
+# Only allow write to /run/elle for socket
+ReadWritePaths=/run/elle
+
+# Network namespacing (collector doesn't need network)
+PrivateNetwork=false
+
+# Memory limit
+MemoryMax=64M
+MemoryHigh=48M
+
+# CPU limit (low priority)
+CPUWeight=20
+Nice=5
+
+# IO scheduling (low priority)
+IOWeight=20
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=elled-ebpfd
+
+# Watchdog (optional)
+WatchdogSec=60
+
+[Install]
+WantedBy=multi-user.target
