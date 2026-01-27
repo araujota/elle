@@ -3,17 +3,46 @@ set -e
 
 case "$1" in
     purge)
-        # Remove state directories on purge
+        # Remove systemd service files that may have been left behind
+        rm -f /etc/systemd/system/elled.service
+        rm -f /lib/systemd/system/elled.service
+        rm -f /usr/lib/systemd/system/elled.service
+
+        # Reload systemd to clear any cached state
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload 2>/dev/null || true
+        fi
+
+        # Remove all ELLE state directories
+        # /var/lib/elle - Main state (databases, mobile certs, backups)
         rm -rf /var/lib/elle
+
+        # /var/cache/elle - Cached data
+        rm -rf /var/cache/elle
+
+        # /var/log/elle - Log files
+        rm -rf /var/log/elle
+
+        # /var/run/elle - Runtime files (PIDs, sockets)
+        rm -rf /var/run/elle
+
+        # /etc/elle - Configuration
         rm -rf /etc/elle
 
-        # Remove elle user
+        # Remove elle system user if it exists (from older installations)
         if getent passwd elle >/dev/null 2>&1; then
-            deluser --quiet --system elle || true
+            deluser --quiet --system elle 2>/dev/null || true
         fi
         if getent group elle >/dev/null 2>&1; then
-            delgroup --quiet --system elle || true
+            delgroup --quiet --system elle 2>/dev/null || true
         fi
+
+        # Clean up any pip-installed dependencies (optional, best effort)
+        # Not removing pydantic as other packages may depend on it
+        ;;
+
+    remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        # Nothing to do for these cases
         ;;
 esac
 

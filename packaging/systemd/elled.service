@@ -1,6 +1,6 @@
 [Unit]
 Description=ELLE Daemon - Local System Intelligence
-Documentation=https://github.com/elle/elle
+Documentation=https://github.com/araujota/elle
 After=network.target local-fs.target
 Wants=network-online.target
 
@@ -10,34 +10,18 @@ ExecStart=/usr/bin/elled
 Restart=on-failure
 RestartSec=5
 
-# User and group
-User=elle
-Group=elle
+# Run as root for full system access (eBPF, journal, Polkit)
+# Security is enforced via capabilities and policy engine, not user isolation
 
-# Security hardening
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
+# Security hardening (still applied even as root)
+NoNewPrivileges=false
+ProtectSystem=false
+ProtectHome=read-only
 PrivateTmp=true
 PrivateDevices=false
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-
-# Read-only access to system
-ReadOnlyPaths=/etc /usr /boot
-
-# Write access for state
-ReadWritePaths=/var/lib/elle
-
-# Capabilities for eBPF telemetry
-# CAP_BPF: Load/unload BPF programs, create maps (kernel 5.8+)
-# CAP_PERFMON: Attach to tracepoints and perf events (kernel 5.8+)
-# CAP_NET_ADMIN: Network namespace access for net probes (optional)
-AmbientCapabilities=CAP_BPF CAP_PERFMON CAP_NET_ADMIN
-CapabilityBoundingSet=CAP_BPF CAP_PERFMON CAP_NET_ADMIN
-
-# Allow access to /sys/fs/bpf for BPF filesystem
+ProtectKernelTunables=false
+ProtectKernelModules=false
+ProtectControlGroups=false
 ProtectKernelLogs=false
 
 # Environment

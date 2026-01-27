@@ -3,9 +3,12 @@ set -e
 
 case "$1" in
     remove|upgrade|deconfigure)
+        # Stop and disable the daemon before removing files
         if [ -d /run/systemd/system ]; then
-            systemctl stop elled.service || true
-            systemctl disable elled.service || true
+            # Stop the service if running
+            systemctl stop elled.service 2>/dev/null || true
+            # Disable the service
+            systemctl disable elled.service 2>/dev/null || true
         fi
         ;;
 esac
