@@ -227,14 +227,33 @@ def _get_pip_packages(relevant_only: bool = True) -> list[PackageState]:
         if result.returncode == 0:
             # Key packages to always include
             key_packages = {
-                "requests", "urllib3", "aiohttp", "httpx",  # HTTP
-                "sqlalchemy", "psycopg2", "pymysql", "redis",  # Databases
-                "flask", "django", "fastapi", "uvicorn",  # Web frameworks
-                "celery", "pika", "kafka-python",  # Messaging
-                "boto3", "google-cloud-core", "azure-core",  # Cloud
-                "cryptography", "pyjwt", "paramiko",  # Security
-                "numpy", "pandas", "scipy",  # Data science
-                "pydantic", "attrs", "dataclasses",  # Data modeling
+                "requests",
+                "urllib3",
+                "aiohttp",
+                "httpx",  # HTTP
+                "sqlalchemy",
+                "psycopg2",
+                "pymysql",
+                "redis",  # Databases
+                "flask",
+                "django",
+                "fastapi",
+                "uvicorn",  # Web frameworks
+                "celery",
+                "pika",
+                "kafka-python",  # Messaging
+                "boto3",
+                "google-cloud-core",
+                "azure-core",  # Cloud
+                "cryptography",
+                "pyjwt",
+                "paramiko",  # Security
+                "numpy",
+                "pandas",
+                "scipy",  # Data science
+                "pydantic",
+                "attrs",
+                "dataclasses",  # Data modeling
             }
             for line in result.stdout.strip().split("\n"):
                 if "==" in line:
@@ -274,10 +293,12 @@ def _get_kernel_modules() -> list[dict[str, str]]:
             for line in lines:
                 parts = line.split()
                 if len(parts) >= 2:
-                    modules.append({
-                        "name": parts[0],
-                        "size": parts[1],
-                    })
+                    modules.append(
+                        {
+                            "name": parts[0],
+                            "size": parts[1],
+                        }
+                    )
     except Exception:
         pass
     return modules
@@ -319,11 +340,13 @@ def _get_docker_image_versions() -> list[dict[str, str]]:
                     else:
                         name, tag = image, "latest"
 
-                    images.append({
-                        "image": name,
-                        "tag": tag,
-                        "digest": digest[:32] if digest else "",
-                    })
+                    images.append(
+                        {
+                            "image": name,
+                            "tag": tag,
+                            "digest": digest[:32] if digest else "",
+                        }
+                    )
     except Exception:
         pass
     return images[:20]  # Limit to 20 images

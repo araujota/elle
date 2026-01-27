@@ -181,9 +181,7 @@ class TelemetrydWatcher:
             return False
 
         try:
-            self._reader, self._writer = await asyncio.open_unix_connection(
-                str(self._socket_path)
-            )
+            self._reader, self._writer = await asyncio.open_unix_connection(str(self._socket_path))
             self._connected = True
             logger.info(f"Connected to telemetryd at {self._socket_path}")
             return True

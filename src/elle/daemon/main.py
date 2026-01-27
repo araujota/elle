@@ -113,8 +113,8 @@ class ElledDaemon:
             uptime_sec=self.uptime_sec,
             pid=os.getpid(),
             journal_active=True,  # Handled by telemetryd
-            kernel_active=True,   # Handled by telemetryd
-            probes_active=True,   # Handled by telemetryd
+            kernel_active=True,  # Handled by telemetryd
+            probes_active=True,  # Handled by telemetryd
             api_active=self.config.api.enabled,
             raw_queue=QueueStats(name="raw", size=0, max_size=0),  # Not used
             event_queue=event_stats,
@@ -131,13 +131,8 @@ class ElledDaemon:
 
         # Check if telemetryd is available
         if not is_telemetryd_available():
-            logger.error(
-                "elled-telemetryd is not running. "
-                "Start it with: sudo systemctl start elled-telemetryd"
-            )
-            logger.error(
-                "The Python daemon requires the C telemetry daemon for event collection."
-            )
+            logger.error("elled-telemetryd is not running. Start it with: sudo systemctl start elled-telemetryd")
+            logger.error("The Python daemon requires the C telemetry daemon for event collection.")
             raise RuntimeError("elled-telemetryd is not available")
 
         # Initialize session token for API authentication
