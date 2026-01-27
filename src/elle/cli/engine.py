@@ -1087,10 +1087,11 @@ Validates package operations before execution to detect potential issues.
         intent_result: IntentResult,
         session: Session,
     ) -> EngineResult:
-        """Handle system questions (LLM-powered).
+        """Handle system questions (agentic + LLM-powered).
 
-        Uses the LLM to answer questions about the system, Linux administration,
-        and general technical topics.
+        First tries to answer the question by gathering actual system information
+        using the agentic handler. Falls back to pure LLM response for general
+        questions that don't require system state.
 
         Args:
             user_input: The question.
@@ -1098,13 +1099,125 @@ Validates package operations before execution to detect potential issues.
             session: Current session state.
 
         Returns:
-            EngineResult with LLM-generated answer.
+            EngineResult with answer (from agentic handler or LLM).
         """
         # Extract the actual question (remove /ask prefix if present)
         question = user_input
         if question.startswith("/ask "):
             question = question[5:]
 
+        # Try agentic handling first for questions about system state
+        agentic_result = self._try_agentic_handling(question, session)
+        if agentic_result is not None:
+            return agentic_result
+
+        # Fall back to LLM-only approach for general questions
+        return self._handle_system_question_legacy(question, session)
+
+    def _try_agentic_handling(
+        self,
+        question: str,
+        session: Session,
+    ) -> EngineResult | None:
+        """Try to answer using the agentic handler.
+
+        Args:
+            question: The question to answer.
+            session: Current session state.
+
+        Returns:
+            EngineResult if agentic handling succeeded, None if should fallback.
+        """
+        import asyncio
+
+        try:
+            from elle.cli.agentic import get_agentic_handler
+
+            handler = get_agentic_handler()
+
+            # Check if this question can be handled agentically
+            if not handler.can_handle(question):
+                logger.debug("Question not suitable for agentic handling")
+                return None
+
+            # Run async handler in sync context
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            response = loop.run_until_complete(handler.handle(question))
+
+            # Build output with evidence attribution
+            output = self._format_agentic_response(response, verbose=False)
+
+            return EngineResult(
+                output=output,
+                session=session,
+                success=response.confidence > 0.0,
+            )
+
+        except Exception as e:
+            logger.warning(f"Agentic handling failed: {e}")
+            return None
+
+    def _format_agentic_response(
+        self,
+        response: Any,  # AgenticResponse, but avoid import for type
+        verbose: bool = False,
+    ) -> str:
+        """Format an agentic response for display.
+
+        Args:
+            response: The AgenticResponse to format.
+            verbose: Whether to include evidence details.
+
+        Returns:
+            Formatted output string.
+        """
+        parts: list[str] = []
+
+        # Main answer
+        parts.append(response.answer)
+
+        # Evidence attribution (brief mode)
+        if response.evidence and not verbose:
+            capabilities = sorted({e.capability for e in response.evidence if e.success})
+            if capabilities:
+                parts.append(f"\n{Colors.DIM}[Evidence: {', '.join(capabilities)}]{Colors.RESET}")
+
+        # Verbose evidence
+        if response.evidence and verbose:
+            parts.append(f"\n{Colors.BOLD}Evidence gathered:{Colors.RESET}")
+            for ev in response.evidence:
+                status = Colors.GREEN + "✓" + Colors.RESET if ev.success else Colors.RED + "✗" + Colors.RESET
+                parts.append(f"  {status} {ev.capability} ({ev.duration_ms}ms)")
+                if ev.error:
+                    parts.append(f"      {Colors.RED}{ev.error}{Colors.RESET}")
+
+        # Follow-up suggestions
+        if response.follow_up_suggestions:
+            parts.append(f"\n{Colors.DIM}Try: {response.follow_up_suggestions[0]}{Colors.RESET}")
+
+        return "\n".join(parts)
+
+    def _handle_system_question_legacy(
+        self,
+        question: str,
+        session: Session,
+    ) -> EngineResult:
+        """Handle system questions using LLM only.
+
+        This is the fallback when agentic handling is not applicable.
+
+        Args:
+            question: The question to answer.
+            session: Current session state.
+
+        Returns:
+            EngineResult with LLM-generated answer.
+        """
         # Try to use LLM to answer the question
         try:
             from elle.rag.llm import get_llm
@@ -1130,7 +1243,7 @@ Validates package operations before execution to detect potential issues.
                 "If you don't know something, say so rather than guessing."
             )
 
-            # Generate response
+            # Generate response with streaming
             response = llm.chat(
                 [
                     {"role": "system", "content": system_prompt},
@@ -1138,23 +1251,16 @@ Validates package operations before execution to detect potential issues.
                 ]
             )
 
-            if response:
-                lines: list[str] = [
-                    f"{Colors.BOLD}Question:{Colors.RESET} {question}",
-                    "",
-                    str(response),
-                ]
+            if response and response.content:
+                # Just return the content, not the whole response object
                 return EngineResult(
-                    output="\n".join(lines),
+                    output=response.content,
                     session=session,
                     success=True,
                 )
             else:
                 return EngineResult(
-                    output=(
-                        f"{Colors.BOLD}Question:{Colors.RESET} {question}\n\n"
-                        f"{Colors.YELLOW}No response from LLM.{Colors.RESET}"
-                    ),
+                    output=f"{Colors.YELLOW}No response from LLM.{Colors.RESET}",
                     session=session,
                     success=False,
                 )
