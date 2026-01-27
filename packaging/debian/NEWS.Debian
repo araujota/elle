@@ -1,0 +1,22 @@
+elle (1.0.0) unstable; urgency=medium
+
+  ELLE v1.0.0 - First Stable Release
+
+  This is the initial stable release of ELLE, the Enabling Layer Learning
+  Everything system assistant for Ubuntu 24.04 LTS.
+
+  Key features:
+  * Intent classification with local Ollama inference
+  * Man Vault documentation search (SQLite+FTS5)
+  * Incident Vault decision memory
+  * Reactive Functions for event-driven automation
+  * AT-SPI GUI automation with self-healing
+  * Policy engine for safe command execution
+  * Capability auto-generation from installed packages
+
+  Configuration:
+  * Main config: /etc/elle/elle.toml
+  * State databases: /var/lib/elle/
+  * Logs: journalctl -u elled
+
+ -- Tyler Araujo <araujota97@gmail.com>  Mon, 27 Jan 2026 00:00:00 +0000

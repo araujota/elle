@@ -119,8 +119,9 @@ Usage:
 Batch learning:
   /learn --all               Learn ALL installed packages (may take a while)
   /learn --all --dry-run     Preview which packages would be learned
-  /learn bootstrap           Learn core + optional packages
+  /learn bootstrap           Learn core + essential + optional packages
   /learn bootstrap --core    Only core system packages
+  /learn bootstrap --essential  Only Debian Essential packages
   /learn bootstrap --deps    Only ELLE dependencies
   /learn status              Show bootstrap status
 
@@ -336,7 +337,7 @@ Output valid JSON only."""
             except Exception as e:
                 warnings.append(f"Failed to save {spec.name}: {e}")
 
-    return LearnResult(
+    result = LearnResult(
         package_name=package_name,
         capabilities_generated=generated_count,
         capabilities_validated=validated_count,
@@ -345,6 +346,29 @@ Output valid JSON only."""
         errors=tuple(errors),
         warnings=tuple(warnings),
     )
+
+    # Record to incident vault for provenance and pattern matching
+    if not dry_run:
+        try:
+            from elle.cli.agentic.incident_recorder import record_arm_action
+
+            record_arm_action(
+                arm_name="package_learning",
+                action="learn_package",
+                target=package_name,
+                success=saved_count > 0,
+                details={
+                    "capabilities_generated": generated_count,
+                    "capabilities_validated": validated_count,
+                    "capabilities_saved": saved_count,
+                    "extraction_sources": list(intel.extraction_sources),
+                },
+                error=errors[0] if errors else None,
+            )
+        except Exception as e:
+            logger.debug(f"Failed to record learning to incident vault: {e}")
+
+    return result
 
 
 def _format_learn_result(result: LearnResult, dry_run: bool = False) -> str:
@@ -491,6 +515,20 @@ async def _handle_approve(args: str) -> str:
 
     try:
         if store.approve(cap_name):
+            # Record to incident vault for audit trail
+            try:
+                from elle.cli.agentic.incident_recorder import record_arm_action
+
+                record_arm_action(
+                    arm_name="package_learning",
+                    action="approve_capability",
+                    target=cap_name,
+                    success=True,
+                    details={"capability_name": cap_name},
+                )
+            except Exception as e:
+                logger.debug(f"Failed to record approval to incident vault: {e}")
+
             return f"{Colors.GREEN}Approved '{cap_name}' for use.{Colors.RESET}"
         else:
             return f"Capability '{cap_name}' not found."
@@ -513,6 +551,20 @@ async def _handle_delete(args: str) -> str:
 
     try:
         if store.delete(cap_name):
+            # Record to incident vault for audit trail
+            try:
+                from elle.cli.agentic.incident_recorder import record_arm_action
+
+                record_arm_action(
+                    arm_name="package_learning",
+                    action="delete_capability",
+                    target=cap_name,
+                    success=True,
+                    details={"capability_name": cap_name},
+                )
+            except Exception as e:
+                logger.debug(f"Failed to record deletion to incident vault: {e}")
+
             return f"{Colors.GREEN}Deleted capability '{cap_name}'.{Colors.RESET}"
         else:
             return f"Capability '{cap_name}' not found."
@@ -535,7 +587,7 @@ async def _handle_bootstrap(args: str) -> str:
     """Run bootstrap capability generation for core packages.
 
     Args:
-        args: Flags like --core, --deps, --optional
+        args: Flags like --core, --essential, --deps, --optional
 
     Returns:
         Status message.
@@ -549,10 +601,24 @@ async def _handle_bootstrap(args: str) -> str:
 
     # Parse flags
     parts = args.lower().split()
-    include_core = "--core" in parts or not parts or "--all" in parts
-    include_deps = "--deps" in parts or not parts or "--all" in parts
-    include_optional = "--optional" in parts or not parts or "--all" in parts
     dry_run = "--dry-run" in parts
+
+    # If specific flags are given, only include those categories
+    has_specific_flags = any(
+        f in parts for f in ["--core", "--essential", "--deps", "--optional"]
+    )
+
+    if has_specific_flags:
+        include_core = "--core" in parts
+        include_essential = "--essential" in parts
+        include_deps = "--deps" in parts
+        include_optional = "--optional" in parts
+    else:
+        # Default: include all categories
+        include_core = True
+        include_essential = True
+        include_deps = True
+        include_optional = True
 
     if dry_run:
         # Just show what would be bootstrapped
@@ -594,6 +660,7 @@ async def _handle_bootstrap(args: str) -> str:
     try:
         result = await run_bootstrap(
             include_core=include_core,
+            include_essential=include_essential,
             include_optional=include_optional,
             include_dependencies=include_deps,
             skip_existing=True,
@@ -693,7 +760,7 @@ async def _handle_learn_all(args: str) -> str:
     # Parse max concurrent
     import contextlib
 
-    max_concurrent = 3
+    max_concurrent = 1
     for part in parts:
         if part.startswith("--max-concurrent="):
             with contextlib.suppress(ValueError):
@@ -851,7 +918,7 @@ async def _filter_learnable_packages(packages: list[str]) -> list[str]:
 async def _run_full_system_learn(
     packages: list[str],
     skip_existing: bool = True,
-    max_concurrent: int = 3,
+    max_concurrent: int = 1,
 ) -> dict[str, Any]:
     """Run learning on all specified packages.
 

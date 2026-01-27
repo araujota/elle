@@ -236,16 +236,26 @@ class Engine:
                 # Extract command from prefix if present
                 command = self._extract_shell_command(user_input)
                 return self._handle_shell_command(command, session, stream_output)
-            case Intent.SYSTEM_QUESTION:
-                return self._handle_system_question(user_input, intent_result, session)
-            case Intent.SYSTEM_TASK:
-                return self._handle_system_task(user_input, intent_result, session, stream_output)
+            case Intent.SYSTEM_QUESTION | Intent.SYSTEM_TASK:
+                # Route through unified agentic loop when enabled
+                # Falls back to legacy handlers if loop is disabled
+                return self._handle_via_agentic_loop(
+                    user_input, intent_result, session, stream_output=stream_output
+                )
             case Intent.FIXIT:
                 return self._handle_fix(session, interactive=stream_output)
             case Intent.EXPLAIN_COMMAND:
                 return self._handle_explain_command(user_input, session)
             case Intent.LEARN_PACKAGE:
                 return self._handle_learn_package(user_input, intent_result, session)
+            case Intent.CAPABILITIES:
+                return self._handle_capabilities(user_input, session)
+            case Intent.AUTONOMY_CONFIG:
+                return self._handle_autonomy_config(user_input, session)
+            case Intent.DAEMON:
+                return self._handle_daemon_command(user_input, session)
+            case Intent.AGENT:
+                return self._handle_agent_command(user_input, session)
             case _:
                 # Fallback to shell passthrough
                 return self._handle_shell_command(user_input, session, stream_output)
@@ -311,6 +321,8 @@ class Engine:
             Intent.FIXIT: "command",
             Intent.NAVIGATION: "command",
             Intent.META: "command",
+            Intent.CAPABILITIES: "query",
+            Intent.AUTONOMY_CONFIG: "config",
         }
         return mapping.get(intent, "command")
 
@@ -446,7 +458,9 @@ class Engine:
         lower = user_input.lower().strip()
 
         if lower == "status":
-            return self._handle_status(session)
+            return self._handle_status(session, show_session=False)
+        elif lower == "status session" or lower == "status --session":
+            return self._handle_status(session, show_session=True)
         elif lower == "history":
             return self._handle_history(session)
         elif lower == "logs":
@@ -694,6 +708,165 @@ class Engine:
                 success=False,
             )
 
+    def _handle_capabilities(self, user_input: str, session: Session) -> EngineResult:
+        """Handle capabilities browsing command.
+
+        Supports:
+        - /capabilities: List all domains with counts
+        - /cap: Alias for above
+        - /capabilities <domain>: List capabilities in domain
+        - /capabilities <name>: Show capability detail
+        - Natural language: "what can you do", "list capabilities", etc.
+
+        Args:
+            user_input: The capabilities command or query.
+            session: Current session state.
+
+        Returns:
+            EngineResult with formatted capability information.
+        """
+        import asyncio
+
+        try:
+            from elle.cli.capabilities_commands import handle_capabilities_command
+
+            # Run async handler
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            return loop.run_until_complete(handle_capabilities_command(user_input, session))
+
+        except Exception as e:
+            logger.exception("Failed to handle capabilities command")
+            return EngineResult(
+                output=f"{Colors.RED}Error displaying capabilities: {e}{Colors.RESET}",
+                session=session,
+                success=False,
+            )
+
+    def _handle_autonomy_config(self, user_input: str, session: Session) -> EngineResult:
+        """Handle autonomy configuration command.
+
+        Supports:
+        - /autonomy: Show current configuration
+        - /autonomy status: Same as above
+        - /autonomy set <level>: Set base autonomy level
+        - /autonomy earn on|off: Enable/disable earned autonomy
+        - /autonomy grant <cap>: Manually grant autonomy
+        - /autonomy revoke <cap>: Revoke autonomy
+
+        Args:
+            user_input: The autonomy command.
+            session: Current session state.
+
+        Returns:
+            EngineResult with configuration result.
+        """
+        import asyncio
+
+        try:
+            from elle.cli.capabilities_commands import handle_autonomy_command
+
+            # Run async handler
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            return loop.run_until_complete(handle_autonomy_command(user_input, session))
+
+        except Exception as e:
+            logger.exception("Failed to handle autonomy command")
+            return EngineResult(
+                output=f"{Colors.RED}Error configuring autonomy: {e}{Colors.RESET}",
+                session=session,
+                success=False,
+            )
+
+    def _handle_daemon_command(self, user_input: str, session: Session) -> EngineResult:
+        """Handle daemon lifecycle and visibility commands.
+
+        Supports:
+        - daemon / daemon status: Show daemon health
+        - daemon explain: Describe what daemon monitors
+        - daemon start/stop/restart: Lifecycle control
+        - daemon logs: Show recent logs
+        - daemon actions: Show autonomous actions
+
+        Args:
+            user_input: The daemon command.
+            session: Current session state.
+
+        Returns:
+            EngineResult with daemon information.
+        """
+        try:
+            from elle.cli.daemon_commands import handle_daemon_command_sync
+
+            # Extract args after "daemon " or "/daemon "
+            args = user_input.strip()
+            if args.lower().startswith("/daemon"):
+                args = args[7:].strip()
+            elif args.lower().startswith("daemon"):
+                args = args[6:].strip()
+
+            output = handle_daemon_command_sync(args)
+            return EngineResult(
+                output=output,
+                session=session,
+            )
+        except Exception as e:
+            logger.exception("Failed to handle daemon command")
+            return EngineResult(
+                output=f"{Colors.RED}Error: {e}{Colors.RESET}",
+                session=session,
+                success=False,
+            )
+
+    def _handle_agent_command(self, user_input: str, session: Session) -> EngineResult:
+        """Handle agent loop introspection commands.
+
+        Supports:
+        - agent / agent last: Show recent executions
+        - agent inspect <id>: Detailed execution view
+        - agent stages: Explain loop stages
+        - agent hypotheses <id>: Show hypotheses
+        - agent tools <id>: Show tool calls
+
+        Args:
+            user_input: The agent command.
+            session: Current session state.
+
+        Returns:
+            EngineResult with agent information.
+        """
+        try:
+            from elle.cli.agent_commands import handle_agent_command_sync
+
+            # Extract args after "agent " or "/agent "
+            args = user_input.strip()
+            if args.lower().startswith("/agent"):
+                args = args[6:].strip()
+            elif args.lower().startswith("agent"):
+                args = args[5:].strip()
+
+            output = handle_agent_command_sync(args)
+            return EngineResult(
+                output=output,
+                session=session,
+            )
+        except Exception as e:
+            logger.exception("Failed to handle agent command")
+            return EngineResult(
+                output=f"{Colors.RED}Error: {e}{Colors.RESET}",
+                session=session,
+                success=False,
+            )
+
     def _handle_preflight_command(self, user_input: str, session: Session) -> EngineResult:
         """Handle preflight validation commands.
 
@@ -879,12 +1052,20 @@ Validates package operations before execution to detect potential issues.
         - incident <id> - Show incident details
         - incident <id> --markdown - Export as markdown
         - incidents search <term> - Search incidents
+        - incident diff <id1> <id2> - Compare two incidents
         """
         import re
 
         lower = user_input.lower().strip()
 
         # Parse the command
+        # incident diff <id1> <id2>
+        diff_match = re.match(r"incidents?\s+diff\s+([a-f0-9-]+)\s+([a-f0-9-]+)", lower)
+        if diff_match:
+            id1 = diff_match.group(1)
+            id2 = diff_match.group(2)
+            return self._diff_incidents(id1, id2, session)
+
         # incident <id>
         id_match = re.match(r"incident\s+([a-f0-9-]+)", lower)
         if id_match:
@@ -1004,6 +1185,60 @@ Validates package operations before execution to detect potential issues.
             logger.exception("Failed to show incident detail")
             return EngineResult(
                 output=f"{Colors.RED}Error loading incident: {e}{Colors.RESET}",
+                session=session,
+                success=False,
+            )
+
+    def _diff_incidents(
+        self,
+        id1: str,
+        id2: str,
+        session: Session,
+    ) -> EngineResult:
+        """Compare two incidents structurally."""
+        try:
+            from elle.daemon.incidents.differ import IncidentDiffer, render_incident_diff
+            from elle.daemon.incidents.store import get_incident, list_incidents
+
+            # Helper to resolve partial IDs
+            def resolve_incident(partial_id: str):
+                incident = get_incident(partial_id)
+                if incident:
+                    return incident
+                # Try partial match
+                all_incidents = list_incidents(limit=1000)
+                matches = [i for i in all_incidents if i.incident_id.startswith(partial_id)]
+                if len(matches) == 1:
+                    return matches[0]
+                return None
+
+            incident1 = resolve_incident(id1)
+            incident2 = resolve_incident(id2)
+
+            if incident1 is None:
+                return EngineResult(
+                    output=f"{Colors.RED}Incident not found: {id1}{Colors.RESET}",
+                    session=session,
+                    success=False,
+                )
+
+            if incident2 is None:
+                return EngineResult(
+                    output=f"{Colors.RED}Incident not found: {id2}{Colors.RESET}",
+                    session=session,
+                    success=False,
+                )
+
+            # Create diff
+            diff = IncidentDiffer.diff(incident1, incident2)
+            output = render_incident_diff(diff)
+
+            return EngineResult(output=output, session=session)
+
+        except Exception as e:
+            logger.exception("Failed to diff incidents")
+            return EngineResult(
+                output=f"{Colors.RED}Error comparing incidents: {e}{Colors.RESET}",
                 session=session,
                 success=False,
             )
@@ -1385,6 +1620,119 @@ Validates package operations before execution to detect potential issues.
 
         # Fall back to planner for complex multi-step tasks
         return self._handle_system_task_planner(task, intent_result, session, interactive)
+
+    def _handle_via_agentic_loop(
+        self,
+        user_input: str,
+        intent_result: IntentResult,
+        session: Session,
+        *,
+        stream_output: bool = True,
+    ) -> EngineResult:
+        """Handle input through the unified agentic loop.
+
+        This is the new unified path that routes both questions and tasks
+        through the AgenticLoop with full retrieval and audit support.
+
+        The agentic loop:
+        1. Creates an AgenticInput from the user message
+        2. Runs unified retrieval (incidents, man vault, capabilities)
+        3. Streams LLM response with tool calling
+        4. Records complete audit trail
+
+        Args:
+            user_input: The user's input.
+            intent_result: Classification result with entities.
+            session: Current session state.
+            stream_output: Whether to stream output.
+
+        Returns:
+            EngineResult with response.
+        """
+        import asyncio
+
+        from elle.cli.agentic.loop import is_agentic_loop_enabled, run_agentic_loop
+
+        # Check if agentic loop is enabled
+        if not is_agentic_loop_enabled():
+            # Fall back to legacy handlers
+            if intent_result.intent == Intent.SYSTEM_QUESTION:
+                return self._handle_system_question(user_input, intent_result, session)
+            else:
+                return self._handle_system_task(user_input, intent_result, session, stream_output)
+
+        try:
+            # Extract message (remove prefixes)
+            message = user_input
+            if message.startswith("/ask "):
+                message = message[5:]
+            elif message.startswith("/do "):
+                message = message[4:]
+
+            # Get or create event loop
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            # Create confirmation callback for tasks
+            async def confirm_callback(title: str, preview: str) -> bool:
+                """Get user confirmation for actions."""
+                print(f"\n{Colors.BOLD}{title}{Colors.RESET}")
+                print(preview)
+                try:
+                    response = input(f"\n{Colors.BOLD}Proceed? [y/N]: {Colors.RESET}").strip().lower()
+                    return response in ("y", "yes")
+                except (EOFError, KeyboardInterrupt):
+                    return False
+
+            # Stream callback if enabled
+            stream_callback = print if stream_output else None
+
+            # Run the agentic loop
+            result = loop.run_until_complete(
+                run_agentic_loop(
+                    message,
+                    stream_callback=stream_callback,
+                    confirm_callback=confirm_callback,
+                    session_id=session.session_id,
+                )
+            )
+
+            # Format output
+            output_parts = []
+
+            # If streaming was disabled, include the response
+            if not stream_output:
+                output_parts.append(result.response)
+
+            # Add execution metadata
+            if result.tool_call_count > 0:
+                output_parts.append(
+                    f"\n{Colors.DIM}[{result.tool_call_count} tool calls, "
+                    f"{result.iterations} iteration(s), {result.total_duration_ms}ms]{Colors.RESET}"
+                )
+
+            # Add audit trail link if available
+            if result.execution_id:
+                output_parts.append(
+                    f"{Colors.DIM}[Audit: {result.execution_id[:8]}]{Colors.RESET}"
+                )
+
+            return EngineResult(
+                output="\n".join(output_parts) if output_parts else "",
+                session=session,
+                success=result.success,
+            )
+
+        except Exception as e:
+            logger.exception("Agentic loop failed")
+            return EngineResult(
+                output=f"{Colors.RED}Error in agentic loop: {e}{Colors.RESET}",
+                session=session,
+                success=False,
+            )
 
     def _handle_system_task_planner(
         self,
@@ -1910,28 +2258,62 @@ Validates package operations before execution to detect potential issues.
             session=session,
         )
 
-    def _handle_status(self, session: Session) -> EngineResult:
-        """Display session status.
+    def _handle_status(self, session: Session, show_session: bool = False) -> EngineResult:
+        """Display daemon or session status.
+
+        By default shows daemon status. Use --session flag or 'status session'
+        to show session status.
 
         Args:
             session: Current session state.
+            show_session: If True, show session status instead of daemon status.
 
         Returns:
             EngineResult with status information.
         """
-        lines = [
-            f"cwd: {session.cwd}",
-            f"history: {len(session.history)} commands",
-        ]
-        if session.last_cmd:
-            lines.append(f"last command: {session.last_cmd}")
-            lines.append(f"last exit code: {session.last_exit}")
-            if session.last_failed:
-                lines.append(f"{Colors.YELLOW}(failed - type 'fix' for help){Colors.RESET}")
-        return EngineResult(
-            output="\n".join(lines),
-            session=session,
-        )
+        if show_session:
+            # Show session status (legacy behavior)
+            lines = [
+                "SESSION STATUS:",
+                f"  cwd: {session.cwd}",
+                f"  history: {len(session.history)} commands",
+            ]
+            if session.last_cmd:
+                lines.append(f"  last command: {session.last_cmd}")
+                lines.append(f"  last exit code: {session.last_exit}")
+                if session.last_failed:
+                    lines.append(f"  {Colors.YELLOW}(failed - type 'fix' for help){Colors.RESET}")
+            return EngineResult(
+                output="\n".join(lines),
+                session=session,
+            )
+
+        # Show daemon status (new default behavior)
+        try:
+            from elle.cli.daemon_commands import handle_daemon_command_sync
+
+            output = handle_daemon_command_sync("status")
+            return EngineResult(
+                output=output,
+                session=session,
+            )
+        except Exception as e:
+            # Fallback to session status if daemon status fails
+            logger.warning(f"Failed to get daemon status: {e}")
+            lines = [
+                f"{Colors.YELLOW}DAEMON STATUS UNAVAILABLE{Colors.RESET}",
+                "",
+                "SESSION STATUS:",
+                f"  cwd: {session.cwd}",
+                f"  history: {len(session.history)} commands",
+            ]
+            if session.last_cmd:
+                lines.append(f"  last command: {session.last_cmd}")
+                lines.append(f"  last exit code: {session.last_exit}")
+            return EngineResult(
+                output="\n".join(lines),
+                session=session,
+            )
 
     def _handle_events(self, session: Session) -> EngineResult:
         """Display recent telemetry events.

@@ -294,19 +294,120 @@ def reset_registry() -> None:
 def _load_core_capabilities(registry: CapabilityRegistry) -> None:
     """Load core capabilities into the registry.
 
+    Strategy:
+    1. Sync core capabilities if source files changed (auto-versioning)
+    2. Load from autogen.db (primary source)
+    3. Fallback to Python files for any not yet migrated
+
     Args:
         registry: The registry to populate.
+    """
+    # First, sync any changed core modules to autogen.db
+    # This ensures stored capabilities match current Python source
+    _sync_core_if_needed()
+
+    # Load from stored capabilities (preferred)
+    stored_count = _load_stored_core_capabilities(registry)
+
+    # Fallback to Python files for any not yet migrated
+    python_count = _load_python_core_capabilities(registry)
+
+    if stored_count > 0 or python_count > 0:
+        logger.info(f"Loaded core capabilities: {stored_count} from DB, {python_count} from Python")
+
+
+def _sync_core_if_needed() -> None:
+    """Sync core capabilities if source files have changed.
+
+    This enables automatic versioning - when ELLE is upgraded and
+    capability source files change, the stored versions are updated.
+    """
+    try:
+        from elle.capabilities.autogen.core_migrator import sync_core_capabilities_if_needed
+
+        result = sync_core_capabilities_if_needed()
+        if result.get("updated_count", 0) > 0:
+            logger.info(f"Updated {result['updated_count']} core capabilities from changed source files")
+        if result.get("migrated_count", 0) > 0:
+            logger.info(f"Migrated {result['migrated_count']} new core capabilities")
+    except Exception as e:
+        logger.debug(f"Could not sync core capabilities: {e}")
+
+
+def _load_stored_core_capabilities(registry: CapabilityRegistry) -> int:
+    """Load core capabilities from autogen.db.
+
+    Args:
+        registry: The registry to populate.
+
+    Returns:
+        Number of capabilities loaded.
+    """
+    try:
+        from elle.capabilities.autogen.loader import load_capability_from_stored
+        from elle.capabilities.autogen.store import get_store
+
+        store = get_store()
+        core_caps = store.list_core()
+
+        count = 0
+        for stored in core_caps:
+            if not stored.approved or not stored.enabled:
+                continue
+
+            # Skip if already registered (e.g., from Python files in tests)
+            if registry.is_registered(stored.capability_name):
+                continue
+
+            try:
+                cap_class = load_capability_from_stored(stored)
+                if cap_class:
+                    registry.register(cap_class)
+                    count += 1
+            except Exception as e:
+                logger.warning(f"Failed to load stored core capability {stored.capability_name}: {e}")
+
+        return count
+
+    except Exception as e:
+        logger.debug(f"No stored core capabilities available: {e}")
+        return 0
+
+
+def _load_python_core_capabilities(registry: CapabilityRegistry) -> int:
+    """Load core capabilities from Python files.
+
+    Only loads capabilities not already in the registry (i.e., not migrated).
+
+    Args:
+        registry: The registry to populate.
+
+    Returns:
+        Number of capabilities loaded.
     """
     try:
         from elle.capabilities.core import get_core_capabilities
 
+        count = 0
         for cap_class in get_core_capabilities():
             try:
+                instance = cap_class()
+                name = instance.spec.name
+
+                # Skip if already loaded from DB
+                if registry.is_registered(name):
+                    continue
+
                 registry.register(cap_class)
+                count += 1
             except Exception as e:
                 logger.warning(f"Failed to register core capability: {e}")
 
+        return count
+
     except ImportError:
-        logger.debug("Core capabilities not available")
+        logger.debug("Core capabilities Python module not available")
+        return 0
     except Exception as e:
-        logger.warning(f"Failed to load core capabilities: {e}")
+        logger.warning(f"Failed to load core capabilities from Python: {e}")
+        return 0

@@ -1,5 +1,22 @@
 """Network connectivity diagnosis for ELLE.
 
+DEPRECATION NOTICE:
+    This module's functionality is now wrapped by the `network.diagnose`
+    capability. The agent loop can execute this capability via:
+
+        execute_capability("network.diagnose", {
+            "target": "api.example.com",
+            "port": 443
+        })
+
+    Using the capability system ensures:
+    - Results are recorded to the Incident Vault for pattern matching
+    - Policy enforcement via the Policy Engine
+    - Audit trails for compliance
+
+    Direct use of `diagnose_connectivity()` remains supported for
+    backwards compatibility, but new code should use the capability.
+
 Provides systematic diagnosis of network connectivity issues,
 checking DNS, routing, firewall, and connectivity in order.
 

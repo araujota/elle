@@ -11,6 +11,7 @@ Capabilities are organized by domain:
 - notification: Desktop/push notifications
 - network: Network and WireGuard operations
 - incident: Incident management
+- auth: Authentication (session tokens, mobile certificates)
 """
 
 # ruff: noqa: E402  # Imports after function definitions for re-exporting
@@ -103,10 +104,28 @@ def get_core_capabilities() -> list[type[Capability[Any, Any]]]:
     except ImportError:
         pass
 
+    # Auth capabilities
+    try:
+        from elle.capabilities.core.auth import AUTH_CAPABILITIES
+
+        capabilities.extend(AUTH_CAPABILITIES)
+    except ImportError:
+        pass
+
     return capabilities
 
 
 # Re-export commonly used classes
+# Auth capabilities
+from elle.capabilities.core.auth import (
+    AUTH_CAPABILITIES,
+    MobileCertsCapability,
+    MobileCertsInput,
+    MobileCertsOutput,
+    SessionTokenCapability,
+    SessionTokenInput,
+    SessionTokenOutput,
+)
 from elle.capabilities.core.config import (
     ConfigEditCapability,
     ConfigEditInput,
@@ -197,6 +216,9 @@ from elle.capabilities.core.incident import (
 # Network capabilities
 from elle.capabilities.core.network import (
     NETWORK_CAPABILITIES,
+    NetworkDiagnoseCapability,
+    NetworkDiagnoseInput,
+    NetworkDiagnoseOutput,
     NetworkListenersCapability,
     NetworkListenersInput,
     NetworkListenersOutput,
@@ -339,6 +361,9 @@ __all__ = [
     "NetworkListenersCapability",
     "NetworkListenersInput",
     "NetworkListenersOutput",
+    "NetworkDiagnoseCapability",
+    "NetworkDiagnoseInput",
+    "NetworkDiagnoseOutput",
     # Incident
     "INCIDENT_CAPABILITIES",
     "IncidentCreateCapability",
@@ -364,4 +389,12 @@ __all__ = [
     "GuiExecuteTaskCapability",
     "GuiExecuteTaskInput",
     "GuiExecuteTaskOutput",
+    # Auth
+    "AUTH_CAPABILITIES",
+    "SessionTokenCapability",
+    "SessionTokenInput",
+    "SessionTokenOutput",
+    "MobileCertsCapability",
+    "MobileCertsInput",
+    "MobileCertsOutput",
 ]

@@ -35,6 +35,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from collections.abc import Callable
 from typing import Any, Literal, cast
 
 import httpx
@@ -1054,6 +1055,394 @@ class LLM:
                     f"Failed to parse JSON after retry: {e2}",
                     raw_content=retry_response.content,
                 ) from e2
+
+
+# =============================================================================
+# Tool Call Models
+# =============================================================================
+
+
+class ToolCall(BaseModel):
+    """A tool call requested by the LLM."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str = ""
+    name: str
+    arguments: dict[str, Any]
+
+
+class ToolCallResponse(BaseModel):
+    """Response containing tool calls and/or content."""
+
+    model_config = ConfigDict(frozen=True)
+
+    content: str = ""
+    tool_calls: tuple[ToolCall, ...] = ()
+    done: bool = True
+    model: str = ""
+    duration_ms: float | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+
+    @property
+    def has_tool_calls(self) -> bool:
+        """Check if response contains tool calls."""
+        return len(self.tool_calls) > 0
+
+
+# =============================================================================
+# LLM Session (Persistent KV Cache)
+# =============================================================================
+
+
+class LLMSession:
+    """Persistent LLM session with KV cache.
+
+    Maintains conversation history and KV cache across multiple
+    chat calls within the same run. Ollama preserves KV cache
+    when messages array is extended (not replaced).
+
+    Usage:
+        async with LLMSession(llm) as session:
+            response = await session.chat("Hello!")
+            # KV cache preserved
+            response = await session.chat("Follow-up question")
+    """
+
+    def __init__(
+        self,
+        llm: LLM,
+        system_prompt: str | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        keep_alive: str = "30m",
+    ) -> None:
+        """Initialize the session.
+
+        Args:
+            llm: LLM instance to use.
+            system_prompt: Optional system prompt.
+            tools: Optional list of tool definitions (Ollama format).
+            keep_alive: How long to keep model loaded between calls.
+        """
+        self.llm = llm
+        self.tools = tools
+        self.keep_alive = keep_alive
+        self._messages: list[dict[str, Any]] = []
+        self._closed = False
+
+        # Add system message if provided
+        if system_prompt:
+            self._messages.append({
+                "role": "system",
+                "content": system_prompt,
+            })
+
+    async def __aenter__(self) -> LLMSession:
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        self.close()
+
+    def close(self) -> None:
+        """Close the session."""
+        self._closed = True
+
+    @property
+    def messages(self) -> list[dict[str, Any]]:
+        """Get all messages in the session."""
+        return list(self._messages)
+
+    @property
+    def message_count(self) -> int:
+        """Get the number of messages."""
+        return len(self._messages)
+
+    def add_user_message(self, content: str) -> None:
+        """Add a user message to the session.
+
+        Args:
+            content: Message content.
+        """
+        self._messages.append({
+            "role": "user",
+            "content": content,
+        })
+
+    def add_assistant_message(
+        self,
+        content: str = "",
+        tool_calls: list[ToolCall] | None = None,
+    ) -> None:
+        """Add an assistant message to the session.
+
+        Args:
+            content: Message content.
+            tool_calls: Optional tool calls made by the assistant.
+        """
+        msg: dict[str, Any] = {
+            "role": "assistant",
+            "content": content,
+        }
+        if tool_calls:
+            msg["tool_calls"] = [
+                {
+                    "id": tc.id or f"call_{i}",
+                    "type": "function",
+                    "function": {
+                        "name": tc.name,
+                        "arguments": json.dumps(tc.arguments),
+                    },
+                }
+                for i, tc in enumerate(tool_calls)
+            ]
+        self._messages.append(msg)
+
+    def add_tool_result(
+        self,
+        tool_call_id: str,
+        result: str,
+    ) -> None:
+        """Add a tool result to the session.
+
+        Args:
+            tool_call_id: ID of the tool call this is a result for.
+            result: Result from the tool execution.
+        """
+        self._messages.append({
+            "role": "tool",
+            "content": result,
+            "tool_call_id": tool_call_id,
+        })
+
+    async def chat(
+        self,
+        content: str | None = None,
+        *,
+        stream_callback: Callable[[str], None] | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        timeout: float | None = None,
+    ) -> ToolCallResponse:
+        """Send a message and get a response.
+
+        This preserves the KV cache from prior turns in the session.
+        Each call extends the messages array rather than replacing it.
+
+        Args:
+            content: User message content. If None, continues from last state
+                     (used after adding tool results).
+            stream_callback: Optional callback for streaming tokens.
+            temperature: Override temperature.
+            max_tokens: Override max tokens.
+            timeout: Override timeout.
+
+        Returns:
+            ToolCallResponse with content and/or tool calls.
+        """
+        if self._closed:
+            raise RuntimeError("Session is closed")
+
+        # Add user message if provided
+        if content:
+            self.add_user_message(content)
+
+        # Build request payload
+        payload: dict[str, Any] = {
+            "model": self.llm.model,
+            "messages": self._messages,
+            "stream": stream_callback is not None,
+            "keep_alive": self.keep_alive,
+            "options": {
+                "num_predict": max_tokens or self.llm.config.max_tokens,
+                "temperature": temperature if temperature is not None else self.llm.config.temperature,
+                "num_ctx": self.llm.config.num_ctx,
+            },
+        }
+
+        if self.tools:
+            payload["tools"] = self.tools
+
+        try:
+            if stream_callback:
+                return await self._stream_chat(
+                    payload, stream_callback, timeout or self.llm.config.timeout
+                )
+            else:
+                return await self._sync_chat(payload, timeout or self.llm.config.timeout)
+
+        except httpx.ConnectError as e:
+            self.llm._available = False
+            raise LLMUnavailableError(
+                "Cannot connect to Ollama. Is it running? Start with: ollama serve"
+            ) from e
+        except httpx.TimeoutException as e:
+            raise LLMTimeoutError(
+                f"Session chat timed out after {timeout or self.llm.config.timeout}s"
+            ) from e
+        except httpx.HTTPStatusError as e:
+            raise LLMError(
+                f"Ollama chat API error: {e.response.text}",
+                status_code=e.response.status_code,
+            ) from e
+
+    async def _sync_chat(
+        self,
+        payload: dict[str, Any],
+        timeout: float,
+    ) -> ToolCallResponse:
+        """Non-streaming chat request."""
+        start_time = time.time()
+
+        response = self.llm._client.post(
+            "/api/chat",
+            json=payload,
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        duration_ms = (time.time() - start_time) * 1000
+        message = data.get("message", {})
+
+        # Parse tool calls if present
+        tool_calls: list[ToolCall] = []
+        if "tool_calls" in message:
+            for tc in message["tool_calls"]:
+                func = tc.get("function", {})
+                args_str = func.get("arguments", "{}")
+                try:
+                    args = json.loads(args_str) if isinstance(args_str, str) else args_str
+                except json.JSONDecodeError:
+                    args = {}
+
+                tool_calls.append(ToolCall(
+                    id=tc.get("id", ""),
+                    name=func.get("name", ""),
+                    arguments=args,
+                ))
+
+        content = message.get("content", "")
+
+        # Add assistant message to history
+        self.add_assistant_message(content, tool_calls if tool_calls else None)
+
+        return ToolCallResponse(
+            content=content,
+            tool_calls=tuple(tool_calls),
+            done=data.get("done", True),
+            model=data.get("model", self.llm.model),
+            duration_ms=duration_ms,
+            prompt_tokens=data.get("prompt_eval_count"),
+            completion_tokens=data.get("eval_count"),
+        )
+
+    async def _stream_chat(
+        self,
+        payload: dict[str, Any],
+        stream_callback: Callable[[str], None],
+        timeout: float,
+    ) -> ToolCallResponse:
+        """Streaming chat request."""
+        start_time = time.time()
+        collected_content = ""
+        tool_calls: list[ToolCall] = []
+        model = self.llm.model
+        prompt_tokens = None
+        completion_tokens = None
+
+        # Use httpx streaming
+        with self.llm._client.stream(
+            "POST",
+            "/api/chat",
+            json=payload,
+            timeout=timeout,
+        ) as response:
+            response.raise_for_status()
+
+            for line in response.iter_lines():
+                if not line:
+                    continue
+
+                try:
+                    chunk = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                # Extract content from message
+                message = chunk.get("message", {})
+                content = message.get("content", "")
+
+                if content:
+                    collected_content += content
+                    stream_callback(content)
+
+                # Check for tool calls
+                if "tool_calls" in message:
+                    for tc in message["tool_calls"]:
+                        func = tc.get("function", {})
+                        args_str = func.get("arguments", "{}")
+                        try:
+                            args = json.loads(args_str) if isinstance(args_str, str) else args_str
+                        except json.JSONDecodeError:
+                            args = {}
+
+                        tool_calls.append(ToolCall(
+                            id=tc.get("id", ""),
+                            name=func.get("name", ""),
+                            arguments=args,
+                        ))
+
+                # Get model and token counts from final chunk
+                if chunk.get("done"):
+                    model = chunk.get("model", model)
+                    prompt_tokens = chunk.get("prompt_eval_count")
+                    completion_tokens = chunk.get("eval_count")
+
+        duration_ms = (time.time() - start_time) * 1000
+
+        # Add assistant message to history
+        self.add_assistant_message(collected_content, tool_calls if tool_calls else None)
+
+        return ToolCallResponse(
+            content=collected_content,
+            tool_calls=tuple(tool_calls),
+            done=True,
+            model=model,
+            duration_ms=duration_ms,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+        )
+
+    async def continue_after_tool(
+        self,
+        *,
+        stream_callback: Callable[[str], None] | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        timeout: float | None = None,
+    ) -> ToolCallResponse:
+        """Continue the conversation after adding tool results.
+
+        Call this after adding tool results with add_tool_result()
+        to get the LLM's next response.
+
+        Args:
+            stream_callback: Optional callback for streaming tokens.
+            temperature: Override temperature.
+            max_tokens: Override max tokens.
+            timeout: Override timeout.
+
+        Returns:
+            ToolCallResponse with content and/or more tool calls.
+        """
+        return await self.chat(
+            content=None,
+            stream_callback=stream_callback,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            timeout=timeout,
+        )
 
 
 # =============================================================================

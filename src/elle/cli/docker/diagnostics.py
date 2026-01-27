@@ -1,5 +1,22 @@
 """Docker container diagnostics for ELLE.
 
+DEPRECATION NOTICE:
+    This module's functionality is now wrapped by the `docker.diagnose`
+    capability. The agent loop can execute this capability via:
+
+        execute_capability("docker.diagnose", {
+            "container": "my-container",
+            "log_lines": 50
+        })
+
+    Using the capability system ensures:
+    - Results are recorded to the Incident Vault for pattern matching
+    - Policy enforcement via the Policy Engine
+    - Audit trails for compliance
+
+    Direct use of `diagnose_container_restart()` remains supported for
+    backwards compatibility, but new code should use the capability.
+
 Provides natural language diagnosis of container issues including:
 - Restart loop analysis
 - Resource usage explanation

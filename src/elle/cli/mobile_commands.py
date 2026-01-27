@@ -409,6 +409,24 @@ def _mobile_revoke(device_id: str | None, session: Session) -> tuple[str, bool]:
         store.update_device(device.device_id, status=DeviceStatus.REVOKED)
         elevation_mgr.revoke_elevation(device.device_id)
 
+        # Record to incident vault for audit trail
+        try:
+            from elle.cli.agentic.incident_recorder import record_arm_action
+
+            record_arm_action(
+                arm_name="mobile_gateway",
+                action="revoke_device",
+                target=device.device_id,
+                success=True,
+                details={
+                    "device_name": device.name,
+                    "device_id": device.device_id,
+                    "previous_status": device.status.value,
+                },
+            )
+        except Exception as e:
+            logger.debug(f"Failed to record revocation to incident vault: {e}")
+
         return (
             f"\n{Colors.GREEN}Revoked access for: {device.name}{Colors.RESET}\nDevice ID: {device.device_id}\n",
             True,
@@ -481,6 +499,26 @@ def _mobile_approve(args: list[str], session: Session) -> tuple[str, bool]:
             ttl_seconds,
             granted_by="cli",
         )
+
+        # Record to incident vault for audit trail
+        try:
+            from elle.cli.agentic.incident_recorder import record_arm_action
+
+            record_arm_action(
+                arm_name="mobile_gateway",
+                action="elevate_device",
+                target=device.device_id,
+                success=True,
+                details={
+                    "device_name": device.name,
+                    "device_id": device.device_id,
+                    "elevated_role": elevation.elevated_role.value,
+                    "ttl_seconds": ttl_seconds,
+                    "expires_at": elevation.expires_at.isoformat(),
+                },
+            )
+        except Exception as e:
+            logger.debug(f"Failed to record elevation to incident vault: {e}")
 
         return (
             f"\n{Colors.GREEN}Elevated device: {device.name}{Colors.RESET}\n"

@@ -34,6 +34,7 @@ class PackageCategory(str, Enum):
     """Categories for core packages."""
 
     SYSTEM = "system"  # Essential system utilities
+    ESSENTIAL = "essential"  # Debian Essential packages (unremovable)
     FILE = "file"  # File management
     NETWORK = "network"  # Network tools
     TEXT = "text"  # Text processing
@@ -192,14 +193,19 @@ def is_package_installed(package_name: str) -> bool:
 
 
 def get_elle_dependencies() -> list[str]:
-    """Get ELLE's package dependencies.
+    """Get ELLE's package dependencies AND the elle package itself.
 
-    Extracts system package dependencies from ELLE's installed state.
+    Extracts system package dependencies from ELLE's installed state,
+    and includes the elle package if it's installed.
 
     Returns:
-        List of package names ELLE depends on.
+        List of package names ELLE depends on, plus 'elle' itself.
     """
     dependencies: list[str] = []
+
+    # Include ELLE itself if installed
+    if is_package_installed("elle"):
+        dependencies.append("elle")
 
     # Try to get dependencies from elle package
     try:
@@ -253,6 +259,37 @@ def get_installed_optional_packages() -> list[tuple[str, PackageCategory]]:
     return installed
 
 
+def get_essential_packages() -> list[tuple[str, PackageCategory]]:
+    """Get Debian Essential packages via dpkg-query.
+
+    Essential packages are those marked as Essential=yes in dpkg database.
+    These packages cannot be removed without special flags.
+
+    Returns:
+        List of (package_name, ESSENTIAL) tuples.
+    """
+    essential: list[tuple[str, PackageCategory]] = []
+    try:
+        result = subprocess.run(
+            ["dpkg-query", "-W", "-f=${Package} ${Essential}\n"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            for line in result.stdout.strip().split("\n"):
+                if not line:
+                    continue
+                parts = line.rsplit(" ", 1)
+                if len(parts) == 2:
+                    pkg_name, is_essential = parts
+                    if is_essential.strip().lower() == "yes":
+                        essential.append((pkg_name.strip(), PackageCategory.ESSENTIAL))
+    except Exception as e:
+        logger.warning(f"Error querying Essential packages: {e}")
+    return essential
+
+
 # =============================================================================
 # Bootstrap Runner
 # =============================================================================
@@ -269,21 +306,24 @@ class BootstrapRunner:
         self,
         *,
         include_core: bool = True,
+        include_essential: bool = True,
         include_optional: bool = True,
         include_dependencies: bool = True,
-        max_concurrent: int = 3,
+        max_concurrent: int = 1,
         skip_existing: bool = True,
     ) -> None:
         """Initialize the bootstrap runner.
 
         Args:
             include_core: Include core system packages.
+            include_essential: Include Debian Essential packages.
             include_optional: Include detected optional packages.
             include_dependencies: Include ELLE dependencies.
-            max_concurrent: Max concurrent package learning.
+            max_concurrent: Max concurrent package learning (default 1 for sequential).
             skip_existing: Skip packages that already have capabilities.
         """
         self.include_core = include_core
+        self.include_essential = include_essential
         self.include_optional = include_optional
         self.include_dependencies = include_dependencies
         self.max_concurrent = max_concurrent
@@ -292,27 +332,40 @@ class BootstrapRunner:
     def get_packages_to_bootstrap(self) -> list[tuple[str, PackageCategory]]:
         """Get the full list of packages to bootstrap.
 
+        Tier order:
+        1. Core system packages (hardcoded in CORE_SYSTEM_PACKAGES)
+        2. Debian Essential packages (dpkg Essential=yes)
+        3. ELLE dependencies (elle package + its runtime deps)
+        4. Optional packages (common but not universal)
+
         Returns:
             List of (package_name, category) tuples.
         """
         packages: list[tuple[str, PackageCategory]] = []
         seen: set[str] = set()
 
-        # Add core packages
+        # Tier 1: Core packages
         if self.include_core:
             for pkg_name, category in CORE_SYSTEM_PACKAGES:
                 if pkg_name not in seen and is_package_installed(pkg_name):
                     packages.append((pkg_name, category))
                     seen.add(pkg_name)
 
-        # Add ELLE dependencies
+        # Tier 2: Essential packages (not already in core)
+        if self.include_essential:
+            for pkg_name, category in get_essential_packages():
+                if pkg_name not in seen and is_package_installed(pkg_name):
+                    packages.append((pkg_name, category))
+                    seen.add(pkg_name)
+
+        # Tier 3: ELLE dependencies
         if self.include_dependencies:
             for pkg_name in get_elle_dependencies():
                 if pkg_name not in seen and is_package_installed(pkg_name):
                     packages.append((pkg_name, PackageCategory.SYSTEM))
                     seen.add(pkg_name)
 
-        # Add optional packages
+        # Tier 4: Optional packages
         if self.include_optional:
             for pkg_name, category in get_installed_optional_packages():
                 if pkg_name not in seen:
@@ -538,8 +591,10 @@ Output valid JSON only."""
 async def run_bootstrap(
     *,
     include_core: bool = True,
+    include_essential: bool = True,
     include_optional: bool = True,
     include_dependencies: bool = True,
+    max_concurrent: int = 1,
     skip_existing: bool = True,
     progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> BootstrapResult:
@@ -547,8 +602,10 @@ async def run_bootstrap(
 
     Args:
         include_core: Include core system packages.
+        include_essential: Include Debian Essential packages.
         include_optional: Include detected optional packages.
         include_dependencies: Include ELLE dependencies.
+        max_concurrent: Max concurrent package learning (default 1 for sequential).
         skip_existing: Skip packages with existing capabilities.
         progress_callback: Optional progress callback.
 
@@ -557,8 +614,10 @@ async def run_bootstrap(
     """
     runner = BootstrapRunner(
         include_core=include_core,
+        include_essential=include_essential,
         include_optional=include_optional,
         include_dependencies=include_dependencies,
+        max_concurrent=max_concurrent,
         skip_existing=skip_existing,
     )
     return await runner.run(progress_callback)

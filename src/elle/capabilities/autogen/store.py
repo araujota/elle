@@ -329,6 +329,45 @@ class AutogenStore:
             )
             return [self._row_to_stored(row) for row in cursor.fetchall()]
 
+    def list_core(self) -> list[StoredCapability]:
+        """List all core capabilities.
+
+        Core capabilities are ELLE's native capabilities migrated from
+        Python files to stored objects.
+
+        Returns:
+            List of StoredCapability objects with trust_level='core'.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT * FROM generated_capabilities
+                WHERE trust_level = 'core'
+                ORDER BY capability_name
+                """
+            )
+            return [self._row_to_stored(row) for row in cursor.fetchall()]
+
+    def list_by_trust_level(self, trust_level: TrustLevel) -> list[StoredCapability]:
+        """List capabilities by trust level.
+
+        Args:
+            trust_level: The trust level to filter by.
+
+        Returns:
+            List of StoredCapability objects.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT * FROM generated_capabilities
+                WHERE trust_level = ?
+                ORDER BY capability_name
+                """,
+                (trust_level.value,),
+            )
+            return [self._row_to_stored(row) for row in cursor.fetchall()]
+
     def list_by_command(self, command: str) -> list[StoredCapability]:
         """List capabilities for a source command.
 

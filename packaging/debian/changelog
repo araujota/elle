@@ -6,4 +6,4 @@ elle (0.1.0-1) noble; urgency=medium
   * OpenAI-compatible API endpoint
   * Polkit integration for privilege escalation
 
- -- ELLE Contributors <elle@example.com>  Fri, 24 Jan 2025 12:00:00 +0000
+ -- Tyler Araujo <araujota97@gmail.com>  Fri, 24 Jan 2025 12:00:00 +0000

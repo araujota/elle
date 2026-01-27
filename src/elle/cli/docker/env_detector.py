@@ -1,5 +1,14 @@
 """Docker Environment Variable Detector.
 
+DEPRECATION NOTICE:
+    This module's functionality should eventually be wrapped by a capability.
+    The agent loop can handle environment variable detection through:
+    - LLM-based analysis (more flexible than hardcoded profiles)
+    - Incident vault patterns (learning from past configurations)
+
+    For now, this module remains for backward compatibility.
+    See also: docker.configure-env capability for storing env configurations.
+
 Detects required and optional environment variables for Docker images
 from multiple sources: known profiles, image metadata, and compose files.
 """

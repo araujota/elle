@@ -202,6 +202,8 @@ def generate_policy_file(prefs: SetupPreferences) -> None:
 def configure_polkit_privileges(prefs: SetupPreferences) -> tuple[bool, str]:
     """Configure Polkit privileges based on user preference.
 
+    Uses Polkit helper for all privileged operations instead of direct sudo.
+
     Args:
         prefs: User preferences.
 
@@ -209,16 +211,18 @@ def configure_polkit_privileges(prefs: SetupPreferences) -> tuple[bool, str]:
         Tuple of (success, message).
     """
     import getpass
-    import grp
-    import subprocess
+
+    from elle.security.polkit_helper import (
+        add_user_to_group_sync,
+        create_group_sync,
+        install_polkit_rules_sync,
+    )
 
     if prefs.privilege_level == PrivilegeLevel.SECURE:
         # Nothing to do for secure mode (default Polkit behavior)
         return True, "Using default secure (password) mode."
 
     username = getpass.getuser()
-    rules_dir = Path("/etc/polkit-1/rules.d")
-    rules_file = rules_dir / "50-elle.rules"
 
     # Build the rules file content based on privilege level
     if prefs.privilege_level == PrivilegeLevel.CONVENIENT:
@@ -230,59 +234,29 @@ def configure_polkit_privileges(prefs: SetupPreferences) -> tuple[bool, str]:
     else:
         return False, f"Unknown privilege level: {prefs.privilege_level}"
 
-    # Write rules file (requires root)
+    # Install rules file via Polkit helper
     try:
-        # Create temp file and use sudo to copy it
-        import tempfile
+        result = install_polkit_rules_sync(rules_content)
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".rules", delete=False) as tmp:
-            tmp.write(rules_content)
-            tmp_path = tmp.name
-
-        # Copy to polkit rules directory
-        result = subprocess.run(
-            ["sudo", "cp", tmp_path, str(rules_file)],
-            capture_output=True,
-            text=True,
-        )
-
-        # Clean up temp file
-        Path(tmp_path).unlink(missing_ok=True)
-
-        if result.returncode != 0:
-            return False, f"Failed to install Polkit rules: {result.stderr}"
-
-        # Set permissions
-        subprocess.run(
-            ["sudo", "chmod", "644", str(rules_file)],
-            capture_output=True,
-        )
+        if not result.success:
+            if not result.authorized:
+                return False, "Authorization denied. Please try again."
+            return False, f"Failed to install Polkit rules: {result.error}"
 
     except Exception as e:
         return False, f"Failed to configure Polkit: {e}"
 
     # For convenient mode, also create group and add user
     if prefs.privilege_level == PrivilegeLevel.CONVENIENT:
-        # Create 'elle' group if it doesn't exist
-        try:
-            grp.getgrnam("elle")
-        except KeyError:
-            result = subprocess.run(
-                ["sudo", "groupadd", "elle"],
-                capture_output=True,
-                text=True,
-            )
-            if result.returncode != 0 and "already exists" not in result.stderr:
-                return False, f"Failed to create 'elle' group: {result.stderr}"
+        # Create 'elle' group
+        group_result = create_group_sync("elle")
+        if not group_result.success and "already exists" not in group_result.output:
+            return False, f"Failed to create 'elle' group: {group_result.error}"
 
         # Add user to group
-        result = subprocess.run(
-            ["sudo", "usermod", "-aG", "elle", username],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            return False, f"Failed to add user to 'elle' group: {result.stderr}"
+        usermod_result = add_user_to_group_sync(username, "elle")
+        if not usermod_result.success:
+            return False, f"Failed to add user to 'elle' group: {usermod_result.error}"
 
         return True, (
             f"Polkit rules installed. User '{username}' added to 'elle' group.\n"
@@ -1564,14 +1538,11 @@ class SetupWizard:
                     # Already running
                     return {"success": True, "method": "systemd (already running)", "error": None}
 
-                # Try to start it
-                start_result = subprocess.run(
-                    ["sudo", "systemctl", "start", "elled-telemetryd"],
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                )
-                if start_result.returncode == 0:
+                # Try to start it via Polkit
+                from elle.security.polkit_helper import start_service_sync
+
+                start_result = start_service_sync("elled-telemetryd", timeout=30.0)
+                if start_result.success:
                     # Wait for socket to be ready
                     time.sleep(1)
                     if self._check_telemetryd_running():
@@ -1579,10 +1550,13 @@ class SetupWizard:
                     else:
                         return {"success": False, "method": "systemd", "error": "Started but socket not ready"}
                 else:
+                    error_msg = start_result.error.strip() if start_result.error else "Failed to start"
+                    if not start_result.authorized:
+                        error_msg = "Authorization denied"
                     return {
                         "success": False,
                         "method": "systemd",
-                        "error": start_result.stderr.strip() or "Failed to start",
+                        "error": error_msg,
                     }
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
@@ -1628,20 +1602,20 @@ class SetupWizard:
                     # Already running
                     return {"success": True, "method": "systemd (already running)", "error": None}
 
-                # Try to start it
-                start_result = subprocess.run(
-                    ["sudo", "systemctl", "start", "elled"],
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                )
-                if start_result.returncode == 0:
+                # Try to start it via Polkit
+                from elle.security.polkit_helper import start_service_sync
+
+                start_result = start_service_sync("elled", timeout=30.0)
+                if start_result.success:
                     return {"success": True, "method": "systemd", "error": None}
                 else:
+                    error_msg = start_result.error.strip() if start_result.error else "Failed to start"
+                    if not start_result.authorized:
+                        error_msg = "Authorization denied"
                     return {
                         "success": False,
                         "method": "systemd",
-                        "error": start_result.stderr.strip() or "Failed to start",
+                        "error": error_msg,
                     }
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass

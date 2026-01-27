@@ -118,8 +118,38 @@ PREFIX_COMMANDS = {
     "/preflight": Intent.NAVIGATION,  # Pre-flight package validation
     "/mobile": Intent.NAVIGATION,  # Mobile gateway management
     "/react": Intent.NAVIGATION,  # Reactive functions management
+    "/capabilities": Intent.CAPABILITIES,  # Capability browsing
+    "/cap": Intent.CAPABILITIES,  # Alias for /capabilities
+    "/autonomy": Intent.AUTONOMY_CONFIG,  # Autonomy configuration
+    "/daemon": Intent.DAEMON,  # Daemon lifecycle and visibility
+    "/agent": Intent.AGENT,  # Agent loop introspection
     "!": Intent.SHELL_PASSTHROUGH,  # Bang prefix for shell
 }
+
+# Daemon command triggers (exact match)
+DAEMON_COMMANDS = frozenset(
+    {
+        "daemon",
+        "daemon status",
+        "daemon explain",
+        "daemon start",
+        "daemon stop",
+        "daemon restart",
+        "daemon logs",
+        "daemon actions",
+    }
+)
+
+# Agent command triggers (exact match)
+AGENT_COMMANDS = frozenset(
+    {
+        "agent",
+        "agent last",
+        "agent inspect",
+        "agent stages",
+        "agent hypotheses",
+    }
+)
 
 
 # =============================================================================
@@ -332,6 +362,25 @@ PACKAGE_LEARN_PATTERNS = [
 _COMPILED_PACKAGE_LEARN_PATTERNS = [(re.compile(p, re.IGNORECASE), i, c) for p, i, c in PACKAGE_LEARN_PATTERNS]
 
 
+# Capability browsing patterns
+CAPABILITY_PATTERNS = [
+    # List all capabilities
+    (r"^(?:what|list|show)\s+(?:your\s+)?capabilities$", "capabilities", 0.92),
+    (r"^tell\s+me\s+(?:about\s+)?(?:your\s+)?capabilities$", "capabilities", 0.90),
+    (r"^what\s+can\s+you\s+do$", "capabilities", 0.88),
+    # Domain-specific queries
+    (r"^(?:what|which|list|show)\s+(\w+)\s+capabilities", "capabilities", 0.88),
+    # Explain specific capability
+    (r"^explain\s+(?:the\s+)?(\w+\.\w+)\s+capability", "capabilities", 0.90),
+    # Autonomy queries
+    (r"^what\s+can\s+run\s+automatically$", "autonomy_config", 0.90),
+    (r"^what\s+(?:runs|executes)\s+autonomously$", "autonomy_config", 0.88),
+    (r"^autonomy\s+status$", "autonomy_config", 0.92),
+]
+
+_COMPILED_CAPABILITY_PATTERNS = [(re.compile(p, re.IGNORECASE), i, c) for p, i, c in CAPABILITY_PATTERNS]
+
+
 # =============================================================================
 # SLM Prompt Template
 # =============================================================================
@@ -357,6 +406,8 @@ INTENTS (use exactly these values):
 - "gui_task": user wants to interact with a GUI application (click, toggle, enable/disable in settings)
 - "explain_command": user wants to understand what a command did (what did that do, explain)
 - "learn_package": user wants to learn about a package/binary, discover its capabilities, understand how to use it
+- "capabilities": user wants to browse/explore ELLE's capabilities (what can you do, list capabilities)
+- "autonomy_config": user asks about or wants to configure autonomy settings (what runs automatically)
 
 RULES:
 - Known keyword (help, exit, status) -> meta/navigation, confidence >= 0.9
@@ -367,6 +418,8 @@ RULES:
 - Mentions previous failure or error -> fixit
 - "what did that do", "explain", "what happened" -> explain_command
 - "learn ffmpeg", "figure out how to use X", "teach me about X" -> learn_package
+- "what can you do", "list capabilities", "show capabilities" -> capabilities
+- "what runs automatically", "autonomy status", "configure autonomy" -> autonomy_config
 - Keep rationale to ONE short sentence
 - entities: extract command names, file paths, service names, port numbers, app names, package names
 - If confidence < 0.55, set requires_clarification to true"""
@@ -593,6 +646,24 @@ class IntentClassifier:
                     confidence=MEDIUM_CONFIDENCE,
                 )
 
+        # Daemon commands - exact match or prefix
+        if lower in DAEMON_COMMANDS or lower.startswith("daemon "):
+            subcommand = lower.split(None, 1)[1] if " " in lower else ""
+            return create_rule_result(
+                Intent.DAEMON,
+                f"Daemon command: {subcommand or 'status'}",
+                entities=[subcommand] if subcommand else [],
+            )
+
+        # Agent commands - exact match or prefix
+        if lower in AGENT_COMMANDS or lower.startswith("agent "):
+            subcommand = lower.split(None, 1)[1] if " " in lower else ""
+            return create_rule_result(
+                Intent.AGENT,
+                f"Agent command: {subcommand or 'last'}",
+                entities=[subcommand] if subcommand else [],
+            )
+
         return None
 
     def _check_prefix_commands(self, text: str) -> IntentResult | None:
@@ -681,6 +752,22 @@ class IntentClassifier:
                     intent=intent,
                     confidence=confidence,
                     rationale="Package learning request detected",
+                    entities=entities,
+                    classified_by="rule",
+                )
+
+        # Capability browsing patterns (high confidence)
+        for pattern, intent_str, confidence in _COMPILED_CAPABILITY_PATTERNS:
+            match = pattern.search(text)
+            if match:
+                intent = Intent.from_label(intent_str)
+                # Extract domain or capability name if present
+                cap_name = match.group(1) if match.groups() else None
+                entities = [cap_name] if cap_name else ["capabilities"]
+                return IntentResult(
+                    intent=intent,
+                    confidence=confidence,
+                    rationale="Capability query detected",
                     entities=entities,
                     classified_by="rule",
                 )

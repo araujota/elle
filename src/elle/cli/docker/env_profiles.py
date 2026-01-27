@@ -1,5 +1,15 @@
 """Docker Image Environment Variable Profiles.
 
+DEPRECATION NOTICE:
+    This module contains hardcoded knowledge about Docker images.
+    This approach should be replaced by:
+    - LLM-based analysis of image documentation
+    - Learning from incident vault patterns
+    - User-provided configurations stored via docker.configure-env
+
+    The hardcoded profiles remain for backward compatibility and
+    as a fallback when the LLM is unavailable.
+
 Knowledge base of common Docker images and their environment variables.
 These profiles provide:
 - Required vs optional variable classification

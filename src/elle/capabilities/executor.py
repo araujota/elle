@@ -1,11 +1,13 @@
 """Capability Executor - orchestrates the capability lifecycle.
 
 Provides the main entry point for executing capabilities with:
+- Autonomy checking (can capability run without confirmation?)
 - Policy checks
 - Dry run previews
-- User confirmation
+- User confirmation (if required by autonomy/policy)
 - Execution
 - Verification
+- Earned autonomy tracking
 - Incident recording
 """
 
@@ -38,6 +40,7 @@ from elle.capabilities.policy import (
 from elle.capabilities.registry import CapabilityRegistry, get_registry
 
 if TYPE_CHECKING:
+    from elle.capabilities.autonomy import AutonomyEngine
     from elle.capabilities.dependencies.checker import DependencyChecker
     from elle.capabilities.protocol import Capability
 
@@ -84,6 +87,7 @@ class CapabilityExecutor:
         registry: CapabilityRegistry | None = None,
         incident_store: IncidentStore | None = None,
         dependency_checker: DependencyChecker | None = None,
+        autonomy_engine: AutonomyEngine | None = None,
     ) -> None:
         """Initialize the executor.
 
@@ -91,10 +95,12 @@ class CapabilityExecutor:
             registry: Capability registry (uses default if None).
             incident_store: Incident store for recording (optional).
             dependency_checker: Dependency checker (uses default if None).
+            autonomy_engine: Autonomy engine for confirmation decisions (uses default if None).
         """
         self.registry = registry or get_registry()
         self.incident_store = incident_store
         self._dependency_checker = dependency_checker
+        self._autonomy_engine = autonomy_engine
 
     @property
     def dependency_checker(self) -> DependencyChecker:
@@ -104,6 +110,15 @@ class CapabilityExecutor:
 
             self._dependency_checker = get_checker()
         return self._dependency_checker
+
+    @property
+    def autonomy_engine(self) -> AutonomyEngine:
+        """Get the autonomy engine (lazy initialization)."""
+        if self._autonomy_engine is None:
+            from elle.capabilities.autonomy import get_autonomy_engine
+
+            self._autonomy_engine = get_autonomy_engine()
+        return self._autonomy_engine
 
     async def execute(
         self,
@@ -185,8 +200,17 @@ class CapabilityExecutor:
                 ),
             )
 
-        # 5. Confirmation
-        needs_confirm = require_confirmation and (
+        # 5. Confirmation - check autonomy first
+        # Determine if capability can run autonomously
+        can_auto, auto_reason = self.autonomy_engine.can_run_autonomously(
+            spec.name, spec.risk
+        )
+
+        # Confirmation is needed if:
+        # - require_confirmation is True AND
+        # - capability cannot run autonomously AND
+        # - (policy requires it OR spec requires it OR dry_run requires it)
+        needs_confirm = require_confirmation and not can_auto and (
             getattr(policy_result, "requires_confirmation", False)
             or capability_requires_confirmation(spec)
             or dry_run_result.requires_confirmation
@@ -206,6 +230,8 @@ class CapabilityExecutor:
             else:
                 # No callback provided but confirmation required
                 logger.warning(f"Capability {spec.name} requires confirmation but no callback provided")
+        elif can_auto:
+            logger.debug(f"Capability {spec.name} running autonomously: {auto_reason}")
 
         # 6. Execute
         try:
@@ -267,6 +293,16 @@ class CapabilityExecutor:
                 await self._record_action(incident_id, capability, input, result)
             except Exception as e:
                 logger.warning(f"Failed to record action to incident vault: {e}")
+
+        # 10. Update autonomy tracking (for earned autonomy)
+        try:
+            autonomy_message = self.autonomy_engine.update_after_execution(
+                spec.name, result.success, spec.risk
+            )
+            if autonomy_message:
+                logger.info(autonomy_message)
+        except Exception as e:
+            logger.debug(f"Failed to update autonomy tracking: {e}")
 
         return result
 

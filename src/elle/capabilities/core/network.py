@@ -1283,6 +1283,132 @@ class WireGuardRotateKeysCapability(BaseCapability[WireGuardRotateKeysInput, Wir
 
 
 # =============================================================================
+# Network Diagnose Capability
+# =============================================================================
+
+
+class NetworkDiagnoseInput(BaseModel):
+    """Input for network.diagnose operation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    target: str = Field(description="Target hostname or IP address")
+    port: int | None = Field(
+        default=None,
+        description="Target port (optional but recommended for TCP services)",
+    )
+
+
+class NetworkDiagnoseOutput(BaseModel):
+    """Output from network.diagnose operation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    target: str = Field(description="Target that was diagnosed")
+    port: int | None = Field(default=None, description="Port tested")
+    reachable: bool = Field(description="Whether target is reachable")
+    likely_cause: str | None = Field(
+        default=None,
+        description="Most likely cause if unreachable",
+    )
+    summary: str = Field(description="Natural language summary")
+    checks_passed: int = Field(description="Number of checks that passed")
+    checks_failed: int = Field(description="Number of checks that failed")
+    suggestions: tuple[str, ...] = Field(
+        default_factory=tuple,
+        description="Suggested fixes",
+    )
+
+
+class NetworkDiagnoseCapability(BaseCapability[NetworkDiagnoseInput, NetworkDiagnoseOutput]):
+    """Diagnose network connectivity issues with root cause analysis."""
+
+    @property
+    def spec(self) -> CapabilitySpec:
+        return CapabilitySpec(
+            name="network.diagnose",
+            summary="Diagnose network connectivity with systematic checks",
+            domain="network",
+            risk="none",
+            side_effects=(),  # Read-only operation
+            requires_privilege=False,
+            idempotent=True,
+            trust_level="core",
+            version="1.0.0",
+            input_schema_name="NetworkDiagnoseInput",
+            output_schema_name="NetworkDiagnoseOutput",
+        )
+
+    def dry_run(self, input: NetworkDiagnoseInput) -> DryRunResult:
+        """Preview network diagnosis."""
+        checks = [
+            "DNS resolution check",
+            "Route verification",
+            "Firewall inspection",
+        ]
+        if input.port:
+            checks.append(f"TCP connection to port {input.port}")
+        else:
+            checks.append("ICMP ping test")
+
+        return DryRunResult(
+            would_execute=tuple(checks),
+            would_modify=(),
+            estimated_risk="none",
+            requires_confirmation=False,
+            preview_text=f"Would diagnose connectivity to {input.target}"
+            + (f":{input.port}" if input.port else ""),
+            is_valid=True,
+        )
+
+    def run(self, input: NetworkDiagnoseInput) -> CapabilityResult:
+        """Run network diagnosis."""
+        start_time = time.time()
+
+        try:
+            from elle.cli.network.diagnosis import diagnose_connectivity
+
+            diagnosis = diagnose_connectivity(input.target, port=input.port)
+
+            checks_passed = sum(1 for c in diagnosis.checks if c.passed)
+            checks_failed = sum(1 for c in diagnosis.checks if not c.passed)
+
+            return CapabilityResult(
+                success=True,
+                output=NetworkDiagnoseOutput(
+                    target=diagnosis.target,
+                    port=diagnosis.port,
+                    reachable=diagnosis.reachable,
+                    likely_cause=diagnosis.likely_cause,
+                    summary=diagnosis.summary,
+                    checks_passed=checks_passed,
+                    checks_failed=checks_failed,
+                    suggestions=diagnosis.suggestions,
+                ),
+                execution_time_ms=int((time.time() - start_time) * 1000),
+                evidence=CapabilityEvidence(
+                    commands_executed=(
+                        "DNS resolution",
+                        "ip route get",
+                        "firewall check",
+                        f"TCP connect to {input.target}:{input.port}"
+                        if input.port
+                        else f"ping {input.target}",
+                    ),
+                    rationale=f"Diagnosed {input.target}: "
+                    + ("reachable" if diagnosis.reachable else diagnosis.likely_cause or "unreachable"),
+                ),
+            )
+
+        except Exception as e:
+            return CapabilityResult(
+                success=False,
+                error=f"Network diagnosis failed: {e}",
+                execution_time_ms=int((time.time() - start_time) * 1000),
+            )
+
+
+# =============================================================================
 # Exports
 # =============================================================================
 
@@ -1292,4 +1418,5 @@ NETWORK_CAPABILITIES = [
     NetworkListenersCapability,
     WireGuardGenerateKeyCapability,
     WireGuardRotateKeysCapability,
+    NetworkDiagnoseCapability,
 ]

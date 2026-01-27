@@ -387,6 +387,27 @@ def _react_create(prompt: str | None, session: Session) -> tuple[str, bool]:
         if response in ("y", "yes"):
             # Save the function
             create_function(func)
+
+            # Record to incident vault for provenance
+            try:
+                from elle.cli.agentic.incident_recorder import record_arm_action
+
+                record_arm_action(
+                    arm_name="reactive_functions",
+                    action="create_function",
+                    target=func.name,
+                    success=True,
+                    details={
+                        "function_name": func.name,
+                        "description": func.description,
+                        "trigger_type": func.trigger.type,
+                        "action_count": len(func.actions),
+                        "capabilities": [a.capability for a in func.actions],
+                    },
+                )
+            except Exception as e:
+                logger.debug(f"Failed to record function creation: {e}")
+
             return (
                 f"\n{Colors.GREEN}Created reactive function: {func.name}{Colors.RESET}\n"
                 f"\n{Colors.DIM}Use '/react show {func.name}' to view details{Colors.RESET}",
@@ -395,6 +416,26 @@ def _react_create(prompt: str | None, session: Session) -> tuple[str, bool]:
         elif response in ("e", "edit"):
             # Save the function, then inform user they can recreate it if needed
             create_function(func)
+
+            # Record to incident vault for provenance
+            try:
+                from elle.cli.agentic.incident_recorder import record_arm_action
+
+                record_arm_action(
+                    arm_name="reactive_functions",
+                    action="create_function",
+                    target=func.name,
+                    success=True,
+                    details={
+                        "function_name": func.name,
+                        "description": func.description,
+                        "trigger_type": func.trigger.type,
+                        "action_count": len(func.actions),
+                    },
+                )
+            except Exception as e:
+                logger.debug(f"Failed to record function creation: {e}")
+
             return (
                 f"\n{Colors.GREEN}Created reactive function: {func.name}{Colors.RESET}\n"
                 f"\n{Colors.DIM}To modify, delete with '/react delete {func.name}' "
@@ -477,6 +518,25 @@ def _react_delete(name: str | None, session: Session) -> tuple[str, bool]:
             return f"{Colors.DIM}Cancelled.{Colors.RESET}", False
 
         delete_function(func.id)
+
+        # Record to incident vault for audit
+        try:
+            from elle.cli.agentic.incident_recorder import record_arm_action
+
+            record_arm_action(
+                arm_name="reactive_functions",
+                action="delete_function",
+                target=name,
+                success=True,
+                details={
+                    "function_id": func.id,
+                    "function_name": name,
+                    "description": func.description,
+                },
+            )
+        except Exception as e:
+            logger.debug(f"Failed to record function deletion: {e}")
+
         return f"{Colors.GREEN}Deleted reactive function: {name}{Colors.RESET}", True
 
     except Exception as e:

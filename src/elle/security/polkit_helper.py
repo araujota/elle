@@ -48,6 +48,11 @@ class PolkitAction:
     MANAGE_GRUB = "com.elle.ops.manage-grub"
     REBOOT = "com.elle.ops.reboot"
 
+    # Setup wizard operations
+    SETUP_CONFIGURE_POLKIT = "com.elle.setup.configure-polkit"
+    SETUP_MANAGE_GROUPS = "com.elle.setup.manage-groups"
+    SETUP_MANAGE_DAEMON = "com.elle.setup.manage-daemon"
+
 
 # =============================================================================
 # Result Models
@@ -437,6 +442,114 @@ class PolkitHelper:
                 exit_code=-1,
             )
 
+    # =========================================================================
+    # Setup Operations
+    # =========================================================================
+
+    async def create_group(self, group_name: str) -> PolkitResult:
+        """Create a system group.
+
+        Args:
+            group_name: Name of the group to create.
+
+        Returns:
+            PolkitResult with outcome.
+        """
+        # Check if group already exists
+        try:
+            import grp
+
+            grp.getgrnam(group_name)
+            return PolkitResult(
+                success=True,
+                output=f"Group '{group_name}' already exists",
+            )
+        except KeyError:
+            pass  # Group doesn't exist, create it
+
+        return await self._run_pkexec(
+            ["groupadd", "--system", group_name],
+            PolkitAction.SETUP_MANAGE_GROUPS,
+        )
+
+    async def add_user_to_group(self, username: str, group_name: str) -> PolkitResult:
+        """Add a user to a group.
+
+        Args:
+            username: Username to add.
+            group_name: Group to add the user to.
+
+        Returns:
+            PolkitResult with outcome.
+        """
+        return await self._run_pkexec(
+            ["usermod", "-aG", group_name, username],
+            PolkitAction.SETUP_MANAGE_GROUPS,
+        )
+
+    async def start_service(self, service_name: str) -> PolkitResult:
+        """Start a systemd service.
+
+        Args:
+            service_name: Name of the service (without .service suffix).
+
+        Returns:
+            PolkitResult with outcome.
+        """
+        return await self._run_pkexec(
+            ["systemctl", "start", service_name],
+            PolkitAction.SETUP_MANAGE_DAEMON,
+        )
+
+    async def stop_service(self, service_name: str) -> PolkitResult:
+        """Stop a systemd service.
+
+        Args:
+            service_name: Name of the service (without .service suffix).
+
+        Returns:
+            PolkitResult with outcome.
+        """
+        return await self._run_pkexec(
+            ["systemctl", "stop", service_name],
+            PolkitAction.SETUP_MANAGE_DAEMON,
+        )
+
+    async def enable_service(self, service_name: str) -> PolkitResult:
+        """Enable a systemd service to start on boot.
+
+        Args:
+            service_name: Name of the service (without .service suffix).
+
+        Returns:
+            PolkitResult with outcome.
+        """
+        return await self._run_pkexec(
+            ["systemctl", "enable", service_name],
+            PolkitAction.SETUP_MANAGE_DAEMON,
+        )
+
+    async def install_polkit_rules(
+        self,
+        rules_content: str,
+        rules_filename: str = "50-elle.rules",
+    ) -> PolkitResult:
+        """Install Polkit rules file.
+
+        Args:
+            rules_content: Content of the rules file.
+            rules_filename: Name of the rules file (default: 50-elle.rules).
+
+        Returns:
+            PolkitResult with outcome.
+        """
+        rules_path = f"/etc/polkit-1/rules.d/{rules_filename}"
+        return await self.write_privileged(
+            rules_path,
+            rules_content,
+            action_id=PolkitAction.SETUP_CONFIGURE_POLKIT,
+        )
+
 
 # =============================================================================
 # Module-level convenience functions
@@ -495,3 +608,240 @@ def is_authorized(action_id: str = PolkitAction.EDIT_SYSTEM_CONFIG) -> bool:
         True if likely authorized.
     """
     return get_helper().check_authorization(action_id)
+
+
+# =============================================================================
+# Synchronous convenience functions for setup
+# =============================================================================
+
+
+def run_privileged_sync(
+    command: list[str],
+    action_id: str = PolkitAction.EDIT_SYSTEM_CONFIG,
+    timeout: float = 60.0,
+) -> PolkitResult:
+    """Run a privileged command synchronously via pkexec.
+
+    This is a blocking version for use in non-async contexts like setup wizard.
+
+    Args:
+        command: Command and arguments.
+        action_id: Polkit action ID.
+        timeout: Timeout in seconds.
+
+    Returns:
+        PolkitResult with outcome.
+    """
+    pkexec_cmd = ["pkexec", *command]
+
+    try:
+        result = subprocess.run(
+            pkexec_cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+
+        if result.returncode == 126:
+            return PolkitResult(
+                success=False,
+                authorized=False,
+                error="Authorization denied",
+                exit_code=result.returncode,
+            )
+        elif result.returncode == 127:
+            return PolkitResult(
+                success=False,
+                error=f"Command not found: {command[0]}",
+                exit_code=result.returncode,
+            )
+
+        return PolkitResult(
+            success=result.returncode == 0,
+            authorized=True,
+            output=result.stdout,
+            error=result.stderr,
+            exit_code=result.returncode,
+        )
+
+    except subprocess.TimeoutExpired:
+        return PolkitResult(
+            success=False,
+            error=f"Operation timed out after {timeout}s",
+            exit_code=-1,
+        )
+    except FileNotFoundError:
+        return PolkitResult(
+            success=False,
+            error="pkexec not found - Polkit may not be installed",
+            exit_code=-1,
+        )
+    except Exception as e:
+        return PolkitResult(
+            success=False,
+            error=str(e),
+            exit_code=-1,
+        )
+
+
+def write_privileged_sync(
+    file_path: str | Path,
+    content: str,
+    action_id: str = PolkitAction.EDIT_SYSTEM_CONFIG,
+    mode: str | None = None,
+) -> PolkitResult:
+    """Write to a privileged file synchronously.
+
+    Uses atomic temp file + pkexec copy pattern.
+
+    Args:
+        file_path: Destination path.
+        content: Content to write.
+        action_id: Polkit action ID.
+        mode: File permissions (e.g., "644").
+
+    Returns:
+        PolkitResult with outcome.
+    """
+    import tempfile
+
+    file_path = Path(file_path)
+
+    # Write to temp file
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".elle-tmp",
+            delete=False,
+        ) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+    except Exception as e:
+        return PolkitResult(
+            success=False,
+            error=f"Failed to create temp file: {e}",
+            exit_code=-1,
+        )
+
+    try:
+        # Copy to destination via pkexec
+        result = run_privileged_sync(
+            ["cp", "--preserve=timestamps", tmp_path, str(file_path)],
+            action_id,
+        )
+
+        if not result.success:
+            return result
+
+        # Set permissions if specified
+        if mode:
+            chmod_result = run_privileged_sync(
+                ["chmod", mode, str(file_path)],
+                action_id,
+            )
+            if not chmod_result.success:
+                logger.warning(f"Failed to set permissions: {chmod_result.error}")
+
+        return result
+
+    finally:
+        # Clean up temp file
+        with contextlib.suppress(Exception):
+            os.unlink(tmp_path)
+
+
+def create_group_sync(group_name: str) -> PolkitResult:
+    """Create a system group synchronously.
+
+    Args:
+        group_name: Name of the group.
+
+    Returns:
+        PolkitResult with outcome.
+    """
+    import grp
+
+    # Check if group already exists
+    try:
+        grp.getgrnam(group_name)
+        return PolkitResult(
+            success=True,
+            output=f"Group '{group_name}' already exists",
+        )
+    except KeyError:
+        pass
+
+    return run_privileged_sync(
+        ["groupadd", "--system", group_name],
+        PolkitAction.SETUP_MANAGE_GROUPS,
+    )
+
+
+def add_user_to_group_sync(username: str, group_name: str) -> PolkitResult:
+    """Add a user to a group synchronously.
+
+    Args:
+        username: Username.
+        group_name: Group name.
+
+    Returns:
+        PolkitResult with outcome.
+    """
+    return run_privileged_sync(
+        ["usermod", "-aG", group_name, username],
+        PolkitAction.SETUP_MANAGE_GROUPS,
+    )
+
+
+def start_service_sync(service_name: str, timeout: float = 30.0) -> PolkitResult:
+    """Start a systemd service synchronously.
+
+    Args:
+        service_name: Service name.
+        timeout: Timeout in seconds.
+
+    Returns:
+        PolkitResult with outcome.
+    """
+    return run_privileged_sync(
+        ["systemctl", "start", service_name],
+        PolkitAction.SETUP_MANAGE_DAEMON,
+        timeout=timeout,
+    )
+
+
+def enable_service_sync(service_name: str) -> PolkitResult:
+    """Enable a systemd service to start on boot.
+
+    Args:
+        service_name: Service name.
+
+    Returns:
+        PolkitResult with outcome.
+    """
+    return run_privileged_sync(
+        ["systemctl", "enable", service_name],
+        PolkitAction.SETUP_MANAGE_DAEMON,
+    )
+
+
+def install_polkit_rules_sync(
+    rules_content: str,
+    rules_filename: str = "50-elle.rules",
+) -> PolkitResult:
+    """Install Polkit rules file synchronously.
+
+    Args:
+        rules_content: Content of the rules file.
+        rules_filename: Name of the rules file.
+
+    Returns:
+        PolkitResult with outcome.
+    """
+    rules_path = f"/etc/polkit-1/rules.d/{rules_filename}"
+    return write_privileged_sync(
+        rules_path,
+        rules_content,
+        action_id=PolkitAction.SETUP_CONFIGURE_POLKIT,
+        mode="644",
+    )

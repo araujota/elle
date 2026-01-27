@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: elle
-Upstream-Contact: ELLE Contributors <elle@example.com>
+Upstream-Contact: Tyler Araujo <araujota97@gmail.com>
 Source: https://github.com/elle-project/elle
 
 Files: *

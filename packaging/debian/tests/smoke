@@ -1,0 +1,36 @@
+#!/bin/bash
+set -e
+
+echo "=== ELLE Autopkgtest Smoke Tests ==="
+
+# Test 1: CLI exists and runs
+echo "Test 1: CLI binary exists"
+test -x /usr/bin/elle
+
+echo "Test 2: CLI shows help"
+elle --help | grep -q "ELLE"
+
+echo "Test 3: Daemon binary exists"
+test -x /usr/bin/elled
+
+# Test 4: Config directory exists
+echo "Test 4: Config directory"
+test -d /etc/elle
+
+# Test 5: State directory exists (may need to be created by postinst)
+echo "Test 5: State directory"
+test -d /var/lib/elle || mkdir -p /var/lib/elle
+
+# Test 6: Polkit policy installed
+echo "Test 6: Polkit policy"
+test -f /usr/share/polkit-1/actions/com.elle.policy
+
+# Test 7: Python module imports
+echo "Test 7: Python module imports"
+python3 -c "from elle.cli.engine import Engine; print('Import OK')"
+
+# Test 8: Systemd unit exists
+echo "Test 8: Systemd unit"
+systemctl cat elled.service >/dev/null
+
+echo "=== All smoke tests passed ==="

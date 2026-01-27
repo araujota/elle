@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
+from elle.rag.sanitizer import sanitize_command, sanitize_for_prompt
+
 if TYPE_CHECKING:
     from elle.cli.fixit.models import FixitContext
 
@@ -186,13 +188,13 @@ def _format_prior_art_context(context: FixitContext) -> str:
         if art.days_ago > 0:
             lines.append(f"Age: {art.days_ago} days ago")
 
-        # Original trigger for comparison
+        # Original trigger for comparison (sanitized)
         if art.trigger_command:
-            lines.append(f"Original failed command: {art.trigger_command}")
+            lines.append(f"Original failed command: {sanitize_command(art.trigger_command)}")
 
-        # Summary and root cause
+        # Summary and root cause (sanitized)
         if art.summary:
-            lines.append(f"Summary: {art.summary[:300]}")
+            lines.append(f"Summary: {sanitize_for_prompt(art.summary[:300], 'incident_summary')}")
         if art.root_cause:
             lines.append(f"Root Cause: {art.root_cause}")
 

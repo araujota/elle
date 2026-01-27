@@ -1,7 +1,11 @@
-"""Lazy loader for auto-generated capabilities.
+"""Lazy loader for auto-generated and core capabilities.
 
 Loads approved capabilities from the store at daemon startup and
 registers them with the capability registry.
+
+Supports two types of stored capabilities:
+1. Auto-generated: Simple shell-command-based, compiled via factory
+2. Core: Full Python implementations, compiled directly from stored code
 """
 
 from __future__ import annotations
@@ -10,7 +14,11 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from elle.capabilities.autogen.factory import compile_capability_class
-from elle.capabilities.autogen.models import GeneratedCapabilitySpec, StoredCapability
+from elle.capabilities.autogen.models import (
+    GeneratedCapabilitySpec,
+    StoredCapability,
+    TrustLevel,
+)
 from elle.capabilities.autogen.store import get_store
 
 if TYPE_CHECKING:
@@ -27,6 +35,10 @@ logger = logging.getLogger(__name__)
 def load_capability_from_stored(stored: StoredCapability) -> type | None:
     """Load a capability class from a stored capability.
 
+    Supports two types:
+    1. Core capabilities: Full Python code with complex logic
+    2. Auto-generated: Simple shell-command-based capabilities
+
     Args:
         stored: StoredCapability from database.
 
@@ -34,16 +46,18 @@ def load_capability_from_stored(stored: StoredCapability) -> type | None:
         Compiled capability class or None.
     """
     try:
-        # Parse spec from JSON
-        spec = GeneratedCapabilitySpec.model_validate_json(stored.spec_json)
-
-        # Compile the class
-        cap_class = compile_capability_class(
-            spec,
-            stored.input_model_code,
-            stored.output_model_code,
-            stored.capability_class_code,
-        )
+        # Core capabilities have full Python implementations
+        if stored.trust_level == TrustLevel.CORE:
+            cap_class = _compile_core_capability(stored)
+        else:
+            # Auto-generated capabilities use the factory
+            spec = GeneratedCapabilitySpec.model_validate_json(stored.spec_json)
+            cap_class = compile_capability_class(
+                spec,
+                stored.input_model_code,
+                stored.output_model_code,
+                stored.capability_class_code,
+            )
 
         if cap_class:
             # Add metadata to class (dynamic attributes)
@@ -55,6 +69,57 @@ def load_capability_from_stored(stored: StoredCapability) -> type | None:
 
     except Exception as e:
         logger.error(f"Failed to load capability {stored.capability_name}: {e}")
+        return None
+
+
+def _compile_core_capability(stored: StoredCapability) -> type | None:
+    """Compile a core capability from stored Python code.
+
+    Core capabilities have full Python implementations including:
+    - Helper functions
+    - Custom input/output models
+    - Complex run(), verify(), rollback() logic
+
+    Args:
+        stored: StoredCapability with trust_level='core'.
+
+    Returns:
+        Compiled capability class or None.
+    """
+    try:
+        # Derive class name from capability name
+        # e.g., "service.restart" -> "ServiceRestartCapability"
+        parts = stored.capability_name.split(".")
+        class_name = "".join(p.title() for p in parts) + "Capability"
+
+        # Build execution namespace with necessary imports
+        namespace: dict[str, Any] = {}
+
+        # Execute the capability class code which includes:
+        # - Imports
+        # - Helper functions
+        # - The capability class itself
+        exec(stored.capability_class_code, namespace)
+
+        cap_class = namespace.get(class_name)
+        if not cap_class:
+            # Try alternative naming patterns
+            # Some classes might have different naming
+            for name, obj in namespace.items():
+                if name.endswith("Capability") and isinstance(obj, type):
+                    cap_class = obj
+                    break
+
+        if not cap_class:
+            logger.error(f"Could not find capability class in {stored.capability_name}")
+            return None
+
+        return cap_class
+
+    except Exception as e:
+        logger.error(f"Failed to compile core capability {stored.capability_name}: {e}")
+        import traceback
+        logger.debug(traceback.format_exc())
         return None
 
 

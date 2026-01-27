@@ -7,65 +7,83 @@
 
 A local-first, agentic system layer for Ubuntu 24.04 LTS that converts kernel-level telemetry into natural language insight and safe system operations.
 
+## Architecture: The Spine
+
+ELLE is built around a unified execution pipeline called **The Spine**:
+
+```
+DAEMON → SIGNALS → INCIDENT REPORT → AGENT LOOP → CAPABILITIES → OUTCOME → INCIDENT MEMORY
+```
+
+Every interaction flows through this pipeline, ensuring complete auditability, learning from experience, and consistent behavior.
+
+### The Three Pillars
+
+| Pillar | Role |
+|--------|------|
+| **Daemon (`elled`)** | Owns ALL passive monitoring: telemetry, events, state changes, probes |
+| **Capabilities** | Typed, policy-governed operations - the ONLY way to mutate the system |
+| **Agent Loop** | LLM-powered reasoning that plans and executes via capabilities |
+
+```
+User ──▶ elle (CLI/REPL)
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     AGENT LOOP                                   │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │ 1. Create Incident Report (provenance tracking)          │  │
+│  │ 2. Search Man Vault (documentation)                      │  │
+│  │ 3. Search Incident Vault (prior decisions)               │  │
+│  │ 4. LLM reasons over context                              │  │
+│  │ 5. Execute Capabilities (policy-enforced)                │  │
+│  │ 6. Record outcome to Incident Memory                     │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      DAEMON (elled)                              │
+│  ├─▶ Telemetry: Journal, Kernel, eBPF, inotify, probes          │
+│  ├─▶ Man Vault: ~24,000 man pages indexed                       │
+│  ├─▶ Incident Vault: Decision memory + outcomes                 │
+│  ├─▶ Event correlation & fingerprinting                         │
+│  └─▶ Polkit helper for privileged operations                    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
 ## Features
 
-### Core Capabilities
-- **Interactive Terminal** - Natural language interface to your Ubuntu system
-- **Intent Classification** - Automatically understands what you want to do (shell, question, task, fixit)
-- **Safe Command Execution** - Dangerous commands are blocked, privileged operations require confirmation
-- **Fixit Service** - Automatic diagnosis and repair of failed commands
-- **Planner Service** - Multi-step system task planning with verification
-
-### Capabilities & Policy System
-- **Typed Capabilities** - Safe, auditable system operations with risk levels and side effects
-- **Policy Engine** - Rule-based access control (allow, deny, require_confirmation, require_preview)
-- **Reactive Functions** - Event-driven automations from natural language ("when disk > 90%, clean docker")
+### Core System
+- **Agent Loop** - LLM-powered reasoning with full provenance tracking
+- **Typed Capabilities** - Safe, auditable system operations with risk levels
+- **Policy Engine** - Rule-based access control (allow, deny, require_confirmation)
+- **Incident Vault** - Decision memory that learns from every interaction
 
 ### Knowledge & Memory
-- **Man Vault** - Local SQLite+FTS5 index of ~24,000 man pages with semantic search
-- **Incident Vault** - Decision memory storing past incidents, actions, and outcomes for learning
-
-### Configuration Management
-- **LLM-Driven Config Generation** - Generate configuration changes from natural language
-- **Augeas Integration** - Safe config editing with preview, validation, and rollback
-- **File Operations** - Safe file read/write with atomic operations and rollback support
-- **Docker Config** - Docker Compose generation, container diagnostics
-- **WireGuard Config** - VPN tunnel configuration from natural language
-- **Network Diagnosis** - Connectivity testing, firewall explanation, lockdown suggestions
+- **Man Vault** - SQLite+FTS5 index of ~24,000 man pages with semantic search
+- **Incident Memory** - Every action recorded with provenance and outcome
+- **Pattern Matching** - Prior successful incidents inform future decisions
 
 ### Capability Auto-Generation
 - **Package Learning** - `/learn <package>` generates typed capabilities from installed packages
-- **Multi-Source Intelligence** - Extracts from dpkg metadata, shell completions, man pages, systemd units
-- **Bootstrap on Install** - Core package capabilities generated automatically after ELLE installation
-- **Auto-Learn New Packages** - Automatically generates capabilities when new packages are installed
-- **Batch Learning** - `/learn --all` generates capabilities for all installed packages
+- **Multi-Source Intelligence** - Extracts from dpkg, shell completions, man pages, systemd units
+- **Bootstrap on Install** - Core capabilities generated automatically on first run
+- **Auto-Learn** - Capabilities generated when new packages are installed
 
-### GUI Automation (AT-SPI)
-- **Application Learning** - `/map <appname>` captures UI structure via accessibility APIs
-- **Natural Language Control** - "disable bluetooth in settings" executed as UI actions
-- **Self-Healing** - Automatically adapts when UI elements move or change names
-- **Recipe Storage** - Versioned UI "recipes" stored locally for reliable automation
+### Automations
+- **Reactive Functions** - Event-driven automations from natural language
+- **GUI Automation** - `/map <app>` learns UI structure via AT-SPI accessibility APIs
 
-### Telemetry & Monitoring
-- **Journal/Kernel Watchers** - Real-time system event monitoring
-- **Docker Watcher** - Container state change monitoring
-- **Inotify Watcher** - File system change monitoring
-- **Port Probe** - Network port status monitoring
-- **eBPF Probes** - Kernel-level telemetry (OOM, disk I/O, network drops, thermal)
-- **Periodic Probes** - SMART, sensors, disk usage, network status
+### Monitoring & Telemetry
+- **eBPF Probes** - Kernel-level telemetry (OOM, disk I/O, network, thermal)
+- **Watchers** - Journal, kernel, Docker, inotify, package changes
 - **Notifications** - ntfy integration for alerts
 
 ### Mobile Gateway
-- **QR Code Pairing** - Scan to pair mobile devices securely
+- **QR Code Pairing** - Secure device pairing
 - **mTLS Authentication** - Mutual TLS with auto-generated certificates
 - **Role-Based Access** - Read-only and operator modes with temporary elevation
-- **Remote Configuration** - Manage ELLE settings from your mobile device
-- **Multi-Device Support** - Connect multiple devices across different machines
-- **Audit Logging** - Full audit trail of all mobile operations
-
-### System Management
-- **Reboot Tracking** - GRUB/kernel management with pre/post verification
-- **Polkit Integration** - Secure privileged operations
 
 ## Requirements
 
@@ -80,7 +98,7 @@ A local-first, agentic system layer for Ubuntu 24.04 LTS that converts kernel-le
 ```bash
 curl -fsSL https://ollama.ai/install.sh | sh
 
-# Pull the default models (Q8_0 quantization for better efficiency)
+# Pull the default models
 ollama pull qwen2.5:7b-instruct-q8_0   # LLM for generation
 ollama pull phi3.5:3.8b-mini-instruct-q8_0  # SLM for classification
 ```
@@ -94,7 +112,7 @@ ollama pull phi3.5:3.8b-mini-instruct-q8_0  # SLM for classification
 curl -fsSL https://repo.agentelle.org/elle.gpg \
   | sudo gpg --dearmor -o /usr/share/keyrings/elle-archive-keyring.gpg
 
-# Add the repository (DEB822 format)
+# Add the repository
 sudo tee /etc/apt/sources.list.d/elle.sources > /dev/null <<EOF
 Types: deb
 URIs: https://repo.agentelle.org
@@ -112,26 +130,11 @@ sudo apt install elle
 #### From Source (Development)
 
 ```bash
-# Clone the repository
 git clone https://github.com/araujota/elle.git
 cd elle
-
-# Create virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
-
-# Install in development mode
 pip install -e ".[dev]"
-```
-
-### 3. Verify Installation
-
-```bash
-# Run tests
-pytest
-
-# Start ELLE
-elle
 ```
 
 ## Usage
@@ -141,844 +144,88 @@ elle
 ```bash
 $ elle
 ELLE - Ubuntu System Assistant
-Type 'help' for commands or just start typing.
 
-elle > help
 elle > what is using port 8080?
-elle > show disk usage
 elle > why is nginx failing?
+elle > configure nginx as reverse proxy for localhost:3000
 ```
 
 ### One-shot Commands
 
 ```bash
-elle status          # Show system status
-elle help            # Show help
-elle "check disk space"  # Run a query directly
+elle "check disk space"
+elle status
+elle help
 ```
 
-### Configuration Generation
-
-ELLE can generate configuration changes from natural language:
-
-```python
-from elle.rag.confgen import generate, get_confgen_service
-
-# Generate configuration
-outcome = generate(
-    request="Set static IP 192.168.1.10 for eth0",
-    target_path="/etc/netplan/01-netcfg.yaml",
-)
-
-if outcome.success:
-    print(outcome.result.explanation)
-    for op in outcome.result.operations:
-        print(f"  {op.kind} {op.path} = {op.value}")
-
-    # Apply if approved
-    service = get_confgen_service()
-    service.apply(outcome)
-```
-
-Supported configuration domains:
-- **network** - Netplan configuration
-- **ssh** - SSH daemon settings
-- **filesystem** - fstab mount points
-- **firewall** - UFW rules
-- **service** - Systemd unit files
-- **cron** - Scheduled tasks
-
-### Fixit (Command Recovery)
-
-When a command fails, use `fix` to diagnose and repair:
-
-```bash
-elle > apt update
-# ... command fails ...
-
-elle > fix
-Analyzing failure...
-
-Diagnosis: Permission denied - requires sudo
-Suggested fix: Run with elevated privileges via Polkit
-
-Apply fix? [y/n]:
-```
-
-### Planner (System Tasks)
-
-For complex system changes, ELLE creates a verified plan:
-
-```bash
-elle > configure nginx as reverse proxy for localhost:3000
-
-Planning...
-
-Plan: Configure Nginx Reverse Proxy
-1. Install nginx (if needed)
-2. Create /etc/nginx/sites-available/proxy.conf
-3. Enable site with symlink
-4. Test configuration (nginx -t)
-5. Reload nginx
-
-Risks:
-- Port 80 must be available
-- Existing nginx config may conflict
-
-Execute plan? [y/n]:
-```
-
-### Augeas Config Editing
-
-Safe configuration editing with preview and rollback:
-
-```python
-from elle.ops.augeas import AugeasController, AugeasOp
-
-controller = AugeasController()
-
-# Preview changes before applying
-ops = [
-    AugeasOp(kind="set", path="/files/etc/ssh/sshd_config/PermitRootLogin", value="no"),
-]
-preview = controller.preview(ops)
-print(preview.diff)
-
-# Execute with automatic backup
-result = controller.execute(ops)
-if not result.success:
-    controller.rollback()  # Restore from backup
-```
-
-### File Operations
-
-```python
-from elle.ops.files import read_file, write_file, MarkdownBuilder
-
-# Read a file
-result = read_file("/etc/hostname")
-print(result.content)
-
-# Write a file
-result = write_file("/tmp/config.txt", "key=value", overwrite=True)
-
-# Build markdown
-doc = (
-    MarkdownBuilder()
-    .heading("Report", level=1)
-    .paragraph("Generated by ELLE")
-    .code_block("systemctl status nginx", language="bash")
-    .build()
-)
-```
-
-### Telemetry & eBPF
-
-ELLE monitors system health via multiple sources:
-
-```python
-from elle.daemon.telemetry import get_recent_events
-from elle.daemon.telemetry.ebpf import is_ebpf_available
-
-# Check eBPF availability
-if is_ebpf_available():
-    print("eBPF probes active: OOM, disk I/O, network drops, thermal")
-
-# Get recent telemetry events
-events = get_recent_events(limit=10, severity="warning")
-for event in events:
-    print(f"{event.ts} [{event.severity}] {event.message}")
-```
-
-### Notifications
-
-Configure ntfy for system alerts:
-
-```python
-from elle.daemon.notifications import get_notification_service
-
-svc = get_notification_service()
-svc.configure(
-    ntfy_url="https://ntfy.sh/my-elle-alerts",
-    min_severity="warning",
-)
-
-# Alerts are sent automatically for:
-# - OOM kills
-# - Disk space critical (>95%)
-# - Service failures
-# - SMART warnings
-```
-
-### Reactive Functions
-
-Create event-driven automations using natural language:
-
-```bash
-elle > /react create "when disk usage exceeds 90%, clean docker images and notify me"
-
-Creating reactive function...
-
-Name: disk-cleanup-alert
-Trigger: event (probe/disk)
-Condition: {event.raw.used_pct} >= 90
-Actions:
-  1. docker.prune (remove unused images)
-  2. notify.send (alert: "Disk cleanup triggered")
-Policy: max_frequency=1h, escalate_on_failure=true
-
-[Approve] [Edit] [Cancel]
-```
-
-Manage reactive functions:
-
-```bash
-elle > /react list                    # List all functions
-elle > /react show disk-cleanup-alert # Show details
-elle > /react enable disk-cleanup     # Enable function
-elle > /react disable disk-cleanup    # Disable function
-elle > /react history disk-cleanup    # View execution history
-elle > /react test disk-cleanup       # Dry-run with sample event
-```
-
-### Docker Utilities
-
-```bash
-# Convert docker run to compose
-elle > docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=secret postgres:15
-# ELLE suggests: Would you like me to convert this to docker-compose.yml?
-
-# Diagnose container issues
-elle > why is my-container restarting?
-# Analyzes logs, exit codes, resource limits
-
-# Explain resource usage
-elle > show docker resource usage
-```
-
-### Network Diagnosis
-
-```bash
-# Diagnose connectivity
-elle > can't connect to api.example.com:443
-# Tests DNS, routing, TLS, firewall rules
-
-# Explain firewall rules
-elle > explain ufw rules
-# Human-readable firewall summary
-
-# Lockdown suggestions
-elle > lock postgres to localhost only
-# Suggests ufw rules for service isolation
-```
-
-### Package Capability Learning
-
-ELLE can automatically generate typed capabilities from installed packages:
+### Capability Learning
 
 ```bash
 # Learn a specific package
 elle > /learn ffmpeg
-Gathering intelligence for 'ffmpeg'...
-  Sources: dpkg, bash-completion, man pages
-  Extracted: 47 flags, 3 subcommands
-Generating capabilities...
-  Created: ffmpeg.convert, ffmpeg.probe, ffmpeg.stream
-Capabilities saved: 3 (pending approval)
+Generating capabilities: ffmpeg.convert, ffmpeg.probe, ffmpeg.stream
 
-# Learn all installed packages (batch mode)
-elle > /learn --all --dry-run
-Would learn 127 packages (out of 1,432 total installed)
-  - ffmpeg, nginx, docker.io, systemctl...
-
+# Learn all installed packages
 elle > /learn --all
-Learning all 127 packages...
-  Complete! 119 succeeded, 8 failed
-  Capabilities generated: 342
-
-# List packages with capabilities
-elle > /learn list
-Packages with generated capabilities:
-  ffmpeg     (3 caps, 2 approved)
-  nginx      (5 caps, 5 approved)
-  docker.io  (12 caps, 10 approved)
 
 # Approve a capability for use
 elle > /learn approve ffmpeg.convert
 ```
 
-**Auto-learning:** When enabled (default), ELLE automatically generates capabilities for newly installed packages. Configure in setup wizard or `~/.config/elle/elle.toml`:
+### Reactive Functions
 
-```toml
-[daemon]
-auto_learn_new_packages = true  # Default: enabled
+```bash
+# Create event-driven automations
+elle > /react create "when disk > 90%, clean docker images and notify me"
+
+# Manage reactive functions
+elle > /react list
+elle > /react enable disk-cleanup
 ```
 
 ### GUI Automation
 
-Control desktop applications using natural language:
-
 ```bash
-# Learn an application's UI structure (renamed to /map)
+# Learn an application's UI
 elle > /map gnome-control-center
-Learning 'gnome-control-center'...
-  Elements: 127
-  Navigation targets: 23
-  Recipe stored with ID: abc123...
 
-# Execute GUI tasks via natural language
+# Execute GUI tasks
 elle > disable bluetooth in settings
-Planning GUI task...
-  1. Navigate to Bluetooth panel
-  2. Click Bluetooth toggle
-  3. Verify state is "off"
-Execute? [y/n]: y
-✓ Bluetooth disabled
-
-# List learned applications
-elle > /map list
-Learned applications:
-  gnome-control-center  v1 (100% conf, 5/5 success)
-  nautilus              v2 (95% conf, 18/19 success)
-
-# Show recipe details
-elle > /map show gnome-control-center
-```
-
-**Note:** GUI automation requires AT-SPI accessibility to be enabled:
-```bash
-gsettings set org.gnome.desktop.interface toolkit-accessibility true
-```
-
-### Reboot Management
-
-Track kernel updates and verify post-reboot:
-
-```python
-from elle.daemon.reboot import schedule_reboot, get_pending_reboot
-
-# Check if reboot is needed (e.g., kernel update)
-pending = get_pending_reboot()
-if pending:
-    print(f"Reboot required: {pending.reason}")
-    print(f"New kernel: {pending.target_kernel}")
-
-# Schedule with verification
-schedule_reboot(
-    reason="Kernel update to 6.8.0-40",
-    verify_commands=["uname -r", "systemctl is-system-running"],
-)
 ```
 
 ### Mobile Gateway
 
-Access ELLE remotely from your mobile device with secure QR code pairing.
-
-#### Starting the Gateway
-
 ```bash
-# Start the mobile gateway and display QR code
-elle > /mobile up
-Mobile Gateway starting on 0.0.0.0:8378...
-Certificates generated.
-
-Scan this QR code with the ELLE mobile app:
-██████████████████████████████████
-██ ▄▄▄▄▄ █▀▀▄█▀▄▀▀█▄██ ▄▄▄▄▄ ██
-██ █   █ █▄ ▄▀█▄▀▄██▀█ █   █ ██
-...
-
-Token expires in 90 seconds.
-
-# Check gateway status
-elle > /mobile status
-Mobile Gateway: Running
-  PID: 12345
-  Address: 0.0.0.0:8378
-  Paired devices: 2
-  Active elevations: 0
-  Uptime: 2h 15m
-
-# Stop the gateway
-elle > /mobile down
+elle > /mobile up          # Start gateway with QR code
+elle > /mobile devices     # List paired devices
+elle > /mobile approve <device> --ttl 30m  # Grant elevation
 ```
-
-#### Device Management
-
-```bash
-# List all paired devices
-elle > /mobile devices
-Paired Devices:
-  iphone-tyler    mobile_readonly  paired   Last seen: 2m ago
-  ipad-work       mobile_operator  elevated Last seen: 5m ago (elevated: 8m left)
-
-# Revoke a device's access
-elle > /mobile revoke iphone-tyler
-Device 'iphone-tyler' revoked.
-
-# Grant temporary elevation (allows write operations)
-elle > /mobile approve ipad-work --ttl 30m
-Device 'ipad-work' elevated to mobile_operator for 30 minutes.
-
-# View audit log
-elle > /mobile audit
-Recent mobile operations:
-  2024-01-15 10:30:22  ipad-work  REQUEST  /v1/chat/completions  success
-  2024-01-15 10:28:15  ipad-work  ELEVATE  -                     success
-  2024-01-15 10:25:00  iphone-tyler PAIR   -                     success
-```
-
-#### Mobile Roles
-
-| Role | Capabilities |
-|------|-------------|
-| `mobile_readonly` | Query system status, ask questions, view logs |
-| `mobile_operator` | Execute tasks, modify configuration (requires elevation) |
-
-Elevation is temporary (default 10 minutes, max 1 hour) and must be granted from the local machine via `/mobile approve`.
-
-#### Configuration
-
-Configure the mobile gateway in `~/.config/elle/elle.toml`:
-
-```toml
-[mobile]
-enabled = true
-bind_host = "0.0.0.0"      # Listen on all interfaces
-bind_port = 8378           # Gateway port
-overlay_host = "10.0.0.1"  # Optional: WireGuard/Tailscale IP
-max_paired_devices = 10    # Maximum paired devices
-default_role = "mobile_readonly"
-```
-
-#### Security
-
-- **mTLS Required**: All connections use mutual TLS with auto-generated certificates
-- **QR Pairing**: One-time tokens expire in 90 seconds
-- **Certificate Pinning**: Mobile app pins to server certificate fingerprint
-- **Local Elevation**: Write access requires approval from local machine
-- **Full Audit Trail**: All operations logged with device ID, IP, and timestamp
-- **Device Revocation**: Instantly revoke any device's access
-
-## Architecture
-
-```
-User ──▶ elle (terminal / CLI)
-         ├─▶ Intent Classifier (hybrid: keywords + patterns + SLM)
-         ├─▶ Fixit Service (command failure recovery)
-         ├─▶ Planner Service (multi-step task planning)
-         ├─▶ Man Vault (documentation grounding)
-         ├─▶ Incident Vault (decision memory + prior art)
-         ├─▶ Config Generator (natural language → config)
-         ├─▶ Capabilities (typed operations with policy)
-         ├─▶ Capability Auto-Generator (package → capabilities)
-         ├─▶ Reactive Engine (event-driven automations)
-         ├─▶ Policy Engine (rule-based access control)
-         ├─▶ GUI Automation (AT-SPI application control)
-         ├─▶ Ollama (local inference)
-         └─▶ elled (telemetry + privileged ops)
-                ├─▶ Journal/Kernel Watchers
-                ├─▶ Docker Watcher (container state)
-                ├─▶ Inotify Watcher (file changes)
-                ├─▶ Port Probe (network ports)
-                ├─▶ Package Probe (new installs + upgrades)
-                ├─▶ eBPF Probes (OOM, I/O, network, thermal)
-                ├─▶ Periodic Probes (SMART, sensors, df)
-                ├─▶ Reactive Scheduler (cron triggers)
-                ├─▶ Capability Bootstrap (first-run learning)
-                ├─▶ Reboot Manager (GRUB, verification)
-                └─▶ Notifications (ntfy)
-
-Mobile ──▶ Mobile Gateway (separate process, :8378)
-           ├─▶ QR Pairing (90s one-time tokens)
-           ├─▶ mTLS Authentication (auto-generated certs)
-           ├─▶ Role Enforcement (readonly/operator)
-           ├─▶ Elevation Manager (TTL-based privileges)
-           ├─▶ Request Proxy (→ internal API :8377)
-           ├─▶ Config Manager (remote config read/write)
-           └─▶ Audit Store (all operations logged)
-```
-
-### Request Lifecycle
-
-Every natural language message follows this flow through ELLE's processing pipeline:
-
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                         REQUEST LIFECYCLE                                     │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-  User Input (CLI or API)
-       │
-       ▼
-┌──────────────────┐
-│  Engine.process  │  ◄── Entry point for all requests
-│  (engine.py)     │      Receives: input string + Session
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                        INTENT CLASSIFICATION                                  │
-│  ┌─────────────────────────────────────────────────────────────────────────┐ │
-│  │ 1. Hard keyword routes    (exact matches: "help", "exit", "status")    │ │
-│  │ 2. Prefix commands        (/ask, /do, /sh, /fix, /react, /learn, !)    │ │
-│  │ 3. Pattern matching       (regex for shell, questions, tasks, GUI)     │ │
-│  │ 4. SLM classification     (Ollama phi3.5 fallback if no pattern hit)   │ │
-│  │ 5. Safety overrides       (reduce confidence for dangerous commands)   │ │
-│  └─────────────────────────────────────────────────────────────────────────┘ │
-│                                                                               │
-│  Output: ClassificationResult(intent, confidence, reasoning)                  │
-│                                                                               │
-│  Intent Types:                                                                │
-│  ├── shell_passthrough   Safe shell commands                                  │
-│  ├── system_question     "Why is nginx failing?" "What uses port 8080?"       │
-│  ├── system_task         "Install nginx", "Configure static IP"               │
-│  ├── gui_task            "Disable bluetooth in settings"                      │
-│  ├── fixit               "fix" after a command failure                        │
-│  ├── navigation          "status", "events", "logs"                           │
-│  ├── meta                "help", "exit", "config"                             │
-│  └── explain_command     "explain: ls -la"                                    │
-└──────────────────────────────────────────────────────────────────────────────┘
-         │
-         ▼
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                           INTENT ROUTING                                      │
-├──────────────────────────────────────────────────────────────────────────────┤
-│                                                                               │
-│  shell_passthrough ────▶ ┌─────────────────┐                                  │
-│                          │ Denylist Check  │ Block: rm -rf /, fork bombs,     │
-│                          └────────┬────────┘        sudo, curl|bash, etc.     │
-│                                   │                                           │
-│                                   ▼                                           │
-│                          ┌─────────────────┐                                  │
-│                          │ subprocess_run  │ Execute safely, capture output   │
-│                          └─────────────────┘                                  │
-│                                                                               │
-│  system_question ──────▶ ┌─────────────────┐    ┌─────────────────┐           │
-│                          │   Man Vault     │───▶│    Ollama LLM   │           │
-│                          │   (RAG docs)    │    │   (generation)  │           │
-│                          └─────────────────┘    └─────────────────┘           │
-│                                                                               │
-│  system_task ──────────▶ ┌─────────────────────────────────────────────────┐  │
-│                          │              PLANNER SERVICE                     │  │
-│                          │  ┌──────────────────────────────────────────┐   │  │
-│                          │  │ 1. Query Man Vault for relevant docs     │   │  │
-│                          │  │ 2. Query Incident Vault for prior art    │   │  │
-│                          │  │ 3. Query daemon for system state         │   │  │
-│                          │  │ 4. LLM generates CapabilityPlan          │   │  │
-│                          │  │ 5. User confirmation (if required)       │   │  │
-│                          │  └──────────────────────────────────────────┘   │  │
-│                          │                      │                          │  │
-│                          │                      ▼                          │  │
-│                          │  ┌──────────────────────────────────────────┐   │  │
-│                          │  │         CAPABILITY EXECUTION              │   │  │
-│                          │  │  ┌────────────────────────────────────┐  │   │  │
-│                          │  │  │ Policy Engine                      │  │   │  │
-│                          │  │  │ ├── Check rules (ALLOW/DENY)       │  │   │  │
-│                          │  │  │ ├── REQUIRE_CONFIRMATION prompts   │  │   │  │
-│                          │  │  │ └── REQUIRE_PREVIEW shows diff     │  │   │  │
-│                          │  │  └────────────────────────────────────┘  │   │  │
-│                          │  │                   │                       │   │  │
-│                          │  │                   ▼                       │   │  │
-│                          │  │  ┌────────────────────────────────────┐  │   │  │
-│                          │  │  │ Capability Executor                │  │   │  │
-│                          │  │  │ ├── Execute capability             │  │   │  │
-│                          │  │  │ ├── Collect evidence               │  │   │  │
-│                          │  │  │ └── Record to Incident Vault       │  │   │  │
-│                          │  │  └────────────────────────────────────┘  │   │  │
-│                          │  └──────────────────────────────────────────┘   │  │
-│                          └─────────────────────────────────────────────────┘  │
-│                                                                               │
-│  fixit ────────────────▶ ┌─────────────────────────────────────────────────┐  │
-│                          │              FIXIT SERVICE                       │  │
-│                          │  1. Analyze exit code, stdout, stderr            │  │
-│                          │  2. Search Incident Vault for similar failures   │  │
-│                          │  3. Query Man Vault for command docs             │  │
-│                          │  4. LLM diagnosis (or rule-based fallback)       │  │
-│                          │  5. Generate fix via Capabilities                │  │
-│                          └─────────────────────────────────────────────────┘  │
-│                                                                               │
-│  gui_task ─────────────▶ ┌─────────────────────────────────────────────────┐  │
-│                          │             AT-SPI AUTOMATION                    │  │
-│                          │  1. Load UI recipe for target application        │  │
-│                          │  2. LLM plans UITaskPlan from request            │  │
-│                          │  3. Execute UIActions via AT-SPI                 │  │
-│                          │  4. Self-heal if elements moved (fuzzy match)    │  │
-│                          │  5. Record execution to Incident Vault           │  │
-│                          └─────────────────────────────────────────────────┘  │
-│                                                                               │
-│  navigation/meta ──────▶ Direct handlers (status, help, exit, events, etc.)  │
-│                                                                               │
-└──────────────────────────────────────────────────────────────────────────────┘
-         │
-         ▼
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                              RESPONSE                                         │
-│                                                                               │
-│  EngineResult:                                                                │
-│  ├── output        Rendered text/markdown for display                         │
-│  ├── session       Updated Session (immutable, new instance)                  │
-│  ├── action        CONTINUE | EXIT | CLEAR                                    │
-│  └── success       True/False                                                 │
-│                                                                               │
-│  Side effects:                                                                │
-│  ├── Incident created/updated in Incident Vault                               │
-│  ├── Telemetry events recorded (if system mutated)                            │
-│  └── Reactive functions may trigger from state changes                        │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
-
-**Confidence Thresholds:**
-- `HIGH (0.90)` - Proceed without confirmation
-- `MEDIUM (0.75)` - May require confirmation for mutations
-- `MIN (0.55)` - Low confidence, user clarification may be needed
-
-### Key Components
-
-| Component | Description |
-|-----------|-------------|
-| `elle` | Interactive terminal REPL and CLI |
-| `elled` | Background daemon for telemetry and privileged ops |
-| Intent Classifier | Hybrid classification (keywords, patterns, SLM fallback) |
-| Fixit Service | Diagnose and repair failed commands |
-| Planner Service | Plan multi-step system tasks with verification |
-| Man Vault | SQLite+FTS5 index of ~24,000 man pages |
-| Incident Vault | Decision memory storing incidents and outcomes |
-| Config Generator | LLM-driven config from natural language |
-| Capabilities | Typed system operations with risk levels and side effects |
-| Capability Auto-Gen | Generate capabilities from packages via multi-source intelligence |
-| Policy Engine | Rule-based access control for capabilities |
-| Reactive Engine | Event-driven automation execution |
-| Augeas Controller | Safe config editing with preview/rollback |
-| GUI Automation | AT-SPI application control with self-healing (`/map` command) |
-| Package Probe | Monitor package installs/upgrades, trigger auto-learning |
-| eBPF Watcher | Kernel-level telemetry probes |
-| Reboot Manager | GRUB/kernel management with verification |
-| Mobile Gateway | Secure remote access via mTLS, QR pairing, role-based access |
-
-## Development
-
-```bash
-# Activate environment
-source .venv/bin/activate
-
-# Run tests
-pytest
-
-# Run tests with coverage
-pytest --cov=elle
-
-# Lint
-ruff check src/
-
-# Format
-ruff format src/
-
-# Type check
-mypy src/
-```
-
-### OpenAI-Compatible API
-
-ELLE exposes an OpenAI-compatible API for programmatic access. All requests flow through the same intent classification and policy pipeline as the CLI.
-
-**Important:** This is NOT direct LLM access. Every request is classified, policy-checked, and executed through ELLE's capability system.
-
-#### Authentication
-
-The daemon API uses session token authentication. When `elled` starts, it generates a cryptographic token stored at:
-
-```
-$XDG_RUNTIME_DIR/elle/session.token
-```
-
-Include this token in requests via header:
-
-```bash
-# Read the session token
-TOKEN=$(cat $XDG_RUNTIME_DIR/elle/session.token)
-
-# Use X-Elle-Token header
-curl -H "X-Elle-Token: $TOKEN" http://localhost:8420/v1/models
-
-# Or use Bearer token format
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8420/v1/models
-```
-
-#### Available Models (Execution Modes)
-
-| Model ID | Description |
-|----------|-------------|
-| `elle` | Full execution mode - can perform all operations (with policy enforcement) |
-| `elle.readonly` | Read-only mode - queries and explanations only, no system mutations |
-| `elle.capabilities_only` | Returns planned capabilities as `tool_calls` without executing them |
-
-#### Endpoints
-
-**List Models**
-```bash
-GET /v1/models
-
-# Response
-{
-  "object": "list",
-  "data": [
-    {"id": "elle", "object": "model", "owned_by": "elle"},
-    {"id": "elle.readonly", "object": "model", "owned_by": "elle"},
-    {"id": "elle.capabilities_only", "object": "model", "owned_by": "elle"}
-  ]
-}
-```
-
-**Chat Completions**
-```bash
-POST /v1/chat/completions
-
-# Request body
-{
-  "model": "elle",
-  "messages": [
-    {"role": "user", "content": "What is using port 8080?"}
-  ],
-  "stream": false
-}
-
-# Response
-{
-  "id": "chatcmpl-...",
-  "object": "chat.completion",
-  "model": "elle",
-  "choices": [{
-    "index": 0,
-    "message": {
-      "role": "assistant",
-      "content": "Port 8080 is being used by..."
-    },
-    "finish_reason": "stop"
-  }],
-  "usage": {...}
-}
-```
-
-#### Python Example
-
-```python
-import os
-from pathlib import Path
-from openai import OpenAI
-
-# Read session token
-runtime_dir = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-token_path = Path(runtime_dir) / "elle" / "session.token"
-token = token_path.read_text().strip()
-
-# Create client pointing to elled
-client = OpenAI(
-    base_url="http://localhost:8420/v1",
-    api_key=token,  # Token goes here
-)
-
-# Query ELLE
-response = client.chat.completions.create(
-    model="elle.readonly",  # Read-only for safety
-    messages=[
-        {"role": "user", "content": "Show disk usage"}
-    ]
-)
-print(response.choices[0].message.content)
-
-# Execute a task (requires "elle" model)
-response = client.chat.completions.create(
-    model="elle",
-    messages=[
-        {"role": "user", "content": "Clean docker images older than 7 days"}
-    ]
-)
-# Will go through policy checks, may require confirmation
-```
-
-#### Streaming
-
-```python
-response = client.chat.completions.create(
-    model="elle",
-    messages=[{"role": "user", "content": "Explain nginx config"}],
-    stream=True
-)
-
-for chunk in response:
-    if chunk.choices[0].delta.content:
-        print(chunk.choices[0].delta.content, end="")
-```
-
-#### curl Examples
-
-```bash
-TOKEN=$(cat $XDG_RUNTIME_DIR/elle/session.token)
-
-# Simple query (readonly mode)
-curl -X POST http://localhost:8420/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "X-Elle-Token: $TOKEN" \
-  -d '{
-    "model": "elle.readonly",
-    "messages": [{"role": "user", "content": "What services are running?"}]
-  }'
-
-# Execute a task (full mode)
-curl -X POST http://localhost:8420/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "X-Elle-Token: $TOKEN" \
-  -d '{
-    "model": "elle",
-    "messages": [{"role": "user", "content": "Restart nginx"}]
-  }'
-
-# Get capabilities without execution
-curl -X POST http://localhost:8420/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "X-Elle-Token: $TOKEN" \
-  -d '{
-    "model": "elle.capabilities_only",
-    "messages": [{"role": "user", "content": "Install nginx as reverse proxy"}]
-  }'
-# Returns tool_calls with planned capabilities
-```
-
-#### Security Notes
-
-- Session tokens are ephemeral - regenerated each time `elled` starts
-- Token file has 600 permissions (owner read/write only)
-- Tokens use constant-time comparison to prevent timing attacks
-- All requests go through the same policy engine as CLI commands
-- High-risk operations still require confirmation via the CLI
-
-## Configuration
-
-ELLE stores data in:
-- `~/.local/state/elle/` - User state and logs
-- `/var/lib/elle/` - System databases (Man Vault, Incident Vault, telemetry)
-- `/var/lib/elle/backups/` - Configuration backups
 
 ## Safety
 
 ELLE includes multiple safety mechanisms:
 - **Command denylist** - Blocks dangerous commands (rm -rf /, fork bombs, etc.)
+- **Policy enforcement** - All capabilities go through the Policy Engine
+- **Incident tracking** - Every action recorded with full provenance
 - **No implicit sudo** - Privileged operations require explicit confirmation
 - **Preview before apply** - Configuration changes show diffs before execution
-- **Automatic backups** - Critical configs are backed up before modification
-- **Rollback support** - Failed operations can be reverted
+
+## Development
+
+```bash
+source .venv/bin/activate
+pytest                    # Run tests
+pytest --cov=elle         # With coverage
+ruff check src/           # Lint
+ruff format src/          # Format
+mypy src/                 # Type check
+```
 
 ## Support ELLE
 
 ELLE is open source and free to use. If you find it valuable, consider sponsoring development:
 
 [![Sponsor on GitHub](https://img.shields.io/badge/Sponsor_on_GitHub-❤-ea4aaa?style=for-the-badge&logo=github)](https://github.com/sponsors/araujota)
-
-**Other ways to help:**
-- Report bugs and suggest features on [GitHub Issues](https://github.com/araujota/elle/issues)
-- Contribute code or documentation
-- Share ELLE with others who might find it useful
 
 **Questions or feedback?** Email: araujota97@gmail.com
 

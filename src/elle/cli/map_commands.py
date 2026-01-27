@@ -140,6 +140,27 @@ async def _handle_map(args: str) -> str:
         if not recipe:
             return f"Could not find application '{app_name}'.\nMake sure the application is running and accessible."
 
+        # Record to incident vault for provenance
+        try:
+            from elle.cli.agentic.incident_recorder import record_arm_action
+
+            record_arm_action(
+                arm_name="gui_mapping",
+                action="map_application",
+                target=app_name,
+                success=True,
+                details={
+                    "app_name": recipe.app_name,
+                    "recipe_id": recipe.recipe_id,
+                    "element_count": len(recipe.elements),
+                    "navigation_count": len(recipe.navigation_paths),
+                    "confidence": recipe.confidence,
+                    "mode": mode,
+                },
+            )
+        except Exception as e:
+            logger.debug(f"Failed to record mapping to incident vault: {e}")
+
         return (
             f"Mapped '{recipe.app_name}':\n"
             f"  Recipe ID: {recipe.recipe_id[:8]}...\n"
@@ -322,6 +343,23 @@ async def _handle_delete(args: str) -> str:
         deleted = delete_recipe(recipe.recipe_id)
 
         if deleted:
+            # Record to incident vault for audit
+            try:
+                from elle.cli.agentic.incident_recorder import record_arm_action
+
+                record_arm_action(
+                    arm_name="gui_mapping",
+                    action="delete_recipe",
+                    target=app_name,
+                    success=True,
+                    details={
+                        "app_name": app_name,
+                        "recipe_id": recipe.recipe_id,
+                    },
+                )
+            except Exception as e:
+                logger.debug(f"Failed to record deletion to incident vault: {e}")
+
             return f"Deleted recipe for '{app_name}'"
         else:
             return f"Failed to delete recipe for '{app_name}'"

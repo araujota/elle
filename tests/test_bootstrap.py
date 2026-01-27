@@ -17,6 +17,7 @@ from elle.capabilities.autogen.bootstrap import (
     get_bootstrap_packages,
     get_bootstrap_state,
     get_elle_dependencies,
+    get_essential_packages,
     is_package_installed,
     should_run_bootstrap,
 )
@@ -28,6 +29,7 @@ class TestPackageCategory:
     def test_categories_exist(self):
         """Test that all expected categories exist."""
         assert PackageCategory.SYSTEM.value == "system"
+        assert PackageCategory.ESSENTIAL.value == "essential"
         assert PackageCategory.FILE.value == "file"
         assert PackageCategory.NETWORK.value == "network"
         assert PackageCategory.TEXT.value == "text"
@@ -146,6 +148,61 @@ class TestPackageDetection:
         assert isinstance(deps, list)
 
 
+class TestEssentialPackages:
+    """Tests for Essential package detection."""
+
+    @patch("subprocess.run")
+    def test_get_essential_packages_success(self, mock_run):
+        """Test successful Essential package query."""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="base-files yes\ncoreutils yes\nbash yes\nsome-pkg no\n",
+        )
+
+        essential = get_essential_packages()
+
+        assert len(essential) == 3
+        assert ("base-files", PackageCategory.ESSENTIAL) in essential
+        assert ("coreutils", PackageCategory.ESSENTIAL) in essential
+        assert ("bash", PackageCategory.ESSENTIAL) in essential
+
+    @patch("subprocess.run")
+    def test_get_essential_packages_empty(self, mock_run):
+        """Test Essential query when no packages are essential."""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="pkg1 no\npkg2 no\n",
+        )
+
+        essential = get_essential_packages()
+
+        assert essential == []
+
+    @patch("subprocess.run")
+    def test_get_essential_packages_timeout(self, mock_run):
+        """Test Essential query timeout handling."""
+        import subprocess
+        mock_run.side_effect = subprocess.TimeoutExpired("cmd", 30)
+
+        essential = get_essential_packages()
+
+        # Should return empty list on timeout, not raise
+        assert essential == []
+
+    @patch("subprocess.run")
+    def test_get_essential_packages_error(self, mock_run):
+        """Test Essential query error handling."""
+        mock_run.return_value = MagicMock(
+            returncode=1,
+            stdout="",
+        )
+
+        essential = get_essential_packages()
+
+        # Should return empty list on error
+        assert essential == []
+
+
 class TestBootstrapRunner:
     """Tests for BootstrapRunner class."""
 
@@ -154,24 +211,33 @@ class TestBootstrapRunner:
         runner = BootstrapRunner()
 
         assert runner.include_core is True
+        assert runner.include_essential is True
         assert runner.include_optional is True
         assert runner.include_dependencies is True
-        assert runner.max_concurrent == 3
+        assert runner.max_concurrent == 1  # Sequential by default
         assert runner.skip_existing is True
 
     def test_custom_options(self):
         """Test custom runner options."""
         runner = BootstrapRunner(
             include_core=False,
+            include_essential=False,
             include_optional=False,
             include_dependencies=True,
             max_concurrent=5,
         )
 
         assert runner.include_core is False
+        assert runner.include_essential is False
         assert runner.include_optional is False
         assert runner.include_dependencies is True
         assert runner.max_concurrent == 5
+
+    def test_include_essential_default_true(self):
+        """Test that include_essential defaults to True."""
+        runner = BootstrapRunner()
+
+        assert runner.include_essential is True
 
     @patch("elle.capabilities.autogen.bootstrap.is_package_installed")
     def test_get_packages_to_bootstrap(self, mock_installed):

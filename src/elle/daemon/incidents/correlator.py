@@ -6,12 +6,28 @@ Groups related telemetry events into incidents based on:
 - Shared entities
 
 Implements basic incident detection heuristics.
+
+Agentic Integration:
+    The correlator supports an optional callback (`on_incident_created`) that
+    is invoked when a new incident is created. This enables the agentic handler
+    to automatically process high-value incidents.
+
+    Example:
+        from elle.daemon.incidents.agentic_handler import get_agentic_handler
+
+        handler = get_agentic_handler()
+        correlator = IncidentCorrelator(on_incident_created=handler.on_incident_created)
 """
 
+import asyncio
 import re
 import sqlite3
+from collections.abc import Callable, Coroutine
 from datetime import datetime, timedelta
 from typing import Any
+
+# Type for the incident callback
+OnIncidentCreated = Callable[[str], Coroutine[Any, Any, None]] | Callable[[str], None] | None
 
 from elle.daemon.incidents.models import IncidentDomain
 from elle.daemon.incidents.snapshot import collect_snapshot, extract_fingerprint
@@ -74,6 +90,7 @@ class IncidentCorrelator:
         time_window_sec: int = 600,  # 10 minutes
         min_events_for_incident: int = 1,
         critical_triggers_immediate: bool = True,
+        on_incident_created: OnIncidentCreated = None,
     ):
         """Initialize the correlator.
 
@@ -81,10 +98,13 @@ class IncidentCorrelator:
             time_window_sec: Time window for grouping events.
             min_events_for_incident: Minimum events to trigger incident.
             critical_triggers_immediate: If True, critical events trigger immediately.
+            on_incident_created: Optional callback when an incident is created.
+                                 Called with incident_id. Can be sync or async.
         """
         self.time_window_sec = time_window_sec
         self.min_events_for_incident = min_events_for_incident
         self.critical_triggers_immediate = critical_triggers_immediate
+        self._on_incident_created = on_incident_created
 
         # Event buffer for correlation
         self._event_buffer: list[dict[str, Any]] = []
@@ -186,6 +206,9 @@ class IncidentCorrelator:
             fingerprint=fingerprint,
             conn=conn,
         )
+
+        # Notify agentic handler if configured
+        self._notify_incident_created(incident.incident_id)
 
         return incident.incident_id
 
@@ -337,7 +360,41 @@ class IncidentCorrelator:
         if event_ids:
             link_events(incident.incident_id, event_ids, conn)
 
+        # Notify agentic handler if configured
+        self._notify_incident_created(incident.incident_id)
+
         return incident.incident_id
+
+    def _notify_incident_created(self, incident_id: str) -> None:
+        """Notify the agentic handler about a new incident.
+
+        Handles both sync and async callbacks.
+
+        Args:
+            incident_id: ID of the newly created incident.
+        """
+        if self._on_incident_created is None:
+            return
+
+        try:
+            result = self._on_incident_created(incident_id)
+
+            # Handle async callback
+            if asyncio.iscoroutine(result):
+                # Schedule the coroutine to run
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(result)
+                except RuntimeError:
+                    # No running loop - run synchronously
+                    asyncio.run(result)
+
+        except Exception as e:
+            # Don't let callback failure break incident creation
+            import logging
+            logging.getLogger(__name__).warning(
+                f"Incident callback failed for {incident_id}: {e}"
+            )
 
     def clear_active_incident(self, key: str) -> None:
         """Clear an active incident tracking key."""
@@ -349,11 +406,21 @@ class IncidentCorrelator:
 _correlator: IncidentCorrelator | None = None
 
 
-def get_correlator() -> IncidentCorrelator:
-    """Get the shared incident correlator."""
+def get_correlator(
+    on_incident_created: OnIncidentCreated = None,
+) -> IncidentCorrelator:
+    """Get the shared incident correlator.
+
+    Args:
+        on_incident_created: Optional callback when an incident is created.
+                            Only used when creating a new correlator instance.
+
+    Returns:
+        The shared IncidentCorrelator instance.
+    """
     global _correlator
     if _correlator is None:
-        _correlator = IncidentCorrelator()
+        _correlator = IncidentCorrelator(on_incident_created=on_incident_created)
     return _correlator
 
 
@@ -361,3 +428,29 @@ def reset_correlator() -> None:
     """Reset the correlator (for testing)."""
     global _correlator
     _correlator = None
+
+
+def initialize_with_agentic_handler() -> IncidentCorrelator:
+    """Initialize the correlator with the agentic handler attached.
+
+    This is a convenience function for daemon startup that wires
+    the incident correlator to the agentic handling system.
+
+    Returns:
+        The configured IncidentCorrelator instance.
+    """
+    reset_correlator()
+
+    try:
+        from elle.daemon.incidents.agentic_handler import get_agentic_handler
+
+        handler = get_agentic_handler()
+        return get_correlator(on_incident_created=handler.on_incident_created)
+
+    except ImportError:
+        # Agentic handler not available - use bare correlator
+        import logging
+        logging.getLogger(__name__).debug(
+            "Agentic handler not available, using basic correlator"
+        )
+        return get_correlator()

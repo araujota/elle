@@ -1,7 +1,7 @@
 Source: elle
 Section: admin
 Priority: optional
-Maintainer: ELLE Contributors <elle@example.com>
+Maintainer: Tyler Araujo <araujota97@gmail.com>
 Build-Depends: debhelper-compat (= 13),
                dh-python,
                python3 (>= 3.11),

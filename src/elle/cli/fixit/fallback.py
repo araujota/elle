@@ -1,14 +1,29 @@
 """Rule-based fallback analysis for Fixit.
 
 DEPRECATION NOTICE:
+    This module is DEPRECATED. Command failure analysis should now flow
+    through the agent loop using `run_for_failed_command()`:
+
+        from elle.cli.agentic.loop import run_for_failed_command
+
+        result = await run_for_failed_command(
+            command="apt install foo",
+            exit_code=100,
+            stderr="E: Unable to locate package foo",
+        )
+
+    The agent loop approach:
+    - Retrieves from Incident Vault for similar past failures
+    - Uses LLM for context-aware diagnosis
+    - Records the fix attempt for future pattern matching
+    - Integrates with the full Spine architecture
+
     The hardcoded patterns in this module are being migrated to the
     Incident Vault as learnable patterns. See:
     - elle.daemon.incidents.seeds for the new pattern definitions
     - elle.daemon.incidents.store for semantic search
 
-    New error patterns should be added to seeds.py rather than here.
-    The patterns here will eventually be removed once the Incident Vault
-    semantic search is fully integrated.
+    This module will be removed once migration is complete.
 
 Provides pattern-matching based error analysis when the LLM
 is unavailable. Covers common error categories with
