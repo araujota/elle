@@ -223,7 +223,7 @@ class REPL:
 
             llm = get_llm()
             if llm.is_available():
-                return llm.model_name
+                return str(llm.model)
         except Exception:
             pass
         return None
@@ -254,9 +254,9 @@ class REPL:
     def _get_open_incidents(self) -> int:
         """Get the count of open incidents."""
         try:
-            from elle.daemon.incidents import get_open_count
+            from elle.daemon.incidents.store import get_incident_count
 
-            return get_open_count()
+            return get_incident_count()
         except Exception:
             pass
         return 0
@@ -264,10 +264,9 @@ class REPL:
     def _check_pending_reboot(self) -> bool:
         """Check if a reboot is pending."""
         try:
-            from elle.daemon.reboot import get_reboot_manager
+            from elle.daemon.reboot.store import get_active_intent
 
-            manager = get_reboot_manager()
-            return manager.get_pending() is not None
+            return get_active_intent() is not None
         except Exception:
             pass
         return False

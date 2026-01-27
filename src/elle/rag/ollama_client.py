@@ -122,7 +122,7 @@ class OllamaClient:
     def __enter__(self) -> OllamaClient:
         return self
 
-    def __exit__(self, *args) -> None:
+    def __exit__(self, *args: Any) -> None:
         self.close()
 
     def is_available(self, force_check: bool = False) -> bool:
@@ -278,7 +278,8 @@ class OllamaClient:
         )
 
         try:
-            return json.loads(response.content)
+            result: dict[str, Any] = json.loads(response.content)
+            return result
         except json.JSONDecodeError as e:
             if not retry_on_parse_error:
                 raise OllamaError(f"Failed to parse JSON response: {e}") from e
@@ -303,7 +304,8 @@ class OllamaClient:
             )
 
             try:
-                return json.loads(response.content)
+                retry_result: dict[str, Any] = json.loads(response.content)
+                return retry_result
             except json.JSONDecodeError as e2:
                 raise OllamaError(f"Failed to parse JSON after retry: {response.content[:200]}") from e2
 
@@ -332,7 +334,8 @@ class OllamaClient:
             )
             response.raise_for_status()
             data = response.json()
-            return data.get("embedding", [])
+            embedding: list[float] = data.get("embedding", [])
+            return embedding
 
         except httpx.ConnectError as e:
             self._available = False

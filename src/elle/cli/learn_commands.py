@@ -14,6 +14,7 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +121,7 @@ async def _handle_learn(args: str) -> str:
     # Parse args
     parts = args.split()
     app_name = parts[0] if parts else ""
-    mode = "passive"
+    mode: Literal["interactive", "passive", "rebuild"] = "passive"
 
     if "--interactive" in parts:
         mode = "interactive"

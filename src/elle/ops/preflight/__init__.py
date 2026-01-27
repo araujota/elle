@@ -12,7 +12,12 @@ from elle.ops.preflight.models import (
     PreflightStatus,
     PreflightTest,
 )
-from elle.ops.preflight.validator import PreflightValidator, get_validator
+from elle.ops.preflight.validator import (
+    PreflightValidator,
+    format_result_for_display,
+    get_validator,
+    validate_packages,
+)
 
 __all__ = [
     "PreflightIssue",
@@ -20,5 +25,7 @@ __all__ = [
     "PreflightStatus",
     "PreflightTest",
     "PreflightValidator",
+    "format_result_for_display",
     "get_validator",
+    "validate_packages",
 ]

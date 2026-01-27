@@ -11,6 +11,7 @@ Certificates are stored in /var/lib/elle/mobile/
 
 import logging
 from datetime import datetime, timedelta
+from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from typing import NamedTuple
 
@@ -197,7 +198,7 @@ class MobileCrypto:
             Hex-encoded SHA-256 fingerprint.
         """
         cert = x509.load_pem_x509_certificate(cert_pem)
-        return cert.fingerprint(hashes.SHA256()).hex()
+        return str(cert.fingerprint(hashes.SHA256()).hex())
 
     def verify_client_cert(self, cert_pem: bytes) -> tuple[bool, str | None]:
         """Verify a client certificate against our CA.
@@ -423,8 +424,8 @@ class MobileCrypto:
         )
 
 
-def ipaddress_from_string(addr: str):
+def ipaddress_from_string(addr: str) -> IPv4Address | IPv6Address:
     """Convert IP address string to ipaddress object."""
-    import ipaddress
+    from ipaddress import ip_address
 
-    return ipaddress.ip_address(addr)
+    return ip_address(addr)

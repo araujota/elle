@@ -19,7 +19,8 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from typing import Any
 
-from elle.daemon.telemetry.models import TelemetryEvent
+from elle.daemon.telemetry.models import TelemetryEvent, TelemetrySeverity
+from elle.daemon.telemetry.queue import TelemetryQueue
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ class DockerEventsWatcher:
 
     def __init__(
         self,
-        event_queue: asyncio.Queue[TelemetryEvent],
+        event_queue: TelemetryQueue[TelemetryEvent],
         container_filter: str | None = None,
     ) -> None:
         """Initialize the Docker events watcher.
@@ -357,7 +358,7 @@ class DockerEventsWatcher:
         self,
         action: str,
         exit_code: int | None,
-    ) -> str:
+    ) -> TelemetrySeverity:
         """Get severity for an event.
 
         Args:
@@ -365,7 +366,7 @@ class DockerEventsWatcher:
             exit_code: Exit code if available.
 
         Returns:
-            Severity string.
+            Severity literal.
         """
         if action == "oom":
             return "critical"

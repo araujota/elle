@@ -6,12 +6,12 @@ Uses prompt_toolkit for advanced input handling.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.application import Application
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
-from prompt_toolkit.completion import Completer, WordCompleter
+from prompt_toolkit.completion import Completer, Completion, WordCompleter
 from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
@@ -23,9 +23,12 @@ from prompt_toolkit.styles import Style
 from elle.cli.ui.theme import Icons
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
+    from prompt_toolkit.completion import CompleteEvent
     from prompt_toolkit.document import Document
+    from prompt_toolkit.key_binding import KeyPressEvent
 
 
 # ELLE prompt style
@@ -87,8 +90,8 @@ class ElleCompleter(Completer):
     def get_completions(
         self,
         document: Document,
-        complete_event: object,
-    ):
+        complete_event: CompleteEvent,
+    ) -> Iterator[Completion]:
         """Generate completions for current input."""
         text = document.text_before_cursor
 
@@ -201,7 +204,7 @@ def create_prompt_session(
     enable_auto_suggest: bool = True,
     enable_completion: bool = True,
     multiline: bool = False,
-) -> PromptSession:
+) -> PromptSession[str]:
     """Create a configured prompt session.
 
     Args:
@@ -221,12 +224,12 @@ def create_prompt_session(
     bindings = KeyBindings()
 
     @bindings.add("c-l")
-    def clear_screen(event):
+    def clear_screen(event: KeyPressEvent) -> None:
         """Clear screen on Ctrl+L."""
         event.app.renderer.clear()
 
     # Build session
-    session: PromptSession = PromptSession(
+    session: PromptSession[str] = PromptSession(
         style=PROMPT_STYLE,
         history=history,
         auto_suggest=AutoSuggestFromHistory() if enable_auto_suggest else None,
@@ -529,7 +532,7 @@ class EllePrompt:
 
     def prompt_env_var_batch(
         self,
-        specs: list[dict],
+        specs: list[dict[str, Any]],
         *,
         saved_values: dict[str, str] | None = None,
     ) -> dict[str, tuple[str, bool]]:
@@ -615,28 +618,28 @@ class EllePrompt:
 
         @bindings.add("up")
         @bindings.add("k")  # Vim-style
-        def move_up(event):
+        def move_up(event: KeyPressEvent) -> None:
             nonlocal selected_index
             selected_index = (selected_index - 1) % len(options)
 
         @bindings.add("down")
         @bindings.add("j")  # Vim-style
-        def move_down(event):
+        def move_down(event: KeyPressEvent) -> None:
             nonlocal selected_index
             selected_index = (selected_index + 1) % len(options)
 
         @bindings.add("enter")
-        def select(event):
+        def select(event: KeyPressEvent) -> None:
             event.app.exit(result=options[selected_index][0])
 
         @bindings.add("escape")
         @bindings.add("c-c")
-        def cancel(event):
+        def cancel(event: KeyPressEvent) -> None:
             event.app.exit(result=None)
 
-        def get_formatted_text():
+        def get_formatted_text() -> FormattedText:
             """Generate the menu display."""
-            lines = []
+            lines: list[tuple[str, str]] = []
 
             # Header
             lines.append(("class:prompt", message + "\n"))
@@ -712,32 +715,32 @@ class EllePrompt:
 
         @bindings.add("up")
         @bindings.add("k")
-        def move_up(event):
+        def move_up(event: KeyPressEvent) -> None:
             nonlocal selected_index
             selected_index = (selected_index - 1) % len(options)
 
         @bindings.add("down")
         @bindings.add("j")
-        def move_down(event):
+        def move_down(event: KeyPressEvent) -> None:
             nonlocal selected_index
             selected_index = (selected_index + 1) % len(options)
 
         @bindings.add("space")
-        def toggle(event):
+        def toggle(event: KeyPressEvent) -> None:
             checked[selected_index] = not checked[selected_index]
 
         @bindings.add("enter")
-        def confirm(event):
+        def confirm(event: KeyPressEvent) -> None:
             result = [opt[0] for i, opt in enumerate(options) if checked[i]]
             event.app.exit(result=result)
 
         @bindings.add("escape")
         @bindings.add("c-c")
-        def cancel(event):
+        def cancel(event: KeyPressEvent) -> None:
             event.app.exit(result=None)
 
-        def get_formatted_text():
-            lines = []
+        def get_formatted_text() -> FormattedText:
+            lines: list[tuple[str, str]] = []
             lines.append(("class:prompt", message + "\n"))
             lines.append(("", "\n"))
 

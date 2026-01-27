@@ -192,7 +192,7 @@ def parse_docker_run(command: str) -> DockerRunConfig:
                 flag_name, flag_value = flag.split("=", 1)
             else:
                 flag_name = flag
-                flag_value = tokens[i + 1] if i + 1 < len(tokens) else None
+                flag_value = tokens[i + 1] if i + 1 < len(tokens) else ""
 
             if flag_name == "name":
                 name = flag_value

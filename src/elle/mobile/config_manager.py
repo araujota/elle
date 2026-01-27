@@ -64,7 +64,7 @@ class ConfigManager:
     updates from mobile devices.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the config manager."""
         self._config: Config | None = None
 
@@ -290,7 +290,7 @@ class ConfigManager:
         """
         violations = []
 
-        def check_nested(data: dict, prefix: str = "") -> None:
+        def check_nested(data: dict[str, Any], prefix: str = "") -> None:
             for key, value in data.items():
                 full_key = f"{prefix}.{key}" if prefix else key
                 if full_key in READONLY_FIELDS:
@@ -311,7 +311,7 @@ class ConfigManager:
             True if restart is required.
         """
 
-        def check_nested(data: dict, prefix: str = "") -> bool:
+        def check_nested(data: dict[str, Any], prefix: str = "") -> bool:
             for key, value in data.items():
                 full_key = f"{prefix}.{key}" if prefix else key
                 if full_key in RESTART_REQUIRED_FIELDS:
@@ -332,7 +332,7 @@ class ConfigManager:
         USER_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
 
         # Load existing config or start fresh
-        existing = {}
+        existing: dict[str, Any] = {}
         if USER_CONFIG_PATH.exists():
             try:
                 import tomllib
@@ -341,10 +341,10 @@ class ConfigManager:
                     existing = tomllib.load(f)
             except ImportError:
                 try:
-                    import tomli as tomllib
+                    import tomli
 
                     with open(USER_CONFIG_PATH, "rb") as f:
-                        existing = tomllib.load(f)
+                        existing = tomli.load(f)
                 except ImportError:
                     logger.warning("No TOML library available, starting fresh config")
 
@@ -357,7 +357,7 @@ class ConfigManager:
 
         logger.info("Configuration written to %s", USER_CONFIG_PATH)
 
-    def _merge_dict(self, base: dict, override: dict) -> None:
+    def _merge_dict(self, base: dict[str, Any], override: dict[str, Any]) -> None:
         """Recursively merge override into base.
 
         Args:
@@ -370,7 +370,7 @@ class ConfigManager:
             else:
                 base[key] = value
 
-    def _dict_to_toml(self, data: dict, indent: int = 0) -> str:
+    def _dict_to_toml(self, data: dict[str, Any], indent: int = 0) -> str:
         """Convert dictionary to TOML string.
 
         Args:

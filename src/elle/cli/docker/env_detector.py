@@ -11,7 +11,8 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ruamel.yaml import YAML, YAMLError
+from ruamel.yaml import YAML
+from ruamel.yaml.error import YAMLError
 
 from elle.cli.docker.env_models import EnvVarSpec
 from elle.cli.docker.env_profiles import (

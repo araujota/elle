@@ -186,7 +186,7 @@ def _find_submenu_entries(content: str, submenu_name: str) -> list[str]:
     Returns:
         List of entry names within the submenu.
     """
-    entries = []
+    entries: list[str] = []
 
     # Find the submenu block
     pattern = rf"submenu\s+['\"]({re.escape(submenu_name)})['\"].*?\{{"

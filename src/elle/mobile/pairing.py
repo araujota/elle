@@ -299,7 +299,7 @@ class PairingManager:
                 ip = "127.0.0.1"
             finally:
                 s.close()
-            return ip
+            return str(ip)
         except Exception:
             return "127.0.0.1"
 

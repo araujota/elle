@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 from elle.daemon.telemetry.models import TelemetryEvent
+from elle.daemon.telemetry.queue import TelemetryQueue
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ class PortListenerProbe:
 
     def __init__(
         self,
-        event_queue: asyncio.Queue[TelemetryEvent],
+        event_queue: TelemetryQueue[TelemetryEvent],
         scan_interval_sec: int = 60,
         alert_on_sensitive: bool = True,
         alert_on_new: bool = True,
@@ -155,7 +156,7 @@ class PortListenerProbe:
         # Temporarily capture events
         original_queue = self._queue
         capture_queue: asyncio.Queue[TelemetryEvent] = asyncio.Queue()
-        self._queue = capture_queue
+        self._queue = capture_queue  # type: ignore[assignment]
 
         try:
             await self._scan_and_check()

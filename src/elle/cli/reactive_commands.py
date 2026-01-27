@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -70,7 +71,8 @@ def handle_reactive_command(user_input: str, session: Session) -> tuple[str, boo
     subcommand = parts[1].lower()
 
     # Route to handler
-    handlers = {
+    HandlerType = Callable[[list[str], "Session"], tuple[str, bool]]
+    handlers: dict[str, HandlerType] = {
         "help": lambda p, s: (_react_help(), True),
         "list": lambda p, s: _react_list(s),
         "ls": lambda p, s: _react_list(s),

@@ -46,10 +46,10 @@ def load_capability_from_stored(stored: StoredCapability) -> type | None:
         )
 
         if cap_class:
-            # Add metadata to class
-            cap_class._autogen_id = stored.id
-            cap_class._autogen_name = stored.capability_name
-            cap_class._autogen_trust = stored.trust_level
+            # Add metadata to class (dynamic attributes)
+            cap_class._autogen_id = stored.id  # type: ignore[attr-defined]
+            cap_class._autogen_name = stored.capability_name  # type: ignore[attr-defined]
+            cap_class._autogen_trust = stored.trust_level  # type: ignore[attr-defined]
 
         return cap_class
 
@@ -197,7 +197,8 @@ def execute_autogen_capability(
         return None
 
     try:
-        return instance.run(input_data)
+        result = instance.run(input_data)
+        return dict(result) if result is not None else None
     except Exception as e:
         logger.error(f"Execution failed for {name}: {e}")
         return {"success": False, "output": str(e), "return_code": -1}

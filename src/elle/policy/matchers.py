@@ -119,7 +119,7 @@ def _glob_to_regex(pattern: str) -> str:
 
 
 @lru_cache(maxsize=256)
-def _compile_regex(pattern: str) -> re.Pattern | None:
+def _compile_regex(pattern: str) -> re.Pattern[str] | None:
     """Compile a regex pattern with caching.
 
     Args:

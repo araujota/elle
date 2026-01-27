@@ -65,7 +65,7 @@ def normalize_ebpf_event(raw: dict[str, Any]) -> TelemetryEvent | None:
 
     return TelemetryEvent(
         ts=ts,
-        source="ebpf",  # type: ignore
+        source="ebpf",
         severity=severity,
         category=category,
         message=message,

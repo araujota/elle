@@ -191,7 +191,7 @@ class YAMLHandler:
                 else:
                     return None
             elif isinstance(current, dict):
-                current = current.get(part)
+                current = current.get(part)  # type: ignore[assignment]
             else:
                 return None
 
@@ -347,7 +347,7 @@ class YAMLHandler:
             path: Optional base path for tracking changes.
         """
 
-        def _merge(base: dict, update: dict, current_path: str = "") -> None:
+        def _merge(base: dict[str, Any], update: dict[str, Any], current_path: str = "") -> None:
             for key, value in update.items():
                 key_path = f"{current_path}.{key}" if current_path else key
 
@@ -435,7 +435,10 @@ class NetplanHandler(YAMLHandler):
         Returns:
             Interface configuration dict, or None if not found.
         """
-        return self.get_path(data, f"network.{iface_type}.{name}")
+        result = self.get_path(data, f"network.{iface_type}.{name}")
+        if result is None:
+            return None
+        return dict(result) if isinstance(result, dict) else None
 
     def set_interface(
         self,
@@ -528,7 +531,8 @@ class NetplanHandler(YAMLHandler):
         Returns:
             Renderer name ("networkd" or "NetworkManager") or None.
         """
-        return self.get_path(data, "network.renderer")
+        result = self.get_path(data, "network.renderer")
+        return str(result) if result is not None else None
 
     def set_renderer(
         self,

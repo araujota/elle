@@ -82,6 +82,9 @@ def search(
         conn = get_connection()
         ensure_schema(conn)
 
+    # At this point conn is guaranteed to be non-None
+    assert conn is not None
+
     try:
         candidates: list[tuple[IncidentReport, float, str]] = []
 
@@ -112,7 +115,7 @@ def search(
         return ranked[:k]
 
     finally:
-        if own_conn:
+        if own_conn and conn is not None:
             conn.close()
 
 
@@ -258,7 +261,7 @@ def get_prior_art(
         return prior_art
 
     finally:
-        if own_conn:
+        if own_conn and conn is not None:
             conn.close()
 
 
@@ -512,7 +515,7 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
     if norm_a == 0 or norm_b == 0:
         return 0.0
 
-    return dot / (norm_a * norm_b)
+    return float(dot / (norm_a * norm_b))
 
 
 # =============================================================================
@@ -639,7 +642,7 @@ def _compute_recency_weight(updated_at: datetime) -> float:
     weight = 0.5 ** (age_days / RECENCY_HALF_LIFE_DAYS)
 
     # Minimum weight of 0.1 to not completely discount old incidents
-    return max(weight, 0.1)
+    return float(max(weight, 0.1))
 
 
 def _merge_and_rank(
@@ -793,6 +796,10 @@ def get_status(
         conn = get_connection()
         ensure_schema(conn)
 
+    if conn is None:
+        conn = get_connection()
+        own_conn = True
+
     try:
         cursor = conn.cursor()
 
@@ -853,5 +860,5 @@ def get_status(
         )
 
     finally:
-        if own_conn:
+        if own_conn and conn is not None:
             conn.close()

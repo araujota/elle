@@ -106,7 +106,7 @@ def _get_role_name(role: Any) -> str:
     try:
         # pyatspi returns role as Atspi.Role enum
         if hasattr(role, "value_name"):
-            name = role.value_name.replace("ATSPI_ROLE_", "").lower()
+            name = str(role.value_name).replace("ATSPI_ROLE_", "").lower()
             return name.replace("_", " ")
         # Fallback to string conversion
         return str(role).lower().replace("role.", "").replace("_", " ")
@@ -576,7 +576,7 @@ class ATSPIClient:
         Returns:
             List of matching AT-SPI accessibles.
         """
-        results = []
+        results: list[Any] = []
 
         def search(accessible: Any, depth: int = 0) -> None:
             if len(results) >= max_results or depth > 15:
@@ -794,7 +794,7 @@ class ATSPIClient:
         Returns:
             Tuple of indices from root to element.
         """
-        path = []
+        path: list[int] = []
         current = element
 
         while current:

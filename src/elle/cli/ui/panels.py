@@ -250,10 +250,10 @@ def rationale_panel(
     if man_citations:
         content_parts.append(section_header("Documentation", icon=Icons.BOOK))
         for citation in man_citations[:3]:  # Show top 3
-            name = citation.get("name", "")
-            section = citation.get("section", "")
-            snippet = citation.get("snippet", "")
-            score = float(citation.get("relevance_score", 0))
+            name = str(citation.get("name", ""))
+            section = str(citation.get("section", ""))
+            snippet = str(citation.get("snippet", ""))
+            score = float(citation.get("relevance_score") or 0)
 
             cite_text = Text()
             cite_text.append(f"  {Icons.CITATION} ", style="info")
@@ -276,10 +276,10 @@ def rationale_panel(
     if incident_citations:
         content_parts.append(section_header("Prior Incidents", icon=Icons.HISTORY))
         for citation in incident_citations[:3]:  # Show top 3
-            title = citation.get("title", "")
-            outcome = citation.get("outcome", "unknown")
-            score = float(citation.get("similarity_score", 0))
-            successful = citation.get("successful_actions", [])
+            title = str(citation.get("title", ""))
+            outcome = str(citation.get("outcome", "unknown"))
+            score = float(citation.get("similarity_score") or 0)
+            successful: list[str] = citation.get("successful_actions", [])  # type: ignore[assignment]
 
             cite_text = Text()
             cite_text.append(f"  {Icons.CITATION} ", style="info")
@@ -459,10 +459,10 @@ def plan_panel(
     if rollback_steps:
         content_parts.append(Text())
         content_parts.append(section_header("Rollback", icon=Icons.ARROW_LEFT, style="muted"))
-        for i, step in enumerate(rollback_steps, 1):
+        for i, rb_step in enumerate(rollback_steps, 1):
             rb_text = Text()
             rb_text.append(f"  {i}. ", style="muted")
-            rb_text.append(step.get("description", ""), style="muted")
+            rb_text.append(rb_step.get("description", ""), style="muted")
             content_parts.append(rb_text)
 
     # Footer

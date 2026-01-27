@@ -38,7 +38,7 @@ def levenshtein_distance(s1: str, s2: str) -> int:
     if len(s2) == 0:
         return len(s1)
 
-    previous_row = range(len(s2) + 1)
+    previous_row: list[int] = list(range(len(s2) + 1))
 
     for i, c1 in enumerate(s1):
         current_row = [i + 1]
@@ -357,7 +357,7 @@ class ElementMatcher:
                 best_score = score
                 best_path = self.client.get_element_path(candidate)
 
-        if best_match:
+        if best_match and best_path is not None:
             return MatchResult(
                 found=True,
                 element=self._accessible_to_element(best_match, best_path),
@@ -483,7 +483,7 @@ class ElementMatcher:
                 best_score = score
                 best_path = self.client.get_element_path(candidate)
 
-        if best_match and best_score >= 0.5:  # Lower threshold for role search
+        if best_match and best_score >= 0.5 and best_path is not None:  # Lower threshold for role search
             return MatchResult(
                 found=True,
                 element=self._accessible_to_element(best_match, best_path),

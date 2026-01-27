@@ -185,7 +185,7 @@ def _deep_get(d: dict[str, Any], *keys: str, default: Any = None) -> Any:
     for key in keys:
         if not isinstance(d, dict):
             return default
-        d = d.get(key, default)  # type: ignore
+        d = d.get(key, default)
         if d is default:
             return default
     return d

@@ -369,7 +369,7 @@ class DockerDiagnoseOutput(BaseModel):
 # =============================================================================
 
 
-class DockerPruneCapability(BaseCapability):
+class DockerPruneCapability(BaseCapability[DockerPruneInput, DockerPruneOutput]):
     """Clean unused Docker resources."""
 
     @property
@@ -542,7 +542,7 @@ class DockerPruneCapability(BaseCapability):
 # =============================================================================
 
 
-class DockerStopCapability(BaseCapability):
+class DockerStopCapability(BaseCapability[DockerStopInput, DockerStopOutput]):
     """Stop a running container."""
 
     @property
@@ -768,7 +768,7 @@ class DockerStopCapability(BaseCapability):
 # =============================================================================
 
 
-class DockerInspectCapability(BaseCapability):
+class DockerInspectCapability(BaseCapability[DockerInspectInput, DockerInspectOutput]):
     """Inspect a container's state and logs."""
 
     @property
@@ -926,7 +926,7 @@ class DockerInspectCapability(BaseCapability):
 # =============================================================================
 
 
-class DockerRollbackCapability(BaseCapability):
+class DockerRollbackCapability(BaseCapability[DockerRollbackInput, DockerRollbackOutput]):
     """Rollback a container to a previous image."""
 
     @property
@@ -1133,7 +1133,7 @@ class DockerRollbackCapability(BaseCapability):
 # =============================================================================
 
 
-class DockerListCapability(BaseCapability):
+class DockerListCapability(BaseCapability[DockerListInput, DockerListOutput]):
     """List Docker containers."""
 
     @property
@@ -1242,7 +1242,7 @@ class DockerListCapability(BaseCapability):
 # =============================================================================
 
 
-class DockerDiagnoseCapability(BaseCapability):
+class DockerDiagnoseCapability(BaseCapability[DockerDiagnoseInput, DockerDiagnoseOutput]):
     """Diagnose container failure with root cause analysis."""
 
     @property
@@ -1401,7 +1401,7 @@ class DockerConfigureEnvOutput(BaseModel):
     persisted: bool = Field(description="Whether config was persisted")
 
 
-class DockerConfigureEnvCapability(BaseCapability):
+class DockerConfigureEnvCapability(BaseCapability[DockerConfigureEnvInput, DockerConfigureEnvOutput]):
     """Configure environment variables for Docker images."""
 
     @property

@@ -7,6 +7,8 @@ All operations are designed for safe state machine transitions.
 import json
 import sqlite3
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
 
@@ -22,6 +24,25 @@ from elle.daemon.reboot.models import (
     RebootStatus,
 )
 from elle.daemon.reboot.schema import ensure_schema, get_connection
+
+
+@contextmanager
+def _ensure_connection(
+    conn: sqlite3.Connection | None = None,
+) -> Iterator[sqlite3.Connection]:
+    """Context manager that ensures a valid connection with schema."""
+    own_conn = conn is None
+    actual_conn: sqlite3.Connection
+    if own_conn:
+        actual_conn = get_connection()
+        ensure_schema(actual_conn)
+    else:
+        actual_conn = conn  # type: ignore[assignment]
+    try:
+        yield actual_conn
+    finally:
+        if own_conn:
+            actual_conn.close()
 
 
 def _serialize_datetime(dt: datetime) -> str:
@@ -93,16 +114,11 @@ def create_intent(
     Returns:
         The created RebootIntent.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         intent_id = str(uuid.uuid4())
         now = datetime.utcnow()
 
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(
             """
             INSERT INTO reboot_intents (
@@ -139,7 +155,7 @@ def create_intent(
                 None,
             ),
         )
-        conn.commit()
+        c.commit()
 
         # Add verifications if provided
         if verifications:
@@ -152,14 +168,10 @@ def create_intent(
                     expected_exit_code=v.expected_exit_code,
                     expected_output_contains=v.expected_output_contains,
                     required=v.required,
-                    conn=conn,
+                    conn=c,
                 )
 
-        return get_intent(intent_id, conn=conn)  # type: ignore
-
-    finally:
-        if own_conn:
-            conn.close()
+        return get_intent(intent_id, conn=c)  # type: ignore
 
 
 def get_intent(
@@ -175,13 +187,8 @@ def get_intent(
     Returns:
         RebootIntent if found, None otherwise.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute("SELECT * FROM reboot_intents WHERE id = ?", (intent_id,))
         row = cursor.fetchone()
 
@@ -189,13 +196,9 @@ def get_intent(
             return None
 
         # Get verifications
-        verifications = get_verifications(intent_id, conn=conn)
+        verifications = get_verifications(intent_id, conn=c)
 
         return _row_to_intent(row, verifications)
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def get_intents_by_status(
@@ -213,13 +216,8 @@ def get_intents_by_status(
     Returns:
         List of RebootIntents with the specified status.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             SELECT * FROM reboot_intents
@@ -232,14 +230,10 @@ def get_intents_by_status(
 
         result = []
         for row in cursor.fetchall():
-            verifications = get_verifications(row["id"], conn=conn)
+            verifications = get_verifications(row["id"], conn=c)
             result.append(_row_to_intent(row, verifications))
 
         return result
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def get_active_intent(
@@ -255,13 +249,8 @@ def get_active_intent(
     Returns:
         Active RebootIntent if exists, None otherwise.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             SELECT * FROM reboot_intents
@@ -275,12 +264,8 @@ def get_active_intent(
         if not row:
             return None
 
-        verifications = get_verifications(row["id"], conn=conn)
+        verifications = get_verifications(row["id"], conn=c)
         return _row_to_intent(row, verifications)
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def list_intents(
@@ -302,12 +287,7 @@ def list_intents(
     Returns:
         List of RebootIntents.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         query = "SELECT * FROM reboot_intents WHERE 1=1"
         params: list[Any] = []
 
@@ -321,19 +301,15 @@ def list_intents(
         query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
 
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(query, params)
 
         result = []
         for row in cursor.fetchall():
-            verifications = get_verifications(row["id"], conn=conn)
+            verifications = get_verifications(row["id"], conn=c)
             result.append(_row_to_intent(row, verifications))
 
         return result
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def list_recent_intents(
@@ -351,13 +327,8 @@ def list_recent_intents(
     Returns:
         List of RebootIntentSummary objects.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             SELECT id, created_at, goal, reason, status, outcome, verification_attempts
@@ -384,10 +355,6 @@ def list_recent_intents(
             )
 
         return result
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def update_intent_status(
@@ -418,12 +385,7 @@ def update_intent_status(
     Returns:
         Updated RebootIntent, or None if not found.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         now = datetime.utcnow()
 
         updates = ["updated_at = ?", "status = ?"]
@@ -452,21 +414,17 @@ def update_intent_status(
 
         values.append(intent_id)
 
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(
             f"UPDATE reboot_intents SET {', '.join(updates)} WHERE id = ?",
             values,
         )
-        conn.commit()
+        c.commit()
 
         if cursor.rowcount == 0:
             return None
 
-        return get_intent(intent_id, conn=conn)
-
-    finally:
-        if own_conn:
-            conn.close()
+        return get_intent(intent_id, conn=c)
 
 
 def mark_rebooting(
@@ -486,15 +444,10 @@ def mark_rebooting(
     Returns:
         Updated RebootIntent.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         now = datetime.utcnow()
 
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(
             """
             UPDATE reboot_intents
@@ -503,16 +456,12 @@ def mark_rebooting(
             """,
             (_serialize_datetime(now), "rebooting", boot_id, intent_id),
         )
-        conn.commit()
+        c.commit()
 
         if cursor.rowcount == 0:
             return None
 
-        return get_intent(intent_id, conn=conn)
-
-    finally:
-        if own_conn:
-            conn.close()
+        return get_intent(intent_id, conn=c)
 
 
 def cancel_intent(
@@ -530,15 +479,10 @@ def cancel_intent(
     Returns:
         Updated RebootIntent, or None if not found/not cancellable.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         now = datetime.utcnow()
 
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(
             """
             UPDATE reboot_intents
@@ -547,16 +491,12 @@ def cancel_intent(
             """,
             (_serialize_datetime(now), intent_id),
         )
-        conn.commit()
+        c.commit()
 
         if cursor.rowcount == 0:
             return None
 
-        return get_intent(intent_id, conn=conn)
-
-    finally:
-        if own_conn:
-            conn.close()
+        return get_intent(intent_id, conn=c)
 
 
 def delete_intent(
@@ -575,20 +515,11 @@ def delete_intent(
     Returns:
         True if deleted, False if not found.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute("DELETE FROM reboot_intents WHERE id = ?", (intent_id,))
-        conn.commit()
+        c.commit()
         return cursor.rowcount > 0
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def _row_to_intent(
@@ -665,13 +596,8 @@ def add_verification(
     Returns:
         The created PendingVerification.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             INSERT INTO pending_verifications (
@@ -691,7 +617,7 @@ def add_verification(
                 1 if required else 0,
             ),
         )
-        conn.commit()
+        c.commit()
 
         return PendingVerification(
             id=cursor.lastrowid,
@@ -703,10 +629,6 @@ def add_verification(
             expected_output_contains=expected_output_contains,
             required=required,
         )
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def get_verifications(
@@ -722,13 +644,8 @@ def get_verifications(
     Returns:
         List of PendingVerifications in step order.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             SELECT * FROM pending_verifications
@@ -739,10 +656,6 @@ def get_verifications(
         )
 
         return [_row_to_verification(row) for row in cursor.fetchall()]
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def update_verification_result(
@@ -766,15 +679,10 @@ def update_verification_result(
     Returns:
         Updated PendingVerification, or None if not found.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         now = datetime.utcnow()
 
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(
             """
             UPDATE pending_verifications
@@ -790,7 +698,7 @@ def update_verification_result(
                 verification_id,
             ),
         )
-        conn.commit()
+        c.commit()
 
         if cursor.rowcount == 0:
             return None
@@ -803,10 +711,6 @@ def update_verification_result(
         if row:
             return _row_to_verification(row)
         return None
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def reset_verifications(
@@ -824,13 +728,8 @@ def reset_verifications(
     Returns:
         Number of verifications reset.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             UPDATE pending_verifications
@@ -840,12 +739,8 @@ def reset_verifications(
             """,
             (intent_id,),
         )
-        conn.commit()
+        c.commit()
         return cursor.rowcount
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def _row_to_verification(row: sqlite3.Row) -> PendingVerification:
@@ -883,42 +778,44 @@ def get_reboot_status(
     Returns:
         RebootStatus with counts and active operations.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
 
         # Get counts by status
         cursor.execute("SELECT COUNT(*) FROM reboot_intents")
-        total = cursor.fetchone()[0]
+        row = cursor.fetchone()
+        total = int(row[0]) if row else 0
 
         cursor.execute("SELECT COUNT(*) FROM reboot_intents WHERE status = 'pending'")
-        pending = cursor.fetchone()[0]
+        row = cursor.fetchone()
+        pending = int(row[0]) if row else 0
 
         cursor.execute("SELECT COUNT(*) FROM reboot_intents WHERE status = 'rebooting'")
-        rebooting = cursor.fetchone()[0]
+        row = cursor.fetchone()
+        rebooting = int(row[0]) if row else 0
 
         cursor.execute("SELECT COUNT(*) FROM reboot_intents WHERE status = 'verifying'")
-        verifying = cursor.fetchone()[0]
+        row = cursor.fetchone()
+        verifying = int(row[0]) if row else 0
 
         cursor.execute("SELECT COUNT(*) FROM reboot_intents WHERE status = 'completed'")
-        completed = cursor.fetchone()[0]
+        row = cursor.fetchone()
+        completed = int(row[0]) if row else 0
 
         cursor.execute("SELECT COUNT(*) FROM reboot_intents WHERE status = 'failed'")
-        failed = cursor.fetchone()[0]
+        row = cursor.fetchone()
+        failed = int(row[0]) if row else 0
 
         cursor.execute("SELECT COUNT(*) FROM reboot_intents WHERE status = 'rolled_back'")
-        rolled_back = cursor.fetchone()[0]
+        row = cursor.fetchone()
+        rolled_back = int(row[0]) if row else 0
 
         # Get counts by outcome
         cursor.execute("SELECT outcome, COUNT(*) FROM reboot_intents GROUP BY outcome")
         by_outcome = dict(cursor.fetchall())
 
         # Get active intent
-        active_intent = get_active_intent(conn=conn)
+        active_intent = get_active_intent(conn=c)
         active_summary = None
         if active_intent:
             active_summary = RebootIntentSummary(
@@ -932,7 +829,7 @@ def get_reboot_status(
             )
 
         # Get recent intents
-        recent = list_recent_intents(days=7, limit=5, conn=conn)
+        recent = list_recent_intents(days=7, limit=5, conn=c)
 
         # Get database size
         from elle.daemon.reboot.schema import get_db_path
@@ -943,8 +840,8 @@ def get_reboot_status(
         # Get oldest/newest
         cursor.execute("SELECT MIN(created_at), MAX(created_at) FROM reboot_intents")
         row = cursor.fetchone()
-        oldest = _parse_datetime(row[0]) if row[0] else None
-        newest = _parse_datetime(row[1]) if row[1] else None
+        oldest = _parse_datetime(row[0]) if row and row[0] else None
+        newest = _parse_datetime(row[1]) if row and row[1] else None
 
         return RebootStatus(
             total_intents=total,
@@ -962,10 +859,6 @@ def get_reboot_status(
             newest_intent=newest,
         )
 
-    finally:
-        if own_conn:
-            conn.close()
-
 
 def get_intent_count(
     conn: sqlite3.Connection | None = None,
@@ -978,16 +871,8 @@ def get_intent_count(
     Returns:
         Total intent count.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute("SELECT COUNT(*) FROM reboot_intents")
-        return cursor.fetchone()[0]
-
-    finally:
-        if own_conn:
-            conn.close()
+        row = cursor.fetchone()
+        return int(row[0]) if row else 0

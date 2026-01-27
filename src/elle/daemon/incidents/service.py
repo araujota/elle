@@ -29,10 +29,10 @@ EMBEDDING_MODEL = "nomic-embed-text"
 class IncidentVaultService:
     """Background service for Incident Vault maintenance."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._embedding = False
         self._stop_requested = False
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
         """Start the background service."""

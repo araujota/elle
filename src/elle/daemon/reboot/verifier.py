@@ -1582,7 +1582,7 @@ async def _get_uptime_seconds() -> int | None:
 
 
 def _analyze_likely_causes(
-    failed_checks: list[dict],
+    failed_checks: list[dict[str, Any]],
     dmesg_errors: list[str],
     journal_errors: list[str],
     failed_services: list[str],

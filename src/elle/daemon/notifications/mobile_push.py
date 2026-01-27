@@ -222,7 +222,7 @@ class MobilePushNotifier:
     Singleton that tracks connected clients and broadcasts events.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._clients: dict[str, MobileClientConnection] = {}
         self._lock = asyncio.Lock()
         self._gateway_available = False

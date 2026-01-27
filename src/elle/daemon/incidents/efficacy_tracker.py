@@ -6,6 +6,8 @@ what actually works on THIS machine.
 
 import hashlib
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
 
@@ -23,6 +25,25 @@ from elle.daemon.incidents.models import (
     IncidentReport,
 )
 from elle.daemon.incidents.schema import ensure_schema, get_connection
+
+
+@contextmanager
+def _ensure_connection(
+    conn: sqlite3.Connection | None = None,
+) -> Iterator[sqlite3.Connection]:
+    """Context manager that ensures a valid connection with schema."""
+    own_conn = conn is None
+    if own_conn:
+        actual_conn = get_connection()
+        ensure_schema(actual_conn)
+    else:
+        # conn is guaranteed non-None here due to the if check above
+        actual_conn = conn  # type: ignore[assignment]
+    try:
+        yield actual_conn
+    finally:
+        if own_conn:
+            actual_conn.close()
 
 
 def _serialize_datetime(dt: datetime) -> str:
@@ -71,20 +92,15 @@ def record_outcome(
         outcome: The outcome (improved, partial, no_change, worse).
         conn: SQLite connection.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         now = datetime.utcnow()
 
         # Update domain efficacy
-        _update_domain_efficacy(incident.domain, outcome, now, conn)
+        _update_domain_efficacy(incident.domain, outcome, now, c)
 
         # Update entity efficacy for each involved entity
         for entity in incident.fingerprint.entities:
-            _update_entity_efficacy(entity, outcome, now, conn)
+            _update_entity_efficacy(entity, outcome, now, c)
 
         # Update solution approach efficacy
         approach_signature = _compute_approach_signature(incident)
@@ -97,15 +113,12 @@ def record_outcome(
                 outcome=outcome,
                 time_to_resolve=incident.time_to_resolve_sec,
                 now=now,
-                conn=conn,
+                conn=c,
             )
 
-        if own_conn:
-            conn.commit()
-
-    finally:
-        if own_conn:
-            conn.close()
+        # Commit if we created our own connection
+        if conn is None:
+            c.commit()
 
 
 def _update_domain_efficacy(
@@ -235,6 +248,7 @@ def _update_approach_efficacy(
     )
     row = cursor.fetchone()
 
+    avg_time: int | None
     if row:
         total = row["total_uses"] + 1
         improved = row["improved_count"] + (1 if outcome == "improved" else 0)
@@ -316,7 +330,7 @@ def _compute_decayed_rate(
         Decayed success rate between 0.0 and 1.0.
     """
     if total == 0:
-        return PRIOR_SUCCESS_RATE
+        return float(PRIOR_SUCCESS_RATE)
 
     # Weighted sum of outcomes
     # improved = 1.0, partial = 0.6, no_change = 0.0, worse = -0.5
@@ -339,7 +353,7 @@ def _compute_decayed_rate(
     # - Data-driven rate (weighted by confidence and recency)
     # - Prior (weighted by lack of confidence and age)
     effective_confidence = confidence * decay_factor
-    return effective_confidence * raw_rate + (1 - effective_confidence) * PRIOR_SUCCESS_RATE
+    return float(effective_confidence * raw_rate + (1 - effective_confidence) * PRIOR_SUCCESS_RATE)
 
 
 def _compute_approach_signature(incident: IncidentReport) -> str | None:
@@ -458,13 +472,8 @@ def get_domain_efficacy(
     Returns:
         DomainEfficacy if found, None otherwise.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             "SELECT * FROM domain_efficacy WHERE domain = ?",
             (domain,),
@@ -485,10 +494,6 @@ def get_domain_efficacy(
             last_updated=_parse_datetime(row["last_updated"]),
         )
 
-    finally:
-        if own_conn:
-            conn.close()
-
 
 def get_entity_efficacy(
     entity: str,
@@ -503,13 +508,8 @@ def get_entity_efficacy(
     Returns:
         EntityEfficacy if found, None otherwise.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             "SELECT * FROM entity_efficacy WHERE entity = ?",
             (entity,),
@@ -530,10 +530,6 @@ def get_entity_efficacy(
             last_updated=_parse_datetime(row["last_updated"]),
         )
 
-    finally:
-        if own_conn:
-            conn.close()
-
 
 def get_approach_efficacy(
     approach_signature: str,
@@ -548,13 +544,8 @@ def get_approach_efficacy(
     Returns:
         SolutionApproachEfficacy if found, None otherwise.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             "SELECT * FROM solution_approach_efficacy WHERE approach_signature = ?",
             (approach_signature,),
@@ -579,10 +570,6 @@ def get_approach_efficacy(
             last_used=_parse_datetime(row["last_used"]),
         )
 
-    finally:
-        if own_conn:
-            conn.close()
-
 
 def get_efficacy_context(
     domain: str,
@@ -604,14 +591,9 @@ def get_efficacy_context(
     Returns:
         EfficacyContext with available efficacy data.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         # Domain efficacy
-        domain_eff = get_domain_efficacy(domain, conn)
+        domain_eff = get_domain_efficacy(domain, c)
         domain_success_rate = domain_eff.success_rate if domain_eff else None
         domain_sample_size = domain_eff.total_incidents if domain_eff else 0
 
@@ -619,7 +601,7 @@ def get_efficacy_context(
         entity_success_rates = {}
         if entities:
             for entity in entities:
-                ent_eff = get_entity_efficacy(entity, conn)
+                ent_eff = get_entity_efficacy(entity, c)
                 if ent_eff:
                     entity_success_rates[entity] = ent_eff.success_rate
 
@@ -629,7 +611,7 @@ def get_efficacy_context(
         if incident:
             sig = _compute_approach_signature(incident)
             if sig:
-                app_eff = get_approach_efficacy(sig, conn)
+                app_eff = get_approach_efficacy(sig, c)
                 if app_eff:
                     approach_success_rate = app_eff.success_rate
                     approach_sample_size = app_eff.total_uses
@@ -641,10 +623,6 @@ def get_efficacy_context(
             approach_success_rate=approach_success_rate,
             approach_sample_size=approach_sample_size,
         )
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def get_all_domain_efficacy(
@@ -658,13 +636,8 @@ def get_all_domain_efficacy(
     Returns:
         List of DomainEfficacy records.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute("SELECT * FROM domain_efficacy ORDER BY total_incidents DESC")
 
         results = []
@@ -684,10 +657,6 @@ def get_all_domain_efficacy(
 
         return results
 
-    finally:
-        if own_conn:
-            conn.close()
-
 
 def get_efficacy_stats(
     conn: sqlite3.Connection | None = None,
@@ -700,18 +669,13 @@ def get_efficacy_stats(
     Returns:
         EfficacyStats summary.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
 
         # Overall stats
         cursor.execute("SELECT SUM(total_incidents) as total FROM domain_efficacy")
         row = cursor.fetchone()
-        total_finalized = row["total"] if row["total"] else 0
+        total_finalized: int = row["total"] if row and row["total"] else 0
 
         # Overall success rate (weighted average)
         cursor.execute(
@@ -722,10 +686,10 @@ def get_efficacy_stats(
             """
         )
         row = cursor.fetchone()
-        overall_rate = row["avg"] if row["avg"] else 0.5
+        overall_rate: float = row["avg"] if row and row["avg"] else 0.5
 
         # Domain stats
-        domain_stats = tuple(get_all_domain_efficacy(conn))
+        domain_stats = tuple(get_all_domain_efficacy(c))
 
         # Top entities
         cursor.execute(
@@ -786,10 +750,6 @@ def get_efficacy_stats(
             top_approaches=tuple(top_approaches),
         )
 
-    finally:
-        if own_conn:
-            conn.close()
-
 
 # =============================================================================
 # Bootstrap migration
@@ -812,27 +772,19 @@ def bootstrap_from_historical(
     """
     from elle.daemon.incidents.store import list_incidents
 
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         # Get all resolved/mitigated incidents
-        incidents = list_incidents(status="resolved", limit=10000, conn=conn)
-        incidents.extend(list_incidents(status="mitigated", limit=10000, conn=conn))
+        incidents = list_incidents(status="resolved", limit=10000, conn=c)
+        incidents.extend(list_incidents(status="mitigated", limit=10000, conn=c))
 
         processed = 0
         for incident in incidents:
             if incident.outcome in ("improved", "partial", "no_change", "worse"):
-                record_outcome(incident, incident.outcome, conn=conn)
+                record_outcome(incident, incident.outcome, conn=c)
                 processed += 1
 
-        if own_conn:
-            conn.commit()
+        # Commit if we created our own connection
+        if conn is None:
+            c.commit()
 
         return processed
-
-    finally:
-        if own_conn:
-            conn.close()

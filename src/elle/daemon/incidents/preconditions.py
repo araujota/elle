@@ -6,12 +6,16 @@ against system snapshots and fingerprints.
 
 import operator
 import re
+from collections.abc import Callable
 from typing import Any
 
 from elle.daemon.incidents.models import Fingerprint, Precondition, SystemSnapshot
 
+# Type alias for comparison functions
+CompareFunc = Callable[[Any, Any], bool]
+
 # Safe operators for comparison
-OPERATORS = {
+OPERATORS: dict[str, CompareFunc] = {
     "==": operator.eq,
     "!=": operator.ne,
     ">": operator.gt,
@@ -111,7 +115,7 @@ def evaluate_expression(
 
     # Compare
     try:
-        return op_func(actual_value, expected_value)
+        return bool(op_func(actual_value, expected_value))
     except Exception as e:
         raise PreconditionError(f"Error comparing values: {e}") from e
 

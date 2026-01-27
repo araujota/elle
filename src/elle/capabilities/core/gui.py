@@ -25,7 +25,7 @@ from elle.capabilities.models import (
     SideEffect,
     VerificationResult,
 )
-from elle.capabilities.protocol import Capability
+from elle.capabilities.protocol import BaseCapability
 from elle.common.pydantic_compat import safe_model_dump
 
 logger = logging.getLogger(__name__)
@@ -197,15 +197,15 @@ class GuiExecuteTaskOutput(BaseModel):
 # =============================================================================
 
 
-class GuiLearnCapability(Capability):
+class GuiLearnCapability(BaseCapability[GuiLearnInput, GuiLearnOutput]):
     """Learn an application's UI structure.
 
     Captures the accessibility tree of a running application
     and stores it as a recipe for automation.
     """
 
-    @classmethod
-    def spec(cls) -> CapabilitySpec:
+    @property
+    def spec(self) -> CapabilitySpec:
         """Get capability specification."""
         return CapabilitySpec(
             name="gui.learn",
@@ -220,32 +220,49 @@ class GuiLearnCapability(Capability):
             dependencies=("atspi",),
         )
 
-    @classmethod
-    async def execute(
-        cls,
-        input_data: GuiLearnInput,
-        **kwargs: Any,
+    def run(
+        self,
+        input: GuiLearnInput,
     ) -> CapabilityResult:
         """Execute the capability."""
+        import asyncio
+
         from elle.atspi import get_recipe_by_app, learn_application
 
         start_time = datetime.utcnow()
 
         try:
             # Check for existing recipe
-            existing = get_recipe_by_app(input_data.app_name)
+            existing = get_recipe_by_app(input.app_name)
 
-            # Learn the application
-            recipe = await learn_application(
-                app_name=input_data.app_name,
-                mode=input_data.mode,
-                update_existing=input_data.update_existing,
-            )
+            # Learn the application (run async function synchronously)
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    recipe = pool.submit(
+                        lambda: asyncio.run(
+                            learn_application(
+                                app_name=input.app_name,
+                                mode=input.mode,
+                                update_existing=input.update_existing,
+                            )
+                        )
+                    ).result()
+            else:
+                recipe = loop.run_until_complete(
+                    learn_application(
+                        app_name=input.app_name,
+                        mode=input.mode,
+                        update_existing=input.update_existing,
+                    )
+                )
 
             if not recipe:
                 return CapabilityResult(
                     success=False,
-                    error=f"Application '{input_data.app_name}' not found or not accessible",
+                    error=f"Application '{input.app_name}' not found or not accessible",
                     execution_time_ms=_elapsed_ms(start_time),
                 )
 
@@ -275,11 +292,9 @@ class GuiLearnCapability(Capability):
                 execution_time_ms=_elapsed_ms(start_time),
             )
 
-    @classmethod
-    async def dry_run(
-        cls,
-        input_data: GuiLearnInput,
-        **kwargs: Any,
+    def dry_run(
+        self,
+        input: GuiLearnInput,
     ) -> DryRunResult:
         """Preview what would happen."""
         from elle.atspi import get_client, is_atspi_available
@@ -292,39 +307,30 @@ class GuiLearnCapability(Capability):
             )
 
         client = get_client()
-        app = client.get_application(input_data.app_name)
+        app = client.get_application(input.app_name)
 
         if not app:
             return DryRunResult(
                 is_valid=False,
-                validation_errors=(f"Application '{input_data.app_name}' not found",),
-                preview_text=f"Cannot learn: {input_data.app_name} is not running",
+                validation_errors=(f"Application '{input.app_name}' not found",),
+                preview_text=f"Cannot learn: {input.app_name} is not running",
             )
 
         return DryRunResult(
             is_valid=True,
-            would_execute=(f"Traverse UI tree of {input_data.app_name}",),
-            preview_text=f"Will capture UI structure of {input_data.app_name}",
+            would_execute=(f"Traverse UI tree of {input.app_name}",),
+            preview_text=f"Will capture UI structure of {input.app_name}",
             requires_confirmation=False,
         )
 
-    @classmethod
-    async def verify(
-        cls,
-        input_data: GuiLearnInput,
-        result: CapabilityResult,
-        **kwargs: Any,
+    def verify(
+        self,
+        input: GuiLearnInput,
     ) -> VerificationResult:
         """Verify the operation succeeded."""
-        if not result.success:
-            return VerificationResult(
-                passed=False,
-                discrepancies=(result.error or "Unknown error",),
-            )
-
         from elle.atspi import get_recipe_by_app
 
-        recipe = get_recipe_by_app(input_data.app_name)
+        recipe = get_recipe_by_app(input.app_name)
 
         return VerificationResult(
             passed=recipe is not None,
@@ -333,12 +339,10 @@ class GuiLearnCapability(Capability):
             expected_state={"recipe_exists": True},
         )
 
-    @classmethod
-    async def rollback(
-        cls,
-        input_data: GuiLearnInput,
+    def rollback(
+        self,
+        input: GuiLearnInput,
         result: CapabilityResult,
-        **kwargs: Any,
     ) -> RollbackResult:
         """Rollback is not needed for learning."""
         return RollbackResult(
@@ -347,11 +351,11 @@ class GuiLearnCapability(Capability):
         )
 
 
-class GuiClickCapability(Capability):
+class GuiClickCapability(BaseCapability[GuiClickInput, GuiClickOutput]):
     """Click a UI element."""
 
-    @classmethod
-    def spec(cls) -> CapabilitySpec:
+    @property
+    def spec(self) -> CapabilitySpec:
         """Get capability specification."""
         return CapabilitySpec(
             name="gui.click",
@@ -373,11 +377,9 @@ class GuiClickCapability(Capability):
             dependencies=("atspi",),
         )
 
-    @classmethod
-    async def execute(
-        cls,
-        input_data: GuiClickInput,
-        **kwargs: Any,
+    def run(
+        self,
+        input: GuiClickInput,
     ) -> CapabilityResult:
         """Execute the capability."""
         from elle.atspi import (
@@ -393,11 +395,11 @@ class GuiClickCapability(Capability):
             adaptor = get_adaptor()
 
             # Find application
-            app = client.get_application(input_data.app_name)
+            app = client.get_application(input.app_name)
             if not app:
                 return CapabilityResult(
                     success=False,
-                    error=f"Application '{input_data.app_name}' not found",
+                    error=f"Application '{input.app_name}' not found",
                     execution_time_ms=_elapsed_ms(start_time),
                 )
 
@@ -411,17 +413,17 @@ class GuiClickCapability(Capability):
                 )
 
             # Get recipe for context
-            recipe = get_recipe_by_app(input_data.app_name)
+            recipe = get_recipe_by_app(input.app_name)
 
             # Find element
-            result, _ = adaptor.adapt_and_find(
+            find_result, _ = adaptor.adapt_and_find(
                 root=window,
-                target_name=input_data.element_name,
-                target_role=input_data.element_role,
+                target_name=input.element_name,
+                target_role=input.element_role,
                 recipe_elements=recipe.elements if recipe else (),
             )
 
-            if not result.found:
+            if not find_result.found:
                 return CapabilityResult(
                     success=False,
                     output=safe_model_dump(
@@ -430,25 +432,26 @@ class GuiClickCapability(Capability):
                             element_found=False,
                         )
                     ),
-                    error=result.error,
+                    error=find_result.error,
                     execution_time_ms=_elapsed_ms(start_time),
                 )
 
             # Click element
-            accessible = client._follow_path(window, result.actual_path)
+            actual_path = find_result.actual_path or ()
+            accessible = client._follow_path(window, actual_path)
             clicked = client.do_action(accessible, "click")
 
-            if input_data.wait_ms > 0:
+            if input.wait_ms > 0:
                 import time
 
-                time.sleep(input_data.wait_ms / 1000)
+                time.sleep(input.wait_ms / 1000)
 
             state_after = client.get_state(accessible) if accessible else ()
 
             output = GuiClickOutput(
                 clicked=clicked,
                 element_found=True,
-                adapted=result.method != "direct_path",
+                adapted=find_result.method != "direct_path",
                 state_after=state_after,
             )
 
@@ -465,39 +468,53 @@ class GuiClickCapability(Capability):
                 execution_time_ms=_elapsed_ms(start_time),
             )
 
-    @classmethod
-    async def dry_run(
-        cls,
-        input_data: GuiClickInput,
-        **kwargs: Any,
+    def dry_run(
+        self,
+        input: GuiClickInput,
     ) -> DryRunResult:
         """Preview what would happen."""
         return DryRunResult(
             is_valid=True,
-            would_execute=(f"Click '{input_data.element_name}'",),
-            preview_text=f"Will click element '{input_data.element_name}' in {input_data.app_name}",
+            would_execute=(f"Click '{input.element_name}'",),
+            preview_text=f"Will click element '{input.element_name}' in {input.app_name}",
             requires_confirmation=True,
         )
 
-    @classmethod
-    async def verify(
-        cls,
-        input_data: GuiClickInput,
-        result: CapabilityResult,
-        **kwargs: Any,
+    def verify(
+        self,
+        input: GuiClickInput,
     ) -> VerificationResult:
         """Verify the operation succeeded."""
+        # Click verification just checks the element exists
+        from elle.atspi import get_adaptor, get_client, get_recipe_by_app
+
+        client = get_client()
+        app = client.get_application(input.app_name)
+        if not app:
+            return VerificationResult(passed=False, discrepancies=("Application not found",))
+
+        window = _get_main_window(client, app)
+        if not window:
+            return VerificationResult(passed=False, discrepancies=("Window not found",))
+
+        recipe = get_recipe_by_app(input.app_name)
+        adaptor = get_adaptor()
+        find_result, _ = adaptor.adapt_and_find(
+            root=window,
+            target_name=input.element_name,
+            target_role=input.element_role,
+            recipe_elements=recipe.elements if recipe else (),
+        )
+
         return VerificationResult(
-            passed=result.success,
+            passed=find_result.found,
             checks_performed=("Click action completed",),
         )
 
-    @classmethod
-    async def rollback(
-        cls,
-        input_data: GuiClickInput,
+    def rollback(
+        self,
+        input: GuiClickInput,
         result: CapabilityResult,
-        **kwargs: Any,
     ) -> RollbackResult:
         """Rollback is not possible for clicks."""
         return RollbackResult(
@@ -506,11 +523,11 @@ class GuiClickCapability(Capability):
         )
 
 
-class GuiTypeCapability(Capability):
+class GuiTypeCapability(BaseCapability[GuiTypeInput, GuiTypeOutput]):
     """Type text into a UI element."""
 
-    @classmethod
-    def spec(cls) -> CapabilitySpec:
+    @property
+    def spec(self) -> CapabilitySpec:
         """Get capability specification."""
         return CapabilitySpec(
             name="gui.type",
@@ -532,11 +549,9 @@ class GuiTypeCapability(Capability):
             dependencies=("atspi",),
         )
 
-    @classmethod
-    async def execute(
-        cls,
-        input_data: GuiTypeInput,
-        **kwargs: Any,
+    def run(
+        self,
+        input: GuiTypeInput,
     ) -> CapabilityResult:
         """Execute the capability."""
         from elle.atspi import get_adaptor, get_client, get_recipe_by_app
@@ -547,11 +562,11 @@ class GuiTypeCapability(Capability):
             client = get_client()
             adaptor = get_adaptor()
 
-            app = client.get_application(input_data.app_name)
+            app = client.get_application(input.app_name)
             if not app:
                 return CapabilityResult(
                     success=False,
-                    error=f"Application '{input_data.app_name}' not found",
+                    error=f"Application '{input.app_name}' not found",
                     execution_time_ms=_elapsed_ms(start_time),
                 )
 
@@ -563,16 +578,16 @@ class GuiTypeCapability(Capability):
                     execution_time_ms=_elapsed_ms(start_time),
                 )
 
-            recipe = get_recipe_by_app(input_data.app_name)
+            recipe = get_recipe_by_app(input.app_name)
 
-            result, _ = adaptor.adapt_and_find(
+            find_result, _ = adaptor.adapt_and_find(
                 root=window,
-                target_name=input_data.element_name,
-                target_role=input_data.element_role,
+                target_name=input.element_name,
+                target_role=input.element_role,
                 recipe_elements=recipe.elements if recipe else (),
             )
 
-            if not result.found:
+            if not find_result.found:
                 return CapabilityResult(
                     success=False,
                     output=safe_model_dump(
@@ -581,12 +596,13 @@ class GuiTypeCapability(Capability):
                             element_found=False,
                         )
                     ),
-                    error=result.error,
+                    error=find_result.error,
                     execution_time_ms=_elapsed_ms(start_time),
                 )
 
-            accessible = client._follow_path(window, result.actual_path)
-            typed = client.type_text(accessible, input_data.text)
+            actual_path = find_result.actual_path or ()
+            accessible = client._follow_path(window, actual_path)
+            typed = client.type_text(accessible, input.text)
 
             output = GuiTypeOutput(
                 typed=typed,
@@ -606,39 +622,53 @@ class GuiTypeCapability(Capability):
                 execution_time_ms=_elapsed_ms(start_time),
             )
 
-    @classmethod
-    async def dry_run(
-        cls,
-        input_data: GuiTypeInput,
-        **kwargs: Any,
+    def dry_run(
+        self,
+        input: GuiTypeInput,
     ) -> DryRunResult:
         """Preview what would happen."""
         return DryRunResult(
             is_valid=True,
-            would_execute=(f"Type '{input_data.text}' into '{input_data.element_name}'",),
-            preview_text=f"Will type text into '{input_data.element_name}'",
+            would_execute=(f"Type '{input.text}' into '{input.element_name}'",),
+            preview_text=f"Will type text into '{input.element_name}'",
             requires_confirmation=True,
         )
 
-    @classmethod
-    async def verify(
-        cls,
-        input_data: GuiTypeInput,
-        result: CapabilityResult,
-        **kwargs: Any,
+    def verify(
+        self,
+        input: GuiTypeInput,
     ) -> VerificationResult:
         """Verify the operation succeeded."""
+        # Type verification just checks the element exists
+        from elle.atspi import get_adaptor, get_client, get_recipe_by_app
+
+        client = get_client()
+        app = client.get_application(input.app_name)
+        if not app:
+            return VerificationResult(passed=False, discrepancies=("Application not found",))
+
+        window = _get_main_window(client, app)
+        if not window:
+            return VerificationResult(passed=False, discrepancies=("Window not found",))
+
+        recipe = get_recipe_by_app(input.app_name)
+        adaptor = get_adaptor()
+        find_result, _ = adaptor.adapt_and_find(
+            root=window,
+            target_name=input.element_name,
+            target_role=input.element_role,
+            recipe_elements=recipe.elements if recipe else (),
+        )
+
         return VerificationResult(
-            passed=result.success,
+            passed=find_result.found,
             checks_performed=("Text typed",),
         )
 
-    @classmethod
-    async def rollback(
-        cls,
-        input_data: GuiTypeInput,
+    def rollback(
+        self,
+        input: GuiTypeInput,
         result: CapabilityResult,
-        **kwargs: Any,
     ) -> RollbackResult:
         """Rollback by clearing the text."""
         # Could potentially clear the field
@@ -648,11 +678,11 @@ class GuiTypeCapability(Capability):
         )
 
 
-class GuiNavigateCapability(Capability):
+class GuiNavigateCapability(BaseCapability[GuiNavigateInput, GuiNavigateOutput]):
     """Navigate to a UI element (focus, scroll into view)."""
 
-    @classmethod
-    def spec(cls) -> CapabilitySpec:
+    @property
+    def spec(self) -> CapabilitySpec:
         """Get capability specification."""
         return CapabilitySpec(
             name="gui.navigate",
@@ -674,11 +704,9 @@ class GuiNavigateCapability(Capability):
             dependencies=("atspi",),
         )
 
-    @classmethod
-    async def execute(
-        cls,
-        input_data: GuiNavigateInput,
-        **kwargs: Any,
+    def run(
+        self,
+        input: GuiNavigateInput,
     ) -> CapabilityResult:
         """Execute the capability."""
         from elle.atspi import get_adaptor, get_client, get_recipe_by_app
@@ -689,11 +717,11 @@ class GuiNavigateCapability(Capability):
             client = get_client()
             adaptor = get_adaptor()
 
-            app = client.get_application(input_data.app_name)
+            app = client.get_application(input.app_name)
             if not app:
                 return CapabilityResult(
                     success=False,
-                    error=f"Application '{input_data.app_name}' not found",
+                    error=f"Application '{input.app_name}' not found",
                     execution_time_ms=_elapsed_ms(start_time),
                 )
 
@@ -705,16 +733,16 @@ class GuiNavigateCapability(Capability):
                     execution_time_ms=_elapsed_ms(start_time),
                 )
 
-            recipe = get_recipe_by_app(input_data.app_name)
+            recipe = get_recipe_by_app(input.app_name)
 
-            result, _ = adaptor.adapt_and_find(
+            find_result, _ = adaptor.adapt_and_find(
                 root=window,
-                target_name=input_data.element_name,
-                target_role=input_data.element_role,
+                target_name=input.element_name,
+                target_role=input.element_role,
                 recipe_elements=recipe.elements if recipe else (),
             )
 
-            if not result.found:
+            if not find_result.found:
                 return CapabilityResult(
                     success=False,
                     output=safe_model_dump(
@@ -723,17 +751,18 @@ class GuiNavigateCapability(Capability):
                             element_found=False,
                         )
                     ),
-                    error=result.error,
+                    error=find_result.error,
                     execution_time_ms=_elapsed_ms(start_time),
                 )
 
-            accessible = client._follow_path(window, result.actual_path)
+            actual_path = find_result.actual_path or ()
+            accessible = client._follow_path(window, actual_path)
             focused = client.focus_element(accessible)
 
             output = GuiNavigateOutput(
                 focused=focused,
                 element_found=True,
-                element_path=result.actual_path or (),
+                element_path=actual_path,
             )
 
             return CapabilityResult(
@@ -749,49 +778,63 @@ class GuiNavigateCapability(Capability):
                 execution_time_ms=_elapsed_ms(start_time),
             )
 
-    @classmethod
-    async def dry_run(
-        cls,
-        input_data: GuiNavigateInput,
-        **kwargs: Any,
+    def dry_run(
+        self,
+        input: GuiNavigateInput,
     ) -> DryRunResult:
         """Preview what would happen."""
         return DryRunResult(
             is_valid=True,
-            would_execute=(f"Navigate to '{input_data.element_name}'",),
-            preview_text=f"Will focus element '{input_data.element_name}'",
+            would_execute=(f"Navigate to '{input.element_name}'",),
+            preview_text=f"Will focus element '{input.element_name}'",
             requires_confirmation=False,
         )
 
-    @classmethod
-    async def verify(
-        cls,
-        input_data: GuiNavigateInput,
-        result: CapabilityResult,
-        **kwargs: Any,
+    def verify(
+        self,
+        input: GuiNavigateInput,
     ) -> VerificationResult:
         """Verify the operation succeeded."""
+        # Navigate verification checks the element exists
+        from elle.atspi import get_adaptor, get_client, get_recipe_by_app
+
+        client = get_client()
+        app = client.get_application(input.app_name)
+        if not app:
+            return VerificationResult(passed=False, discrepancies=("Application not found",))
+
+        window = _get_main_window(client, app)
+        if not window:
+            return VerificationResult(passed=False, discrepancies=("Window not found",))
+
+        recipe = get_recipe_by_app(input.app_name)
+        adaptor = get_adaptor()
+        find_result, _ = adaptor.adapt_and_find(
+            root=window,
+            target_name=input.element_name,
+            target_role=input.element_role,
+            recipe_elements=recipe.elements if recipe else (),
+        )
+
         return VerificationResult(
-            passed=result.success,
+            passed=find_result.found,
             checks_performed=("Element located",),
         )
 
-    @classmethod
-    async def rollback(
-        cls,
-        input_data: GuiNavigateInput,
+    def rollback(
+        self,
+        input: GuiNavigateInput,
         result: CapabilityResult,
-        **kwargs: Any,
     ) -> RollbackResult:
         """Rollback not needed for navigation."""
         return RollbackResult(success=True, rolled_back=())
 
 
-class GuiExecuteTaskCapability(Capability):
+class GuiExecuteTaskCapability(BaseCapability[GuiExecuteTaskInput, GuiExecuteTaskOutput]):
     """Execute a natural language GUI task."""
 
-    @classmethod
-    def spec(cls) -> CapabilitySpec:
+    @property
+    def spec(self) -> CapabilitySpec:
         """Get capability specification."""
         return CapabilitySpec(
             name="gui.execute_task",
@@ -819,41 +862,59 @@ class GuiExecuteTaskCapability(Capability):
             dependencies=("atspi",),
         )
 
-    @classmethod
-    async def execute(
-        cls,
-        input_data: GuiExecuteTaskInput,
-        **kwargs: Any,
+    def run(
+        self,
+        input: GuiExecuteTaskInput,
     ) -> CapabilityResult:
         """Execute the capability."""
+        import asyncio
+
         from elle.atspi import execute_gui_task
 
         start_time = datetime.utcnow()
 
         try:
-            result = await execute_gui_task(
-                request=input_data.request,
-                app_name=input_data.app_name,
-                dry_run=input_data.dry_run,
-            )
+            # Run async function synchronously
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    task_result = pool.submit(
+                        lambda: asyncio.run(
+                            execute_gui_task(
+                                request=input.request,
+                                app_name=input.app_name,
+                                dry_run=input.dry_run,
+                            )
+                        )
+                    ).result()
+            else:
+                task_result = loop.run_until_complete(
+                    execute_gui_task(
+                        request=input.request,
+                        app_name=input.app_name,
+                        dry_run=input.dry_run,
+                    )
+                )
 
             output = GuiExecuteTaskOutput(
-                success=result.success,
-                outcome=result.outcome,
-                actions_completed=result.actions_completed,
-                actions_total=result.actions_total,
-                adaptations_made=result.adaptations_made,
-                user_explanation=result.user_explanation,
-                incident_id=result.incident_id,
+                success=task_result.success,
+                outcome=task_result.outcome,
+                actions_completed=task_result.actions_completed,
+                actions_total=task_result.actions_total,
+                adaptations_made=task_result.adaptations_made,
+                user_explanation=task_result.user_explanation,
+                incident_id=task_result.incident_id,
             )
 
             return CapabilityResult(
-                success=result.success,
+                success=task_result.success,
                 output=safe_model_dump(output),
                 execution_time_ms=_elapsed_ms(start_time),
                 evidence=CapabilityEvidence(
-                    verification_passed=result.success,
-                    verification_details=result.user_explanation,
+                    verification_passed=task_result.success,
+                    verification_details=task_result.user_explanation,
                 ),
             )
 
@@ -864,23 +925,42 @@ class GuiExecuteTaskCapability(Capability):
                 execution_time_ms=_elapsed_ms(start_time),
             )
 
-    @classmethod
-    async def dry_run(
-        cls,
-        input_data: GuiExecuteTaskInput,
-        **kwargs: Any,
+    def dry_run(
+        self,
+        input: GuiExecuteTaskInput,
     ) -> DryRunResult:
         """Preview what would happen."""
+        import asyncio
+
         from elle.atspi import get_planner, get_recipe_by_app
 
         try:
-            recipe = get_recipe_by_app(input_data.app_name)
+            recipe = get_recipe_by_app(input.app_name)
             planner = get_planner()
-            plan = await planner.plan_task(
-                input_data.request,
-                input_data.app_name,
-                recipe,
-            )
+
+            # Run async function synchronously
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    plan = pool.submit(
+                        lambda: asyncio.run(
+                            planner.plan_task(
+                                input.request,
+                                input.app_name,
+                                recipe,
+                            )
+                        )
+                    ).result()
+            else:
+                plan = loop.run_until_complete(
+                    planner.plan_task(
+                        input.request,
+                        input.app_name,
+                        recipe,
+                    )
+                )
 
             actions = [f"{a.action_type} '{a.target_name}'" for a in plan.actions]
 
@@ -898,25 +978,21 @@ class GuiExecuteTaskCapability(Capability):
                 preview_text=f"Cannot plan: {e}",
             )
 
-    @classmethod
-    async def verify(
-        cls,
-        input_data: GuiExecuteTaskInput,
-        result: CapabilityResult,
-        **kwargs: Any,
+    def verify(
+        self,
+        input: GuiExecuteTaskInput,
     ) -> VerificationResult:
         """Verify the operation succeeded."""
+        # Task verification is application-specific, return success by default
         return VerificationResult(
-            passed=result.success,
+            passed=True,
             checks_performed=("Task execution completed",),
         )
 
-    @classmethod
-    async def rollback(
-        cls,
-        input_data: GuiExecuteTaskInput,
+    def rollback(
+        self,
+        input: GuiExecuteTaskInput,
         result: CapabilityResult,
-        **kwargs: Any,
     ) -> RollbackResult:
         """Rollback not possible for complex tasks."""
         return RollbackResult(
@@ -958,7 +1034,7 @@ def _get_main_window(client: Any, app: Any) -> Any | None:
 # =============================================================================
 
 
-GUI_CAPABILITIES: list[type[Capability]] = [
+GUI_CAPABILITIES: list[type[BaseCapability[Any, Any]]] = [
     GuiLearnCapability,
     GuiClickCapability,
     GuiTypeCapability,

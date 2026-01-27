@@ -109,6 +109,7 @@ class PolicyParser:
 
         # Parse extends
         extends_raw = data.get("extends", [])
+        extends: tuple[str, ...]
         if isinstance(extends_raw, str):
             extends = (extends_raw,)
         elif isinstance(extends_raw, list):

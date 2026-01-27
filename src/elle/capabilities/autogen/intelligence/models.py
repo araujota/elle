@@ -29,16 +29,16 @@ class ExtractedFlag(BaseModel, frozen=True):
     """
 
     flag: str = Field(..., description="Flag string (e.g., '-v', '--verbose')")
-    long_form: str | None = Field(None, description="Long form if flag is short")
-    description: str = Field("", description="Description of what the flag does")
-    takes_value: bool = Field(False, description="Whether flag requires an argument")
+    long_form: str | None = Field(default=None, description="Long form if flag is short")
+    description: str = Field(default="", description="Description of what the flag does")
+    takes_value: bool = Field(default=False, description="Whether flag requires an argument")
     value_type: str | None = Field(
-        None,
+        default=None,
         description="Type of value: 'file', 'int', 'string', 'path', 'dir', etc.",
     )
     source: str = Field(..., description="Source: 'man', 'completion', 'help', etc.")
     confidence: float = Field(
-        1.0,
+        default=1.0,
         ge=0.0,
         le=1.0,
         description="Confidence in this flag's accuracy",
@@ -241,13 +241,13 @@ class ExtractionResult(BaseModel, frozen=True):
     """
 
     source_name: str = Field(..., description="Name of the extractor")
-    success: bool = Field(True, description="Whether extraction succeeded")
-    error: str | None = Field(None, description="Error message if failed")
+    success: bool = Field(default=True, description="Whether extraction succeeded")
+    error: str | None = Field(default=None, description="Error message if failed")
 
     # Data from extraction
     flags: tuple[ExtractedFlag, ...] = Field(default_factory=tuple)
     subcommands: tuple[ExtractedSubcommand, ...] = Field(default_factory=tuple)
-    completions: ShellCompletions | None = None
+    completions: ShellCompletions | None = Field(default=None)
     systemd_units: tuple[SystemdUnitInfo, ...] = Field(default_factory=tuple)
-    metadata: PackageMetadata | None = None
-    manifest: FileManifest | None = None
+    metadata: PackageMetadata | None = Field(default=None)
+    manifest: FileManifest | None = Field(default=None)

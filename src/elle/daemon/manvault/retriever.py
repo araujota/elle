@@ -65,6 +65,9 @@ def search(
         conn = get_connection()
         ensure_schema(conn)
 
+    # At this point conn is guaranteed to be non-None
+    assert conn is not None
+
     try:
         if search_type == "lexical":
             return _lexical_search(query, k, name, section, conn)
@@ -201,7 +204,7 @@ def _semantic_search(
     similarities.sort(key=lambda x: x[1], reverse=True)
 
     # Get top chunks and their documents
-    results = []
+    results: list[ManSnippet] = []
     seen_docs: set[tuple[str, str]] = set()
 
     cursor = conn.cursor()
@@ -391,7 +394,7 @@ def _parse_sections(text: str) -> list[tuple[str | None, str]]:
     if not matches:
         return [(None, text)]
 
-    sections = []
+    sections: list[tuple[str | None, str]] = []
 
     # Handle preamble
     if matches[0].start() > 0:
@@ -574,7 +577,7 @@ def flag_exists(cmd: str, flag: str, conn: sqlite3.Connection | None = None) -> 
         return False
 
     finally:
-        if own_conn:
+        if own_conn and conn is not None:
             conn.close()
 
 
@@ -605,5 +608,5 @@ def get_document(
         doc = get_doc(conn, name, section, lang)
         return doc.text if doc else None
     finally:
-        if own_conn:
+        if own_conn and conn is not None:
             conn.close()

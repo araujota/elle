@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import re
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from elle.capabilities.autogen.models import (
     CORE_COMMANDS,
@@ -52,7 +52,7 @@ def validate_flags(
     """
     errors: list[str] = []
     warnings: list[str] = []
-    details: dict[str, any] = {}
+    details: dict[str, Any] = {}
 
     # Extract flags from command template
     template = spec.command_template
@@ -108,7 +108,7 @@ def validate_dry_run(spec: GeneratedCapabilitySpec) -> ValidationResult:
     """
     errors: list[str] = []
     warnings: list[str] = []
-    details: dict[str, any] = {}
+    details: dict[str, Any] = {}
 
     try:
         from elle.capabilities.autogen.factory import (
@@ -142,14 +142,18 @@ def validate_dry_run(spec: GeneratedCapabilitySpec) -> ValidationResult:
         test_input = {}
         for field in spec.input_fields:
             if field.required:
+                test_value: str | int | bool
                 if field.field_type in ("str", "string"):
-                    test_input[field.name] = "test_value"
+                    test_value = "test_value"
                 elif field.field_type in ("int", "integer"):
-                    test_input[field.name] = 1
+                    test_value = 1
                 elif field.field_type in ("bool", "boolean"):
-                    test_input[field.name] = True
+                    test_value = True
                 elif "path" in field.field_type.lower():
-                    test_input[field.name] = "/tmp/test"
+                    test_value = "/tmp/test"
+                else:
+                    test_value = "test_value"
+                test_input[field.name] = test_value
 
         # Call dry_run
         result = instance.dry_run(test_input)
@@ -196,7 +200,7 @@ def validate_sandbox(spec: GeneratedCapabilitySpec) -> ValidationResult:
         ValidationResult for sandbox stage.
     """
     warnings: list[str] = []
-    details: dict[str, any] = {}
+    details: dict[str, Any] = {}
 
     # For now, just check for obviously dangerous patterns
     dangerous_patterns = [
@@ -259,7 +263,7 @@ def validate_package_coherence(
     """
     errors: list[str] = []
     warnings: list[str] = []
-    details: dict[str, any] = {}
+    details: dict[str, Any] = {}
 
     if not intel:
         warnings.append("No package intelligence available for coherence validation")
@@ -364,7 +368,7 @@ def assign_trust_level(
     """
     errors: list[str] = []
     warnings: list[str] = []
-    details: dict[str, any] = {}
+    details: dict[str, Any] = {}
 
     # Check if core command
     if spec.source_command in CORE_COMMANDS:

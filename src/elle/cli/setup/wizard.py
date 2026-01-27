@@ -14,13 +14,14 @@ import time
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from rich.panel import Panel
 from rich.progress import (
     BarColumn,
     Progress,
     SpinnerColumn,
+    TaskID,
     TaskProgressColumn,
     TextColumn,
 )
@@ -139,7 +140,7 @@ def save_setup_state(state: SetupState) -> None:
     USER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
     # Load existing config or start fresh
-    config: dict = {}
+    config: dict[str, Any] = {}
     if USER_CONFIG_FILE.exists():
         try:
             import tomllib
@@ -667,7 +668,7 @@ class SetupWizard:
         console.print()
         return StepResult.CONTINUE
 
-    def _check_ollama(self) -> dict:
+    def _check_ollama(self) -> dict[str, Any]:
         """Check if Ollama is available and list models.
 
         Returns:
@@ -693,7 +694,7 @@ class SetupWizard:
             result["installed"] = True
         else:
             # Check common installation paths
-            common_paths = [
+            common_paths: list[str | Path] = [
                 "/usr/local/bin/ollama",
                 "/usr/bin/ollama",
                 Path.home() / ".local" / "bin" / "ollama",
@@ -823,35 +824,35 @@ class SetupWizard:
         console.print()
 
         # Build multi-select options
-        telemetry_options = [
+        telemetry_options: list[tuple[str, str, str, bool]] = [
             (
                 "journal",
-                TELEMETRY_INFO["journal"]["name"],
-                TELEMETRY_INFO["journal"]["description"],
+                str(TELEMETRY_INFO["journal"]["name"]),
+                str(TELEMETRY_INFO["journal"]["description"]),
                 self.prefs.journal_enabled,
             ),
             (
                 "kernel",
-                TELEMETRY_INFO["kernel"]["name"],
-                TELEMETRY_INFO["kernel"]["description"],
+                str(TELEMETRY_INFO["kernel"]["name"]),
+                str(TELEMETRY_INFO["kernel"]["description"]),
                 self.prefs.kernel_enabled,
             ),
             (
                 "probes",
-                TELEMETRY_INFO["probes"]["name"],
-                TELEMETRY_INFO["probes"]["description"],
+                str(TELEMETRY_INFO["probes"]["name"]),
+                str(TELEMETRY_INFO["probes"]["description"]),
                 self.prefs.probes_enabled,
             ),
             (
                 "docker",
-                TELEMETRY_INFO["docker"]["name"],
-                TELEMETRY_INFO["docker"]["description"],
+                str(TELEMETRY_INFO["docker"]["name"]),
+                str(TELEMETRY_INFO["docker"]["description"]),
                 self.prefs.docker_enabled,
             ),
             (
                 "ebpf",
-                TELEMETRY_INFO["ebpf"]["name"] + " (advanced)",
-                TELEMETRY_INFO["ebpf"]["description"],
+                str(TELEMETRY_INFO["ebpf"]["name"]) + " (advanced)",
+                str(TELEMETRY_INFO["ebpf"]["description"]),
                 self.prefs.ebpf_enabled,
             ),
         ]
@@ -889,23 +890,23 @@ class SetupWizard:
         console.print()
 
         # Build multi-select options for features
-        feature_options = [
+        feature_options: list[tuple[str, str, str, bool]] = [
             (
                 "api",
-                FEATURE_INFO["api"]["name"],
-                FEATURE_INFO["api"]["description"],
+                str(FEATURE_INFO["api"]["name"]),
+                str(FEATURE_INFO["api"]["description"]),
                 self.prefs.api_enabled,
             ),
             (
                 "gui_automation",
-                FEATURE_INFO["gui_automation"]["name"],
-                FEATURE_INFO["gui_automation"]["description"],
+                str(FEATURE_INFO["gui_automation"]["name"]),
+                str(FEATURE_INFO["gui_automation"]["description"]),
                 self.prefs.gui_automation_enabled,
             ),
             (
                 "auto_learn_packages",
-                FEATURE_INFO["auto_learn_packages"]["name"],
-                FEATURE_INFO["auto_learn_packages"]["description"],
+                str(FEATURE_INFO["auto_learn_packages"]["name"]),
+                str(FEATURE_INFO["auto_learn_packages"]["description"]),
                 self.prefs.auto_learn_packages,
             ),
         ]
@@ -1382,7 +1383,7 @@ class SetupWizard:
         self,
         model: str,
         progress: Progress,
-        task_id: int,
+        task_id: TaskID,
     ) -> bool:
         """Pull a model with progress updates.
 
@@ -1444,7 +1445,7 @@ class SetupWizard:
         except Exception:
             return False
 
-    def _start_daemon(self) -> dict:
+    def _start_daemon(self) -> dict[str, Any]:
         """Start the ELLE daemon.
 
         Returns:

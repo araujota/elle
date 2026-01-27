@@ -23,7 +23,7 @@ from elle.daemon.incidents.store import (
 )
 
 # Domain detection patterns
-DOMAIN_PATTERNS: list[tuple[str, re.Pattern, str]] = [
+DOMAIN_PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
     # Network
     (
         "net",
@@ -55,7 +55,7 @@ DOMAIN_PATTERNS: list[tuple[str, re.Pattern, str]] = [
 ]
 
 # Entity extraction patterns
-ENTITY_PATTERNS: list[tuple[str, re.Pattern]] = [
+ENTITY_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     # Service patterns: "nginx.service", "service nginx", "unit nginx.service"
     ("service", re.compile(r"([a-zA-Z0-9_-]+)\.service", re.I)),
     ("service", re.compile(r"(?:service|unit)\s+([a-zA-Z0-9_-]+)", re.I)),

@@ -6,7 +6,8 @@ efficacy summaries, and trend analysis.
 
 import sqlite3
 from datetime import datetime, timedelta
-from typing import Literal
+from types import TracebackType
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -134,12 +135,17 @@ class ReportGenerator:
         """Close the connection if we own it."""
         if self._own_conn and self._conn:
             self._conn.close()
-            self._conn = None
+            self._conn = None  # type: ignore[assignment]
 
     def __enter__(self) -> "ReportGenerator":
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self.close()
 
     # -------------------------------------------------------------------------
@@ -710,7 +716,7 @@ class ReportGenerator:
         self,
         from_time: datetime,
         to_time: datetime,
-        incidents: list,
+        incidents: list[Any],
         by_domain: dict[str, int],
         by_outcome: dict[str, int],
         avg_resolve: float | None,
@@ -766,7 +772,7 @@ class ReportGenerator:
         self,
         from_time: datetime,
         to_time: datetime,
-        incidents: list,
+        incidents: list[Any],
         by_domain: dict[str, int],
         by_outcome: dict[str, int],
         avg_resolve: float | None,

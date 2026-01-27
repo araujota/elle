@@ -13,7 +13,7 @@ installed packages using multi-source intelligence extraction.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
@@ -196,7 +196,7 @@ async def _learn_package(
         PackageIntelligence,
         get_aggregator,
     )
-    from elle.rag.llm import generate_json
+    from elle.rag.llm import LLM
     from elle.rag.prompts import get_composer
 
     errors: list[str] = []
@@ -237,9 +237,13 @@ Focus on operations that are well-documented in the extracted intelligence.
 Output valid JSON only."""
 
     try:
-        capabilities_json = await generate_json(
+        import asyncio
+
+        llm = LLM()
+        capabilities_json = await asyncio.to_thread(
+            llm.generate_json,
             user_prompt,
-            system_prompt=system_prompt,
+            system=system_prompt,
         )
     except Exception as e:
         errors.append(f"LLM generation failed: {e}")
@@ -282,7 +286,7 @@ Output valid JSON only."""
     generated_count = len(capabilities)
 
     # Step 5: Validate capabilities
-    validated: list[tuple[GeneratedCapabilitySpec, any]] = []
+    validated: list[tuple[GeneratedCapabilitySpec, Any]] = []
 
     for spec in capabilities:
         try:
@@ -683,7 +687,7 @@ async def _handle_learn_all(args: str) -> str:
     # Parse flags
     parts = args.lower().split()
     dry_run = "--dry-run" in parts
-    skip_existing = "--skip-existing" not in parts or True  # Default to skip
+    skip_existing: bool = "--skip-existing" not in parts or True  # Default to skip
     no_skip = "--no-skip" in parts
 
     # Parse max concurrent
@@ -848,7 +852,7 @@ async def _run_full_system_learn(
     packages: list[str],
     skip_existing: bool = True,
     max_concurrent: int = 3,
-) -> dict:
+) -> dict[str, Any]:
     """Run learning on all specified packages.
 
     Args:
@@ -903,10 +907,11 @@ async def _run_full_system_learn(
 
     for pkg_name, res in zip(to_learn, results, strict=True):
         attempted += 1
-        if isinstance(res, Exception):
+        if isinstance(res, BaseException):
             failed += 1
             failures.append((pkg_name, str(res)))
         else:
+            # res is tuple[bool, int, str | None] after BaseException check
             success, caps, error = res
             if success:
                 succeeded += 1

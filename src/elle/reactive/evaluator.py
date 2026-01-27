@@ -12,6 +12,15 @@ from typing import Any
 
 from elle.reactive.models import Condition, ConditionContext
 
+# Re-export for convenience
+__all__ = [
+    "ConditionContext",
+    "ConditionEvaluator",
+    "EvaluationError",
+    "evaluate_condition",
+    "resolve_templates_in_dict",
+]
+
 
 class EvaluationError(Exception):
     """Error evaluating a condition."""
@@ -185,7 +194,7 @@ class ConditionEvaluator:
             return None
 
         # Navigate the path
-        current = obj
+        current: Any = obj
         for part in remaining:
             if isinstance(current, dict):
                 current = current.get(part)
@@ -271,7 +280,7 @@ class ConditionEvaluator:
             raise EvaluationError("'eq' operator requires exactly two arguments")
         left = self._resolve_value(args[0], ctx)
         right = self._resolve_value(args[1], ctx)
-        return left == right
+        return bool(left == right)
 
     def _op_ne(self, args: list[Any], ctx: ConditionContext) -> bool:
         """Test inequality."""
@@ -279,7 +288,7 @@ class ConditionEvaluator:
             raise EvaluationError("'ne' operator requires exactly two arguments")
         left = self._resolve_value(args[0], ctx)
         right = self._resolve_value(args[1], ctx)
-        return left != right
+        return bool(left != right)
 
     def _op_gt(self, args: list[Any], ctx: ConditionContext) -> bool:
         """Test greater than."""

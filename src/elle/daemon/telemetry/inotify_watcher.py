@@ -18,7 +18,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from elle.daemon.telemetry.models import TelemetryEvent
+from elle.daemon.telemetry.models import TelemetryEvent, TelemetrySeverity
+from elle.daemon.telemetry.queue import TelemetryQueue
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ class InotifyWatcher:
 
     def __init__(
         self,
-        event_queue: asyncio.Queue[TelemetryEvent],
+        event_queue: TelemetryQueue[TelemetryEvent],
         watch_paths: list[str] | None = None,
         generate_diffs: bool = True,
     ) -> None:
@@ -291,7 +292,7 @@ class InotifyWatcher:
             category = "auth"
 
         # Determine severity
-        severity = "warning"
+        severity: TelemetrySeverity = "warning"
         if category == "auth":
             severity = "error" if event_type in ("modify", "create") else "warning"
 

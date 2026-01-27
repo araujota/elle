@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from elle.daemon.incidents.models import (
+    ChangeSignificance,
     ConfigFileState,
     SemanticChange,
     SemanticDiff,
@@ -496,7 +497,7 @@ def _path_basename(path: str) -> str:
     return Path(path).name
 
 
-def _config_significance(path: str) -> str:
+def _config_significance(path: str) -> ChangeSignificance:
     """Determine significance of a config file change."""
     high_significance = [
         "/etc/ssh/sshd_config",

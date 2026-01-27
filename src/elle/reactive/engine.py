@@ -579,7 +579,9 @@ class ReactiveEngine:
         # Try to get the input schema class
         if hasattr(capability, "input_schema"):
             schema_class = capability.input_schema
-            return schema_class(**input_data)
+            result = schema_class(**input_data)
+            # Cast to BaseModel since schema_class is dynamically typed
+            return result if isinstance(result, BaseModel) else BaseModel()
 
         # Fallback: try to infer from spec
         spec = capability.spec

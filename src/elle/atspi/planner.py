@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import re
 import uuid
+from typing import Any
 
 from elle.atspi.models import UIAction, UIElement, UIRecipe, UITaskPlan
 
@@ -234,7 +235,7 @@ class UITaskPlanner:
         request: str,
         app_name: str,
         recipe: UIRecipe,
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         """Generate plan using LLM.
 
         Args:
@@ -291,7 +292,7 @@ class UITaskPlanner:
         request: str,
         app_name: str,
         recipe: UIRecipe | None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Generate plan using rule-based matching.
 
         Args:
@@ -448,7 +449,7 @@ class UITaskPlanner:
         request: str,
         app_name: str,
         recipe: UIRecipe | None,
-        plan_data: dict,
+        plan_data: dict[str, Any],
     ) -> UITaskPlan:
         """Build UITaskPlan from plan data.
 

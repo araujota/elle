@@ -407,8 +407,8 @@ class FixitInteractive:
     def _wrap_text(self, text: str, width: int) -> list[str]:
         """Wrap text to specified width."""
         words = text.split()
-        lines = []
-        current = []
+        lines: list[str] = []
+        current: list[str] = []
         current_len = 0
 
         for word in words:

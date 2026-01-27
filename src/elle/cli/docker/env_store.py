@@ -7,6 +7,8 @@ per image family across sessions.
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -133,6 +135,34 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
     except sqlite3.OperationalError:
         # Table doesn't exist yet
         init_schema(conn)
+
+
+@contextmanager
+def _ensure_connection(
+    conn: sqlite3.Connection | None = None,
+    db_path: Path | None = None,
+) -> Iterator[sqlite3.Connection]:
+    """Context manager that ensures a valid connection with schema.
+
+    Args:
+        conn: Optional existing connection to use.
+        db_path: Override database path (for testing).
+
+    Yields:
+        A valid SQLite connection with schema initialized.
+    """
+    own_conn = conn is None
+    if own_conn:
+        actual_conn = get_connection(db_path)
+        ensure_schema(actual_conn)
+    else:
+        assert conn is not None  # for mypy
+        actual_conn = conn
+    try:
+        yield actual_conn
+    finally:
+        if own_conn:
+            actual_conn.close()
 
 
 # =============================================================================

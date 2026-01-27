@@ -22,6 +22,7 @@ import logging
 import subprocess
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -58,7 +59,7 @@ class KeyRotationResult(BaseModel):
     )
 
 
-def _run_wg_command(args: list[str], capture: bool = True) -> subprocess.CompletedProcess:
+def _run_wg_command(args: list[str], capture: bool = True) -> subprocess.CompletedProcess[str]:
     """Run a wg command.
 
     Args:
@@ -372,7 +373,7 @@ def list_interfaces() -> list[str]:
     return interfaces
 
 
-def get_interface_stats(interface: str) -> dict | None:
+def get_interface_stats(interface: str) -> dict[str, Any] | None:
     """Get transfer statistics for a WireGuard interface.
 
     Args:
@@ -395,10 +396,11 @@ def get_interface_stats(interface: str) -> dict | None:
     if len(interface_parts) < 4:
         return None
 
-    stats = {
+    peers: list[dict[str, str | int | list[str] | None]] = []
+    stats: dict[str, str | int | list[dict[str, str | int | list[str] | None]] | None] = {
         "public_key": interface_parts[1],
         "listen_port": int(interface_parts[2]) if interface_parts[2] != "(none)" else None,
-        "peers": [],
+        "peers": peers,
     }
 
     # Remaining lines are peers
@@ -408,7 +410,7 @@ def get_interface_stats(interface: str) -> dict | None:
         if len(parts) < 8:
             continue
 
-        peer = {
+        peer: dict[str, str | int | list[str] | None] = {
             "public_key": parts[0],
             "endpoint": parts[2] if parts[2] != "(none)" else None,
             "allowed_ips": parts[3].split(",") if parts[3] else [],
@@ -417,6 +419,6 @@ def get_interface_stats(interface: str) -> dict | None:
             "tx_bytes": int(parts[6]),
             "keepalive": int(parts[7]) if parts[7] != "off" else None,
         }
-        stats["peers"].append(peer)
+        peers.append(peer)
 
     return stats

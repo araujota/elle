@@ -190,7 +190,7 @@ class IncidentAttachOutput(BaseModel):
 # =============================================================================
 
 
-class IncidentCreateCapability(BaseCapability):
+class IncidentCreateCapability(BaseCapability[IncidentCreateInput, IncidentCreateOutput]):
     """Create a new incident."""
 
     @property
@@ -265,9 +265,9 @@ class IncidentCreateCapability(BaseCapability):
             snapshot_attached = False
             if input.attach_snapshot:
                 try:
-                    from elle.daemon.incidents.snapshot import collect_system_snapshot
+                    from elle.daemon.incidents.snapshot import collect_snapshot
 
-                    snapshot = collect_system_snapshot()
+                    snapshot = collect_snapshot()
                     attach_snapshot(incident.incident_id, "pre", snapshot)
                     snapshot_attached = True
                 except Exception as e:
@@ -335,7 +335,7 @@ class IncidentCreateCapability(BaseCapability):
 # =============================================================================
 
 
-class IncidentAttachCapability(BaseCapability):
+class IncidentAttachCapability(BaseCapability[IncidentAttachInput, IncidentAttachOutput]):
     """Attach evidence to an existing incident."""
 
     @property
@@ -468,9 +468,9 @@ class IncidentAttachCapability(BaseCapability):
             elif input.attach_type == "snapshot":
                 # Attach system snapshot
                 try:
-                    from elle.daemon.incidents.snapshot import collect_system_snapshot
+                    from elle.daemon.incidents.snapshot import collect_snapshot
 
-                    snapshot = collect_system_snapshot()
+                    snapshot = collect_snapshot()
                     attach_snapshot(input.incident_id, input.snapshot_which, snapshot)
                     details = f"Attached {input.snapshot_which} snapshot"
                 except Exception as e:

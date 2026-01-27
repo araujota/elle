@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
 
@@ -22,6 +24,26 @@ from elle.atspi.models import (
     UIRecipe,
 )
 from elle.atspi.schema import ensure_schema, get_connection
+
+
+@contextmanager
+def _ensure_connection(
+    conn: sqlite3.Connection | None = None,
+) -> Iterator[sqlite3.Connection]:
+    """Context manager that ensures a valid connection with schema."""
+    own_conn = conn is None
+    if own_conn:
+        actual_conn = get_connection()
+        ensure_schema(actual_conn)
+    else:
+        # conn is guaranteed non-None here by the condition above
+        actual_conn = conn  # type: ignore[assignment]
+    try:
+        yield actual_conn
+    finally:
+        if own_conn:
+            actual_conn.close()
+
 
 # =============================================================================
 # Serialization Helpers
@@ -52,7 +74,7 @@ def _json_loads(s: str | None) -> Any:
     return json.loads(s)
 
 
-def _element_to_dict(element: UIElement) -> dict:
+def _element_to_dict(element: UIElement) -> dict[str, Any]:
     """Convert UIElement to JSON-serializable dict."""
     return {
         "role": element.role,
@@ -69,7 +91,7 @@ def _element_to_dict(element: UIElement) -> dict:
     }
 
 
-def _dict_to_element(data: dict) -> UIElement:
+def _dict_to_element(data: dict[str, Any]) -> UIElement:
     """Convert dict to UIElement."""
     return UIElement(
         role=data.get("role", ""),
@@ -86,7 +108,7 @@ def _dict_to_element(data: dict) -> UIElement:
     )
 
 
-def _action_to_dict(action: UIAction) -> dict:
+def _action_to_dict(action: UIAction) -> dict[str, Any]:
     """Convert UIAction to JSON-serializable dict."""
     return {
         "action_type": action.action_type,
@@ -101,7 +123,7 @@ def _action_to_dict(action: UIAction) -> dict:
     }
 
 
-def _dict_to_action(data: dict) -> UIAction:
+def _dict_to_action(data: dict[str, Any]) -> UIAction:
     """Convert dict to UIAction."""
     return UIAction(
         action_type=data.get("action_type", "click"),
@@ -146,12 +168,7 @@ def create_recipe(
     Returns:
         The created UIRecipe.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         recipe_id = str(uuid.uuid4())
         now = datetime.utcnow()
 
@@ -176,7 +193,7 @@ def create_recipe(
             confidence=1.0,
         )
 
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(
             """
             INSERT INTO recipes (
@@ -204,12 +221,8 @@ def create_recipe(
         # Index elements for FTS
         _index_elements(cursor, recipe_id, elements)
 
-        conn.commit()
+        c.commit()
         return recipe
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def get_recipe(
@@ -225,13 +238,8 @@ def get_recipe(
     Returns:
         UIRecipe if found, None otherwise.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute("SELECT * FROM recipes WHERE recipe_id = ?", (recipe_id,))
         row = cursor.fetchone()
 
@@ -239,10 +247,6 @@ def get_recipe(
             return None
 
         return _row_to_recipe(row)
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def get_recipe_by_app(
@@ -260,13 +264,8 @@ def get_recipe_by_app(
     Returns:
         UIRecipe if found, None otherwise.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             SELECT * FROM recipes
@@ -282,10 +281,6 @@ def get_recipe_by_app(
             return None
 
         return _row_to_recipe(row)
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def list_recipes(
@@ -303,13 +298,8 @@ def list_recipes(
     Returns:
         List of UIRecipes.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             SELECT * FROM recipes
@@ -320,10 +310,6 @@ def list_recipes(
         )
 
         return [_row_to_recipe(row) for row in cursor.fetchall()]
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def update_recipe(
@@ -356,18 +342,13 @@ def update_recipe(
     Returns:
         Updated UIRecipe, or None if not found.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         # Get current recipe
-        current = get_recipe(recipe_id, conn=conn)
+        current = get_recipe(recipe_id, conn=c)
         if not current:
             return None
 
-        cursor = conn.cursor()
+        cursor = c.cursor()
 
         # Build update statement
         updates = ["updated_at = ?"]
@@ -415,13 +396,9 @@ def update_recipe(
             f"UPDATE recipes SET {', '.join(updates)} WHERE recipe_id = ?",
             values,
         )
-        conn.commit()
+        c.commit()
 
-        return get_recipe(recipe_id, conn=conn)
-
-    finally:
-        if own_conn:
-            conn.close()
+        return get_recipe(recipe_id, conn=c)
 
 
 def delete_recipe(
@@ -437,13 +414,8 @@ def delete_recipe(
     Returns:
         True if deleted, False if not found.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
 
         # Delete from FTS index
         cursor.execute(
@@ -453,13 +425,9 @@ def delete_recipe(
 
         # Delete recipe (cascades to versions and executions)
         cursor.execute("DELETE FROM recipes WHERE recipe_id = ?", (recipe_id,))
-        conn.commit()
+        c.commit()
 
         return cursor.rowcount > 0
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def _row_to_recipe(row: sqlite3.Row) -> UIRecipe:
@@ -573,13 +541,8 @@ def search_elements(
     Returns:
         List of (recipe_id, UIElement) tuples.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
 
         if recipe_id:
             cursor.execute(
@@ -618,10 +581,6 @@ def search_elements(
 
         return results
 
-    finally:
-        if own_conn:
-            conn.close()
-
 
 # =============================================================================
 # Execution CRUD
@@ -647,12 +606,7 @@ def create_execution(
     Returns:
         The created RecipeExecution.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         execution_id = str(uuid.uuid4())
         now = datetime.utcnow()
         actions = actions or []
@@ -664,10 +618,10 @@ def create_execution(
             task_request=task_request,
             actions=tuple(actions),
             started_at=now,
-            outcome="pending",  # type: ignore
+            outcome="pending",
         )
 
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(
             """
             INSERT INTO recipe_executions (
@@ -685,13 +639,9 @@ def create_execution(
                 "pending",
             ),
         )
-        conn.commit()
+        c.commit()
 
         return execution
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def finalize_execution(
@@ -711,13 +661,8 @@ def finalize_execution(
     Returns:
         Updated RecipeExecution.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         now = datetime.utcnow()
 
         cursor.execute(
@@ -733,16 +678,12 @@ def finalize_execution(
                 execution_id,
             ),
         )
-        conn.commit()
+        c.commit()
 
         if cursor.rowcount == 0:
             return None
 
-        return get_execution(execution_id, conn=conn)
-
-    finally:
-        if own_conn:
-            conn.close()
+        return get_execution(execution_id, conn=c)
 
 
 def get_execution(
@@ -758,13 +699,8 @@ def get_execution(
     Returns:
         RecipeExecution if found, None otherwise.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             "SELECT * FROM recipe_executions WHERE execution_id = ?",
             (execution_id,),
@@ -775,10 +711,6 @@ def get_execution(
             return None
 
         return _row_to_execution(row)
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def list_executions(
@@ -796,13 +728,8 @@ def list_executions(
     Returns:
         List of RecipeExecutions.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
 
         if recipe_id:
             cursor.execute(
@@ -825,10 +752,6 @@ def list_executions(
             )
 
         return [_row_to_execution(row) for row in cursor.fetchall()]
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def _row_to_execution(row: sqlite3.Row) -> RecipeExecution:
@@ -869,13 +792,8 @@ def get_versions(
     Returns:
         List of RecipeVersions, newest first.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             SELECT * FROM recipe_versions
@@ -887,10 +805,6 @@ def get_versions(
         )
 
         return [_row_to_version(row) for row in cursor.fetchall()]
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def get_version(
@@ -908,13 +822,8 @@ def get_version(
     Returns:
         RecipeVersion if found, None otherwise.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             SELECT * FROM recipe_versions
@@ -928,10 +837,6 @@ def get_version(
             return None
 
         return _row_to_version(row)
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def _row_to_version(row: sqlite3.Row) -> RecipeVersion:
@@ -976,13 +881,8 @@ def add_navigation_target(
         element_name: Element name.
         conn: SQLite connection.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         path_str = "/".join(str(i) for i in element_path)
 
         cursor.execute(
@@ -1005,11 +905,7 @@ def add_navigation_target(
                 _serialize_datetime(datetime.utcnow()),
             ),
         )
-        conn.commit()
-
-    finally:
-        if own_conn:
-            conn.close()
+        c.commit()
 
 
 def get_navigation_target(
@@ -1027,13 +923,8 @@ def get_navigation_target(
     Returns:
         Element path, or None if not found.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             SELECT element_path FROM navigation_targets
@@ -1048,10 +939,6 @@ def get_navigation_target(
 
         return tuple(int(i) for i in row["element_path"].split("/") if i)
 
-    finally:
-        if own_conn:
-            conn.close()
-
 
 def increment_target_usage(
     recipe_id: str,
@@ -1065,13 +952,8 @@ def increment_target_usage(
         target_name: Name of the target.
         conn: SQLite connection.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             UPDATE navigation_targets
@@ -1085,11 +967,7 @@ def increment_target_usage(
                 target_name,
             ),
         )
-        conn.commit()
-
-    finally:
-        if own_conn:
-            conn.close()
+        c.commit()
 
 
 # =============================================================================
@@ -1100,7 +978,7 @@ def increment_target_usage(
 def get_recipe_stats(
     recipe_id: str,
     conn: sqlite3.Connection | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Get statistics for a recipe.
 
     Args:
@@ -1110,15 +988,10 @@ def get_recipe_stats(
     Returns:
         Dictionary with stats.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
 
-    try:
-        cursor = conn.cursor()
-
-        stats = {"recipe_id": recipe_id}
+        stats: dict[str, Any] = {"recipe_id": recipe_id}
 
         # Execution stats
         cursor.execute(
@@ -1146,17 +1019,15 @@ def get_recipe_stats(
             "SELECT COUNT(*) FROM recipe_versions WHERE recipe_id = ?",
             (recipe_id,),
         )
-        stats["version_count"] = cursor.fetchone()[0]
+        version_row = cursor.fetchone()
+        stats["version_count"] = int(version_row[0]) if version_row else 0
 
         # Navigation target count
         cursor.execute(
             "SELECT COUNT(*) FROM navigation_targets WHERE recipe_id = ?",
             (recipe_id,),
         )
-        stats["target_count"] = cursor.fetchone()[0]
+        target_row = cursor.fetchone()
+        stats["target_count"] = int(target_row[0]) if target_row else 0
 
         return stats
-
-    finally:
-        if own_conn:
-            conn.close()

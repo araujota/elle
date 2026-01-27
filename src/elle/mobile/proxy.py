@@ -158,7 +158,8 @@ class RequestProxy:
                     status_code=response.status,
                 )
 
-            return await response.json()
+            result: dict[str, Any] = await response.json()
+            return result
 
     async def _stream_request(
         self,
@@ -227,11 +228,14 @@ class RequestProxy:
         Returns:
             List of available models (filtered by role).
         """
-        response = await self.proxy_request(
+        result = await self.proxy_request(
             "GET",
             "/v1/models",
             auth,
         )
+
+        # This is a non-streaming request, so result is always a dict
+        response: dict[str, Any] = result  # type: ignore[assignment]
 
         # Filter models based on role
         from elle.mobile.roles import ROLE_ALLOWED_MODELS
@@ -255,7 +259,7 @@ class RequestProxy:
                 f"{self.internal_api_url}/health",
                 timeout=aiohttp.ClientTimeout(total=5),
             ) as response:
-                return response.status == 200
+                return bool(response.status == 200)
         except Exception:
             return False
 

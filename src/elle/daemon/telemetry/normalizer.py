@@ -303,11 +303,10 @@ class Normalizer:
         """
         self._dedupe_window = dedupe_window_sec
         self._recent_fingerprints: dict[str, datetime] = {}
-        self._stats = {
-            "processed": 0,
-            "deduplicated": 0,
-            "by_category": {},
-        }
+        # Stats counters
+        self._processed: int = 0
+        self._deduplicated: int = 0
+        self._by_category: dict[str, int] = {}
 
     def normalize(self, raw: dict[str, Any]) -> TelemetryEvent | None:
         """Normalize a raw event into a TelemetryEvent.
@@ -318,7 +317,7 @@ class Normalizer:
         Returns:
             TelemetryEvent or None if deduplicated.
         """
-        self._stats["processed"] += 1
+        self._processed += 1
 
         # Check for eBPF events - use specialized normalizer
         if raw.get("_SOURCE") == "ebpf":
@@ -356,15 +355,16 @@ class Normalizer:
 
         # Check deduplication
         if self._is_duplicate(fingerprint, ts):
-            self._stats["deduplicated"] += 1
+            self._deduplicated += 1
             return None
 
         # Track by category
-        self._stats["by_category"][category] = self._stats["by_category"].get(category, 0) + 1
+        self._by_category[category] = self._by_category.get(category, 0) + 1
+        # by_category already tracked via self._by_category
 
         return TelemetryEvent(
             ts=ts,
-            source=source,  # type: ignore
+            source=source,
             severity=severity,
             category=category,
             message=message,
@@ -445,11 +445,12 @@ class Normalizer:
 
         # Check deduplication
         if self._is_duplicate(event.fingerprint or "", event.ts):
-            self._stats["deduplicated"] += 1
+            self._deduplicated += 1
             return None
 
         # Track by category
-        self._stats["by_category"][event.category] = self._stats["by_category"].get(event.category, 0) + 1
+        self._by_category[event.category] = self._by_category.get(event.category, 0) + 1
+        # by_category already tracked via self._by_category
 
         return event
 
@@ -459,15 +460,17 @@ class Normalizer:
         Returns:
             Stats dictionary.
         """
-        return self._stats.copy()
+        return {
+            "processed": self._processed,
+            "deduplicated": self._deduplicated,
+            "by_category": self._by_category.copy(),
+        }
 
     def reset_stats(self) -> None:
         """Reset statistics counters."""
-        self._stats = {
-            "processed": 0,
-            "deduplicated": 0,
-            "by_category": {},
-        }
+        self._processed = 0
+        self._deduplicated = 0
+        self._by_category = {}
 
 
 # Module-level normalizer instance

@@ -187,7 +187,7 @@ def _send_via_libnotify(notification: Notification) -> NotificationResult:
 def _create_action_callback(
     action: NotificationAction,
     notification: Notification,
-) -> Callable:
+) -> Callable[..., None]:
     """Create a callback for notification action."""
 
     def callback(notif: Any, action_id: str, user_data: Any) -> None:
@@ -704,7 +704,7 @@ class NotificationService:
         """Initialize the notification service."""
         self._running = False
         self._queue: asyncio.Queue[Notification] = asyncio.Queue()
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
         self._history: list[tuple[Notification, NotificationResult]] = []
         self._max_history = 100
 

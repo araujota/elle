@@ -98,7 +98,7 @@ def _parse_size_to_mb(value: str, unit: str) -> float:
         return 0.0
 
 
-def _extract_packages(match: re.Match | None) -> tuple[str, ...]:
+def _extract_packages(match: re.Match[str] | None) -> tuple[str, ...]:
     """Extract package names from regex match.
 
     Args:

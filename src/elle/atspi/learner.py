@@ -401,7 +401,7 @@ class InteractiveLearner:
         self._learner = learner or RecipeLearner()
         self._recording = False
         self._recorded_elements: list[UIElement] = []
-        self._recorded_actions: list[dict] = []
+        self._recorded_actions: list[dict[str, Any]] = []
 
     def start_recording(self, app_name: str) -> bool:
         """Start recording user interactions.
@@ -419,7 +419,7 @@ class InteractiveLearner:
         logger.info(f"Started recording interactions for '{app_name}'")
         return True
 
-    def stop_recording(self) -> list[dict]:
+    def stop_recording(self) -> list[dict[str, Any]]:
         """Stop recording and return captured interactions.
 
         Returns:

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from elle.cli.fixit.models import (
     CommandFailure,
@@ -34,6 +34,7 @@ from elle.cli.fixit.prompts import BASE_SYSTEM_PROMPT, build_fixit_prompt, get_s
 from elle.cli.fixit.verifier import verify_analysis
 
 if TYPE_CHECKING:
+    from elle.capabilities.models import CapabilityResult
     from elle.common.session import Session
 
 logger = logging.getLogger(__name__)
@@ -192,7 +193,7 @@ class FixitService:
             stderr_keywords = self._extract_error_keywords(failure.stderr)
             query = f"{cmd_name} {' '.join(stderr_keywords[:5])} exit {failure.exit_code}"
 
-            async def search_via_daemon() -> list[dict]:
+            async def search_via_daemon() -> list[dict[str, Any]]:
                 if not await client.is_daemon_available():
                     return []
                 return await client.search_incidents(query=query, limit=5)
@@ -510,7 +511,7 @@ class FixitService:
     def _build_man_citations(
         self,
         context: FixitContext,
-    ) -> tuple:
+    ) -> tuple[Any, ...]:
         """Build ManPageCitation tuples from context.
 
         Args:
@@ -537,7 +538,7 @@ class FixitService:
     def _build_incident_citations(
         self,
         context: FixitContext,
-    ) -> tuple:
+    ) -> tuple[Any, ...]:
         """Build IncidentCitation tuples from context.
 
         Args:
@@ -601,6 +602,7 @@ class FixitService:
         overall = min(1.0, llm_conf * 0.5 + man_conf + incident_conf)
 
         # Determine dominant tier
+        dominant: Literal["fingerprint", "lexical", "semantic", "llm"]
         if incident_conf > man_conf and incident_conf > llm_conf * 0.3:
             dominant = "semantic" if provenance.prior_incidents else "llm"
         elif man_conf > llm_conf * 0.3:
@@ -811,7 +813,7 @@ class FixitService:
                 executor = get_executor()
                 cap = executor.registry.get(mapping.capability)
 
-                if cap:
+                if cap and mapping.capability:
                     from pydantic import BaseModel
 
                     class GenericInput(BaseModel):
@@ -819,10 +821,11 @@ class FixitService:
                             extra = "allow"
 
                     input_model = GenericInput(**(mapping.capability_input or {}))
+                    cap_name = mapping.capability  # Capture for closure
 
-                    async def run_cap():
+                    async def run_cap() -> CapabilityResult:
                         return await executor.execute(
-                            mapping.capability,
+                            cap_name,
                             input_model,
                             require_confirmation=False,
                         )

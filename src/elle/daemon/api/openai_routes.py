@@ -28,6 +28,7 @@ from elle.daemon.api.openai_models import (
     MODEL_TO_MODE,
     ChatCompletionRequest,
     ChatCompletionResponse,
+    ModelInfo,
     ModelsListResponse,
 )
 from elle.daemon.api.streaming import stream_chat_completion
@@ -66,7 +67,7 @@ def get_engine_adapter() -> EngineAdapter:
     return get_adapter()
 
 
-@openai_router.post(
+@openai_router.post(  # type: ignore[untyped-decorator]
     "/chat/completions",
     response_model=ChatCompletionResponse,
     response_model_exclude_none=True,
@@ -140,7 +141,7 @@ async def chat_completions(
         ) from e
 
 
-@openai_router.get(
+@openai_router.get(  # type: ignore[untyped-decorator]
     "/models",
     response_model=ModelsListResponse,
     responses={
@@ -164,8 +165,9 @@ async def list_models(
     return ModelsListResponse(data=ELLE_MODELS)
 
 
-@openai_router.get(
+@openai_router.get(  # type: ignore[untyped-decorator]
     "/models/{model_id}",
+    response_model=ModelInfo,
     responses={
         401: {"description": "Authentication required"},
         404: {"description": "Model not found"},
@@ -174,7 +176,7 @@ async def list_models(
 async def get_model(
     model_id: str,
     auth: AuthContext = Depends(get_auth_context),
-):
+) -> ModelInfo:
     """Get information about a specific model.
 
     Requires authentication.

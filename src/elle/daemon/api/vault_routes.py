@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
@@ -138,7 +138,7 @@ class IncidentSearchResponse(BaseModel):
 # ============================================================================
 
 
-@router.get(
+@router.get(  # type: ignore[untyped-decorator]
     "/manvault/status",
     response_model=ManVaultStatusResponse,
     responses={401: {"description": "Authentication required"}},
@@ -164,7 +164,7 @@ async def get_manvault_status(
     )
 
 
-@router.post(
+@router.post(  # type: ignore[untyped-decorator]
     "/manvault/reindex",
     response_model=ReindexResponse,
     responses={401: {"description": "Authentication required"}},
@@ -195,7 +195,7 @@ async def trigger_manvault_reindex(
     )
 
 
-@router.get(
+@router.get(  # type: ignore[untyped-decorator]
     "/manvault/search",
     response_model=ManVaultSearchResponse,
     responses={401: {"description": "Authentication required"}},
@@ -216,16 +216,18 @@ async def search_manvault(
         from elle.daemon.manvault import search
 
         # Perform search
+        # The search function uses `k` for limit and `search_type` for semantic mode
+        search_type: Literal["lexical", "semantic", "hybrid"] = "hybrid" if use_semantic else "lexical"
         results = search(
             query=q,
-            limit=limit,
-            semantic=use_semantic,
+            k=limit,
+            search_type=search_type,
         )
 
         return ManVaultSearchResponse(
             results=[
                 ManVaultSearchResult(
-                    command=r.command,
+                    command=r.name,  # ManSnippet uses 'name' not 'command'
                     section=r.section,
                     snippet=r.snippet[:500],  # Truncate long snippets
                     score=r.score,
@@ -246,7 +248,7 @@ async def search_manvault(
 # ============================================================================
 
 
-@router.get(
+@router.get(  # type: ignore[untyped-decorator]
     "/incidents/search",
     response_model=IncidentSearchResponse,
     responses={401: {"description": "Authentication required"}},
@@ -265,28 +267,28 @@ async def search_incidents(
     """
     _ = auth
     try:
-        from elle.daemon.incidents.store import search_incidents as do_search
+        from elle.daemon.incidents.retriever import search as do_search
 
         # Perform search
         results = do_search(
             query=q,
-            limit=limit,
+            k=limit,
             domain=domain,
-            semantic=use_semantic,
+            search_type="hybrid" if use_semantic else "lexical",
         )
 
         return IncidentSearchResponse(
             results=[
                 IncidentSearchResult(
-                    incident_id=r.incident_id,
-                    title=r.title,
-                    domain=r.domain,
-                    severity=r.severity,
-                    summary=r.summary,
-                    root_cause=r.root_cause,
-                    outcome=r.outcome,
-                    score=getattr(r, "score", 0.0),
-                    created_at=r.created_at,
+                    incident_id=r.incident.incident_id,
+                    title=r.incident.title,
+                    domain=r.incident.domain,
+                    severity=r.incident.severity,
+                    summary=r.incident.summary,
+                    root_cause=r.incident.root_cause,
+                    outcome=r.incident.outcome,
+                    score=r.score,
+                    created_at=r.incident.created_at,
                 )
                 for r in results
             ],

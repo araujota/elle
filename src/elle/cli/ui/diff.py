@@ -6,6 +6,7 @@ Displays unified diffs, config changes, and before/after comparisons.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any
 
 from rich.console import Group, RenderableType
 from rich.panel import Panel
@@ -263,7 +264,7 @@ def render_config_change(
 
 
 def render_config_changes(
-    changes: Sequence[dict],
+    changes: Sequence[dict[str, Any]],
     *,
     title: str = "Configuration Changes",
 ) -> Panel:
@@ -312,8 +313,8 @@ def render_config_changes(
 
 
 def render_snapshot_diff(
-    before: dict,
-    after: dict,
+    before: dict[str, Any],
+    after: dict[str, Any],
     *,
     fields: Sequence[str] | None = None,
 ) -> Table:

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Any
 
 from rich.box import MINIMAL, ROUNDED, SIMPLE
 from rich.table import Table
@@ -29,7 +30,7 @@ from elle.cli.ui.theme import Colors, Icons, Theme
 
 
 def incident_table(
-    incidents: Sequence[dict],
+    incidents: Sequence[dict[str, Any]],
     *,
     title: str | None = None,
     show_outcome: bool = True,
@@ -90,13 +91,13 @@ def incident_table(
             incident_id,
             domain_badge(domain),
             title_text,
-            status_badge(status),  # type: ignore[arg-type]
-            severity_badge(severity),  # type: ignore[arg-type]
+            status_badge(status),
+            severity_badge(severity),
         ]
 
         if show_outcome:
             if outcome:
-                row.append(outcome_badge(outcome))  # type: ignore[arg-type]
+                row.append(outcome_badge(outcome))
             else:
                 row.append(Text("-", style="muted"))
 
@@ -111,7 +112,7 @@ def incident_table(
 
 
 def incident_table_compact(
-    incidents: Sequence[dict],
+    incidents: Sequence[dict[str, Any]],
     *,
     max_rows: int = 5,
 ) -> Table:
@@ -167,7 +168,7 @@ def incident_table_compact(
 
 
 def event_table(
-    events: Sequence[dict],
+    events: Sequence[dict[str, Any]],
     *,
     title: str | None = None,
     max_message_width: int = 50,
@@ -236,7 +237,7 @@ def event_table(
 
 
 def manvault_results_table(
-    results: Sequence[dict],
+    results: Sequence[dict[str, Any]],
     *,
     title: str | None = None,
 ) -> Table:
@@ -291,7 +292,7 @@ def manvault_results_table(
 
 
 def disk_status_table(
-    disks: Sequence[dict],
+    disks: Sequence[dict[str, Any]],
     *,
     title: str = "Disk Usage",
 ) -> Table:
@@ -335,7 +336,7 @@ def disk_status_table(
 
 
 def service_status_table(
-    services: Sequence[dict],
+    services: Sequence[dict[str, Any]],
     *,
     title: str = "Services",
 ) -> Table:
@@ -380,7 +381,7 @@ def service_status_table(
 
 
 def interface_status_table(
-    interfaces: Sequence[dict],
+    interfaces: Sequence[dict[str, Any]],
     *,
     title: str = "Network Interfaces",
 ) -> Table:
@@ -434,7 +435,7 @@ def interface_status_table(
 
 
 def command_history_table(
-    commands: Sequence[dict],
+    commands: Sequence[dict[str, Any]],
     *,
     title: str | None = "Recent Commands",
     max_rows: int = 10,
@@ -534,7 +535,7 @@ def options_table(
 
 
 def snapshot_diff_table(
-    changes: Sequence[dict],
+    changes: Sequence[dict[str, Any]],
     *,
     title: str = "System Changes",
 ) -> Table:

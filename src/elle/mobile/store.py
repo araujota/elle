@@ -306,7 +306,8 @@ class MobileStore:
                 )
             else:
                 cursor = conn.execute("SELECT COUNT(*) FROM devices")
-            return cursor.fetchone()[0]
+            row = cursor.fetchone()
+            return int(row[0]) if row else 0
 
     def _row_to_device(self, row: sqlite3.Row) -> PairedDevice:
         """Convert a database row to a PairedDevice."""

@@ -605,7 +605,7 @@ def index_page(
         return True
 
     finally:
-        if own_conn:
+        if own_conn and conn is not None:
             conn.close()
 
 
@@ -669,7 +669,7 @@ def index_all(
         return count
 
     finally:
-        if own_conn:
+        if own_conn and conn is not None:
             conn.close()
 
 
@@ -745,7 +745,7 @@ def index_incremental(
         return added, updated
 
     finally:
-        if own_conn:
+        if own_conn and conn is not None:
             conn.close()
 
 
@@ -809,7 +809,7 @@ def seed_core_commands(
         return count
 
     finally:
-        if own_conn:
+        if own_conn and conn is not None:
             conn.close()
 
 
@@ -834,7 +834,7 @@ def get_seeded_count(conn: sqlite3.Connection | None = None) -> int:
                 count += 1
         return count
     finally:
-        if own_conn:
+        if own_conn and conn is not None:
             conn.close()
 
 

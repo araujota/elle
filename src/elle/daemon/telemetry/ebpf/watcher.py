@@ -183,7 +183,7 @@ class EBPFWatcher:
         Returns:
             Dict mapping program name to factory function.
         """
-        factories = {}
+        factories: dict[str, Any] = {}
 
         # OOM program
         try:

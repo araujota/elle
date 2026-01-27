@@ -9,7 +9,9 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
+
+from fastapi.responses import StreamingResponse
 
 from elle.daemon.api.openai_models import (
     ChatCompletionChunk,
@@ -21,6 +23,9 @@ from elle.daemon.api.openai_models import (
 if TYPE_CHECKING:
     from elle.daemon.api.auth import AuthContext
     from elle.daemon.api.engine_adapter import EngineAdapter
+
+# Type alias for valid finish reasons
+FinishReason = Literal["stop", "length", "tool_calls", "content_filter"] | None
 
 
 def _format_sse_chunk(data: str) -> str:
@@ -40,7 +45,7 @@ def _create_chunk(
     model: str,
     created: int,
     content: str | None = None,
-    finish_reason: str | None = None,
+    finish_reason: FinishReason = None,
 ) -> ChatCompletionChunk:
     """Create a streaming chunk.
 
@@ -55,7 +60,7 @@ def _create_chunk(
         ChatCompletionChunk for streaming.
     """
     delta = ChatMessage(
-        role="assistant" if content is None and finish_reason is None else None,
+        role="assistant",  # Streaming deltas always use assistant role
         content=content,
     )
 
@@ -79,7 +84,7 @@ async def stream_chat_completion(
     mode: ExecutionMode,
     auth: AuthContext,
     model: str,
-):
+) -> StreamingResponse:
     """Create a streaming response for chat completions.
 
     Streams the response as Server-Sent Events following the OpenAI
@@ -95,7 +100,6 @@ async def stream_chat_completion(
     Returns:
         StreamingResponse with SSE content.
     """
-    from fastapi.responses import StreamingResponse
 
     async def generate_chunks() -> AsyncIterator[str]:
         """Generate SSE chunks."""
@@ -166,7 +170,7 @@ async def stream_chat_completion(
 async def stream_error(
     error_message: str,
     model: str,
-):
+) -> StreamingResponse:
     """Create a streaming error response.
 
     Args:
@@ -176,7 +180,6 @@ async def stream_error(
     Returns:
         StreamingResponse with error content.
     """
-    from fastapi.responses import StreamingResponse
 
     async def generate_error() -> AsyncIterator[str]:
         completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"

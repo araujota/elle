@@ -18,10 +18,11 @@ import hashlib
 import logging
 import secrets
 import sqlite3
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -145,7 +146,7 @@ class ApiKeyStore:
             conn.commit()
 
     @contextmanager
-    def _connect(self):
+    def _connect(self) -> Generator[sqlite3.Connection, None, None]:
         """Context manager for database connections."""
         conn = sqlite3.connect(str(self._db_path))
         conn.row_factory = sqlite3.Row
@@ -249,7 +250,7 @@ class ApiKeyStore:
                 (key_id,),
             )
             conn.commit()
-            return cursor.rowcount > 0
+            return bool(cursor.rowcount > 0)
 
     def list_keys(self, include_revoked: bool = False) -> list[ApiKey]:
         """List all API keys.
@@ -281,7 +282,7 @@ class ApiKeyStore:
             ]
 
 
-def _get_peer_credentials(request) -> tuple[int, int] | None:
+def _get_peer_credentials(request: Request) -> tuple[int, int] | None:
     """Extract peer credentials from a Unix domain socket connection.
 
     Uses SO_PEERCRED socket option to get the connecting process's UID/GID.
@@ -326,7 +327,7 @@ def _get_peer_credentials(request) -> tuple[int, int] | None:
         return None
 
 
-def _extract_bearer_token(request) -> str | None:
+def _extract_bearer_token(request: Request) -> str | None:
     """Extract bearer token from Authorization header.
 
     Args:
@@ -337,7 +338,7 @@ def _extract_bearer_token(request) -> str | None:
     """
     auth_header = request.headers.get("Authorization", "")
     if auth_header.lower().startswith("bearer "):
-        return auth_header[7:].strip()
+        return str(auth_header[7:].strip())
     return None
 
 
@@ -383,7 +384,7 @@ class AuthMiddleware:
             self._key_store = ApiKeyStore(self._config.api_keys_db_path)
         return self._key_store
 
-    async def __call__(self, request) -> AuthContext:
+    async def __call__(self, request: Request) -> AuthContext:
         """Authenticate a request and return its auth context.
 
         Args:
@@ -429,7 +430,7 @@ class AuthMiddleware:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    def _auth_from_session_token(self, request) -> AuthContext | None:
+    def _auth_from_session_token(self, request: Request) -> AuthContext | None:
         """Authenticate using session token.
 
         Checks X-Elle-Token header or Bearer token for session token.
@@ -538,7 +539,7 @@ async def get_auth_context(request: Request) -> AuthContext:
     # Check if auth middleware has already been run
     auth = getattr(request.state, "auth_context", None)
     if auth is not None:
-        return auth
+        return cast(AuthContext, auth)
 
     # No auth configured - return anonymous
     return ANONYMOUS_AUTH

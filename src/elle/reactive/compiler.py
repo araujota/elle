@@ -195,8 +195,7 @@ class ReactiveFunctionCompiler:
             return "Available capabilities: notify.send (send notifications)"
 
         lines = ["Available capabilities:"]
-        for cap in capabilities:
-            spec = cap.spec
+        for spec in capabilities:
             lines.append(f"- {spec.name}: {spec.summary}")
 
         return "\n".join(lines)
@@ -341,8 +340,7 @@ class ReactiveFunctionCompiler:
             cap = self.registry.get(action.capability)
             if cap is None:
                 logger.warning(
-                    f"Unknown capability: {action.capability}. "
-                    f"Available: {[c.spec.name for c in self.registry.list_all()]}"
+                    f"Unknown capability: {action.capability}. Available: {[c.name for c in self.registry.list_all()]}"
                 )
                 # Don't raise - allow unknown capabilities for extensibility
                 # raise ValidationError(f"Unknown capability: {action.capability}")
@@ -435,7 +433,7 @@ def reset_compiler() -> None:
 
 async def compile_reactive_function(
     prompt: str,
-    **kwargs,
+    **kwargs: Any,
 ) -> ReactiveFunction:
     """Compile a natural language prompt to a ReactiveFunction.
 

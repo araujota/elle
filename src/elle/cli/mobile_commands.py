@@ -14,10 +14,14 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from elle.common.session import Session
+
+# Type alias for command handlers
+MobileHandler = Callable[[list[str], "Session"], tuple[str, bool]]
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +73,7 @@ def handle_mobile_command(user_input: str, session: Session) -> tuple[str, bool]
     subcommand = parts[1].lower()
 
     # Route to handler
-    handlers = {
+    handlers: dict[str, MobileHandler] = {
         "help": lambda p, s: (_mobile_help(), True),
         "up": lambda p, s: _mobile_up(p[2:], s),
         "start": lambda p, s: _mobile_up(p[2:], s),

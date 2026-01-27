@@ -286,9 +286,10 @@ class RebootManager:
         )
 
         # Refresh intent
-        intent = get_intent(intent.id)
-        if not intent:
+        refreshed_intent = get_intent(intent.id)
+        if not refreshed_intent:
             return None
+        intent = refreshed_intent
 
         # Run verification
         return await self._run_post_boot_verification(intent)
@@ -504,9 +505,19 @@ class RebootManager:
                 severity="error",
                 trigger_source="reboot_failure",
                 trigger_command=f"Reboot intent: {intent.id}",
-                symptoms=tuple(symptoms),
-                hypothesis=f"The reboot for '{intent.goal}' failed verification. "
-                f"Likely causes: {'; '.join(diagnostics.likely_causes[:3]) if diagnostics.likely_causes else 'Unknown'}",
+            )
+
+            # Update incident with symptoms and hypothesis via update_incident
+            from elle.daemon.incidents.store import update_incident
+
+            hypothesis = (
+                f"The reboot for '{intent.goal}' failed verification. "
+                f"Likely causes: {'; '.join(diagnostics.likely_causes[:3]) if diagnostics.likely_causes else 'Unknown'}"
+            )
+            update_incident(
+                incident.incident_id,
+                symptoms=list(symptoms),
+                summary=hypothesis,
             )
 
             # Attach pre-reboot snapshot if available
@@ -540,12 +551,9 @@ class RebootManager:
                 success=False,
             )
 
-            # Update intent with incident ID
-            update_intent_status(
-                intent.id,
-                status=intent.status,
-                incident_id=incident.incident_id,
-            )
+            # Note: The intent's incident_id is set at creation time.
+            # If we need to link back to a newly created incident, we would need to
+            # add incident_id parameter to update_intent_status or use a direct update.
 
             logger.info(f"Created failure incident: {incident.incident_id}")
             return incident.incident_id
@@ -576,7 +584,8 @@ class RebootManager:
         """
         diagnostics = self.get_last_diagnostics()
         if diagnostics:
-            return diagnostics.to_llm_context()
+            result = diagnostics.to_llm_context()
+            return str(result) if result is not None else None
         return None
 
     async def _initiate_rollback(

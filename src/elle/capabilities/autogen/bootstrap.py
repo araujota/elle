@@ -13,10 +13,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
 from elle.common.pydantic_compat import safe_model_dump_json
 
@@ -319,7 +321,7 @@ class BootstrapRunner:
 
         return packages
 
-    async def run(self, progress_callback=None) -> BootstrapResult:
+    async def run(self, progress_callback: Callable[[int, int, str], None] | None = None) -> BootstrapResult:
         """Run the bootstrap process.
 
         Args:
@@ -369,7 +371,7 @@ class BootstrapRunner:
 
         # Aggregate results
         for res in results:
-            if isinstance(res, Exception):
+            if isinstance(res, BaseException):
                 result.packages_failed += 1
                 continue
 
@@ -422,7 +424,7 @@ class BootstrapRunner:
             validate_capability,
         )
         from elle.capabilities.autogen.intelligence import get_aggregator
-        from elle.rag.llm import generate_json
+        from elle.rag.llm import LLM
         from elle.rag.prompts import get_composer
 
         # Gather intelligence
@@ -444,9 +446,13 @@ class BootstrapRunner:
 Focus on the most common and useful operations.
 Output valid JSON only."""
 
-        capabilities_json = await generate_json(
+        import asyncio
+
+        llm = LLM()
+        capabilities_json = await asyncio.to_thread(
+            llm.generate_json,
             user_prompt,
-            system_prompt=system_prompt,
+            system=system_prompt,
         )
 
         # Parse capabilities
@@ -535,7 +541,7 @@ async def run_bootstrap(
     include_optional: bool = True,
     include_dependencies: bool = True,
     skip_existing: bool = True,
-    progress_callback=None,
+    progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> BootstrapResult:
     """Run bootstrap capability generation.
 
@@ -576,7 +582,7 @@ def get_bootstrap_packages() -> list[tuple[str, str]]:
 _BOOTSTRAP_STATE_FILE = Path("/var/lib/elle/bootstrap_state.json")
 
 
-def get_bootstrap_state() -> dict:
+def get_bootstrap_state() -> dict[str, Any]:
     """Get the current bootstrap state.
 
     Returns:
@@ -588,7 +594,8 @@ def get_bootstrap_state() -> dict:
         return {"completed": False, "last_run": None, "version": None}
 
     try:
-        return json.loads(_BOOTSTRAP_STATE_FILE.read_text())
+        data = json.loads(_BOOTSTRAP_STATE_FILE.read_text())
+        return dict(data) if isinstance(data, dict) else {"completed": False, "last_run": None, "version": None}
     except Exception:
         return {"completed": False, "last_run": None, "version": None}
 

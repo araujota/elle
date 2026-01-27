@@ -4,7 +4,7 @@ Defines the primary data structures used across the system.
 """
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -20,7 +20,7 @@ class TelemetryEvent(BaseModel):
     severity: Literal["info", "warning", "error", "critical"]
     category: str
     message: str
-    raw: dict
+    raw: dict[str, Any]
 
 
 class CommandPlan(BaseModel):

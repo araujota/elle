@@ -68,14 +68,14 @@ def incident_citations_to_ui(
 
 def confidence_to_ui(
     confidence: ConfidenceBreakdown,
-) -> dict[str, float]:
+) -> dict[str, float | str]:
     """Convert ConfidenceBreakdown model to UI-compatible dict.
 
     Args:
         confidence: ConfidenceBreakdown model.
 
     Returns:
-        Dict with 'overall', 'from_man_vault', 'from_incident_vault', 'from_llm'.
+        Dict with 'overall', 'from_man_vault', 'from_incident_vault', 'from_llm', 'dominant_tier'.
     """
     return {
         "overall": confidence.overall,

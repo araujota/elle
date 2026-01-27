@@ -14,7 +14,7 @@ import uuid
 from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from elle.cli.engine import Engine, EngineResult, get_engine
 from elle.cli.terminal.classifier import IntentClassifier, get_classifier
@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 
 # Commands that are considered mutating (blocked in readonly mode)
-MUTATING_COMMAND_PATTERNS: tuple[re.Pattern, ...] = (
+MUTATING_COMMAND_PATTERNS: tuple[re.Pattern[str], ...] = (
     # File operations
     re.compile(r"^rm\b"),
     re.compile(r"^mv\b"),
@@ -617,7 +617,7 @@ def format_completion_response(
     )
 
     # Determine finish reason
-    finish_reason = "stop"
+    finish_reason: Literal["stop", "length", "tool_calls", "content_filter"] = "stop"
     if response.tool_calls:
         finish_reason = "tool_calls"
 

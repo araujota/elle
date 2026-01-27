@@ -35,7 +35,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import httpx
 from pydantic import BaseModel, ConfigDict
@@ -443,7 +443,7 @@ class LLM:
     def __enter__(self) -> LLM:
         return self
 
-    def __exit__(self, *args) -> None:
+    def __exit__(self, *args: Any) -> None:
         self.close()
 
     # -------------------------------------------------------------------------
@@ -779,7 +779,8 @@ class LLM:
             content = content[:-3]
         content = content.strip()
 
-        return json.loads(content)
+        result: dict[str, Any] = json.loads(content)
+        return result
 
     def _retry_json(
         self,
@@ -878,7 +879,12 @@ class LLM:
         normalized: list[Message] = []
         for msg in messages:
             if isinstance(msg, dict):
-                normalized.append(Message(role=msg["role"], content=msg["content"]))
+                normalized.append(
+                    Message(
+                        role=cast(Literal["system", "user", "assistant"], msg["role"]),
+                        content=msg["content"],
+                    )
+                )
             else:
                 normalized.append(msg)
 

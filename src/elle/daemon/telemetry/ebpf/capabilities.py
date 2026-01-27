@@ -91,7 +91,7 @@ def _check_capability(cap: int) -> bool:
         libc = ctypes.CDLL("libc.so.6", use_errno=True)
         PR_CAPBSET_READ = 23
         result = libc.prctl(PR_CAPBSET_READ, cap, 0, 0, 0)
-        return result == 1
+        return bool(result == 1)
     except Exception as e:
         logger.debug(f"Failed to check capability {cap}: {e}")
         return False

@@ -69,7 +69,7 @@ class WireguardWatcher:
         self._running = False
 
         # State tracking
-        self._previous_stats: dict[str, dict] = {}  # interface -> stats
+        self._previous_stats: dict[str, dict[str, Any]] = {}  # interface -> stats
         self._peer_states: dict[str, bool] = {}  # peer_pubkey -> is_online
 
     @property
@@ -195,7 +195,7 @@ class WireguardWatcher:
                 "peers": peers_dict,
             }
 
-    async def _get_wg_stats(self) -> dict[str, dict] | None:
+    async def _get_wg_stats(self) -> dict[str, dict[str, Any]] | None:
         """Get WireGuard stats via `wg show all dump`.
 
         Returns:
@@ -227,7 +227,7 @@ class WireguardWatcher:
             logger.error(f"Failed to get WireGuard stats: {e}")
             return None
 
-    def _parse_wg_dump(self, output: str) -> dict[str, dict]:
+    def _parse_wg_dump(self, output: str) -> dict[str, dict[str, Any]]:
         """Parse `wg show all dump` output.
 
         Format:
@@ -237,7 +237,7 @@ class WireguardWatcher:
         Returns:
             Dict mapping interface names to stats.
         """
-        stats: dict[str, dict] = {}
+        stats: dict[str, dict[str, Any]] = {}
         current_interface: str | None = None
 
         for line in output.strip().split("\n"):
@@ -345,14 +345,9 @@ def get_wireguard_summary() -> dict[str, Any] | None:
         peers_total = 0
         now = int(datetime.utcnow().timestamp())
 
-        interfaces = []
+        interfaces: list[dict[str, Any]] = []
         for name, iface_stats in stats.items():
-            interface_info = {
-                "name": name,
-                "listen_port": iface_stats.get("listen_port"),
-                "peer_count": len(iface_stats.get("peers", [])),
-                "peers_online": 0,
-            }
+            iface_peers_online = 0
 
             for peer in iface_stats.get("peers", []):
                 peers_total += 1
@@ -362,8 +357,14 @@ def get_wireguard_summary() -> dict[str, Any] | None:
                 last_handshake = peer.get("latest_handshake")
                 if last_handshake and (now - last_handshake) < HANDSHAKE_STALE_THRESHOLD:
                     peers_online += 1
-                    interface_info["peers_online"] += 1
+                    iface_peers_online += 1
 
+            interface_info: dict[str, Any] = {
+                "name": name,
+                "listen_port": iface_stats.get("listen_port"),
+                "peer_count": len(iface_stats.get("peers", [])),
+                "peers_online": iface_peers_online,
+            }
             interfaces.append(interface_info)
 
         return {

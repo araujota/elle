@@ -15,6 +15,7 @@ import os
 import shutil
 import time
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -219,7 +220,7 @@ class FileCopyOutput(BaseModel):
 # =============================================================================
 
 
-class FileReadCapability(BaseCapability):
+class FileReadCapability(BaseCapability[FileReadInput, FileReadOutput]):
     """Read contents of a file."""
 
     @property
@@ -313,7 +314,7 @@ class FileReadCapability(BaseCapability):
 # =============================================================================
 
 
-class FileWriteCapability(BaseCapability):
+class FileWriteCapability(BaseCapability[FileWriteInput, FileWriteOutput]):
     """Write content to a file."""
 
     @property
@@ -538,7 +539,7 @@ class FileWriteCapability(BaseCapability):
 # =============================================================================
 
 
-class FileDeleteCapability(BaseCapability):
+class FileDeleteCapability(BaseCapability[FileDeleteInput, FileDeleteOutput]):
     """Delete a file."""
 
     @property
@@ -713,7 +714,7 @@ class FileDeleteCapability(BaseCapability):
 # =============================================================================
 
 
-class FileCopyCapability(BaseCapability):
+class FileCopyCapability(BaseCapability[FileCopyInput, FileCopyOutput]):
     """Copy a file."""
 
     @property
@@ -922,7 +923,7 @@ class FileDiffOutput(BaseModel):
     previous_sha256: str = Field(default="", description="Previous file hash")
 
 
-class FileDiffCapability(BaseCapability):
+class FileDiffCapability(BaseCapability[FileDiffInput, FileDiffOutput]):
     """Generate unified diff for a file."""
 
     @property
@@ -980,17 +981,19 @@ class FileDiffCapability(BaseCapability):
             current_sha = hashlib.sha256(current_content.encode()).hexdigest()
 
             # Get previous content
+            previous_content: str
             if input.previous_content is not None:
                 previous_content = input.previous_content
             elif input.snapshot_id:
                 # Try to load from snapshot store
-                previous_content = self._get_snapshot_content(input.snapshot_id, input.path)
-                if previous_content is None:
+                snapshot_content = self._get_snapshot_content(input.snapshot_id, input.path)
+                if snapshot_content is None:
                     return CapabilityResult(
                         success=False,
                         error=f"Snapshot not found: {input.snapshot_id}",
                         execution_time_ms=int((time.time() - start_time) * 1000),
                     )
+                previous_content = snapshot_content
             else:
                 # No previous content - show as all new
                 previous_content = ""
@@ -1088,7 +1091,7 @@ class FileDiffCapability(BaseCapability):
 # =============================================================================
 
 # Simple in-memory snapshot store (could be backed by SQLite in production)
-_snapshot_store: dict[str, dict] = {}
+_snapshot_store: dict[str, dict[str, Any]] = {}
 
 
 class FileWatchSnapshotInput(BaseModel):
@@ -1115,7 +1118,7 @@ class FileWatchSnapshotOutput(BaseModel):
     timestamp: str = Field(description="Snapshot timestamp")
 
 
-class FileWatchSnapshotCapability(BaseCapability):
+class FileWatchSnapshotCapability(BaseCapability[FileWatchSnapshotInput, FileWatchSnapshotOutput]):
     """Take a snapshot of a file for later comparison."""
 
     @property

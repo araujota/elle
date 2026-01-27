@@ -72,13 +72,13 @@ class ParsedFlag(BaseModel, frozen=True):
     """A parsed command-line flag from man page."""
 
     name: str = Field(..., description="Flag name without dashes")
-    short: str | None = Field(None, description="Short form (e.g., '-v')")
-    long: str | None = Field(None, description="Long form (e.g., '--verbose')")
-    flag_type: FlagType = Field(FlagType.BOOL, description="Inferred type")
-    description: str = Field("", description="Flag description from man page")
-    required: bool = Field(False, description="Whether flag is required")
-    default: Any = Field(None, description="Default value if known")
-    metavar: str | None = Field(None, description="Argument placeholder (e.g., 'FILE')")
+    short: str | None = Field(default=None, description="Short form (e.g., '-v')")
+    long: str | None = Field(default=None, description="Long form (e.g., '--verbose')")
+    flag_type: FlagType = Field(default=FlagType.BOOL, description="Inferred type")
+    description: str = Field(default="", description="Flag description from man page")
+    required: bool = Field(default=False, description="Whether flag is required")
+    default: Any = Field(default=None, description="Default value if known")
+    metavar: str | None = Field(default=None, description="Argument placeholder (e.g., 'FILE')")
 
 
 class ParsedSynopsis(BaseModel, frozen=True):

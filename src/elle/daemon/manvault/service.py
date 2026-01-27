@@ -63,7 +63,7 @@ class ManVaultService:
         self._indexing = False
         self._embedding = False
         self._stop_requested = False
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
         self._embedder: ManVaultEmbedder | None = None
         self._last_incremental: datetime | None = None
 

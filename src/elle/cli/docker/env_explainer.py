@@ -164,10 +164,10 @@ class EnvVarExplainer:
 
         # Fall back to LLM
         try:
-            explanation = self._explain_with_llm(var_name, image)
-            if explanation:
-                self._cache[cache_key] = explanation
-                return explanation
+            llm_explanation = self._explain_with_llm(var_name, image)
+            if llm_explanation:
+                self._cache[cache_key] = llm_explanation
+                return llm_explanation
         except Exception as e:
             logger.warning(f"LLM explanation failed for {var_name}: {e}")
 

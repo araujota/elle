@@ -70,7 +70,7 @@ def get_version() -> str | None:
         try:
             # Version is typically available via /augeas/version
             version = a.get("/augeas/version")
-            return version
+            return str(version) if version is not None else None
         finally:
             a.close()
     except Exception:
@@ -245,7 +245,8 @@ class AugeasEngine:
             Value at the path, or None if not found.
         """
         aug = self._ensure_open()
-        return aug.get(path)
+        result = aug.get(path)
+        return str(result) if result is not None else None
 
     def match(self, pattern: str) -> list[str]:
         """Find all paths matching a pattern.
@@ -389,7 +390,7 @@ class AugeasEngine:
             )
             logger.debug(f"Removed {path} ({count} nodes)")
 
-        return count
+        return int(count)
 
     def insert(
         self,
@@ -528,7 +529,7 @@ class AugeasEngine:
         content = aug.get(text_path)
 
         if content is not None:
-            return content
+            return str(content)
 
         # Fallback: Read the actual file if text transform not available
         # This won't reflect pending changes

@@ -138,7 +138,7 @@ class PreflightValidator:
             )
 
         # Run validation
-        return self._run_tiered_validation(test, tier, risk)
+        return self._run_tiered_validation(test, tier, risk.level)
 
     def _select_tier(
         self,
@@ -181,7 +181,7 @@ class PreflightValidator:
         self,
         test: PreflightTest,
         tier: int,
-        risk,
+        risk: RiskLevel,
     ) -> PreflightResult:
         """Run validation at the specified tier.
 
@@ -203,7 +203,7 @@ class PreflightValidator:
         # For tier 1 only, return apt result
         if tier == 1:
             # Add risk-based warning if high risk
-            if risk.level in (RiskLevel.HIGH, RiskLevel.CRITICAL):
+            if risk in (RiskLevel.HIGH, RiskLevel.CRITICAL):
                 issues = list(apt_result.issues)
                 issues.append(
                     PreflightIssue(

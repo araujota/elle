@@ -154,13 +154,15 @@ class BackupManager:
         Raises:
             AugeasBackupError: If restore fails.
         """
+        original_path: Path
         if isinstance(backup, BackupRecord):
             backup_path = Path(backup.backup_path)
             original_path = Path(target_path or backup.original_path)
         else:
             backup_path = Path(backup)
-            original_path = Path(target_path) if target_path else None
-            if original_path is None:
+            if target_path:
+                original_path = Path(target_path)
+            else:
                 raise AugeasBackupError("restore", str(backup_path), "Target path not specified")
 
         if not backup_path.exists():

@@ -48,6 +48,17 @@ def verify_step(step: PlanStep, step_index: int) -> StepVerification:
     Returns:
         StepVerification with results.
     """
+    # Early return if no command
+    if step.command is None:
+        return StepVerification(
+            step_index=step_index,
+            command="",
+            is_valid=False,
+            checks_passed=(),
+            checks_failed=("No command specified",),
+            warnings=(),
+        )
+
     command = step.command
     checks_passed: list[str] = []
     checks_failed: list[str] = []
@@ -391,6 +402,8 @@ def _requires_rollback(plan: CommandPlan) -> bool:
         True if rollback is required.
     """
     for step in plan.steps:
+        if step.command is None:
+            continue
         command_lower = step.command.lower()
         for pattern in REQUIRES_ROLLBACK:
             if pattern in command_lower:

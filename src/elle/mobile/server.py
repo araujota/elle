@@ -150,6 +150,9 @@ class GatewayServer:
             return False
 
         pid = status.pid
+        if pid is None:
+            logger.warning("No PID available for gateway")
+            return False
         try:
             # Send SIGTERM
             os.kill(pid, signal.SIGTERM)

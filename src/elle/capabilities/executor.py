@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
@@ -40,7 +40,10 @@ from elle.capabilities.registry import CapabilityRegistry, get_registry
 if TYPE_CHECKING:
     from elle.capabilities.dependencies.checker import DependencyChecker
     from elle.capabilities.protocol import Capability
-    from elle.daemon.incidents.store import IncidentStore
+
+# IncidentStore class was refactored to standalone functions
+# Using Any for backwards compatibility until full migration
+IncidentStore = Any
 
 logger = logging.getLogger(__name__)
 
@@ -298,8 +301,8 @@ class CapabilityExecutor:
         if check_dependencies and spec.dependencies:
             missing_results = []
             for dep_name in spec.dependencies:
-                result = self.dependency_checker.check(dep_name)
-                if not result.available:
+                dep_result = self.dependency_checker.check(dep_name)
+                if not dep_result.available:
                     missing_results.append(dep_name)
             missing_deps = tuple(missing_results)
 
@@ -348,7 +351,7 @@ class CapabilityExecutor:
     async def _record_action(
         self,
         incident_id: str,
-        capability: Capability,
+        capability: Capability[Any, Any],
         input: BaseModel,
         result: CapabilityResult,
     ) -> None:
@@ -418,7 +421,7 @@ def reset_executor() -> None:
 async def execute_capability(
     capability_name: str,
     input: BaseModel,
-    **kwargs,
+    **kwargs: Any,
 ) -> CapabilityResult:
     """Execute a capability (convenience function).
 

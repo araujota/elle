@@ -5,10 +5,12 @@ all routes and middleware, including the OpenAI-compatible
 chat completions endpoint.
 """
 
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 
 from elle.daemon.api.auth import AuthMiddleware
 from elle.daemon.api.engine_adapter import get_adapter
@@ -65,13 +67,14 @@ def create_app(daemon: "ElledDaemon") -> FastAPI:
         session_token=session_token,
     )
 
-    @app.middleware("http")
-    async def auth_middleware_handler(request: Request, call_next):
+    @app.middleware("http")  # type: ignore[untyped-decorator]
+    async def auth_middleware_handler(request: Request, call_next: Callable[[Request], Any]) -> Response:
         """Middleware to authenticate requests and attach auth context."""
         # Skip auth for docs (local development only) and health endpoints
         # Note: /docs and /redoc are only exposed on localhost
         if request.url.path in ("/docs", "/redoc", "/openapi.json", "/v1/health", "/"):
-            return await call_next(request)
+            response: Response = await call_next(request)
+            return response
 
         try:
             auth_context = await auth_middleware(request)
@@ -87,7 +90,8 @@ def create_app(daemon: "ElledDaemon") -> FastAPI:
 
             logging.getLogger(__name__).debug(f"Auth middleware error: {e}")
 
-        return await call_next(request)
+        response = await call_next(request)
+        return response
 
     # Set daemon reference for routes
     set_daemon(daemon)
@@ -117,7 +121,7 @@ def create_app(daemon: "ElledDaemon") -> FastAPI:
     app.include_router(openai_router)
 
     # Root redirect to docs
-    @app.get("/", include_in_schema=False)
+    @app.get("/", include_in_schema=False)  # type: ignore[untyped-decorator]
     async def root() -> dict[str, str]:
         return {
             "message": "elled API - see /docs for documentation",

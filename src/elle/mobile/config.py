@@ -7,6 +7,7 @@ functions for loading configuration from TOML files and environment.
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -48,7 +49,7 @@ class MobileGatewayConfig:
     rate_limit_pairing: int = 5  # Max pairing attempts per minute
 
 
-def load_mobile_config(toml_data: dict | None = None) -> MobileGatewayConfig:
+def load_mobile_config(toml_data: dict[str, Any] | None = None) -> MobileGatewayConfig:
     """Load mobile gateway configuration from TOML data and environment.
 
     Args:
@@ -61,7 +62,7 @@ def load_mobile_config(toml_data: dict | None = None) -> MobileGatewayConfig:
     if toml_data:
         mobile_section = toml_data.get("mobile", {})
 
-    def get_val(key: str, default, env_key: str | None = None):
+    def get_val(key: str, default: Any, env_key: str | None = None) -> Any:
         """Get value from env, then TOML, then default."""
         env_name = f"ELLE_MOBILE_{env_key or key.upper()}"
         env_val = os.environ.get(env_name)

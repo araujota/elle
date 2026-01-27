@@ -5,7 +5,10 @@ and generate forecasts from telemetry data.
 """
 
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timedelta
+from typing import Literal
 
 from elle.daemon.telemetry.schema import ensure_schema, get_connection
 from elle.daemon.telemetry.trends import (
@@ -19,6 +22,25 @@ from elle.daemon.telemetry.trends import (
     TrendContext,
     TrendWindow,
 )
+
+
+@contextmanager
+def _ensure_connection(
+    conn: sqlite3.Connection | None = None,
+) -> Iterator[sqlite3.Connection]:
+    """Context manager that ensures a valid connection."""
+    own_conn = conn is None
+    if own_conn:
+        actual_conn = get_connection()
+    else:
+        # conn is not None here due to the if check above
+        actual_conn = conn  # type: ignore[assignment]
+    try:
+        yield actual_conn
+    finally:
+        if own_conn:
+            actual_conn.close()
+
 
 # =============================================================================
 # Schema for aggregations
@@ -170,17 +192,15 @@ def record_metric(
         ts: Timestamp (defaults to now).
         conn: SQLite connection.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-        ensure_aggregation_schema(conn)
+    with _ensure_connection(conn) as c:
+        if conn is None:
+            ensure_schema(c)
+            ensure_aggregation_schema(c)
 
-    try:
         if ts is None:
             ts = datetime.utcnow()
 
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(
             """
             INSERT INTO metric_samples (metric, value, ts)
@@ -188,11 +208,7 @@ def record_metric(
             """,
             (metric, value, _serialize_datetime(ts)),
         )
-        conn.commit()
-
-    finally:
-        if own_conn:
-            conn.close()
+        c.commit()
 
 
 def record_metrics_batch(
@@ -207,18 +223,16 @@ def record_metrics_batch(
         ts: Timestamp for all metrics.
         conn: SQLite connection.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-        ensure_aggregation_schema(conn)
+    with _ensure_connection(conn) as c:
+        if conn is None:
+            ensure_schema(c)
+            ensure_aggregation_schema(c)
 
-    try:
         if ts is None:
             ts = datetime.utcnow()
 
         ts_str = _serialize_datetime(ts)
-        cursor = conn.cursor()
+        cursor = c.cursor()
 
         for metric, value in metrics.items():
             cursor.execute(
@@ -229,11 +243,7 @@ def record_metrics_batch(
                 (metric, value, ts_str),
             )
 
-        conn.commit()
-
-    finally:
-        if own_conn:
-            conn.close()
+        c.commit()
 
 
 # =============================================================================
@@ -275,18 +285,16 @@ class TrendAggregator:
         Returns:
             TrendContext with current trends.
         """
-        own_conn = conn is None
-        if own_conn:
-            conn = get_connection()
-            ensure_schema(conn)
-            ensure_aggregation_schema(conn)
+        with _ensure_connection(conn) as c:
+            if conn is None:
+                ensure_schema(c)
+                ensure_aggregation_schema(c)
 
-        try:
             now = datetime.utcnow()
 
             # Collect and record current metrics
             current_metrics = collect_system_metrics()
-            record_metrics_batch(current_metrics, ts=now, conn=conn)
+            record_metrics_batch(current_metrics, ts=now, conn=c)
 
             # Compute aggregations for each tracked metric
             disk_trends: dict[str, TrendWindow] = {}
@@ -303,7 +311,7 @@ class TrendAggregator:
                     continue
 
                 # Compute window stats
-                trend = self._compute_trend_window(metric, current_value, now, conn)
+                trend = self._compute_trend_window(metric, current_value, now, c)
 
                 # Categorize trend
                 if metric.startswith("disk."):
@@ -318,7 +326,7 @@ class TrendAggregator:
 
                 # Generate forecast for disk metrics
                 if metric.startswith("disk."):
-                    forecast = self._compute_forecast(metric, trend, conn)
+                    forecast = self._compute_forecast(metric, trend, c)
                     forecasts[metric] = forecast
 
                     # Check for warnings
@@ -331,15 +339,15 @@ class TrendAggregator:
                         warnings.append(f"{metric}: Will reach {forecast.threshold}% in ~{hours:.0f} hours")
 
                 # Check for anomalies
-                anomaly = self._check_anomaly(metric, current_value, now, conn)
+                anomaly = self._check_anomaly(metric, current_value, now, c)
                 if anomaly and anomaly.is_anomaly:
                     anomalies.append(anomaly)
 
                 # Update baseline
-                self._update_baseline(metric, current_value, conn)
+                self._update_baseline(metric, current_value, c)
 
             # Update aggregation tables
-            self._store_aggregations(conn)
+            self._store_aggregations(c)
 
             self._last_run = now
 
@@ -354,10 +362,6 @@ class TrendAggregator:
                 warning_messages=tuple(warnings),
                 computed_at=now,
             )
-
-        finally:
-            if own_conn:
-                conn.close()
 
     def _compute_trend_window(
         self,
@@ -397,8 +401,10 @@ class TrendAggregator:
 
         # Compute rate of change (using 1h and 6h averages)
         rate = 0.0
-        if averages.get("1h") is not None and averages.get("6h") is not None:
-            diff = averages["1h"] - averages["6h"]
+        avg_1h = averages.get("1h")
+        avg_6h = averages.get("6h")
+        if avg_1h is not None and avg_6h is not None:
+            diff = avg_1h - avg_6h
             rate = diff / 5.0  # Change over 5 hours
 
         # Check for anomaly
@@ -489,6 +495,7 @@ class TrendAggregator:
         z_score = (current_value - baseline.baseline_mean) / baseline.baseline_stddev
         is_anomaly = abs(z_score) > self.config.anomaly_z_threshold
 
+        direction: Literal["above", "below", "normal"]
         if z_score > 0:
             direction = "above"
         elif z_score < 0:
@@ -647,14 +654,12 @@ def get_metric_trend(
     Returns:
         TrendWindow if metric exists, None otherwise.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-        ensure_aggregation_schema(conn)
+    with _ensure_connection(conn) as c:
+        if conn is None:
+            ensure_schema(c)
+            ensure_aggregation_schema(c)
 
-    try:
-        cursor = conn.cursor()
+        cursor = c.cursor()
 
         # Get current value
         cursor.execute(
@@ -669,7 +674,7 @@ def get_metric_trend(
         if not row:
             return None
 
-        current = row["value"]
+        current: float = row["value"]
 
         # Get aggregations
         cursor.execute(
@@ -690,10 +695,6 @@ def get_metric_trend(
             avg_7d=aggregations.get("7d"),
         )
 
-    finally:
-        if own_conn:
-            conn.close()
-
 
 def cleanup_old_samples(
     retention_hours: int = 168,
@@ -708,23 +709,17 @@ def cleanup_old_samples(
     Returns:
         Number of rows deleted.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-        ensure_aggregation_schema(conn)
+    with _ensure_connection(conn) as c:
+        if conn is None:
+            ensure_schema(c)
+            ensure_aggregation_schema(c)
 
-    try:
         cutoff = datetime.utcnow() - timedelta(hours=retention_hours)
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(
             "DELETE FROM metric_samples WHERE ts < ?",
             (_serialize_datetime(cutoff),),
         )
-        deleted = cursor.rowcount
-        conn.commit()
+        deleted: int = cursor.rowcount
+        c.commit()
         return deleted
-
-    finally:
-        if own_conn:
-            conn.close()

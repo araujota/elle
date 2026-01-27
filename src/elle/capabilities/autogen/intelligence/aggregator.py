@@ -24,6 +24,7 @@ from elle.capabilities.autogen.intelligence.models import (
     PackageIntelligence,
     PackageMetadata,
     ShellCompletions,
+    SystemdUnitInfo,
 )
 
 logger = logging.getLogger(__name__)
@@ -141,7 +142,7 @@ class IntelligenceAggregator:
                     completions = result.completions
 
         # Collect systemd units
-        systemd_units = []
+        systemd_units: list[SystemdUnitInfo] = []
         for result in results:
             if result.success and result.systemd_units:
                 systemd_units.extend(result.systemd_units)
@@ -152,6 +153,8 @@ class IntelligenceAggregator:
                 name=package_name,
                 version="unknown",
                 description="",
+                section=None,
+                homepage=None,
             )
 
         if manifest is None:

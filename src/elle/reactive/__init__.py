@@ -33,6 +33,8 @@ Example usage:
     )
 """
 
+from typing import TYPE_CHECKING
+
 from elle.reactive.models import (
     ActionResult,
     # Action models
@@ -58,30 +60,36 @@ from elle.reactive.models import (
     TriggerType,
 )
 
+if TYPE_CHECKING:
+    from elle.reactive.compiler import ReactiveFunctionCompiler
+    from elle.reactive.engine import ReactiveEngine
+    from elle.reactive.evaluator import ConditionEvaluator
+    from elle.reactive.scheduler import ReactiveScheduler
+
 
 # Lazy imports for heavy modules
-def get_engine():
+def get_engine() -> "ReactiveEngine":
     """Get the singleton ReactiveEngine instance."""
     from elle.reactive.engine import get_engine as _get_engine
 
     return _get_engine()
 
 
-def get_evaluator():
+def get_evaluator() -> "ConditionEvaluator":
     """Get the singleton ConditionEvaluator instance."""
     from elle.reactive.evaluator import get_evaluator as _get_evaluator
 
     return _get_evaluator()
 
 
-def get_compiler():
+def get_compiler() -> "ReactiveFunctionCompiler":
     """Get the singleton ReactiveFunctionCompiler instance."""
     from elle.reactive.compiler import get_compiler as _get_compiler
 
     return _get_compiler()
 
 
-def get_scheduler():
+def get_scheduler() -> "ReactiveScheduler":
     """Get the singleton ReactiveScheduler instance."""
     from elle.reactive.scheduler import get_scheduler as _get_scheduler
 

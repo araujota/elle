@@ -20,6 +20,7 @@ import logging
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -772,7 +773,7 @@ class IntentClassifier:
 
     def _parse_slm_response(
         self,
-        data: dict,
+        data: dict[str, Any],
         latency_ms: float | None = None,
     ) -> IntentResult:
         """Parse SLM JSON response into IntentResult."""

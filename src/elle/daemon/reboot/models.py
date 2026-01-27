@@ -528,8 +528,9 @@ class FailureDiagnostics(BaseModel):
             sections.append("\n### Failed Verification Checks")
             for check in self.failed_checks:
                 sections.append(f"  - [{check.get('check_type')}] {check.get('check_command')}")
-                if check.get("stderr"):
-                    sections.append(f"    stderr: {check.get('stderr')[:200]}")
+                stderr_val = check.get("stderr")
+                if stderr_val:
+                    sections.append(f"    stderr: {str(stderr_val)[:200]}")
 
         if self.dmesg_errors:
             sections.append("\n### Kernel Errors (dmesg)")

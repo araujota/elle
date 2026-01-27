@@ -255,7 +255,7 @@ class BCCProgram(ABC):
 
         try:
             rb_name = self._get_ring_buffer_name()
-            return self._bpf[rb_name].ring_buffer_poll(timeout=timeout_ms)
+            return int(self._bpf[rb_name].ring_buffer_poll(timeout=timeout_ms))
         except Exception as e:
             logger.debug(f"Poll error in {self.name}: {e}")
             self._errors_count += 1

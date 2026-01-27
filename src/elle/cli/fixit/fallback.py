@@ -18,7 +18,7 @@ pre-defined suggestions.
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from elle.cli.fixit.models import (
     ErrorCategory,
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 # Patterns that match common errors
 # IMPORTANT: More specific patterns MUST come BEFORE generic patterns!
 # The first matching pattern wins, so order matters.
-ERROR_PATTERNS: list[tuple[re.Pattern, ErrorCategory, str]] = [
+ERROR_PATTERNS: list[tuple[re.Pattern[str], ErrorCategory, str]] = [
     # ==========================================================================
     # SPECIFIC PATTERNS FIRST (before generic patterns that might mask them)
     # ==========================================================================
@@ -164,7 +164,7 @@ ERROR_PATTERNS: list[tuple[re.Pattern, ErrorCategory, str]] = [
 
 
 # Suggested fixes for each error category
-CATEGORY_FIXES: dict[ErrorCategory, list[dict]] = {
+CATEGORY_FIXES: dict[ErrorCategory, list[dict[str, Any]]] = {
     "command_not_found": [
         {
             "command": "which {cmd}",
@@ -727,7 +727,7 @@ def extract_context_values(context: FixitContext) -> dict[str, str]:
     }
 
 
-def build_fix_command(template: dict, values: dict[str, str]) -> FixCommand:
+def build_fix_command(template: dict[str, Any], values: dict[str, str]) -> FixCommand:
     """Build a FixCommand from a template.
 
     Args:

@@ -7,7 +7,7 @@ for LLM-based command plan generation.
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from elle.cli.planner.models import PlanContext
@@ -242,7 +242,7 @@ def build_planner_prompt(context: PlanContext) -> str:
     )
 
 
-def get_schema_hint() -> dict:
+def get_schema_hint() -> dict[str, Any]:
     """Get the schema hint for generate_json().
 
     Returns a simplified schema dict for the LLM's schema hint parameter.

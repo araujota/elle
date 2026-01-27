@@ -6,7 +6,7 @@ Uses Protocol for structural subtyping to allow flexible implementations.
 
 from __future__ import annotations
 
-from typing import Protocol, TypeVar, runtime_checkable
+from typing import Generic, Protocol, TypeVar, runtime_checkable
 
 from pydantic import BaseModel
 
@@ -19,8 +19,10 @@ from elle.capabilities.models import (
 )
 
 # Type variables for generic capability typing
-TInput = TypeVar("TInput", bound=BaseModel)
-TOutput = TypeVar("TOutput", bound=BaseModel)
+# TInput is contravariant (used in method parameters)
+# TOutput is covariant (used in return types)
+TInput = TypeVar("TInput", bound=BaseModel, contravariant=True)
+TOutput = TypeVar("TOutput", bound=BaseModel, covariant=True)
 
 
 @runtime_checkable
@@ -141,7 +143,7 @@ class Capability(Protocol[TInput, TOutput]):
         ...
 
 
-class BaseCapability:
+class BaseCapability(Generic[TInput, TOutput]):
     """Base class providing default implementations for capabilities.
 
     Provides sensible defaults for verify() and rollback() that
@@ -149,6 +151,10 @@ class BaseCapability:
     - spec property
     - dry_run()
     - run()
+
+    Type Parameters:
+        TInput: The Pydantic model type for capability input
+        TOutput: The Pydantic model type for capability output
     """
 
     @property
@@ -156,15 +162,15 @@ class BaseCapability:
         """Return capability metadata. Must be overridden."""
         raise NotImplementedError("Subclasses must implement spec property")
 
-    def dry_run(self, input: BaseModel) -> DryRunResult:
+    def dry_run(self, input: TInput) -> DryRunResult:
         """Preview changes. Must be overridden."""
         raise NotImplementedError("Subclasses must implement dry_run()")
 
-    def run(self, input: BaseModel) -> CapabilityResult:
+    def run(self, input: TInput) -> CapabilityResult:
         """Execute capability. Must be overridden."""
         raise NotImplementedError("Subclasses must implement run()")
 
-    def verify(self, input: BaseModel) -> VerificationResult:
+    def verify(self, input: TInput) -> VerificationResult:
         """Default verification - returns passed with no checks.
 
         Subclasses should override for meaningful verification.
@@ -179,7 +185,7 @@ class BaseCapability:
 
     def rollback(
         self,
-        input: BaseModel,
+        input: TInput,
         result: CapabilityResult,
     ) -> RollbackResult:
         """Default rollback - returns failure (not supported).

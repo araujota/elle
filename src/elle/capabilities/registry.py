@@ -10,7 +10,7 @@ Provides a central registry for capabilities, enabling:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from elle.capabilities.exceptions import (
     CapabilityNotFoundError,
@@ -47,11 +47,11 @@ class CapabilityRegistry:
 
     def __init__(self) -> None:
         """Initialize an empty registry."""
-        self._capabilities: dict[str, type[Capability]] = {}
+        self._capabilities: dict[str, type[Capability[Any, Any]]] = {}
         self._by_domain: dict[CapabilityDomain, list[str]] = {}
-        self._instances: dict[str, Capability] = {}  # Cached instances
+        self._instances: dict[str, Capability[Any, Any]] = {}  # Cached instances
 
-    def register(self, capability_class: type[Capability]) -> None:
+    def register(self, capability_class: type[Capability[Any, Any]]) -> None:
         """Register a capability implementation.
 
         Args:
@@ -107,7 +107,7 @@ class CapabilityRegistry:
         logger.debug(f"Unregistered capability: {name}")
         return True
 
-    def get(self, name: str) -> Capability | None:
+    def get(self, name: str) -> Capability[Any, Any] | None:
         """Get capability by name.
 
         Returns a cached instance if available, otherwise creates one.
@@ -135,7 +135,7 @@ class CapabilityRegistry:
             logger.error(f"Failed to instantiate capability {name}: {e}")
             return None
 
-    def get_or_raise(self, name: str) -> Capability:
+    def get_or_raise(self, name: str) -> Capability[Any, Any]:
         """Get capability by name, raising if not found.
 
         Args:

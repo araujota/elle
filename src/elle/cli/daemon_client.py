@@ -424,7 +424,8 @@ class DaemonClient:
             response = await client.get("/v1/manvault/status")
 
             if response.status_code == 200:
-                return response.json()
+                result: dict[str, Any] = response.json()
+                return result
             else:
                 return {"error": f"Daemon returned {response.status_code}"}
 
@@ -457,7 +458,8 @@ class DaemonClient:
 
             if response.status_code == 200:
                 data = response.json()
-                return data.get("results", [])
+                results: list[dict[str, Any]] = data.get("results", [])
+                return results
             else:
                 logger.warning(f"Daemon returned {response.status_code} for manvault search")
                 return []
@@ -498,7 +500,8 @@ class DaemonClient:
 
             if response.status_code == 200:
                 data = response.json()
-                return data.get("results", [])
+                incidents: list[dict[str, Any]] = data.get("results", [])
+                return incidents
             else:
                 logger.warning(f"Daemon returned {response.status_code} for incident search")
                 return []

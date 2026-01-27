@@ -17,19 +17,19 @@ Capabilities are organized by domain:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from elle.capabilities.protocol import Capability
 
 
-def get_core_capabilities() -> list[type[Capability]]:
+def get_core_capabilities() -> list[type[Capability[Any, Any]]]:
     """Get all core capability classes.
 
     Returns:
         List of capability classes to register.
     """
-    capabilities: list[type[Capability]] = []
+    capabilities: list[type[Capability[Any, Any]]] = []
 
     # Service capabilities
     try:
@@ -43,7 +43,7 @@ def get_core_capabilities() -> list[type[Capability]]:
     try:
         from elle.capabilities.core.file import FILE_CAPABILITIES
 
-        capabilities.extend(FILE_CAPABILITIES)
+        capabilities.extend(FILE_CAPABILITIES)  # type: ignore[arg-type]
     except ImportError:
         pass
 
@@ -51,7 +51,7 @@ def get_core_capabilities() -> list[type[Capability]]:
     try:
         from elle.capabilities.core.config import CONFIG_CAPABILITIES
 
-        capabilities.extend(CONFIG_CAPABILITIES)
+        capabilities.extend(CONFIG_CAPABILITIES)  # type: ignore[arg-type]
     except ImportError:
         pass
 
@@ -59,7 +59,7 @@ def get_core_capabilities() -> list[type[Capability]]:
     try:
         from elle.capabilities.core.package import PACKAGE_CAPABILITIES
 
-        capabilities.extend(PACKAGE_CAPABILITIES)
+        capabilities.extend(PACKAGE_CAPABILITIES)  # type: ignore[arg-type]
     except ImportError:
         pass
 
@@ -67,7 +67,7 @@ def get_core_capabilities() -> list[type[Capability]]:
     try:
         from elle.capabilities.core.docker import DOCKER_CAPABILITIES
 
-        capabilities.extend(DOCKER_CAPABILITIES)
+        capabilities.extend(DOCKER_CAPABILITIES)  # type: ignore[arg-type]
     except ImportError:
         pass
 
@@ -75,7 +75,7 @@ def get_core_capabilities() -> list[type[Capability]]:
     try:
         from elle.capabilities.core.notify import NOTIFY_CAPABILITIES
 
-        capabilities.extend(NOTIFY_CAPABILITIES)
+        capabilities.extend(NOTIFY_CAPABILITIES)  # type: ignore[arg-type]
     except ImportError:
         pass
 
@@ -83,7 +83,7 @@ def get_core_capabilities() -> list[type[Capability]]:
     try:
         from elle.capabilities.core.network import NETWORK_CAPABILITIES
 
-        capabilities.extend(NETWORK_CAPABILITIES)
+        capabilities.extend(NETWORK_CAPABILITIES)  # type: ignore[arg-type]
     except ImportError:
         pass
 
@@ -91,7 +91,7 @@ def get_core_capabilities() -> list[type[Capability]]:
     try:
         from elle.capabilities.core.incident import INCIDENT_CAPABILITIES
 
-        capabilities.extend(INCIDENT_CAPABILITIES)
+        capabilities.extend(INCIDENT_CAPABILITIES)  # type: ignore[arg-type]
     except ImportError:
         pass
 

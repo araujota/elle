@@ -17,14 +17,17 @@ import logging
 import re
 import time
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
-    pass
+    from elle.capabilities.executor import CapabilityExecutor
+    from elle.capabilities.models import CapabilityResult
+    from elle.ops.preflight.validator import PreflightValidator
+    from elle.rag.llm import LLM
 
 
 # Import get_llm at module level for easier mocking
-def get_llm():
+def get_llm() -> LLM:
     """Get the LLM instance (lazy import)."""
     from elle.rag.llm import get_llm as _get_llm
 
@@ -89,11 +92,11 @@ class PlannerService:
         self.command_timeout = command_timeout
         self.use_capabilities = use_capabilities
         self.use_preflight = use_preflight
-        self._capability_executor = None
-        self._preflight_validator = None
+        self._capability_executor: CapabilityExecutor | None = None
+        self._preflight_validator: PreflightValidator | None = None
 
     @property
-    def capability_executor(self):
+    def capability_executor(self) -> CapabilityExecutor | None:
         """Get the capability executor (lazy initialization)."""
         if self._capability_executor is None and self.use_capabilities:
             try:
@@ -105,7 +108,7 @@ class PlannerService:
         return self._capability_executor
 
     @property
-    def preflight_validator(self):
+    def preflight_validator(self) -> PreflightValidator | None:
         """Get the preflight validator (lazy initialization)."""
         if self._preflight_validator is None and self.use_preflight:
             try:
@@ -272,6 +275,7 @@ class PlannerService:
 
         result = result.with_approved()
         plan = result.plan
+        assert plan is not None  # checked above with `if not result.plan:`
         all_succeeded = True
 
         # Run preflight validation for package operations
@@ -289,7 +293,7 @@ class PlannerService:
             result = result.with_step_result(step_result)
 
             # Record action in incident
-            if result.incident_id:
+            if result.incident_id and step.command:
                 try:
                     self._record_action(
                         result.incident_id,
@@ -412,7 +416,13 @@ class PlannerService:
             all_results = []
             can_proceed = True
 
-            for packages, operation in package_ops:
+            for packages, op in package_ops:
+                # Cast to Literal type for PreflightTest
+                from typing import cast
+
+                operation = cast(
+                    Literal["install", "upgrade", "remove"], op if op in ("install", "upgrade", "remove") else "install"
+                )
                 test = PreflightTest(
                     packages=packages,
                     operation=operation,
@@ -562,7 +572,7 @@ class PlannerService:
 
             client = get_daemon_client()
 
-            async def search_via_daemon() -> list[dict]:
+            async def search_via_daemon() -> list[dict[str, Any]]:
                 if not await client.is_daemon_available():
                     return []
                 return await client.search_manvault(query=query, limit=4)
@@ -570,9 +580,9 @@ class PlannerService:
             results = asyncio.get_event_loop().run_until_complete(search_via_daemon())
 
             if results:
-                docs = []
+                daemon_docs: list[ManDocContext] = []
                 for r in results:
-                    docs.append(
+                    daemon_docs.append(
                         ManDocContext(
                             name=r.get("command", ""),
                             section=r.get("section", ""),
@@ -580,8 +590,8 @@ class PlannerService:
                             flags_used=(),
                         )
                     )
-                logger.debug(f"Got {len(docs)} man docs from daemon API")
-                return tuple(docs)
+                logger.debug(f"Got {len(daemon_docs)} man docs from daemon API")
+                return tuple(daemon_docs)
         except Exception as e:
             logger.debug(f"Daemon API man vault search failed: {e}")
 
@@ -589,15 +599,15 @@ class PlannerService:
         try:
             from elle.daemon.manvault import search
 
-            results = search(query, k=4, search_type="hybrid")
+            store_results = search(query, k=4, search_type="hybrid")
 
-            docs = []
-            for r in results:
+            docs: list[ManDocContext] = []
+            for snippet in store_results:
                 docs.append(
                     ManDocContext(
-                        name=r.name,
-                        section=r.section,
-                        snippet=r.snippet,
+                        name=snippet.name,
+                        section=snippet.section,
+                        snippet=snippet.snippet,
                         flags_used=(),  # Could extract flags from snippet
                     )
                 )
@@ -640,7 +650,7 @@ class PlannerService:
 
             client = get_daemon_client()
 
-            async def search_via_daemon() -> list[dict]:
+            async def search_via_daemon() -> list[dict[str, Any]]:
                 if not await client.is_daemon_available():
                     return []
                 return await client.search_incidents(query=query, limit=3)
@@ -836,7 +846,7 @@ class PlannerService:
             logger.warning(f"Failed to get network state from daemon: {e}")
             return NetworkState()
 
-    def _parse_plan_response(self, response: dict) -> CommandPlan:
+    def _parse_plan_response(self, response: dict[str, Any]) -> CommandPlan:
         """Parse LLM response into CommandPlan.
 
         Args:
@@ -1013,7 +1023,10 @@ class PlannerService:
             cap_input = step.capability_input or {}
 
             # Get the capability to determine input type
-            cap = self.capability_executor.registry.get(cap_name)
+            if self.capability_executor is None:
+                raise ValueError("Capability executor not initialized")
+            executor = self.capability_executor  # Capture for closure
+            cap = executor.registry.get(cap_name)
             if not cap:
                 raise CapabilityNotFoundError(cap_name)
 
@@ -1028,8 +1041,8 @@ class PlannerService:
             input_model = GenericInput(**cap_input)
 
             # Execute capability (async)
-            async def run_cap():
-                return await self.capability_executor.execute(
+            async def run_cap() -> CapabilityResult:
+                return await executor.execute(
                     cap_name,
                     input_model,
                     require_confirmation=False,  # Already confirmed via plan approval
@@ -1344,7 +1357,7 @@ class PlannerService:
                 rationale=result.plan.explanation,
                 confidence=confidence,
                 provenance=provenance,
-                planned_commands=tuple(s.command for s in result.plan.steps),
+                planned_commands=tuple(s.command for s in result.plan.steps if s.command),
             )
 
             store_decision_record(result.incident_id, decision_record)

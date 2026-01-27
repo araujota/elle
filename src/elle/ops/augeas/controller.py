@@ -620,7 +620,7 @@ class EditController:
         file_path = Path(file_path)
 
         if backup_path:
-            return self._backup_manager.restore(backup_path, file_path)
+            return self._backup_manager.restore(str(backup_path), file_path)
 
         # Find latest backup
         latest = self._backup_manager.get_latest_backup(file_path)

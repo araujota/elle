@@ -7,12 +7,13 @@ enabling policy-based access control for capability execution.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
 from elle.capabilities.models import CapabilitySpec, RiskLevel
 from elle.policy.models import PolicyEvaluationResult
+from elle.policy.models import RiskLevel as PolicyRiskLevel
 
 if TYPE_CHECKING:
     from elle.capabilities.protocol import Capability
@@ -20,29 +21,29 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _risk_to_policy_risk(risk: RiskLevel) -> str:
+def _risk_to_policy_risk(risk: RiskLevel) -> PolicyRiskLevel:
     """Convert capability RiskLevel to policy RiskLevel.
 
     Args:
         risk: Capability risk level.
 
     Returns:
-        Policy risk level string.
+        Policy risk level enum.
     """
     # Policy engine uses "low", "medium", "high"
     # Capability uses "none", "low", "medium", "high", "critical"
-    mapping = {
-        "none": "low",
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "critical": "high",  # Map critical to high for policy
+    mapping: dict[str, PolicyRiskLevel] = {
+        "none": PolicyRiskLevel.LOW,
+        "low": PolicyRiskLevel.LOW,
+        "medium": PolicyRiskLevel.MEDIUM,
+        "high": PolicyRiskLevel.HIGH,
+        "critical": PolicyRiskLevel.HIGH,  # Map critical to high for policy
     }
-    return mapping.get(risk, "medium")
+    return mapping.get(risk, PolicyRiskLevel.MEDIUM)
 
 
 def evaluate_capability(
-    capability: Capability,
+    capability: Capability[Any, Any],
     input: BaseModel,
     audit: bool = True,
 ) -> PolicyEvaluationResult:
@@ -216,7 +217,7 @@ class CapabilityPolicyResult(BaseModel):
     is_blocked: bool = False
 
     @classmethod
-    def from_policy_result(cls, result) -> CapabilityPolicyResult:
+    def from_policy_result(cls, result: PolicyEvaluationResult) -> CapabilityPolicyResult:
         """Create from a PolicyEvaluationResult.
 
         Args:

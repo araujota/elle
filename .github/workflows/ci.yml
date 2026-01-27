@@ -47,7 +47,6 @@ jobs:
 
       - name: Run mypy
         run: mypy src/
-        continue-on-error: true  # Type errors shouldn't block CI yet
 
   # ============================================================================
   # Test Suite

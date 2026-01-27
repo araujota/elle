@@ -6,11 +6,32 @@ telemetry events and probe results.
 
 import json
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from elle.daemon.telemetry.models import ProbeResult, TelemetryEvent
 from elle.daemon.telemetry.schema import ensure_schema, get_connection
+
+
+@contextmanager
+def _ensure_connection(
+    conn: sqlite3.Connection | None = None,
+) -> Iterator[sqlite3.Connection]:
+    """Context manager that ensures a valid connection."""
+    own_conn = conn is None
+    if own_conn:
+        actual_conn = get_connection()
+        ensure_schema(actual_conn)
+    else:
+        assert conn is not None  # Help mypy with type narrowing
+        actual_conn = conn
+    try:
+        yield actual_conn
+    finally:
+        if own_conn:
+            actual_conn.close()
 
 
 def _serialize_datetime(dt: datetime) -> str:
@@ -53,13 +74,8 @@ def insert_event(
     Returns:
         The inserted row ID.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             INSERT INTO events (
@@ -79,12 +95,8 @@ def insert_event(
                 _json_dumps(event.raw),
             ),
         )
-        conn.commit()
+        c.commit()
         return cursor.lastrowid or 0
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def insert_events_batch(
@@ -105,13 +117,8 @@ def insert_events_batch(
     if not events:
         return 0
 
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         rows = [
             (
                 event.event_id,
@@ -136,12 +143,8 @@ def insert_events_batch(
             """,
             rows,
         )
-        conn.commit()
+        c.commit()
         return cursor.rowcount
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def get_event(
@@ -157,13 +160,8 @@ def get_event(
     Returns:
         TelemetryEvent if found, None otherwise.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute("SELECT * FROM events WHERE event_id = ?", (event_id,))
         row = cursor.fetchone()
 
@@ -171,10 +169,6 @@ def get_event(
             return None
 
         return _row_to_event(row)
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def get_event_by_id(
@@ -190,13 +184,8 @@ def get_event_by_id(
     Returns:
         TelemetryEvent if found, None otherwise.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute("SELECT * FROM events WHERE id = ?", (row_id,))
         row = cursor.fetchone()
 
@@ -204,10 +193,6 @@ def get_event_by_id(
             return None
 
         return _row_to_event(row)
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def query_events(
@@ -237,12 +222,7 @@ def query_events(
     Returns:
         List of matching TelemetryEvents.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         query = "SELECT * FROM events WHERE 1=1"
         params: list[Any] = []
 
@@ -268,14 +248,10 @@ def query_events(
         query += " ORDER BY ts DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
 
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(query, params)
 
         return [_row_to_event(row) for row in cursor.fetchall()]
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def search_events(
@@ -293,13 +269,8 @@ def search_events(
     Returns:
         List of matching TelemetryEvents.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             SELECT e.* FROM events e
@@ -312,10 +283,6 @@ def search_events(
         )
 
         return [_row_to_event(row) for row in cursor.fetchall()]
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def count_events(
@@ -335,12 +302,7 @@ def count_events(
     Returns:
         Number of matching events.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         query = "SELECT COUNT(*) FROM events WHERE 1=1"
         params: list[Any] = []
 
@@ -354,13 +316,10 @@ def count_events(
             query += " AND severity = ?"
             params.append(severity)
 
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(query, params)
-        return cursor.fetchone()[0]
-
-    finally:
-        if own_conn:
-            conn.close()
+        row = cursor.fetchone()
+        return int(row[0]) if row else 0
 
 
 def count_events_by_category(
@@ -376,12 +335,7 @@ def count_events_by_category(
     Returns:
         Dict mapping category to count.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         query = "SELECT category, COUNT(*) FROM events"
         params: list[Any] = []
 
@@ -391,14 +345,10 @@ def count_events_by_category(
 
         query += " GROUP BY category"
 
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(query, params)
 
         return {row[0]: row[1] for row in cursor.fetchall()}
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def get_recent_fingerprints(
@@ -414,14 +364,9 @@ def get_recent_fingerprints(
     Returns:
         Set of fingerprints.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         since = datetime.now(UTC) - timedelta(seconds=window_sec)
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(
             """
             SELECT DISTINCT fingerprint FROM events
@@ -431,10 +376,6 @@ def get_recent_fingerprints(
         )
 
         return {row[0] for row in cursor.fetchall()}
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def delete_old_events(
@@ -450,24 +391,15 @@ def delete_old_events(
     Returns:
         Number of deleted events.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         cutoff = datetime.now(UTC) - timedelta(days=older_than_days)
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(
             "DELETE FROM events WHERE ts < ?",
             (_serialize_datetime(cutoff),),
         )
-        conn.commit()
+        c.commit()
         return cursor.rowcount
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def _row_to_event(row: sqlite3.Row) -> TelemetryEvent:
@@ -503,13 +435,8 @@ def insert_probe_result(
     Returns:
         The inserted row ID.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             INSERT INTO probe_results (
@@ -524,12 +451,8 @@ def insert_probe_result(
                 result.error,
             ),
         )
-        conn.commit()
+        c.commit()
         return cursor.lastrowid or 0
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def get_latest_probe_result(
@@ -545,13 +468,8 @@ def get_latest_probe_result(
     Returns:
         Latest ProbeResult if found, None otherwise.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             SELECT * FROM probe_results
@@ -574,10 +492,6 @@ def get_latest_probe_result(
             error=row["error"],
         )
 
-    finally:
-        if own_conn:
-            conn.close()
-
 
 def delete_old_probe_results(
     older_than_days: int = 7,
@@ -592,21 +506,12 @@ def delete_old_probe_results(
     Returns:
         Number of deleted results.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         cutoff = datetime.now(UTC) - timedelta(days=older_than_days)
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(
             "DELETE FROM probe_results WHERE ts < ?",
             (_serialize_datetime(cutoff),),
         )
-        conn.commit()
+        c.commit()
         return cursor.rowcount
-
-    finally:
-        if own_conn:
-            conn.close()

@@ -56,7 +56,7 @@ class ElledDaemon:
 
         # Queues
         self.raw_queue: TelemetryQueue[dict[str, Any]] | None = None
-        self.event_queue: TelemetryQueue[Any] | None = None
+        self.event_queue: TelemetryQueue[TelemetryEvent] | None = None
 
         # Components
         self._journal_watcher: JournalWatcher | None = None

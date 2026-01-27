@@ -23,6 +23,7 @@ import subprocess
 from collections.abc import Callable
 from enum import Enum, auto
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -175,7 +176,7 @@ _HISTORY_CLEAR_PATTERNS = [
 ]
 
 
-def _compile_patterns(patterns: list[str]) -> list[re.Pattern]:
+def _compile_patterns(patterns: list[str]) -> list[re.Pattern[str]]:
     """Compile regex patterns for efficient matching."""
     return [re.compile(p, re.IGNORECASE) for p in patterns]
 
@@ -284,7 +285,7 @@ def _check_denylist_legacy(command: str) -> tuple[bool, DenyReason | None, str |
         )
 
     # Check each pattern category
-    checks: list[tuple[list[re.Pattern], DenyReason, str]] = [
+    checks: list[tuple[list[re.Pattern[str]], DenyReason, str]] = [
         (
             _COMPILED_RM,
             DenyReason.DESTRUCTIVE_RM,
@@ -496,14 +497,17 @@ def _run_streaming(
                 )
 
             # Check for readable output
+            streams_to_watch = [s for s in [process.stdout, process.stderr] if s is not None]
             readable, _, _ = select.select(
-                [process.stdout, process.stderr],
+                streams_to_watch,
                 [],
                 [],
                 0.1,  # 100ms poll interval
             )
 
             for stream in readable:
+                if stream is None:
+                    continue
                 line = stream.readline()
                 if line:
                     if stream == process.stdout:
@@ -542,7 +546,7 @@ def _run_streaming(
     )
 
 
-def run_safe(command: str, **kwargs) -> SubprocessResult:
+def run_safe(command: str, **kwargs: Any) -> SubprocessResult:
     """Execute a command, returning a denied result instead of raising.
 
     This is a convenience wrapper around run() that catches CommandDeniedError

@@ -119,7 +119,7 @@ def _check_dns(target: str) -> ConnectivityCheck:
             return ConnectivityCheck(
                 name="DNS Resolution",
                 passed=True,
-                result=f"DNS resolves to: {', '.join(ips)}",
+                result=f"DNS resolves to: {', '.join(str(ip) for ip in ips)}",
                 details={"ips": ips, "hostname": target},
             )
         else:

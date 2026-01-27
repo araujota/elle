@@ -9,11 +9,13 @@ Provides endpoints for:
 - /v1/models - List available models
 """
 
+from typing import Any
+
 # Lazy imports to avoid requiring fastapi at import time
 # when only models are needed
 
 
-def create_app(*args, **kwargs):
+def create_app(*args: Any, **kwargs: Any) -> Any:
     """Create and configure the FastAPI application.
 
     Lazily imports the actual implementation to avoid

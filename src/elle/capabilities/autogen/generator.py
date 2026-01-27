@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Literal
 
 from elle.capabilities.autogen.models import (
     GeneratedCapabilitySpec,
@@ -126,13 +127,13 @@ class CapabilityGenerator:
             LLM response or None.
         """
         try:
-            from elle.rag.llm import generate_json
+            from elle.rag.llm import LLM, LLMConfig
 
-            result = await generate_json(
+            config = LLMConfig(model=self.model, temperature=self.temperature)
+            llm = LLM(config=config)
+            result = llm.generate_json(
                 prompt=user,
                 system=system,
-                model=self.model,
-                temperature=self.temperature,
             )
 
             if result:
@@ -177,7 +178,8 @@ class CapabilityGenerator:
 
                 if response.status_code == 200:
                     data = response.json()
-                    return data.get("response")
+                    response_text = data.get("response")
+                    return str(response_text) if response_text is not None else None
 
         except Exception as e:
             logger.debug(f"Ollama call failed: {e}")
@@ -303,7 +305,7 @@ def generate_basic_spec(man_page: ParsedManPage) -> GeneratedCapabilitySpec:
         domain = "auth"
 
     # Infer risk level
-    risk = "medium"
+    risk: Literal["none", "low", "medium", "high", "critical"] = "medium"
     if man_page.name in ("cat", "ls", "ps", "df", "free", "uname"):
         risk = "none"
     elif man_page.name in ("rm", "dd", "mkfs", "fdisk"):
@@ -319,6 +321,7 @@ def generate_basic_spec(man_page: ParsedManPage) -> GeneratedCapabilitySpec:
                     field_type="str",
                     description=f"{arg} argument",
                     required=True,
+                    default=None,
                 )
             )
 
@@ -332,6 +335,8 @@ def generate_basic_spec(man_page: ParsedManPage) -> GeneratedCapabilitySpec:
         input_fields=tuple(input_fields),
         output_fields=DEFAULT_OUTPUT_FIELDS,
         command_template=man_page.name + " " + " ".join(f"{{{f.name}}}" for f in input_fields),
+        verify_command=None,
+        rollback_command=None,
         source_command=man_page.name,
         source_man_section=man_page.section,
         confidence_score=0.3,

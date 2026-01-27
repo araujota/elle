@@ -186,7 +186,7 @@ class ManVaultEmbedder:
             logger.error(f"Failed to embed chunk {chunk.id}: {e}")
             return False
         finally:
-            if own_conn:
+            if own_conn and conn is not None:
                 conn.close()
 
     def embed_document(
@@ -242,7 +242,7 @@ class ManVaultEmbedder:
             return count
 
         finally:
-            if own_conn:
+            if own_conn and conn is not None:
                 conn.close()
 
     def embed_all_pending(
@@ -311,7 +311,7 @@ class ManVaultEmbedder:
             return count
 
         finally:
-            if own_conn:
+            if own_conn and conn is not None:
                 conn.close()
 
 

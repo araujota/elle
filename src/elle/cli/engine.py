@@ -13,6 +13,8 @@ Flow:
 import contextlib
 import logging
 from enum import Enum, auto
+from types import ModuleType
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -36,10 +38,10 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 # Lazy import to avoid circular dependencies
-_policy_module = None
+_policy_module: ModuleType | bool | None = None
 
 
-def _get_policy_module():
+def _get_policy_module() -> ModuleType | None:
     """Lazy load the policy module."""
     global _policy_module
     if _policy_module is None:
@@ -50,7 +52,7 @@ def _get_policy_module():
         except ImportError:
             logger.warning("Policy module not available")
             _policy_module = False
-    return _policy_module if _policy_module else None
+    return _policy_module if isinstance(_policy_module, ModuleType) else None
 
 
 class EngineAction(Enum):
@@ -253,7 +255,7 @@ class Engine:
         user_input: str,
         intent_result: IntentResult,
         session: Session,
-    ):
+    ) -> Any:
         """Evaluate the current operation against the policy engine.
 
         Args:
@@ -361,7 +363,7 @@ class Engine:
         except (EOFError, KeyboardInterrupt):
             return None
 
-    def _record_policy_justification(self, result, justification: str) -> None:
+    def _record_policy_justification(self, result: Any, justification: str) -> None:
         """Record a policy justification.
 
         Args:
@@ -740,7 +742,7 @@ class Engine:
 
         # Parse options
         tier: int | None = None
-        operation = "install"
+        operation: Literal["install", "upgrade", "remove"] = "install"
 
         # Check for --tier=N
         tier_match = re.search(r"--tier[=\s](\d+)", args)
@@ -1137,10 +1139,10 @@ Validates package operations before execution to detect potential issues.
             )
 
             if response:
-                lines = [
+                lines: list[str] = [
                     f"{Colors.BOLD}Question:{Colors.RESET} {question}",
                     "",
-                    response,
+                    str(response),
                 ]
                 return EngineResult(
                     output="\n".join(lines),
@@ -1516,6 +1518,12 @@ Validates package operations before execution to detect potential issues.
             )
 
             trace = session.last_syscall_trace
+            if trace is None:
+                return EngineResult(
+                    output=f"{Colors.YELLOW}No syscall trace available. Run a command first.{Colors.RESET}",
+                    session=session,
+                    success=False,
+                )
             explanation = format_trace_for_display(trace, use_colors=True)
 
             return EngineResult(
@@ -1724,9 +1732,9 @@ Validates package operations before execution to detect potential issues.
             EngineResult with recent events.
         """
         try:
-            from elle.daemon.telemetry.store import list_events
+            from elle.daemon.telemetry.store import query_events
 
-            events = list_events(limit=10)
+            events = query_events(limit=10)
             if not events:
                 return EngineResult(
                     output=f"{Colors.DIM}No recent events{Colors.RESET}",
@@ -1735,9 +1743,9 @@ Validates package operations before execution to detect potential issues.
 
             lines = [f"{Colors.BOLD}Recent Events:{Colors.RESET}", ""]
             for evt in events:
-                ts = evt.get("ts", "")
-                severity = evt.get("severity", "info")
-                message = evt.get("message", "")[:80]
+                ts = evt.ts.isoformat() if evt.ts else ""
+                severity = evt.severity or "info"
+                message = (evt.message or "")[:80]
                 color = {
                     "info": Colors.DIM,
                     "warning": Colors.YELLOW,
@@ -1772,7 +1780,7 @@ Validates package operations before execution to detect potential issues.
             EngineResult with configuration info.
         """
         try:
-            from elle.common.config import get_config
+            from elle.common.config import get_config  # type: ignore[import-untyped]
 
             config = get_config()
             lines = [f"{Colors.BOLD}Current Configuration:{Colors.RESET}", ""]
@@ -2204,7 +2212,7 @@ for fast lexical and semantic search.{Colors.RESET}"""
 
             from elle.daemon.manvault.indexer import index_all
 
-            def do_reindex():
+            def do_reindex() -> None:
                 try:
                     count = index_all()
                     logger.info(f"Reindex complete: {count} documents")

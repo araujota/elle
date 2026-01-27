@@ -23,7 +23,7 @@ import contextlib
 import logging
 import re
 import subprocess
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -374,7 +374,7 @@ def explain_firewall_rules() -> FirewallExplanation:
     )
 
 
-def parse_restriction(restriction: str) -> dict:
+def parse_restriction(restriction: str) -> dict[str, Any]:
     """Parse a natural language restriction into structured data.
 
     Args:

@@ -272,8 +272,8 @@ class MobileAuditStore:
         Returns:
             List of matching audit entries.
         """
-        conditions = []
-        params = []
+        conditions: list[str] = []
+        params: list[str | int] = []
 
         if device_id:
             conditions.append("device_id = ?")

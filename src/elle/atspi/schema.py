@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 # Default database path
 DEFAULT_DB_PATH = Path("/var/lib/elle/recipes.db")
@@ -285,7 +286,7 @@ def _get_migration_sql(version: int) -> str | None:
     Returns:
         SQL to migrate to this version, or None if no migration needed.
     """
-    migrations = {
+    migrations: dict[int, str] = {
         # Future migrations go here
         # 2: "ALTER TABLE recipes ADD COLUMN new_field TEXT;",
     }
@@ -298,7 +299,7 @@ def _get_migration_sql(version: int) -> str | None:
 # =============================================================================
 
 
-def get_db_stats(conn: sqlite3.Connection | None = None) -> dict:
+def get_db_stats(conn: sqlite3.Connection | None = None) -> dict[str, Any]:
     """Get database statistics.
 
     Args:
@@ -311,6 +312,7 @@ def get_db_stats(conn: sqlite3.Connection | None = None) -> dict:
     if own_conn:
         conn = get_shared_connection()
 
+    assert conn is not None  # type narrowing
     try:
         cursor = conn.cursor()
 

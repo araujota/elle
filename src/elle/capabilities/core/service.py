@@ -160,7 +160,7 @@ def _get_service_state(service: str) -> tuple[str, str, int | None]:
 # =============================================================================
 
 
-class ServiceRestartCapability(BaseCapability):
+class ServiceRestartCapability(BaseCapability[ServiceInput, ServiceOutput]):
     """Restart a systemd service."""
 
     @property
@@ -263,7 +263,7 @@ class ServiceRestartCapability(BaseCapability):
         active_state, sub_state, pid = _get_service_state(input.service)
 
         passed = active_state == "active"
-        discrepancies = ()
+        discrepancies: tuple[str, ...] = ()
 
         if not passed:
             discrepancies = (f"Service not active: {active_state}/{sub_state}",)
@@ -309,7 +309,7 @@ class ServiceRestartCapability(BaseCapability):
 # =============================================================================
 
 
-class ServiceStartCapability(BaseCapability):
+class ServiceStartCapability(BaseCapability[ServiceInput, ServiceOutput]):
     """Start a systemd service."""
 
     @property
@@ -438,7 +438,7 @@ class ServiceStartCapability(BaseCapability):
 # =============================================================================
 
 
-class ServiceStopCapability(BaseCapability):
+class ServiceStopCapability(BaseCapability[ServiceInput, ServiceOutput]):
     """Stop a systemd service."""
 
     @property
@@ -567,7 +567,7 @@ class ServiceStopCapability(BaseCapability):
 # =============================================================================
 
 
-class ServiceStatusCapability(BaseCapability):
+class ServiceStatusCapability(BaseCapability[ServiceInput, ServiceStatusOutput]):
     """Check status of a systemd service."""
 
     @property

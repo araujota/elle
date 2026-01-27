@@ -13,6 +13,7 @@ Elevations are:
 
 import logging
 from datetime import datetime, timedelta
+from typing import Any
 
 from elle.mobile.config import MobileGatewayConfig, get_mobile_config
 from elle.mobile.models import DeviceStatus, Elevation, MobileRole, PairedDevice
@@ -152,7 +153,7 @@ class ElevationManager:
             return elevation.elevated_role
         return device.role
 
-    def get_elevation_status(self, device_id: str) -> dict:
+    def get_elevation_status(self, device_id: str) -> dict[str, Any]:
         """Get elevation status for a device.
 
         Args:
@@ -167,7 +168,7 @@ class ElevationManager:
 
         elevation = self.store.get_active_elevation(device_id)
 
-        result = {
+        result: dict[str, Any] = {
             "device_id": device_id,
             "device_name": device.name,
             "base_role": device.role.value,
@@ -190,7 +191,7 @@ class ElevationManager:
 
         return result
 
-    def list_elevated_devices(self) -> list[dict]:
+    def list_elevated_devices(self) -> list[dict[str, Any]]:
         """List all devices with active elevations.
 
         Returns:

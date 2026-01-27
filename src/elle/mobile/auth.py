@@ -7,6 +7,10 @@ Every request must present a valid client certificate signed by our CA.
 import logging
 from collections.abc import Callable
 from datetime import datetime
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from fastapi import Request
 
 from pydantic import BaseModel, Field
 
@@ -115,6 +119,11 @@ class MobileAuthenticator:
             )
 
         device_id = result
+        if device_id is None:
+            raise AuthenticationError(
+                "Invalid certificate: no device ID",
+                code="CERT_INVALID",
+            )
 
         # Look up device
         device = self.store.get_device(device_id)
@@ -183,7 +192,7 @@ def create_auth_dependency(
     config: MobileGatewayConfig | None = None,
     store: MobileStore | None = None,
     crypto: MobileCrypto | None = None,
-) -> Callable:
+) -> Callable[..., Any]:
     """Create a FastAPI dependency for authentication.
 
     Args:
@@ -196,7 +205,7 @@ def create_auth_dependency(
     """
     authenticator = MobileAuthenticator(config, store, crypto)
 
-    async def get_auth_context(request) -> MobileAuthContext:
+    async def get_auth_context(request: "Request") -> MobileAuthContext:
         """FastAPI dependency that extracts auth context from request.
 
         The client certificate is provided by the TLS layer and stored

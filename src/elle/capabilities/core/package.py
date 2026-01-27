@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -302,14 +302,18 @@ def _parse_apt_conflicts(stderr: str) -> list[ConflictDetail]:
 
         match = breaks_pattern.search(line)
         if match:
-            conflict_type = match.group(1).lower()
+            conflict_type_str = match.group(1).lower()
+            conflict_type = cast(
+                Literal["depends", "breaks", "conflicts", "replaces", "held"],
+                conflict_type_str if conflict_type_str in ("breaks", "conflicts") else "conflicts",
+            )
             conflicts.append(
                 ConflictDetail(
                     conflicting_package=match.group(2),
-                    conflict_type=conflict_type if conflict_type in ("breaks", "conflicts") else "conflicts",
+                    conflict_type=conflict_type,
                     required_version=match.group(3),
                     installed_version=match.group(4),
-                    resolution=f"Remove or upgrade {match.group(2)} to resolve {conflict_type}",
+                    resolution=f"Remove or upgrade {match.group(2)} to resolve {conflict_type_str}",
                 )
             )
 
@@ -364,7 +368,7 @@ def _get_broken_packages() -> list[str]:
 # =============================================================================
 
 
-class PackageInstallCapability(BaseCapability):
+class PackageInstallCapability(BaseCapability[PackageInput, PackageInstallOutput]):
     """Install a package using apt."""
 
     @property
@@ -527,7 +531,7 @@ class PackageInstallCapability(BaseCapability):
 # =============================================================================
 
 
-class PackageRemoveCapability(BaseCapability):
+class PackageRemoveCapability(BaseCapability[PackageInput, PackageRemoveOutput]):
     """Remove a package using apt."""
 
     @property
@@ -677,7 +681,7 @@ class PackageRemoveCapability(BaseCapability):
 # =============================================================================
 
 
-class PackageUpdateCapability(BaseCapability):
+class PackageUpdateCapability(BaseCapability[PackageInput, PackageUpdateOutput]):
     """Update package lists."""
 
     @property
@@ -749,7 +753,7 @@ class PackageUpdateCapability(BaseCapability):
 # =============================================================================
 
 
-class PackageInfoCapability(BaseCapability):
+class PackageInfoCapability(BaseCapability[PackageInput, PackageInfoOutput]):
     """Get package information."""
 
     @property
@@ -832,7 +836,7 @@ class PackageInfoCapability(BaseCapability):
 # =============================================================================
 
 
-class PackageConflictDetectCapability(BaseCapability):
+class PackageConflictDetectCapability(BaseCapability[PackageConflictInput, PackageConflictOutput]):
     """Detect apt/dpkg dependency conflicts."""
 
     @property

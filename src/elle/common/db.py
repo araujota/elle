@@ -6,6 +6,8 @@ SQLite databases:
 """
 
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 # Main ELLE database path
@@ -49,6 +51,56 @@ def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
     return conn
 
 
+@contextmanager
+def ensure_connection(
+    conn: sqlite3.Connection | None = None,
+    db_path: Path | None = None,
+) -> Iterator[sqlite3.Connection]:
+    """Context manager that ensures a valid connection.
+
+    If conn is provided, uses it directly. Otherwise creates a new connection
+    using get_connection and closes it when done.
+
+    Args:
+        conn: Existing connection to use (optional).
+        db_path: Database path to use if creating a new connection (optional).
+
+    Yields:
+        A valid sqlite3.Connection.
+
+    Example:
+        # Before (causes union-attr errors):
+        def store_event(event, conn=None):
+            own = conn is None
+            if own:
+                conn = get_connection()
+            try:
+                cursor = conn.cursor()  # Error: conn could be None
+                ...
+            finally:
+                if own:
+                    conn.close()
+
+        # After (type-safe):
+        def store_event(event, conn=None):
+            with ensure_connection(conn) as c:
+                cursor = c.cursor()  # c is always Connection
+                ...
+    """
+    own_conn = conn is None
+    if own_conn:
+        actual_conn = get_connection(db_path)
+    else:
+        # conn is definitely not None here due to the check above
+        assert conn is not None  # Type narrowing for mypy
+        actual_conn = conn
+    try:
+        yield actual_conn
+    finally:
+        if own_conn:
+            actual_conn.close()
+
+
 def init_db(conn: sqlite3.Connection | None = None) -> None:
     """Initialize the database schema.
 
@@ -58,18 +110,11 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
     Args:
         conn: SQLite connection. Creates new if not provided.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-
-    try:
-        cursor = conn.cursor()
+    with ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(EVENTS_SCHEMA)
         cursor.execute(EVENTS_INDEX)
-        conn.commit()
-    finally:
-        if own_conn:
-            conn.close()
+        c.commit()
 
 
 def init_all_schemas() -> None:

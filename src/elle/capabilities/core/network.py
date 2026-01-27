@@ -311,7 +311,7 @@ class NetworkListenersOutput(BaseModel):
 # =============================================================================
 
 
-class WireGuardRestartCapability(BaseCapability):
+class WireGuardRestartCapability(BaseCapability[WireGuardRestartInput, WireGuardRestartOutput]):
     """Restart a WireGuard interface."""
 
     @property
@@ -568,7 +568,7 @@ class WireGuardRestartCapability(BaseCapability):
 # =============================================================================
 
 
-class WireGuardStatusCapability(BaseCapability):
+class WireGuardStatusCapability(BaseCapability[WireGuardStatusInput, WireGuardStatusOutput]):
     """Check WireGuard interface status."""
 
     @property
@@ -737,7 +737,7 @@ class WireGuardStatusCapability(BaseCapability):
 # =============================================================================
 
 
-class NetworkListenersCapability(BaseCapability):
+class NetworkListenersCapability(BaseCapability[NetworkListenersInput, NetworkListenersOutput]):
     """List processes listening on network ports."""
 
     @property
@@ -982,7 +982,7 @@ class WireGuardGenerateKeyOutput(BaseModel):
     )
 
 
-class WireGuardGenerateKeyCapability(BaseCapability):
+class WireGuardGenerateKeyCapability(BaseCapability[WireGuardGenerateKeyInput, WireGuardGenerateKeyOutput]):
     """Generate WireGuard keypair."""
 
     @property
@@ -1104,7 +1104,7 @@ class WireGuardRotateKeysOutput(BaseModel):
     )
 
 
-class WireGuardRotateKeysCapability(BaseCapability):
+class WireGuardRotateKeysCapability(BaseCapability[WireGuardRotateKeysInput, WireGuardRotateKeysOutput]):
     """Rotate WireGuard keys for an interface."""
 
     @property

@@ -11,7 +11,7 @@ import sqlite3
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from elle.capabilities.dependencies.models import (
     DependencyPreference,
@@ -127,7 +127,9 @@ class DependencyPreferenceStore:
 
         row = cursor.fetchone()
         if row:
-            return row["preference"]
+            pref = row["preference"]
+            if pref in ("always_install", "always_skip", "ask"):
+                return cast(PreferenceChoice, pref)
         return "ask"
 
     def get_preference_full(self, dependency: str) -> DependencyPreference | None:

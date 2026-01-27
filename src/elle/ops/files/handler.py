@@ -632,6 +632,7 @@ class FileHandler:
         # Record for rollback
         if source_existed:
             # Rollback: restore from backup
+            assert backup_path is not None  # Set when source_existed is True
             self._rollback_stack.append(
                 (
                     FileOp(kind="copy", source=backup_path, dest=str(source), overwrite=True),

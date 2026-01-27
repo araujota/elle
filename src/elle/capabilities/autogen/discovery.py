@@ -22,6 +22,15 @@ from elle.capabilities.autogen.models import (
     InstalledBinary,
 )
 
+# Re-export models for convenience
+__all__ = [
+    "DiscoveryResult",
+    "InstalledBinary",
+    "discover_all_binaries",
+    "discover_binary",
+    "discover_specific_commands",
+]
+
 logger = logging.getLogger(__name__)
 
 # Common binary directories
@@ -212,7 +221,7 @@ def scan_binary_directory(dir_path: str) -> list[str]:
     Returns:
         List of binary names.
     """
-    binaries = []
+    binaries: list[str] = []
     path = Path(dir_path)
 
     if not path.exists():

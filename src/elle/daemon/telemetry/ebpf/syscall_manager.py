@@ -41,7 +41,7 @@ class SyscallManager:
 
     def __init__(self) -> None:
         """Initialize the syscall manager."""
-        self._program = None
+        self._program: object = None  # SyscallProgram, but imported lazily
         self._summarizer: SyscallSummarizer | None = None
         self._lock = threading.Lock()
         self._polling = False
@@ -134,10 +134,10 @@ class SyscallManager:
             )
 
             # Set up event callback
-            self._program.set_syscall_callback(self._on_syscall_event)
+            self._program.set_syscall_callback(self._on_syscall_event)  # type: ignore[attr-defined]
 
             # Add PID to trace
-            if not self._program.add_traced_pid(pid):
+            if not self._program.add_traced_pid(pid):  # type: ignore[attr-defined]
                 logger.error(f"Failed to add PID {pid} to trace")
                 return False
 
@@ -183,8 +183,8 @@ class SyscallManager:
 
         # Clear traced PIDs
         if self._program:
-            self._program.clear_traced_pids()
-            self._program.set_syscall_callback(None)
+            self._program.clear_traced_pids()  # type: ignore[attr-defined]
+            self._program.set_syscall_callback(None)  # type: ignore[attr-defined]
 
         # Get summary
         if self._summarizer:
@@ -216,7 +216,7 @@ class SyscallManager:
         while self._polling:
             try:
                 if self._program:
-                    self._program.poll(timeout_ms=100)
+                    self._program.poll(timeout_ms=100)  # type: ignore[attr-defined]
             except Exception as e:
                 logger.debug(f"Poll error: {e}")
             time.sleep(0.01)  # Small sleep to prevent busy loop
@@ -281,7 +281,7 @@ class SyscallManager:
                 self._stop_trace_internal()
 
             if self._program:
-                self._program.unload()
+                self._program.unload()  # type: ignore[attr-defined]
                 self._program = None
 
             self._initialized = False

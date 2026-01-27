@@ -17,7 +17,7 @@ try:
     HAS_CRONITER = True
 except ImportError:
     HAS_CRONITER = False
-    croniter = None  # type: ignore
+    croniter = None
 
 from elle.reactive.models import ReactiveFunction
 from elle.reactive.store import list_enabled_with_schedule_trigger
@@ -53,7 +53,7 @@ class ReactiveScheduler:
         self._engine = engine
         self.check_interval = check_interval
         self._running = False
-        self._tasks: dict[str, asyncio.Task] = {}
+        self._tasks: dict[str, asyncio.Task[None]] = {}
         self._schedules: dict[str, croniter] = {}
         self._stats = SchedulerStats()
 

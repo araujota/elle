@@ -331,6 +331,19 @@ class UIExecutor:
             )
 
         # Get accessible element
+        if match_result.actual_path is None:
+            duration_ms = int((time.time() - start_time) * 1000)
+            return ActionResult(
+                action=action,
+                action_index=action_index,
+                success=False,
+                error="Element path not available",
+                element_found=True,
+                adapted=adapted,
+                adaptation_method=adaptation_method,
+                duration_ms=duration_ms,
+            )
+
         accessible = self.client._follow_path(window, match_result.actual_path)
         if not accessible:
             duration_ms = int((time.time() - start_time) * 1000)
@@ -378,7 +391,7 @@ class UIExecutor:
             action_success = False
 
         # Verify state if requested
-        state_after = ()
+        state_after: tuple[str, ...] = ()
         verification_passed = None
 
         if action_success:
@@ -451,9 +464,9 @@ class UIExecutor:
 
             incident = create_incident_draft(
                 title=f"GUI automation: {plan.user_request}",
-                domain="gui",  # type: ignore  # New domain
+                domain="gui",
                 severity="info",
-                trigger_source="gui_automation",  # type: ignore
+                trigger_source="gui_automation",
             )
             return incident.incident_id
 
@@ -479,7 +492,7 @@ class UIExecutor:
 
             append_action(
                 incident_id=incident_id,
-                kind="gui",  # type: ignore
+                kind="gui",
                 command=f"gui.{result.action.action_type} '{result.action.target_name}'",
                 payload={
                     "target_name": result.action.target_name,

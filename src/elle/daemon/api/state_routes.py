@@ -204,7 +204,7 @@ class ErrorResponse(BaseModel):
 # ============================================================================
 
 
-@router.get(
+@router.get(  # type: ignore[untyped-decorator]
     "/docker",
     response_model=DockerStateResponse,
     responses={
@@ -253,7 +253,7 @@ async def get_docker_state(
     )
 
 
-@router.get(
+@router.get(  # type: ignore[untyped-decorator]
     "/network",
     response_model=NetworkStateResponse,
     responses={
@@ -291,7 +291,7 @@ async def get_network_state(
     )
 
 
-@router.get(
+@router.get(  # type: ignore[untyped-decorator]
     "/firewall",
     response_model=FirewallStateResponse,
     responses={
@@ -327,7 +327,7 @@ async def get_firewall_state(
     )
 
 
-@router.get(
+@router.get(  # type: ignore[untyped-decorator]
     "/listeners",
     response_model=ListenersResponse,
     responses={
@@ -361,7 +361,7 @@ async def get_listeners(
     )
 
 
-@router.get(
+@router.get(  # type: ignore[untyped-decorator]
     "",
     response_model=SystemStateResponse,
     responses={
@@ -448,7 +448,7 @@ async def get_system_state(
     )
 
 
-@router.post(
+@router.post(  # type: ignore[untyped-decorator]
     "/refresh",
     response_model=RefreshResponse,
     responses={

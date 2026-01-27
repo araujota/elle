@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -151,7 +151,7 @@ class ConfigPreviewOutput(BaseModel):
 # =============================================================================
 
 
-class ConfigEditCapability(BaseCapability):
+class ConfigEditCapability(BaseCapability[ConfigEditInput, ConfigEditOutput]):
     """Edit a configuration file using Augeas."""
 
     @property
@@ -181,14 +181,14 @@ class ConfigEditCapability(BaseCapability):
         """Preview config edit."""
         try:
             from elle.ops.augeas.controller import get_controller
-            from elle.ops.augeas.models import AugeasEditRequest, AugeasOperation
+            from elle.ops.augeas.models import AugeasEditRequest, AugeasOp
 
             # Convert operations
             ops = []
             for op in input.operations:
                 ops.append(
-                    AugeasOperation(
-                        kind=op.kind,
+                    AugeasOp(
+                        kind=cast(Literal["set", "rm", "ins", "mv"], op.kind),
                         path=op.path,
                         value=op.value,
                     )
@@ -235,14 +235,14 @@ class ConfigEditCapability(BaseCapability):
 
         try:
             from elle.ops.augeas.controller import get_controller
-            from elle.ops.augeas.models import AugeasEditRequest, AugeasOperation
+            from elle.ops.augeas.models import AugeasEditRequest, AugeasOp
 
             # Convert operations
             ops = []
             for op in input.operations:
                 ops.append(
-                    AugeasOperation(
-                        kind=op.kind,
+                    AugeasOp(
+                        kind=cast(Literal["set", "rm", "ins", "mv"], op.kind),
                         path=op.path,
                         value=op.value,
                     )
@@ -429,7 +429,7 @@ class ConfigEditCapability(BaseCapability):
 # =============================================================================
 
 
-class ConfigPreviewCapability(BaseCapability):
+class ConfigPreviewCapability(BaseCapability[ConfigPreviewInput, ConfigPreviewOutput]):
     """Preview changes to a configuration file."""
 
     @property
@@ -465,14 +465,14 @@ class ConfigPreviewCapability(BaseCapability):
 
         try:
             from elle.ops.augeas.controller import get_controller
-            from elle.ops.augeas.models import AugeasEditRequest, AugeasOperation
+            from elle.ops.augeas.models import AugeasEditRequest, AugeasOp
 
             # Convert operations
             ops = []
             for op in input.operations:
                 ops.append(
-                    AugeasOperation(
-                        kind=op.kind,
+                    AugeasOp(
+                        kind=cast(Literal["set", "rm", "ins", "mv"], op.kind),
                         path=op.path,
                         value=op.value,
                     )
@@ -482,6 +482,7 @@ class ConfigPreviewCapability(BaseCapability):
                 file_path=input.file_path,
                 lens=input.lens,
                 operations=tuple(ops),
+                description="Preview config changes",
             )
 
             controller = get_controller()

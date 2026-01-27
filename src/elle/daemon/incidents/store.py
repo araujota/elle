@@ -7,6 +7,8 @@ All operations are append-only where appropriate for auditability.
 import json
 import sqlite3
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
 
@@ -27,6 +29,36 @@ from elle.daemon.incidents.models import (
     TelemetryCitation,
 )
 from elle.daemon.incidents.schema import ensure_schema, get_connection
+
+
+@contextmanager
+def _ensure_connection(
+    conn: sqlite3.Connection | None = None,
+) -> Iterator[sqlite3.Connection]:
+    """Context manager that ensures a valid connection with schema.
+
+    If conn is provided, uses it directly. Otherwise creates a new connection
+    using get_connection() and ensures the schema is initialized, then closes
+    the connection when done.
+
+    Args:
+        conn: Existing connection to use (optional).
+
+    Yields:
+        A valid sqlite3.Connection.
+    """
+    own_conn = conn is None
+    actual_conn: sqlite3.Connection
+    if own_conn:
+        actual_conn = get_connection()
+        ensure_schema(actual_conn)
+    else:
+        actual_conn = conn  # type: ignore[assignment]
+    try:
+        yield actual_conn
+    finally:
+        if own_conn:
+            actual_conn.close()
 
 
 def _serialize_datetime(dt: datetime) -> str:
@@ -80,12 +112,7 @@ def create_incident_draft(
     Returns:
         The created IncidentReport.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         incident_id = str(uuid.uuid4())
         now = datetime.utcnow()
 
@@ -93,15 +120,15 @@ def create_incident_draft(
             incident_id=incident_id,
             created_at=now,
             updated_at=now,
-            domain=domain,  # type: ignore
-            severity=severity,  # type: ignore
+            domain=domain,  # type: ignore[arg-type]
+            severity=severity,  # type: ignore[arg-type]
             status="open",
             title=title,
-            trigger_source=trigger_source,  # type: ignore
+            trigger_source=trigger_source,  # type: ignore[arg-type]
             trigger_command=trigger_command,
         )
 
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(
             """
             INSERT INTO incidents (
@@ -152,12 +179,8 @@ def create_incident_draft(
                 incident.trigger_command,
             ),
         )
-        conn.commit()
+        c.commit()
         return incident
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def update_incident(
@@ -195,12 +218,7 @@ def update_incident(
     Returns:
         Updated IncidentReport, or None if not found.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         # Build update statement dynamically
         updates = ["updated_at = ?"]
         values: list[Any] = [_serialize_datetime(datetime.utcnow())]
@@ -259,21 +277,17 @@ def update_incident(
 
         values.append(incident_id)
 
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(
             f"UPDATE incidents SET {', '.join(updates)} WHERE id = ?",
             values,
         )
-        conn.commit()
+        c.commit()
 
         if cursor.rowcount == 0:
             return None
 
-        return get_incident(incident_id, conn=conn)
-
-    finally:
-        if own_conn:
-            conn.close()
+        return get_incident(incident_id, conn=c)
 
 
 def get_incident(
@@ -289,13 +303,8 @@ def get_incident(
     Returns:
         IncidentReport if found, None otherwise.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute("SELECT * FROM incidents WHERE id = ?", (incident_id,))
         row = cursor.fetchone()
 
@@ -303,10 +312,6 @@ def get_incident(
             return None
 
         return _row_to_incident(row)
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def list_incidents(
@@ -328,12 +333,7 @@ def list_incidents(
     Returns:
         List of IncidentReports.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         query = "SELECT * FROM incidents WHERE 1=1"
         params: list[Any] = []
 
@@ -347,14 +347,10 @@ def list_incidents(
         query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
 
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(query, params)
 
         return [_row_to_incident(row) for row in cursor.fetchall()]
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def delete_incident(
@@ -373,20 +369,11 @@ def delete_incident(
     Returns:
         True if deleted, False if not found.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute("DELETE FROM incidents WHERE id = ?", (incident_id,))
-        conn.commit()
+        c.commit()
         return cursor.rowcount > 0
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def _row_to_incident(row: sqlite3.Row) -> IncidentReport:
@@ -467,26 +454,22 @@ def append_action(
     Returns:
         The created IncidentAction.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
 
         # Get next step index
         cursor.execute(
             "SELECT COALESCE(MAX(step_index), -1) + 1 FROM incident_actions WHERE incident_id = ?",
             (incident_id,),
         )
-        step_index = cursor.fetchone()[0]
+        row = cursor.fetchone()
+        step_index: int = int(row[0]) if row else 0
 
         now = datetime.utcnow()
         action = IncidentAction(
             incident_id=incident_id,
             step_index=step_index,
-            kind=kind,  # type: ignore
+            kind=kind,  # type: ignore[arg-type]
             command=command,
             payload=payload or {},
             exit_code=exit_code,
@@ -538,12 +521,8 @@ def append_action(
             duration_ms=action.duration_ms,
         )
 
-        conn.commit()
+        c.commit()
         return action
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def get_actions(
@@ -559,13 +538,8 @@ def get_actions(
     Returns:
         List of IncidentActions in order.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             SELECT * FROM incident_actions
@@ -576,10 +550,6 @@ def get_actions(
         )
 
         return [_row_to_action(row) for row in cursor.fetchall()]
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def _row_to_action(row: sqlite3.Row) -> IncidentAction:
@@ -627,13 +597,8 @@ def attach_snapshot(
     Returns:
         The created/updated IncidentSnapshot.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         now = datetime.utcnow()
 
         cursor.execute(
@@ -653,17 +618,13 @@ def attach_snapshot(
         snapshot_record = IncidentSnapshot(
             id=cursor.lastrowid,
             incident_id=incident_id,
-            which=which,  # type: ignore
+            which=which,  # type: ignore[arg-type]
             snapshot=snapshot,
             created_at=now,
         )
 
-        conn.commit()
+        c.commit()
         return snapshot_record
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def get_snapshot(
@@ -681,13 +642,8 @@ def get_snapshot(
     Returns:
         IncidentSnapshot if found, None otherwise.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             SELECT * FROM incident_snapshots
@@ -701,10 +657,6 @@ def get_snapshot(
             return None
 
         return _row_to_snapshot(row)
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def get_snapshots(
@@ -720,28 +672,19 @@ def get_snapshots(
     Returns:
         Dict mapping 'pre'/'post' to IncidentSnapshot.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             "SELECT * FROM incident_snapshots WHERE incident_id = ?",
             (incident_id,),
         )
 
-        result = {}
+        result: dict[str, IncidentSnapshot] = {}
         for row in cursor.fetchall():
             snapshot = _row_to_snapshot(row)
             result[snapshot.which] = snapshot
 
         return result
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def _row_to_snapshot(row: sqlite3.Row) -> IncidentSnapshot:
@@ -797,13 +740,8 @@ def link_events(
     Returns:
         Number of new links created.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         created = 0
 
         for event_id in event_ids:
@@ -817,12 +755,8 @@ def link_events(
                 # Already linked
                 pass
 
-        conn.commit()
+        c.commit()
         return created
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def get_linked_events(
@@ -838,22 +772,13 @@ def get_linked_events(
     Returns:
         List of event IDs.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             "SELECT event_id FROM incident_events WHERE incident_id = ?",
             (incident_id,),
         )
-        return [row["event_id"] for row in cursor.fetchall()]
-
-    finally:
-        if own_conn:
-            conn.close()
+        return [str(row["event_id"]) for row in cursor.fetchall()]
 
 
 # =============================================================================
@@ -877,13 +802,8 @@ def upsert_embedding(
     """
     import struct
 
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
 
         # Convert to bytes
         embedding_bytes = struct.pack(f"{len(embedding)}f", *embedding)
@@ -902,11 +822,7 @@ def upsert_embedding(
                 _serialize_datetime(datetime.utcnow()),
             ),
         )
-        conn.commit()
-
-    finally:
-        if own_conn:
-            conn.close()
+        c.commit()
 
 
 def get_embedding(
@@ -924,13 +840,8 @@ def get_embedding(
     """
     import struct
 
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             "SELECT embedding, dim FROM incident_embeddings WHERE incident_id = ?",
             (incident_id,),
@@ -940,13 +851,9 @@ def get_embedding(
         if not row:
             return None
 
-        dim = row["dim"]
+        dim = int(row["dim"])
         embedding = struct.unpack(f"{dim}f", row["embedding"])
         return list(embedding)
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def get_all_embeddings(
@@ -962,26 +869,17 @@ def get_all_embeddings(
     """
     import struct
 
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute("SELECT incident_id, embedding, dim FROM incident_embeddings")
 
-        result = {}
+        result: dict[str, list[float]] = {}
         for row in cursor.fetchall():
-            dim = row["dim"]
+            dim = int(row["dim"])
             embedding = struct.unpack(f"{dim}f", row["embedding"])
-            result[row["incident_id"]] = list(embedding)
+            result[str(row["incident_id"])] = list(embedding)
 
         return result
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def get_incidents_without_embeddings(
@@ -997,13 +895,8 @@ def get_incidents_without_embeddings(
     Returns:
         List of incident IDs.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             SELECT i.id FROM incidents i
@@ -1013,11 +906,7 @@ def get_incidents_without_embeddings(
             """,
             (limit,),
         )
-        return [row["id"] for row in cursor.fetchall()]
-
-    finally:
-        if own_conn:
-            conn.close()
+        return [str(row["id"]) for row in cursor.fetchall()]
 
 
 # =============================================================================
@@ -1047,14 +936,9 @@ def finalize_outcome(
     Returns:
         Updated IncidentReport.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         # Get current incident
-        incident = get_incident(incident_id, conn=conn)
+        incident = get_incident(incident_id, conn=c)
         if not incident:
             return None
 
@@ -1087,7 +971,7 @@ def finalize_outcome(
             root_cause=root_cause,
             time_to_mitigate_sec=time_to_mitigate,
             time_to_resolve_sec=time_to_resolve,
-            conn=conn,
+            conn=c,
         )
 
         # Record outcome for efficacy tracking
@@ -1095,16 +979,12 @@ def finalize_outcome(
             try:
                 from elle.daemon.incidents.efficacy_tracker import record_outcome
 
-                record_outcome(updated_incident, outcome, conn=conn)
+                record_outcome(updated_incident, outcome, conn=c)
             except Exception:
                 # Don't fail finalization if efficacy tracking fails
                 pass
 
         return updated_incident
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 # =============================================================================
@@ -1123,19 +1003,11 @@ def get_incident_count(
     Returns:
         Total incident count.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute("SELECT COUNT(*) FROM incidents")
-        return cursor.fetchone()[0]
-
-    finally:
-        if own_conn:
-            conn.close()
+        row = cursor.fetchone()
+        return int(row[0]) if row else 0
 
 
 def get_action_count(
@@ -1149,19 +1021,11 @@ def get_action_count(
     Returns:
         Total action count.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute("SELECT COUNT(*) FROM incident_actions")
-        return cursor.fetchone()[0]
-
-    finally:
-        if own_conn:
-            conn.close()
+        row = cursor.fetchone()
+        return int(row[0]) if row else 0
 
 
 def get_snapshot_count(
@@ -1175,19 +1039,11 @@ def get_snapshot_count(
     Returns:
         Total snapshot count.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute("SELECT COUNT(*) FROM incident_snapshots")
-        return cursor.fetchone()[0]
-
-    finally:
-        if own_conn:
-            conn.close()
+        row = cursor.fetchone()
+        return int(row[0]) if row else 0
 
 
 # =============================================================================
@@ -1209,13 +1065,8 @@ def store_decision_record(
         decision_record: The structured decision record.
         conn: SQLite connection.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
 
         # Serialize nested models
         confidence_json = _json_dumps(safe_model_dump(decision_record.confidence))
@@ -1240,11 +1091,7 @@ def store_decision_record(
                 _serialize_datetime(decision_record.decided_at),
             ),
         )
-        conn.commit()
-
-    finally:
-        if own_conn:
-            conn.close()
+        c.commit()
 
 
 def get_decision_record(
@@ -1260,13 +1107,8 @@ def get_decision_record(
     Returns:
         DecisionRecord if found, None otherwise.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             "SELECT * FROM decision_records WHERE incident_id = ?",
             (incident_id,),
@@ -1277,10 +1119,6 @@ def get_decision_record(
             return None
 
         return _row_to_decision_record(row)
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def _row_to_decision_record(row: sqlite3.Row) -> DecisionRecord:
@@ -1364,13 +1202,8 @@ def store_config_state(
         config_state: The config file state.
         conn: SQLite connection.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
 
         mtime_str = _serialize_datetime(config_state.mtime) if config_state.mtime else None
 
@@ -1393,11 +1226,7 @@ def store_config_state(
                 config_state.backup_path,
             ),
         )
-        conn.commit()
-
-    finally:
-        if own_conn:
-            conn.close()
+        c.commit()
 
 
 def get_config_states(
@@ -1415,13 +1244,8 @@ def get_config_states(
     Returns:
         List of ConfigFileState.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
 
         if which:
             cursor.execute(
@@ -1443,10 +1267,6 @@ def get_config_states(
             )
 
         return [_row_to_config_state(row) for row in cursor.fetchall()]
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def _row_to_config_state(row: sqlite3.Row) -> ConfigFileState:
@@ -1482,13 +1302,8 @@ def get_config_state_by_path(
     Returns:
         List of (incident_id, which, ConfigFileState) tuples.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             SELECT incident_id, snapshot_which, *
@@ -1500,13 +1315,9 @@ def get_config_state_by_path(
             (path, limit),
         )
 
-        results = []
+        results: list[tuple[str, str, ConfigFileState]] = []
         for row in cursor.fetchall():
             state = _row_to_config_state(row)
-            results.append((row["incident_id"], row["snapshot_which"], state))
+            results.append((str(row["incident_id"]), str(row["snapshot_which"]), state))
 
         return results
-
-    finally:
-        if own_conn:
-            conn.close()

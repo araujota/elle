@@ -33,7 +33,7 @@ class CapabilityMapping:
 
 
 # Command patterns and their capability mappings
-COMMAND_PATTERNS: list[tuple[re.Pattern, CapabilityMapping]] = [
+COMMAND_PATTERNS: list[tuple[re.Pattern[str], CapabilityMapping]] = [
     # Service management
     (
         re.compile(r"^sudo\s+systemctl\s+restart\s+(\S+)$"),
@@ -141,7 +141,7 @@ COMMAND_PATTERNS: list[tuple[re.Pattern, CapabilityMapping]] = [
 ]
 
 
-def extract_service(match: re.Match) -> dict[str, Any]:
+def extract_service(match: re.Match[str]) -> dict[str, Any]:
     """Extract service name from match."""
     service = match.group(1)
     # Remove .service suffix if present
@@ -150,12 +150,12 @@ def extract_service(match: re.Match) -> dict[str, Any]:
     return {"service": service}
 
 
-def extract_service_legacy(match: re.Match) -> dict[str, Any]:
+def extract_service_legacy(match: re.Match[str]) -> dict[str, Any]:
     """Extract service name from legacy service command."""
     return {"service": match.group(1)}
 
 
-def extract_packages(match: re.Match) -> dict[str, Any]:
+def extract_packages(match: re.Match[str]) -> dict[str, Any]:
     """Extract package list from match."""
     pkg_str = match.group(1).strip()
     # Split on whitespace, filter empty
@@ -163,17 +163,17 @@ def extract_packages(match: re.Match) -> dict[str, Any]:
     return {"packages": packages}
 
 
-def extract_container(match: re.Match) -> dict[str, Any]:
+def extract_container(match: re.Match[str]) -> dict[str, Any]:
     """Extract container ID/name from match."""
     return {"container": match.group(1)}
 
 
-def extract_interface(match: re.Match) -> dict[str, Any]:
+def extract_interface(match: re.Match[str]) -> dict[str, Any]:
     """Extract WireGuard interface from match."""
     return {"interface": match.group(1)}
 
 
-def extract_interface_optional(match: re.Match) -> dict[str, Any]:
+def extract_interface_optional(match: re.Match[str]) -> dict[str, Any]:
     """Extract optional WireGuard interface from match."""
     interface = match.group(1) if match.lastindex and match.group(1) else None
     return {"interface": interface}

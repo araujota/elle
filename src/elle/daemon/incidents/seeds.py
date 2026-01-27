@@ -17,12 +17,15 @@ Usage:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
     pass
+
+# IncidentStore was refactored to standalone functions
+IncidentStore = Any
 
 logger = logging.getLogger(__name__)
 
@@ -397,7 +400,7 @@ SEED_PATTERNS: tuple[IncidentPatternSeed, ...] = (
 )
 
 
-async def seed_incident_patterns(incident_store) -> int:
+async def seed_incident_patterns(incident_store: IncidentStore) -> int:
     """Seed the incident vault with common error patterns.
 
     Args:

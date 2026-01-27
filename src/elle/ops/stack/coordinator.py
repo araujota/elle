@@ -33,7 +33,7 @@ class StackCoordinator:
     into a single transactional deployment.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the coordinator."""
         self._recipes: dict[str, StackRecipe] = {}
         self._load_recipes()

@@ -6,6 +6,8 @@ and function state. All operations follow ELLE's store patterns.
 
 import json
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
 
@@ -24,6 +26,26 @@ from elle.reactive.models import (
     Trigger,
 )
 from elle.reactive.schema import ensure_schema, get_connection
+
+
+@contextmanager
+def _ensure_connection(
+    conn: sqlite3.Connection | None = None,
+) -> Iterator[sqlite3.Connection]:
+    """Context manager that ensures a valid connection with schema."""
+    own_conn = conn is None
+    actual_conn: sqlite3.Connection
+    if own_conn:
+        actual_conn = get_connection()
+        ensure_schema(actual_conn)
+    else:
+        assert conn is not None  # for type narrowing
+        actual_conn = conn
+    try:
+        yield actual_conn
+    finally:
+        if own_conn:
+            actual_conn.close()
 
 
 def _serialize_datetime(dt: datetime) -> str:
@@ -69,13 +91,8 @@ def create_function(
     Raises:
         sqlite3.IntegrityError: If name already exists.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             INSERT INTO reactive_functions (
@@ -102,12 +119,8 @@ def create_function(
                 func.source_prompt,
             ),
         )
-        conn.commit()
+        c.commit()
         return func
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def update_function(
@@ -136,12 +149,7 @@ def update_function(
     Returns:
         Updated ReactiveFunction, or None if not found.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         # Build update statement dynamically
         updates = ["updated_at = ?"]
         values: list[Any] = [_serialize_datetime(datetime.utcnow())]
@@ -176,21 +184,17 @@ def update_function(
 
         values.append(function_id)
 
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(
             f"UPDATE reactive_functions SET {', '.join(updates)} WHERE id = ?",
             values,
         )
-        conn.commit()
+        c.commit()
 
         if cursor.rowcount == 0:
             return None
 
-        return get_function(function_id, conn=conn)
-
-    finally:
-        if own_conn:
-            conn.close()
+        return get_function(function_id, conn=c)
 
 
 def get_function(
@@ -206,13 +210,8 @@ def get_function(
     Returns:
         ReactiveFunction if found, None otherwise.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute("SELECT * FROM reactive_functions WHERE id = ?", (function_id,))
         row = cursor.fetchone()
 
@@ -220,10 +219,6 @@ def get_function(
             return None
 
         return _row_to_function(row)
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def get_function_by_name(
@@ -239,13 +234,8 @@ def get_function_by_name(
     Returns:
         ReactiveFunction if found, None otherwise.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute("SELECT * FROM reactive_functions WHERE name = ?", (name,))
         row = cursor.fetchone()
 
@@ -253,10 +243,6 @@ def get_function_by_name(
             return None
 
         return _row_to_function(row)
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def list_functions(
@@ -278,12 +264,7 @@ def list_functions(
     Returns:
         List of ReactiveFunctions.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         query = "SELECT * FROM reactive_functions WHERE 1=1"
         params: list[Any] = []
 
@@ -293,7 +274,7 @@ def list_functions(
         query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
 
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(query, params)
 
         functions = [_row_to_function(row) for row in cursor.fetchall()]
@@ -303,10 +284,6 @@ def list_functions(
             functions = [f for f in functions if any(t in f.tags for t in tags)]
 
         return functions
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def list_enabled_with_event_trigger(
@@ -322,13 +299,8 @@ def list_enabled_with_event_trigger(
     Returns:
         List of enabled ReactiveFunctions with event triggers.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         # Filter for enabled functions with event triggers
         cursor.execute(
             """
@@ -340,10 +312,6 @@ def list_enabled_with_event_trigger(
         )
 
         return [_row_to_function(row) for row in cursor.fetchall()]
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def list_enabled_with_schedule_trigger(
@@ -359,13 +327,8 @@ def list_enabled_with_schedule_trigger(
     Returns:
         List of enabled ReactiveFunctions with schedule triggers.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             SELECT * FROM reactive_functions
@@ -376,10 +339,6 @@ def list_enabled_with_schedule_trigger(
         )
 
         return [_row_to_function(row) for row in cursor.fetchall()]
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def delete_function(
@@ -395,20 +354,11 @@ def delete_function(
     Returns:
         True if deleted, False if not found.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute("DELETE FROM reactive_functions WHERE id = ?", (function_id,))
-        conn.commit()
+        c.commit()
         return cursor.rowcount > 0
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def delete_function_by_name(
@@ -424,20 +374,11 @@ def delete_function_by_name(
     Returns:
         True if deleted, False if not found.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute("DELETE FROM reactive_functions WHERE name = ?", (name,))
-        conn.commit()
+        c.commit()
         return cursor.rowcount > 0
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def _row_to_function(row: sqlite3.Row) -> ReactiveFunction:
@@ -525,13 +466,8 @@ def record_execution(
     Returns:
         The stored ExecutionRecord.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             INSERT INTO execution_history (
@@ -557,12 +493,8 @@ def record_execution(
                 record.incident_id,
             ),
         )
-        conn.commit()
+        c.commit()
         return record
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def get_execution_history(
@@ -582,13 +514,8 @@ def get_execution_history(
     Returns:
         List of ExecutionRecords, most recent first.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             SELECT * FROM execution_history
@@ -600,10 +527,6 @@ def get_execution_history(
         )
 
         return [_row_to_execution(row) for row in cursor.fetchall()]
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def get_recent_executions(
@@ -621,12 +544,7 @@ def get_recent_executions(
     Returns:
         List of ExecutionRecords, most recent first.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         query = "SELECT * FROM execution_history"
         params: list[Any] = []
 
@@ -636,14 +554,10 @@ def get_recent_executions(
         query += " ORDER BY triggered_at DESC LIMIT ?"
         params.append(limit)
 
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(query, params)
 
         return [_row_to_execution(row) for row in cursor.fetchall()]
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 def _row_to_execution(row: sqlite3.Row) -> ExecutionRecord:
@@ -687,13 +601,8 @@ def get_rate_limit_state(
     Returns:
         RateLimitState (with defaults if no state exists).
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             SELECT key, value_json FROM function_state
@@ -717,10 +626,6 @@ def get_rate_limit_state(
             daily_reset_date=state_dict.get("daily_reset_date", ""),
         )
 
-    finally:
-        if own_conn:
-            conn.close()
-
 
 def update_rate_limit_state(
     function_id: str,
@@ -738,13 +643,8 @@ def update_rate_limit_state(
         daily_reset_date: Date string for daily counter.
         conn: SQLite connection.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         now = _serialize_datetime(datetime.utcnow())
 
         # Upsert each state key
@@ -763,11 +663,7 @@ def update_rate_limit_state(
                 (function_id, key, _json_dumps(value), now),
             )
 
-        conn.commit()
-
-    finally:
-        if own_conn:
-            conn.close()
+        c.commit()
 
 
 def set_function_state(
@@ -784,13 +680,8 @@ def set_function_state(
         value: State value (will be JSON serialized).
         conn: SQLite connection.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             INSERT OR REPLACE INTO function_state (function_id, key, value_json, updated_at)
@@ -798,11 +689,7 @@ def set_function_state(
             """,
             (function_id, key, _json_dumps(value), _serialize_datetime(datetime.utcnow())),
         )
-        conn.commit()
-
-    finally:
-        if own_conn:
-            conn.close()
+        c.commit()
 
 
 def get_function_state(
@@ -820,13 +707,8 @@ def get_function_state(
     Returns:
         State value, or None if not found.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         cursor.execute(
             """
             SELECT value_json FROM function_state
@@ -840,10 +722,6 @@ def get_function_state(
             return None
 
         return _json_loads(row["value_json"])
-
-    finally:
-        if own_conn:
-            conn.close()
 
 
 # =============================================================================
@@ -864,22 +742,14 @@ def get_function_count(
     Returns:
         Total function count.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
-        cursor = conn.cursor()
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
         if enabled_only:
             cursor.execute("SELECT COUNT(*) FROM reactive_functions WHERE enabled = 1")
         else:
             cursor.execute("SELECT COUNT(*) FROM reactive_functions")
-        return cursor.fetchone()[0]
-
-    finally:
-        if own_conn:
-            conn.close()
+        row = cursor.fetchone()
+        return int(row[0]) if row else 0
 
 
 def get_execution_count(
@@ -897,12 +767,7 @@ def get_execution_count(
     Returns:
         Total execution count.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    with _ensure_connection(conn) as c:
         query = "SELECT COUNT(*) FROM execution_history WHERE 1=1"
         params: list[Any] = []
 
@@ -914,10 +779,7 @@ def get_execution_count(
             query += " AND triggered_at >= ?"
             params.append(_serialize_datetime(since))
 
-        cursor = conn.cursor()
+        cursor = c.cursor()
         cursor.execute(query, params)
-        return cursor.fetchone()[0]
-
-    finally:
-        if own_conn:
-            conn.close()
+        row = cursor.fetchone()
+        return int(row[0]) if row else 0

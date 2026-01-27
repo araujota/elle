@@ -326,13 +326,21 @@ class PlanContext(BaseModel):
         from_inc = 0.0
 
         if man_citations:
-            from_man = max(c.get("relevance_score", 0) for c in man_citations) * 0.3
+            scores: list[float] = []
+            for c in man_citations:
+                val = c.get("relevance_score")
+                scores.append(float(val) if val is not None else 0.0)  # type: ignore[arg-type]
+            from_man = max(scores) * 0.3 if scores else 0.0
             overall += from_man
 
         if incident_citations:
             good_outcomes = [c for c in incident_citations if c.get("outcome") in ("improved", "partial", "success")]
             if good_outcomes:
-                from_inc = max(c.get("similarity_score", 0) for c in good_outcomes) * 0.4
+                sim_scores: list[float] = []
+                for c in good_outcomes:
+                    val = c.get("similarity_score")
+                    sim_scores.append(float(val) if val is not None else 0.0)  # type: ignore[arg-type]
+                from_inc = max(sim_scores) * 0.4 if sim_scores else 0.0
                 overall += from_inc
 
         overall = min(1.0, overall)

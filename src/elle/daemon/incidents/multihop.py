@@ -9,7 +9,7 @@ import re
 import sqlite3
 import uuid
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from elle.common.pydantic_compat import safe_model_dump
 from elle.daemon.incidents.models import (
@@ -19,8 +19,11 @@ from elle.daemon.incidents.models import (
 from elle.daemon.incidents.narrative import (
     CausalChain,
     CausalLink,
+    CauseType,
+    EffectType,
     MultiHopConfig,
     MultiHopResult,
+    Relationship,
     SearchHop,
 )
 from elle.daemon.incidents.retriever import search as incident_search
@@ -87,6 +90,9 @@ class MultiHopSearch:
         if own_conn:
             conn = get_connection()
             ensure_schema(conn)
+
+        # At this point conn is guaranteed to be non-None
+        assert conn is not None
 
         try:
             start_time = datetime.utcnow()
@@ -197,7 +203,7 @@ class MultiHopSearch:
             )
 
         finally:
-            if own_conn:
+            if own_conn and conn is not None:
                 conn.close()
 
     def _search_hop(
@@ -286,7 +292,7 @@ class MultiHopSearch:
             return []
 
         try:
-            from elle.daemon.telemetry.store import list_events, search_events
+            from elle.daemon.telemetry.store import query_events, search_events
 
             # First try text search
             results = search_events(query, limit=self.config.max_results_per_hop, conn=conn)
@@ -294,7 +300,7 @@ class MultiHopSearch:
             # Also search by entity if provided
             if entities:
                 for entity in entities[:3]:
-                    entity_results = list_events(
+                    entity_results = query_events(
                         entity=entity,
                         limit=self.config.max_results_per_hop // 3,
                         conn=conn,
@@ -313,10 +319,10 @@ class MultiHopSearch:
 
             # Filter by time window
             filtered = []
-            for evt in event_dicts:
-                evt_time = self._get_event_time(evt)
+            for evt_dict in event_dicts:
+                evt_time = self._get_event_time(evt_dict)
                 if time_start <= evt_time <= time_end:
-                    filtered.append(evt)
+                    filtered.append(evt_dict)
 
             return filtered[: self.config.max_results_per_hop]
 
@@ -447,11 +453,11 @@ class MultiHopSearch:
             next_summary = self._get_item_summary(next_type, next_item)
 
             link = CausalLink(
-                cause_type=curr_type if curr_type != "incident" else "incident",
+                cause_type=cast(CauseType, curr_type if curr_type != "incident" else "incident"),
                 cause_id=curr_id,
                 cause_summary=curr_summary,
                 cause_timestamp=curr_time,
-                effect_type=next_type if next_type != "incident" else "incident",
+                effect_type=cast(EffectType, next_type if next_type != "symptom" else "symptom"),
                 effect_id=next_id,
                 effect_summary=next_summary,
                 effect_timestamp=next_time,
@@ -488,7 +494,7 @@ class MultiHopSearch:
         effect_type: str,
         effect_item: Any,
         delta_sec: int,
-    ) -> str:
+    ) -> Relationship:
         """Infer the type of causal relationship."""
         # Very close timing suggests direct trigger
         if delta_sec < 60:
@@ -556,17 +562,20 @@ class MultiHopSearch:
     def _get_domain(self, item_type: str, item: Any) -> str | None:
         """Get domain from an item."""
         if item_type == "incident":
-            return item.domain
+            domain = item.domain
+            return str(domain) if domain else None
         elif item_type == "event":
-            return item.get("category")
+            category = item.get("category")
+            return str(category) if category else None
         return None
 
     def _get_item_summary(self, item_type: str, item: Any) -> str:
         """Get a summary string for an item."""
         if item_type == "incident":
-            return item.title
+            title = item.title
+            return str(title) if title else "Unknown"
         elif item_type == "event":
-            msg = item.get("message", "")
+            msg = str(item.get("message", ""))
             return msg[:100] + "..." if len(msg) > 100 else msg
         return "Unknown"
 

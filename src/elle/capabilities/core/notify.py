@@ -144,7 +144,7 @@ class NotifyAlertOutput(BaseModel):
 # =============================================================================
 
 
-class NotifySendCapability(BaseCapability):
+class NotifySendCapability(BaseCapability[NotifySendInput, NotifySendOutput]):
     """Send a desktop notification."""
 
     @property
@@ -187,19 +187,20 @@ class NotifySendCapability(BaseCapability):
 
         try:
             from elle.daemon.notifications import notify
+            from elle.daemon.notifications.models import NotificationUrgency
 
             # Map urgency to notification urgency
-            urgency_map = {
-                "low": "low",
-                "normal": "normal",
-                "critical": "critical",
+            urgency_map: dict[str, NotificationUrgency] = {
+                "low": NotificationUrgency.LOW,
+                "normal": NotificationUrgency.NORMAL,
+                "critical": NotificationUrgency.CRITICAL,
             }
 
             # Send via notification service
             _result = notify(  # Result available but notification_id extracted async
                 title=input.title,
                 body=input.body,
-                urgency=urgency_map.get(input.urgency, "normal"),
+                urgency=urgency_map.get(input.urgency, NotificationUrgency.NORMAL),
                 icon=input.icon,
             )
 
@@ -317,7 +318,7 @@ class NotifySendCapability(BaseCapability):
 # =============================================================================
 
 
-class NotifyAlertCapability(BaseCapability):
+class NotifyAlertCapability(BaseCapability[NotifyAlertInput, NotifyAlertOutput]):
     """Send a high-priority alert with optional ntfy push."""
 
     @property
@@ -377,17 +378,18 @@ class NotifyAlertCapability(BaseCapability):
         ntfy_message_id = None
         errors: list[str] = []
 
-        # Map severity to urgency
-        severity_urgency = {
-            "info": "low",
-            "warning": "normal",
-            "error": "critical",
-            "critical": "critical",
-        }
-
         # 1. Send desktop notification
         try:
             from elle.daemon.notifications import notify, notify_incident
+            from elle.daemon.notifications.models import NotificationUrgency
+
+            # Map severity to urgency
+            severity_urgency: dict[str, NotificationUrgency] = {
+                "info": NotificationUrgency.LOW,
+                "warning": NotificationUrgency.NORMAL,
+                "error": NotificationUrgency.CRITICAL,
+                "critical": NotificationUrgency.CRITICAL,
+            }
 
             if input.incident_id:
                 # Use incident notification for click-to-investigate
@@ -403,7 +405,7 @@ class NotifyAlertCapability(BaseCapability):
                 notify(
                     title=input.title,
                     body=input.body,
-                    urgency=severity_urgency.get(input.severity, "normal"),
+                    urgency=severity_urgency.get(input.severity, NotificationUrgency.NORMAL),
                 )
             sent_desktop = True
 
@@ -497,7 +499,7 @@ class NotifyAlertCapability(BaseCapability):
         }
 
         # Build payload
-        payload = {
+        payload: dict[str, str | list[str] | list[dict[str, str]]] = {
             "topic": topic,
             "title": input.title,
             "message": input.body or input.title,
@@ -509,7 +511,7 @@ class NotifyAlertCapability(BaseCapability):
             payload["tags"] = list(input.tags)
         else:
             # Default tags based on severity
-            severity_tags = {
+            severity_tags: dict[str, list[str]] = {
                 "info": ["information_source"],
                 "warning": ["warning"],
                 "error": ["x"],
@@ -527,7 +529,8 @@ class NotifyAlertCapability(BaseCapability):
 
             with urllib.request.urlopen(req, timeout=10) as response:
                 result = json.loads(response.read().decode("utf-8"))
-                return result.get("id")
+                msg_id = result.get("id")
+                return str(msg_id) if msg_id is not None else None
 
         except urllib.error.URLError as e:
             logger.warning(f"ntfy request failed: {e}")

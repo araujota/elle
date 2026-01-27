@@ -348,7 +348,7 @@ class WireguardHandler(DomainHandler):
             return False
 
         # Check base64 character set (with possible = padding)
-        return re.match(r"^[A-Za-z0-9+/]{43}=$", key)
+        return re.match(r"^[A-Za-z0-9+/]{43}=$", key) is not None
 
     def _is_valid_cidr(self, cidr: str) -> bool:
         """Check if a string looks like a valid CIDR notation."""

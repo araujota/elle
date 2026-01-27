@@ -182,9 +182,9 @@ class NarrativeBuilder:
             )
 
             # Parse response
-            summary, explanation = self._parse_llm_response(response)
+            summary, explanation = self._parse_llm_response(response.content)
 
-            model_used = self.model or llm.model_name
+            model_used = self.model or str(llm.model)
 
             return summary, explanation, model_used
 
@@ -447,6 +447,7 @@ def get_narrative(
         conn = get_connection()
         ensure_schema(conn)
         _ensure_narrative_schema(conn)
+    assert conn is not None
 
     try:
         cursor = conn.cursor()
@@ -505,7 +506,7 @@ def get_narrative(
         )
 
     finally:
-        if own_conn:
+        if own_conn and conn is not None:
             conn.close()
 
 
@@ -527,6 +528,7 @@ def get_narratives_for_incident(
         conn = get_connection()
         ensure_schema(conn)
         _ensure_narrative_schema(conn)
+    assert conn is not None
 
     try:
         cursor = conn.cursor()
@@ -544,7 +546,7 @@ def get_narratives_for_incident(
         return narratives
 
     finally:
-        if own_conn:
+        if own_conn and conn is not None:
             conn.close()
 
 
@@ -606,5 +608,5 @@ def generate_narrative_for_incident(
         return narrative
 
     finally:
-        if own_conn:
+        if own_conn and conn is not None:
             conn.close()

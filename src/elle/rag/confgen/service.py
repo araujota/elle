@@ -305,13 +305,15 @@ class ConfigGenService:
                     )
 
                 request = AugeasEditRequest(
-                    target=result.target_path,
+                    file_path=result.target_path,
                     operations=tuple(augeas_ops),
-                    description=result.title,
+                    description=result.title or "Apply configuration changes",
                 )
 
+                import asyncio
+
                 controller = get_controller()
-                edit_result = controller.execute(request)
+                edit_result = asyncio.get_event_loop().run_until_complete(controller.execute(request))
 
                 if not edit_result.success:
                     return edit_result.error

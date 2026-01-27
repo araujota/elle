@@ -511,7 +511,7 @@ class IncidentCitation(BaseModel):
         le=1.0,
         description="How similar this incident was to the current one",
     )
-    match_type: Literal["fingerprint", "lexical", "semantic", "hybrid"] = Field(
+    match_type: Literal["fingerprint", "lexical", "semantic", "hybrid", "daemon_api"] = Field(
         description="How the match was found",
     )
     successful_actions: tuple[str, ...] = Field(

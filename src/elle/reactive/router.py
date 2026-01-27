@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from elle.daemon.telemetry.models import TelemetryEvent
@@ -42,7 +42,7 @@ class EventRouter:
         self.engine = engine
         self.max_concurrent = max_concurrent
         self._running = False
-        self._tasks: list[asyncio.Task] = []
+        self._tasks: list[asyncio.Task[None]] = []
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._stats = RouterStats()
 
@@ -197,7 +197,7 @@ class RouterStats:
 async def route_event(
     event: TelemetryEvent,
     engine: ReactiveEngine | None = None,
-) -> list:
+) -> list[Any]:
     """Route a single event through the reactive engine.
 
     Convenience function for routing events without setting up
@@ -243,7 +243,7 @@ class SimpleRouter:
             self._engine = get_engine()
         return self._engine
 
-    async def route(self, event: TelemetryEvent) -> list:
+    async def route(self, event: TelemetryEvent) -> list[Any]:
         """Route a single event to reactive functions.
 
         Args:
