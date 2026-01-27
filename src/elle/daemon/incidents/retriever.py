@@ -836,11 +836,16 @@ def get_status(
         oldest = _parse_datetime(row[0]) if row[0] else None
         newest = _parse_datetime(row[1]) if row[1] else None
 
-        # DB size
+        # DB size - handle cases where db path may not be accessible (tests, etc.)
         from elle.daemon.incidents.schema import get_db_path
 
-        db_path = get_db_path()
-        db_size = db_path.stat().st_size if db_path.exists() else 0
+        db_size = 0
+        try:
+            db_path = get_db_path()
+            if db_path.exists():
+                db_size = db_path.stat().st_size
+        except (PermissionError, OSError):
+            pass
 
         return safe_model_dump(
             IncidentVaultStatus(

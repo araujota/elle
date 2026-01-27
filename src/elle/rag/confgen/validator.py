@@ -240,10 +240,14 @@ class ConfigValidator:
         # Validate syntax based on file type
         if result.file_type == "yaml":
             try:
-                import yaml
+                from io import StringIO
 
-                yaml.safe_load(content)
-            except yaml.YAMLError as e:
+                from ruamel.yaml import YAML
+                from ruamel.yaml.error import YAMLError
+
+                yaml_parser = YAML(typ="safe")
+                yaml_parser.load(StringIO(content))
+            except YAMLError as e:
                 issues.append(
                     ValidationIssue(
                         severity="error",

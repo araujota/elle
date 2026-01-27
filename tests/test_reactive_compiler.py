@@ -174,15 +174,16 @@ class TestCapabilitiesContext:
 
     def test_build_context_with_capabilities(self, compiler, mock_registry):
         """Test building context with capabilities."""
-        cap1 = MagicMock()
-        cap1.spec.name = "service.restart"
-        cap1.spec.summary = "Restart a service"
+        # list_all() returns specs directly, not capability instances
+        spec1 = MagicMock()
+        spec1.name = "service.restart"
+        spec1.summary = "Restart a service"
 
-        cap2 = MagicMock()
-        cap2.spec.name = "docker.prune"
-        cap2.spec.summary = "Prune Docker resources"
+        spec2 = MagicMock()
+        spec2.name = "docker.prune"
+        spec2.summary = "Prune Docker resources"
 
-        mock_registry.list_all.return_value = [cap1, cap2]
+        mock_registry.list_all.return_value = [spec1, spec2]
 
         result = compiler._build_capabilities_context()
         assert "service.restart" in result

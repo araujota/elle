@@ -28,7 +28,7 @@ class TestCapabilitySpecs:
         """Test that GUI capabilities are registered."""
         assert len(GUI_CAPABILITIES) == 5
 
-        names = [cap.spec().name for cap in GUI_CAPABILITIES]
+        names = [cap().spec.name for cap in GUI_CAPABILITIES]
         assert "gui.learn" in names
         assert "gui.click" in names
         assert "gui.type" in names
@@ -37,7 +37,7 @@ class TestCapabilitySpecs:
 
     def test_gui_learn_spec(self):
         """Test gui.learn capability spec."""
-        spec = GuiLearnCapability.spec()
+        spec = GuiLearnCapability().spec
 
         assert spec.name == "gui.learn"
         assert spec.domain == "gui"
@@ -46,7 +46,7 @@ class TestCapabilitySpecs:
 
     def test_gui_click_spec(self):
         """Test gui.click capability spec."""
-        spec = GuiClickCapability.spec()
+        spec = GuiClickCapability().spec
 
         assert spec.name == "gui.click"
         assert spec.domain == "gui"
@@ -56,7 +56,7 @@ class TestCapabilitySpecs:
 
     def test_gui_type_spec(self):
         """Test gui.type capability spec."""
-        spec = GuiTypeCapability.spec()
+        spec = GuiTypeCapability().spec
 
         assert spec.name == "gui.type"
         assert spec.domain == "gui"
@@ -64,7 +64,7 @@ class TestCapabilitySpecs:
 
     def test_gui_navigate_spec(self):
         """Test gui.navigate capability spec."""
-        spec = GuiNavigateCapability.spec()
+        spec = GuiNavigateCapability().spec
 
         assert spec.name == "gui.navigate"
         assert spec.risk == "none"
@@ -72,7 +72,7 @@ class TestCapabilitySpecs:
 
     def test_gui_execute_task_spec(self):
         """Test gui.execute_task capability spec."""
-        spec = GuiExecuteTaskCapability.spec()
+        spec = GuiExecuteTaskCapability().spec
 
         assert spec.name == "gui.execute_task"
         assert spec.risk == "medium"
@@ -204,12 +204,11 @@ class TestGuiExecuteTaskOutput:
 class TestGuiLearnDryRun:
     """Tests for gui.learn dry run."""
 
-    @pytest.mark.asyncio
-    async def test_dry_run_atspi_unavailable(self):
+    def test_dry_run_atspi_unavailable(self):
         """Test dry run when AT-SPI is not available."""
         with patch("elle.atspi.is_atspi_available", return_value=False):
             input_data = GuiLearnInput(app_name="test-app")
-            result = await GuiLearnCapability.dry_run(input_data)
+            result = GuiLearnCapability().dry_run(input_data)
 
             assert result.is_valid is False
             assert "not available" in result.preview_text.lower()
@@ -218,15 +217,14 @@ class TestGuiLearnDryRun:
 class TestGuiClickDryRun:
     """Tests for gui.click dry run."""
 
-    @pytest.mark.asyncio
-    async def test_click_dry_run(self):
+    def test_click_dry_run(self):
         """Test click dry run preview."""
         input_data = GuiClickInput(
             app_name="settings",
             element_name="Bluetooth",
         )
 
-        result = await GuiClickCapability.dry_run(input_data)
+        result = GuiClickCapability().dry_run(input_data)
 
         assert result.is_valid is True
         assert result.requires_confirmation is True
@@ -236,15 +234,14 @@ class TestGuiClickDryRun:
 class TestGuiNavigateDryRun:
     """Tests for gui.navigate dry run."""
 
-    @pytest.mark.asyncio
-    async def test_navigate_dry_run(self):
+    def test_navigate_dry_run(self):
         """Test navigate dry run preview."""
         input_data = GuiNavigateInput(
             app_name="settings",
             element_name="Bluetooth",
         )
 
-        result = await GuiNavigateCapability.dry_run(input_data)
+        result = GuiNavigateCapability().dry_run(input_data)
 
         assert result.is_valid is True
         assert result.requires_confirmation is False  # Navigation is low risk
@@ -253,40 +250,37 @@ class TestGuiNavigateDryRun:
 class TestCapabilityRollback:
     """Tests for capability rollback behavior."""
 
-    @pytest.mark.asyncio
-    async def test_learn_rollback_not_needed(self):
+    def test_learn_rollback_not_needed(self):
         """Test that learn doesn't need rollback."""
         from elle.capabilities.models import CapabilityResult
 
         input_data = GuiLearnInput(app_name="test")
         result = CapabilityResult(success=True)
 
-        rollback_result = await GuiLearnCapability.rollback(input_data, result)
+        rollback_result = GuiLearnCapability().rollback(input_data, result)
 
         assert rollback_result.success is True
         assert len(rollback_result.rolled_back) == 0
 
-    @pytest.mark.asyncio
-    async def test_click_rollback_not_possible(self):
+    def test_click_rollback_not_possible(self):
         """Test that click cannot be rolled back."""
         from elle.capabilities.models import CapabilityResult
 
         input_data = GuiClickInput(app_name="test", element_name="OK")
         result = CapabilityResult(success=True)
 
-        rollback_result = await GuiClickCapability.rollback(input_data, result)
+        rollback_result = GuiClickCapability().rollback(input_data, result)
 
         assert rollback_result.success is False
         assert "cannot be rolled back" in rollback_result.error.lower()
 
-    @pytest.mark.asyncio
-    async def test_navigate_rollback_not_needed(self):
+    def test_navigate_rollback_not_needed(self):
         """Test that navigate doesn't need rollback."""
         from elle.capabilities.models import CapabilityResult
 
         input_data = GuiNavigateInput(app_name="test", element_name="OK")
         result = CapabilityResult(success=True)
 
-        rollback_result = await GuiNavigateCapability.rollback(input_data, result)
+        rollback_result = GuiNavigateCapability().rollback(input_data, result)
 
         assert rollback_result.success is True

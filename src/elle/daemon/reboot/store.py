@@ -831,11 +831,16 @@ def get_reboot_status(
         # Get recent intents
         recent = list_recent_intents(days=7, limit=5, conn=c)
 
-        # Get database size
+        # Get database size - handle cases where db path may not be accessible
         from elle.daemon.reboot.schema import get_db_path
 
-        db_path = get_db_path()
-        db_size = db_path.stat().st_size if db_path.exists() else 0
+        db_size = 0
+        try:
+            db_path = get_db_path()
+            if db_path.exists():
+                db_size = db_path.stat().st_size
+        except (PermissionError, OSError):
+            pass
 
         # Get oldest/newest
         cursor.execute("SELECT MIN(created_at), MAX(created_at) FROM reboot_intents")

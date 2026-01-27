@@ -377,7 +377,7 @@ class NetworkProbe(BaseProbe):
                     continue
 
                 try:
-                    iface = {"name": name}
+                    iface: dict[str, Any] = {"name": name}
 
                     # Read operstate
                     operstate = (iface_path / "operstate").read_text().strip()
@@ -387,10 +387,10 @@ class NetworkProbe(BaseProbe):
                     stats_path = iface_path / "statistics"
                     if stats_path.exists():
                         try:
-                            iface["rx_errors"] = (stats_path / "rx_errors").read_text().strip()
-                            iface["tx_errors"] = (stats_path / "tx_errors").read_text().strip()
-                            iface["rx_bytes"] = (stats_path / "rx_bytes").read_text().strip()
-                            iface["tx_bytes"] = (stats_path / "tx_bytes").read_text().strip()
+                            iface["rx_errors"] = int((stats_path / "rx_errors").read_text().strip())
+                            iface["tx_errors"] = int((stats_path / "tx_errors").read_text().strip())
+                            iface["rx_bytes"] = int((stats_path / "rx_bytes").read_text().strip())
+                            iface["tx_bytes"] = int((stats_path / "tx_bytes").read_text().strip())
                         except (FileNotFoundError, ValueError):
                             pass
 

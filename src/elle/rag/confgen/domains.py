@@ -179,13 +179,17 @@ class NetplanHandler(DomainHandler):
         issues: list[ValidationIssue] = []
 
         try:
-            import yaml
+            from io import StringIO
+
+            from ruamel.yaml import YAML
+            from ruamel.yaml.error import YAMLError
         except ImportError:
             # YAML not available, skip validation
             return ConfigGenValidation(valid=True)
 
         try:
-            data = yaml.safe_load(content)
+            yaml_parser = YAML(typ="safe")
+            data = yaml_parser.load(StringIO(content))
 
             if not isinstance(data, dict):
                 issues.append(
@@ -213,7 +217,7 @@ class NetplanHandler(DomainHandler):
                         )
                     )
 
-        except yaml.YAMLError as e:
+        except YAMLError as e:
             issues.append(
                 ValidationIssue(
                     severity="error",

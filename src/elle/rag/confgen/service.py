@@ -337,14 +337,20 @@ class ConfigGenService:
         Returns error message if failed, None if successful.
         """
         try:
-            import yaml
+            from io import StringIO
+
+            from ruamel.yaml import YAML
+
+            yaml_parser = YAML()
+            yaml_parser.default_flow_style = False
+            # ruamel.yaml preserves key order by default, no sort_keys needed
 
             path = Path(result.target_path)
 
             # Read current content
             if path.exists():
                 content = path.read_text()
-                data = yaml.safe_load(content) or {}
+                data = yaml_parser.load(StringIO(content)) or {}
             else:
                 data = {}
 
@@ -362,7 +368,9 @@ class ConfigGenService:
                     self._append_nested(data, keys, op.value)
 
             # Write back
-            new_content = yaml.dump(data, default_flow_style=False, sort_keys=False)
+            stream = StringIO()
+            yaml_parser.dump(data, stream)
+            new_content = stream.getvalue()
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(new_content)
 

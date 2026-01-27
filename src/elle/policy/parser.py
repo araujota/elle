@@ -73,12 +73,16 @@ class PolicyParser:
             PolicyParseError: If content cannot be parsed.
         """
         try:
-            import yaml
+            from io import StringIO
 
-            data = yaml.safe_load(content)
+            from ruamel.yaml import YAML
+            from ruamel.yaml.error import YAMLError
+
+            yaml_parser = YAML(typ="safe")
+            data = yaml_parser.load(StringIO(content))
         except ImportError as e:
-            raise PolicyParseError(source, "PyYAML is not installed") from e
-        except yaml.YAMLError as e:
+            raise PolicyParseError(source, "ruamel.yaml is not installed") from e
+        except YAMLError as e:
             line = getattr(e, "problem_mark", None)
             line_num = line.line + 1 if line else None
             raise PolicyParseError(source, f"Invalid YAML: {e}", line_num) from e
