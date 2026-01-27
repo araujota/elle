@@ -10,6 +10,11 @@ case "$1" in
             pip3 install --quiet "pydantic>=2.0" 2>/dev/null || true
         fi
 
+        # Create required directories first (before user, to avoid adduser warning)
+        install -d -m 0750 /var/lib/elle
+        install -d -m 0750 /var/lib/elle/backups
+        install -d -m 0755 /etc/elle
+
         # Create elle system user if it doesn't exist
         if ! getent passwd elle >/dev/null 2>&1; then
             adduser --system --group --home /var/lib/elle \
@@ -17,10 +22,8 @@ case "$1" in
                     --gecos "ELLE System Agent" elle
         fi
 
-        # Create required directories
-        install -d -m 0750 -o elle -g elle /var/lib/elle
-        install -d -m 0750 -o elle -g elle /var/lib/elle/backups
-        install -d -m 0755 -o root -g root /etc/elle
+        # Set ownership of directories to elle user
+        chown -R elle:elle /var/lib/elle
 
         # Install example config if none exists
         if [ ! -f /etc/elle/elle.toml ]; then
