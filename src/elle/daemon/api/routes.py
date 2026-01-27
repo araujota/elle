@@ -60,7 +60,7 @@ def get_daemon() -> "ElledDaemon":
     return _daemon
 
 
-@router.get(  # type: ignore[untyped-decorator]
+@router.get(
     "/status",
     response_model=StatusResponse,
     responses={
@@ -115,7 +115,7 @@ async def get_status(
     )
 
 
-@router.get(  # type: ignore[untyped-decorator]
+@router.get(
     "/events",
     response_model=EventsResponse,
     responses={
@@ -189,7 +189,7 @@ async def get_events(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.get(  # type: ignore[untyped-decorator]
+@router.get(
     "/incidents",
     response_model=IncidentsResponse,
     responses={
@@ -257,7 +257,7 @@ async def get_incidents(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.get(  # type: ignore[untyped-decorator]
+@router.get(
     "/incident/{incident_id}",
     response_model=IncidentDetailResponse,
     responses={
@@ -352,7 +352,7 @@ async def get_incident(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.get("/health")  # type: ignore[untyped-decorator]
+@router.get("/health")
 async def health_check() -> dict[str, Any]:
     """Simple health check endpoint."""
     daemon = get_daemon()

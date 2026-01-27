@@ -67,7 +67,7 @@ def create_app(daemon: "ElledDaemon") -> FastAPI:
         session_token=session_token,
     )
 
-    @app.middleware("http")  # type: ignore[untyped-decorator]
+    @app.middleware("http")
     async def auth_middleware_handler(request: Request, call_next: Callable[[Request], Any]) -> Response:
         """Middleware to authenticate requests and attach auth context."""
         # Skip auth for docs (local development only) and health endpoints
@@ -121,7 +121,7 @@ def create_app(daemon: "ElledDaemon") -> FastAPI:
     app.include_router(openai_router)
 
     # Root redirect to docs
-    @app.get("/", include_in_schema=False)  # type: ignore[untyped-decorator]
+    @app.get("/", include_in_schema=False)
     async def root() -> dict[str, str]:
         return {
             "message": "elled API - see /docs for documentation",

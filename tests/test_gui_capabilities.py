@@ -2,8 +2,6 @@
 
 from unittest.mock import patch
 
-import pytest
-
 from elle.capabilities.core.gui import (
     GUI_CAPABILITIES,
     GuiClickCapability,

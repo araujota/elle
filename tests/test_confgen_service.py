@@ -311,9 +311,12 @@ class TestConfigGenServiceApply:
 
         assert applied_outcome.applied is True
 
-        import yaml
+        from io import StringIO
 
-        data = yaml.safe_load(target.read_text())
+        from ruamel.yaml import YAML
+
+        yaml_parser = YAML(typ="safe")
+        data = yaml_parser.load(StringIO(target.read_text()))
         assert data["key2"] == "value2"
 
 
@@ -392,9 +395,12 @@ class TestYAMLOperations:
         service = ConfigGenService()
         service.apply(outcome, backup=False)
 
-        import yaml
+        from io import StringIO
 
-        data = yaml.safe_load(target.read_text())
+        from ruamel.yaml import YAML
+
+        yaml_parser = YAML(typ="safe")
+        data = yaml_parser.load(StringIO(target.read_text()))
         assert data["root"]["child"] == "modified"
 
     def test_create_nested_path(self, tmp_path: Path) -> None:
@@ -420,9 +426,12 @@ class TestYAMLOperations:
         service = ConfigGenService()
         service.apply(outcome, backup=False)
 
-        import yaml
+        from io import StringIO
 
-        data = yaml.safe_load(target.read_text())
+        from ruamel.yaml import YAML
+
+        yaml_parser = YAML(typ="safe")
+        data = yaml_parser.load(StringIO(target.read_text()))
         assert data["new"]["nested"]["path"] == "created"
 
     def test_remove_key(self, tmp_path: Path) -> None:
@@ -448,9 +457,12 @@ class TestYAMLOperations:
         service = ConfigGenService()
         service.apply(outcome, backup=False)
 
-        import yaml
+        from io import StringIO
 
-        data = yaml.safe_load(target.read_text())
+        from ruamel.yaml import YAML
+
+        yaml_parser = YAML(typ="safe")
+        data = yaml_parser.load(StringIO(target.read_text()))
         assert "keep" in data
         assert "remove" not in data
 
@@ -477,7 +489,10 @@ class TestYAMLOperations:
         service = ConfigGenService()
         service.apply(outcome, backup=False)
 
-        import yaml
+        from io import StringIO
 
-        data = yaml.safe_load(target.read_text())
+        from ruamel.yaml import YAML
+
+        yaml_parser = YAML(typ="safe")
+        data = yaml_parser.load(StringIO(target.read_text()))
         assert "item2" in data["items"]

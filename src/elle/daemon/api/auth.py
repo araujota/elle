@@ -24,13 +24,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
 
+# Request must be imported at runtime for FastAPI dependency injection
+# Import unconditionally - if FastAPI isn't installed, these modules won't be used anyway
+from fastapi import Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from elle.daemon.api.openai_models import ExecutionMode
 
 if TYPE_CHECKING:
-    from fastapi import Request
-
     from elle.daemon.config import ApiAuthConfig
 
 logger = logging.getLogger(__name__)

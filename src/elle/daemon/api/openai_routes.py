@@ -67,7 +67,7 @@ def get_engine_adapter() -> EngineAdapter:
     return get_adapter()
 
 
-@openai_router.post(  # type: ignore[untyped-decorator]
+@openai_router.post(
     "/chat/completions",
     response_model=ChatCompletionResponse,
     response_model_exclude_none=True,
@@ -141,7 +141,7 @@ async def chat_completions(
         ) from e
 
 
-@openai_router.get(  # type: ignore[untyped-decorator]
+@openai_router.get(
     "/models",
     response_model=ModelsListResponse,
     responses={
@@ -165,7 +165,7 @@ async def list_models(
     return ModelsListResponse(data=ELLE_MODELS)
 
 
-@openai_router.get(  # type: ignore[untyped-decorator]
+@openai_router.get(
     "/models/{model_id}",
     response_model=ModelInfo,
     responses={

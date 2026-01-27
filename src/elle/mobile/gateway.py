@@ -200,7 +200,7 @@ def create_mobile_gateway(
     # Public Endpoints (Pairing)
     # ========================================================================
 
-    @app.post("/pair", response_model=PairingResponse)  # type: ignore[untyped-decorator]
+    @app.post("/pair", response_model=PairingResponse)
     async def complete_pairing(request: Request, pairing_request: PairingRequest) -> PairingResponse:
         """Complete device pairing with a valid token.
 
@@ -245,7 +245,7 @@ def create_mobile_gateway(
     # Authenticated API Endpoints
     # ========================================================================
 
-    @app.post("/v1/chat/completions")  # type: ignore[untyped-decorator]
+    @app.post("/v1/chat/completions")
     async def chat_completions(
         request: Request,
         auth: MobileAuthContext = Depends(get_auth),  # noqa: B008
@@ -290,7 +290,7 @@ def create_mobile_gateway(
             )
             raise HTTPException(status_code=e.status_code, detail=str(e)) from None
 
-    @app.get("/v1/models")  # type: ignore[untyped-decorator]
+    @app.get("/v1/models")
     async def list_models(
         auth: MobileAuthContext = Depends(get_auth),  # noqa: B008
     ) -> JSONResponse:
@@ -301,7 +301,7 @@ def create_mobile_gateway(
         except ProxyError as e:
             raise HTTPException(status_code=e.status_code, detail=str(e)) from None
 
-    @app.get("/health")  # type: ignore[untyped-decorator]
+    @app.get("/health")
     async def health_check() -> dict[str, Any]:
         """Health check endpoint."""
         internal_ok = await deps.proxy.check_internal_api()
@@ -315,7 +315,7 @@ def create_mobile_gateway(
     # Configuration Endpoints (requires operator role)
     # ========================================================================
 
-    @app.get("/v1/config")  # type: ignore[untyped-decorator]
+    @app.get("/v1/config")
     async def get_config(
         request: Request,
         auth: MobileAuthContext = Depends(get_auth),  # noqa: B008
@@ -350,7 +350,7 @@ def create_mobile_gateway(
             )
             raise HTTPException(status_code=e.status_code, detail=str(e)) from None
 
-    @app.put("/v1/config")  # type: ignore[untyped-decorator]
+    @app.put("/v1/config")
     async def update_config(
         request: Request,
         auth: MobileAuthContext = Depends(get_auth),  # noqa: B008
@@ -392,7 +392,7 @@ def create_mobile_gateway(
     # Local Management Endpoints (localhost only)
     # ========================================================================
 
-    @app.get("/devices", dependencies=[Depends(require_localhost)])  # type: ignore[untyped-decorator]
+    @app.get("/devices", dependencies=[Depends(require_localhost)])
     async def list_devices() -> dict[str, Any]:
         """List all paired devices (localhost only)."""
         devices = deps.store.list_devices()
@@ -412,7 +412,7 @@ def create_mobile_gateway(
             ]
         }
 
-    @app.delete(  # type: ignore[untyped-decorator]
+    @app.delete(
         "/devices/{device_id}",
         dependencies=[Depends(require_localhost)],
     )
@@ -439,7 +439,7 @@ def create_mobile_gateway(
 
         return {"status": "revoked", "device_id": device_id}
 
-    @app.post(  # type: ignore[untyped-decorator]
+    @app.post(
         "/devices/{device_id}/elevate",
         dependencies=[Depends(require_localhost)],
     )
@@ -488,7 +488,7 @@ def create_mobile_gateway(
             )
             raise HTTPException(status_code=400, detail=str(e)) from None
 
-    @app.get(  # type: ignore[untyped-decorator]
+    @app.get(
         "/devices/{device_id}/status",
         dependencies=[Depends(require_localhost)],
     )
@@ -514,7 +514,7 @@ def create_mobile_gateway(
             "elevation": elevation_status,
         }
 
-    @app.get("/audit", dependencies=[Depends(require_localhost)])  # type: ignore[untyped-decorator]
+    @app.get("/audit", dependencies=[Depends(require_localhost)])
     async def get_audit_log(hours: int = 24, limit: int = 100) -> dict[str, Any]:
         """Get recent audit log entries (localhost only)."""
         entries = deps.audit.get_recent(hours=hours, limit=limit)
@@ -539,7 +539,7 @@ def create_mobile_gateway(
     # Server-Sent Events (SSE) for Push Notifications
     # ========================================================================
 
-    @app.get("/events")  # type: ignore[untyped-decorator]
+    @app.get("/events")
     async def event_stream(
         request: Request,
         auth: MobileAuthContext = Depends(get_auth),  # noqa: B008
@@ -592,7 +592,7 @@ def create_mobile_gateway(
             },
         )
 
-    @app.get("/events/status", dependencies=[Depends(require_localhost)])  # type: ignore[untyped-decorator]
+    @app.get("/events/status", dependencies=[Depends(require_localhost)])
     async def events_status() -> dict[str, Any]:
         """Get status of the event stream (localhost only)."""
         from elle.daemon.notifications.mobile_push import get_mobile_notifier

@@ -138,7 +138,7 @@ class IncidentSearchResponse(BaseModel):
 # ============================================================================
 
 
-@router.get(  # type: ignore[untyped-decorator]
+@router.get(
     "/manvault/status",
     response_model=ManVaultStatusResponse,
     responses={401: {"description": "Authentication required"}},
@@ -164,7 +164,7 @@ async def get_manvault_status(
     )
 
 
-@router.post(  # type: ignore[untyped-decorator]
+@router.post(
     "/manvault/reindex",
     response_model=ReindexResponse,
     responses={401: {"description": "Authentication required"}},
@@ -195,7 +195,7 @@ async def trigger_manvault_reindex(
     )
 
 
-@router.get(  # type: ignore[untyped-decorator]
+@router.get(
     "/manvault/search",
     response_model=ManVaultSearchResponse,
     responses={401: {"description": "Authentication required"}},
@@ -248,7 +248,7 @@ async def search_manvault(
 # ============================================================================
 
 
-@router.get(  # type: ignore[untyped-decorator]
+@router.get(
     "/incidents/search",
     response_model=IncidentSearchResponse,
     responses={401: {"description": "Authentication required"}},
