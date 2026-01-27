@@ -55,7 +55,7 @@ def is_telemetryd_available(socket_path: Path | None = None) -> bool:
         sock.connect(str(path))
         sock.close()
         return True
-    except (socket.error, OSError):
+    except OSError:
         return False
 
 
@@ -234,7 +234,7 @@ class TelemetrydWatcher:
                 # Read events
                 await self._read_events()
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
             except asyncio.CancelledError:
                 break
@@ -272,7 +272,7 @@ class TelemetrydWatcher:
                     logger.warning(f"Invalid JSON from telemetryd: {e}")
                     self._total_errors += 1
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
             except Exception as e:
                 logger.error(f"Read error: {e}")

@@ -1676,8 +1676,8 @@ class SetupWizard:
         Returns:
             True if telemetryd socket exists and is connectable.
         """
-        from pathlib import Path
         import socket
+        from pathlib import Path
 
         socket_path = Path("/run/elle/telemetry.sock")
         if not socket_path.exists():
@@ -1689,7 +1689,7 @@ class SetupWizard:
             sock.connect(str(socket_path))
             sock.close()
             return True
-        except (socket.error, OSError):
+        except OSError:
             return False
 
     def _show_completion(self) -> None:
