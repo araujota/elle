@@ -147,10 +147,28 @@ class SystemSnapshot(BaseModel):
         description="SMART info: dev, health, pct_used, media_errors",
     )
 
-    # Package versions (bedrock + incident-relevant)
+    # Package versions (bedrock + incident-relevant + domain-specific)
     packages: tuple[PackageState, ...] = Field(
         default_factory=tuple,
-        description="Bedrock and relevant package versions at snapshot time",
+        description="Bedrock, domain-specific, and relevant package versions at snapshot time",
+    )
+
+    # Kernel modules (loaded at snapshot time)
+    kernel_modules: tuple[dict[str, Any], ...] = Field(
+        default_factory=tuple,
+        description="Loaded kernel modules: name, size",
+    )
+
+    # Docker image versions (for running containers)
+    docker_images: tuple[dict[str, Any], ...] = Field(
+        default_factory=tuple,
+        description="Docker images: image, tag, digest",
+    )
+
+    # Recent apt operations (last 24h)
+    recent_apt_history: tuple[dict[str, Any], ...] = Field(
+        default_factory=tuple,
+        description="Recent apt operations: action, package, version, timestamp",
     )
 
     # Collected at timestamp

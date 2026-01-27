@@ -590,7 +590,7 @@ Events emitted from telemetryd via Unix socket in NDJSON format.
 
 ### 5.2 SystemSnapshot
 
-Captured at incident start and after resolution.
+Captured at incident start and after resolution. This is a "maximum-surface snapshot" designed to capture all relevant system state at the moment of an incident.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -612,8 +612,29 @@ Captured at incident start and after resolution.
 | `docker_containers` | tuple[dict] | Container details: name, state, image |
 | `temps` | tuple[dict] | Temperature sensors: sensor, celsius |
 | `smart` | tuple[dict] | SMART info: dev, health, pct_used, media_errors |
-| `packages` | tuple[PackageState] | Relevant package versions |
+| `packages` | tuple[PackageState] | Bedrock + domain-specific + context-relevant package versions |
+| `kernel_modules` | tuple[dict] | Loaded kernel modules: name, size |
+| `docker_images` | tuple[dict] | Docker images for running containers: image, tag, digest |
+| `recent_apt_history` | tuple[dict] | Apt operations in last 24h: action, packages, timestamp |
 | `collected_at` | datetime | Snapshot collection timestamp |
+
+#### Package Collection Strategy
+
+The snapshot collector captures three tiers of packages:
+
+1. **Bedrock packages (~30):** Always captured - kernel, systemd, libc, Python, OpenSSL, networking, security, container runtime, observability tools
+
+2. **Domain-specific packages:** Based on incident domain:
+   - `docker`: docker.io, containerd, runc, docker-compose
+   - `net`: iproute2, iptables, nftables, ufw, wireguard, nginx, apache2
+   - `auth`: libpam-modules, openssh-server, sssd, sudo
+   - `disk`: lvm2, mdadm, cryptsetup, e2fsprogs, nfs-common
+   - `oom`: earlyoom, systemd-oomd
+   - `service`: systemd, dbus
+
+3. **Context-relevant packages:** Extracted from command, error output, and entity name
+
+4. **Optional pip packages:** Key Python libraries (requests, sqlalchemy, flask, etc.)
 
 ### 5.3 Fingerprint
 
@@ -671,6 +692,8 @@ Tracks sources that informed a decision.
 ---
 
 ## 6. Example Incident Report
+
+The following example shows a complete incident report with a full system snapshot demonstrating the "maximum-surface" approach to capturing system state.
 
 ```json
 {
@@ -806,6 +829,104 @@ Tracks sources that informed a decision.
   ]
 }
 ```
+
+### 6.1 Example SystemSnapshot (Pre-Incident)
+
+This shows the full system state captured when the incident was detected:
+
+```json
+{
+  "os": "Ubuntu 24.04",
+  "kernel": "6.8.0-45-generic",
+  "uptime_sec": 864000,
+  "hostname": "prod-server-01",
+  "cpu_load": [1.2, 0.95, 0.78],
+  "mem_total_mb": 16384,
+  "mem_free_mb": 512,
+  "mem_available_mb": 8960,
+  "swap_total_mb": 4096,
+  "swap_used_mb": 410,
+  "disks": [
+    {"mount": "/", "used_pct": 45, "avail_gb": 55.2, "device": "/dev/sda2"},
+    {"mount": "/var", "used_pct": 95, "avail_gb": 2.1, "device": "/dev/sda1"},
+    {"mount": "/home", "used_pct": 62, "avail_gb": 180.5, "device": "/dev/sdb1"}
+  ],
+  "interfaces": [
+    {"name": "eth0", "state": "UP", "rx_err": 0, "tx_err": 0},
+    {"name": "docker0", "state": "UP", "rx_err": 0, "tx_err": 0}
+  ],
+  "services": [
+    {"name": "docker", "active": true, "failed": false},
+    {"name": "sshd", "active": true, "failed": false},
+    {"name": "nginx", "active": true, "failed": false}
+  ],
+  "docker_running": 5,
+  "docker_exited": 3,
+  "docker_containers": [
+    {"name": "nginx-proxy", "state": "running", "image": "nginx:1.25"},
+    {"name": "postgres-db", "state": "running", "image": "postgres:16"},
+    {"name": "redis-cache", "state": "running", "image": "redis:7-alpine"},
+    {"name": "app-backend", "state": "running", "image": "myapp:v2.3.1"},
+    {"name": "app-worker", "state": "running", "image": "myapp:v2.3.1"}
+  ],
+  "temps": [
+    {"sensor": "coretemp/Core 0", "celsius": 52},
+    {"sensor": "coretemp/Core 1", "celsius": 48},
+    {"sensor": "nvme/Composite", "celsius": 38}
+  ],
+  "smart": [
+    {"dev": "/dev/nvme0n1", "health": "PASSED", "pct_used": 12, "media_errors": 0},
+    {"dev": "/dev/sda", "health": "PASSED", "pct_used": 0, "media_errors": 0}
+  ],
+  "packages": [
+    {"name": "linux-image-generic", "version": "6.8.0-45.45", "source": "apt", "is_bedrock": true},
+    {"name": "systemd", "version": "255.4-1ubuntu8", "source": "apt", "is_bedrock": true},
+    {"name": "libc6", "version": "2.39-0ubuntu8", "source": "apt", "is_bedrock": true},
+    {"name": "python3", "version": "3.12.3-0ubuntu1", "source": "apt", "is_bedrock": true},
+    {"name": "openssl", "version": "3.0.13-0ubuntu3", "source": "apt", "is_bedrock": true},
+    {"name": "docker.io", "version": "24.0.7-0ubuntu2", "source": "apt", "is_bedrock": true},
+    {"name": "containerd", "version": "1.7.12-0ubuntu2", "source": "apt", "is_bedrock": true},
+    {"name": "runc", "version": "1.1.12-0ubuntu2", "source": "apt", "is_bedrock": true},
+    {"name": "e2fsprogs", "version": "1.47.0-2.4ubuntu1", "source": "apt", "is_bedrock": false},
+    {"name": "nginx", "version": "1.24.0-2ubuntu1", "source": "apt", "is_bedrock": false}
+  ],
+  "kernel_modules": [
+    {"name": "ext4", "size": "1015808"},
+    {"name": "overlay", "size": "180224"},
+    {"name": "br_netfilter", "size": "32768"},
+    {"name": "nf_conntrack", "size": "188416"},
+    {"name": "nvme", "size": "57344"},
+    {"name": "nvme_core", "size": "135168"}
+  ],
+  "docker_images": [
+    {"image": "nginx", "tag": "1.25", "digest": "sha256:a1b2c3d4e5f67890"},
+    {"image": "postgres", "tag": "16", "digest": "sha256:b2c3d4e5f67890a1"},
+    {"image": "redis", "tag": "7-alpine", "digest": "sha256:c3d4e5f67890a1b2"},
+    {"image": "myapp", "tag": "v2.3.1", "digest": "sha256:d4e5f67890a1b2c3"}
+  ],
+  "recent_apt_history": [
+    {
+      "timestamp": "2024-01-25T10:15:00",
+      "action": "upgrade",
+      "packages": "docker.io:amd64 (24.0.5-0ubuntu1, 24.0.7-0ubuntu2)"
+    },
+    {
+      "timestamp": "2024-01-24T08:30:00",
+      "action": "install",
+      "packages": "nginx:amd64 (1.24.0-2ubuntu1)"
+    }
+  ],
+  "collected_at": "2024-01-26T15:30:00Z"
+}
+```
+
+This snapshot captures:
+- **30+ bedrock packages** (kernel, systemd, libc, openssl, docker runtime, etc.)
+- **Domain-specific packages** (e2fsprogs for disk domain)
+- **Context-relevant packages** (nginx extracted from entity)
+- **Kernel modules** (ext4, overlay, nvme - relevant to disk issues)
+- **Docker image versions** (with digests for reproducibility)
+- **Recent apt history** (docker upgrade 1 day before incident)
 
 ---
 

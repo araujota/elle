@@ -18,7 +18,7 @@ from elle.daemon.incidents.models import Fingerprint, PackageState, SystemSnapsh
 # Bedrock Packages
 # =============================================================================
 
-# Core system packages always tracked (~15 packages)
+# Core system packages always tracked (~30 packages)
 # These are fundamental to system operation and frequently relevant to incidents
 BEDROCK_PACKAGES: tuple[str, ...] = (
     # Kernel and core runtime
@@ -26,22 +26,88 @@ BEDROCK_PACKAGES: tuple[str, ...] = (
     "linux-headers-generic",
     "systemd",
     "libc6",
+    "glibc",
     # Python runtime (ELLE itself)
     "python3",
     "python3-pip",
+    "python3-venv",
     # Key infrastructure
     "openssl",
     "libssl3",
     "ca-certificates",
     "apt",
     "dpkg",
+    "gnupg",
     # Networking
     "netplan.io",
     "systemd-resolved",
+    "iproute2",
+    "iptables",
+    "nftables",
     # Security
     "polkitd",
     "sudo",
+    "apparmor",
+    # Container runtime
+    "docker.io",
+    "containerd",
+    "runc",
+    # Observability
+    "lm-sensors",
+    "smartmontools",
 )
+
+# Domain-specific packages to check based on incident domain
+DOMAIN_PACKAGES: dict[str, tuple[str, ...]] = {
+    "docker": (
+        "docker.io",
+        "docker-ce",
+        "containerd",
+        "runc",
+        "docker-compose",
+        "docker-buildx",
+    ),
+    "net": (
+        "iproute2",
+        "iptables",
+        "nftables",
+        "ufw",
+        "wireguard",
+        "openvpn",
+        "bind9",
+        "dnsmasq",
+        "nginx",
+        "apache2",
+        "haproxy",
+    ),
+    "auth": (
+        "libpam-modules",
+        "openssh-server",
+        "sssd",
+        "krb5-user",
+        "samba",
+        "sudo",
+    ),
+    "disk": (
+        "lvm2",
+        "mdadm",
+        "cryptsetup",
+        "parted",
+        "e2fsprogs",
+        "xfsprogs",
+        "btrfs-progs",
+        "nfs-common",
+        "cifs-utils",
+    ),
+    "oom": (
+        "earlyoom",
+        "systemd-oomd",
+    ),
+    "service": (
+        "systemd",
+        "dbus",
+    ),
+}
 
 
 # =============================================================================
@@ -140,25 +206,153 @@ def _extract_relevant_packages(
     return packages
 
 
+def _get_pip_packages(relevant_only: bool = True) -> list[PackageState]:
+    """Get installed pip packages.
+
+    Args:
+        relevant_only: If True, only return packages that seem relevant
+                      (skip standard library wrappers).
+
+    Returns:
+        List of PackageState for pip packages.
+    """
+    states: list[PackageState] = []
+    try:
+        result = subprocess.run(
+            ["pip3", "list", "--format=freeze"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            # Key packages to always include
+            key_packages = {
+                "requests", "urllib3", "aiohttp", "httpx",  # HTTP
+                "sqlalchemy", "psycopg2", "pymysql", "redis",  # Databases
+                "flask", "django", "fastapi", "uvicorn",  # Web frameworks
+                "celery", "pika", "kafka-python",  # Messaging
+                "boto3", "google-cloud-core", "azure-core",  # Cloud
+                "cryptography", "pyjwt", "paramiko",  # Security
+                "numpy", "pandas", "scipy",  # Data science
+                "pydantic", "attrs", "dataclasses",  # Data modeling
+            }
+            for line in result.stdout.strip().split("\n"):
+                if "==" in line:
+                    name, version = line.split("==", 1)
+                    name = name.strip().lower()
+                    # Include if it's a key package or we want all
+                    if not relevant_only or name in key_packages:
+                        states.append(
+                            PackageState(
+                                name=f"pip:{name}",
+                                version=version.strip(),
+                                source="pip",
+                                is_bedrock=False,
+                            )
+                        )
+    except Exception:
+        pass
+    return states[:30]  # Limit to 30 pip packages
+
+
+def _get_kernel_modules() -> list[dict[str, str]]:
+    """Get loaded kernel modules.
+
+    Returns:
+        List of dicts with name and size for loaded modules.
+    """
+    modules: list[dict[str, str]] = []
+    try:
+        result = subprocess.run(
+            ["lsmod"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            lines = result.stdout.strip().split("\n")[1:]  # Skip header
+            for line in lines:
+                parts = line.split()
+                if len(parts) >= 2:
+                    modules.append({
+                        "name": parts[0],
+                        "size": parts[1],
+                    })
+    except Exception:
+        pass
+    return modules
+
+
+def _get_docker_image_versions() -> list[dict[str, str]]:
+    """Get Docker image versions for running containers.
+
+    Returns:
+        List of dicts with image name, tag, and digest.
+    """
+    images: list[dict[str, str]] = []
+    try:
+        result = subprocess.run(
+            ["docker", "ps", "--format", "{{.Image}}"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            seen: set[str] = set()
+            for image in result.stdout.strip().split("\n"):
+                if image and image not in seen:
+                    seen.add(image)
+                    # Get digest for the image
+                    digest_result = subprocess.run(
+                        ["docker", "inspect", "--format", "{{index .RepoDigests 0}}", image],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                    )
+                    digest = ""
+                    if digest_result.returncode == 0:
+                        digest = digest_result.stdout.strip()
+
+                    # Parse image:tag
+                    if ":" in image:
+                        name, tag = image.rsplit(":", 1)
+                    else:
+                        name, tag = image, "latest"
+
+                    images.append({
+                        "image": name,
+                        "tag": tag,
+                        "digest": digest[:32] if digest else "",
+                    })
+    except Exception:
+        pass
+    return images[:20]  # Limit to 20 images
+
+
 def collect_package_state(
     command: str | None = None,
     stderr: str | None = None,
     entity: str | None = None,
+    domain: str | None = None,
+    include_pip: bool = False,
 ) -> tuple[PackageState, ...]:
     """Collect bedrock + relevant package versions.
 
     Always captures bedrock packages. Optionally extracts
-    additional relevant packages from incident context.
+    additional relevant packages from incident context and domain.
 
     Args:
         command: Command that triggered the incident.
         stderr: Error output from the command.
         entity: Entity involved in the incident.
+        domain: Incident domain (docker, net, auth, disk, etc.).
+        include_pip: Whether to include pip packages.
 
     Returns:
         Tuple of PackageState for installed packages.
     """
     states: list[PackageState] = []
+    seen_names: set[str] = set()
 
     # Always collect bedrock packages
     for name in BEDROCK_PACKAGES:
@@ -172,13 +366,28 @@ def collect_package_state(
                     is_bedrock=True,
                 )
             )
+            seen_names.add(name)
 
-    # Collect relevant packages (deduplicated against bedrock)
-    bedrock_names = set(BEDROCK_PACKAGES)
+    # Collect domain-specific packages
+    if domain and domain in DOMAIN_PACKAGES:
+        for name in DOMAIN_PACKAGES[domain]:
+            if name not in seen_names:
+                version = _get_package_version(name)
+                if version:
+                    states.append(
+                        PackageState(
+                            name=name,
+                            version=version,
+                            source="apt",
+                            is_bedrock=False,
+                        )
+                    )
+                    seen_names.add(name)
+
+    # Collect context-relevant packages
     relevant = _extract_relevant_packages(command, stderr, entity)
-
     for name in list(relevant)[:10]:  # Max 10 relevant packages
-        if name not in bedrock_names:
+        if name not in seen_names:
             version = _get_package_version(name)
             if version:
                 states.append(
@@ -189,6 +398,12 @@ def collect_package_state(
                         is_bedrock=False,
                     )
                 )
+                seen_names.add(name)
+
+    # Optionally include pip packages
+    if include_pip:
+        pip_packages = _get_pip_packages(relevant_only=True)
+        states.extend(pip_packages)
 
     return tuple(states)
 
@@ -198,20 +413,91 @@ def collect_package_state(
 # =============================================================================
 
 
+def _get_recent_apt_history() -> list[dict[str, Any]]:
+    """Get recent apt operations from /var/log/apt/history.log.
+
+    Returns:
+        List of recent apt operations in the last 24 hours.
+    """
+    history: list[dict[str, Any]] = []
+    try:
+        from datetime import timedelta
+
+        cutoff = datetime.utcnow() - timedelta(hours=24)
+        history_file = Path("/var/log/apt/history.log")
+
+        if history_file.exists():
+            content = history_file.read_text()
+            # Parse apt history format
+            current_entry: dict[str, Any] = {}
+            for line in content.split("\n"):
+                if line.startswith("Start-Date:"):
+                    date_str = line.split(":", 1)[1].strip()
+                    try:
+                        # Format: 2024-01-26  15:30:00
+                        ts = datetime.strptime(date_str, "%Y-%m-%d  %H:%M:%S")
+                        if ts < cutoff:
+                            continue
+                        current_entry = {"timestamp": ts.isoformat()}
+                    except ValueError:
+                        continue
+                elif line.startswith("Commandline:") and current_entry:
+                    current_entry["command"] = line.split(":", 1)[1].strip()
+                elif line.startswith("Install:") and current_entry:
+                    current_entry["action"] = "install"
+                    current_entry["packages"] = line.split(":", 1)[1].strip()[:200]
+                    history.append(current_entry)
+                    current_entry = {}
+                elif line.startswith("Upgrade:") and current_entry:
+                    current_entry["action"] = "upgrade"
+                    current_entry["packages"] = line.split(":", 1)[1].strip()[:200]
+                    history.append(current_entry)
+                    current_entry = {}
+                elif line.startswith("Remove:") and current_entry:
+                    current_entry["action"] = "remove"
+                    current_entry["packages"] = line.split(":", 1)[1].strip()[:200]
+                    history.append(current_entry)
+                    current_entry = {}
+    except Exception:
+        pass
+    return history[-20:]  # Last 20 operations
+
+
 def collect_snapshot(
     command: str | None = None,
     stderr: str | None = None,
     entity: str | None = None,
+    domain: str | None = None,
+    include_pip: bool = False,
+    include_kernel_modules: bool = True,
+    include_docker_images: bool = True,
+    include_apt_history: bool = True,
 ) -> SystemSnapshot:
     """Collect current system state.
 
     Gathers essential system metrics quickly and deterministically.
     All probes are designed to be fast and non-invasive.
 
+    This creates a "maximum-surface snapshot" capturing:
+    - OS/kernel versions
+    - Resource utilization (CPU, memory, disk, swap)
+    - Network interface states
+    - Service states
+    - Docker container and image states
+    - Temperature and SMART data
+    - Package versions (bedrock + domain-specific + context-relevant)
+    - Kernel modules (for driver/hardware issues)
+    - Recent apt history (for upgrade-related issues)
+
     Args:
         command: Optional command that triggered snapshot collection.
         stderr: Optional error output for package extraction.
         entity: Optional entity name for package extraction.
+        domain: Optional incident domain for domain-specific packages.
+        include_pip: Whether to include Python pip packages.
+        include_kernel_modules: Whether to include loaded kernel modules.
+        include_docker_images: Whether to include Docker image versions.
+        include_apt_history: Whether to include recent apt operations.
 
     Returns:
         SystemSnapshot with current system state including package versions.
@@ -235,7 +521,10 @@ def collect_snapshot(
         docker_containers=tuple(_get_docker_containers()),
         temps=tuple(_get_temps()),
         smart=tuple(_get_smart_info()),
-        packages=collect_package_state(command, stderr, entity),
+        packages=collect_package_state(command, stderr, entity, domain, include_pip),
+        kernel_modules=tuple(_get_kernel_modules()) if include_kernel_modules else (),
+        docker_images=tuple(_get_docker_image_versions()) if include_docker_images else (),
+        recent_apt_history=tuple(_get_recent_apt_history()) if include_apt_history else (),
         collected_at=datetime.utcnow(),
     )
 
