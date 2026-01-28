@@ -1729,3 +1729,58 @@ def _parse_control_surface_snapshot(data: dict[str, Any]) -> "ControlSurfaceSnap
 # Type hints for imports (for documentation purposes)
 TelemetrySnapshotModel = Any  # elle.daemon.incidents.telemetry_snapshot.TelemetrySnapshot
 ControlSurfaceSnapshotModel = Any  # elle.daemon.incidents.control_surface.ControlSurfaceSnapshot
+
+
+# =============================================================================
+# Anonymization Helpers
+# =============================================================================
+
+
+def get_anonymized_incident(
+    incident_id: str,
+    conn: sqlite3.Connection | None = None,
+) -> "AnonymizedIncidentReport | None":
+    """Get an anonymized version of an incident.
+
+    Loads the incident and all associated data (actions, telemetry, surface hashes),
+    then produces an anonymized version suitable for cloud storage.
+
+    Args:
+        incident_id: The incident UUID.
+        conn: SQLite connection.
+
+    Returns:
+        AnonymizedIncidentReport if found, None otherwise.
+    """
+    # Import here to avoid circular imports
+    from elle.daemon.incidents.anonymize import (
+        AnonymizedIncidentReport,
+        anonymize_incident,
+    )
+
+    with _ensure_connection(conn) as c:
+        # Get the incident
+        incident = get_incident(incident_id, conn=c)
+        if incident is None:
+            return None
+
+        # Get actions
+        actions = get_actions(incident_id, conn=c)
+
+        # Get telemetry snapshots
+        telemetry_pre = get_telemetry_snapshot(incident_id, "pre", conn=c)
+        telemetry_post = get_telemetry_snapshot(incident_id, "post", conn=c)
+
+        # Get surface hashes
+        surface_hashes_pre = get_surface_hashes(incident_id, "pre", conn=c)
+        surface_hashes_post = get_surface_hashes(incident_id, "post", conn=c)
+
+        # Anonymize and return
+        return anonymize_incident(
+            incident=incident,
+            actions=actions,
+            telemetry_pre=telemetry_pre,
+            telemetry_post=telemetry_post,
+            surface_hashes_pre=surface_hashes_pre,
+            surface_hashes_post=surface_hashes_post,
+        )

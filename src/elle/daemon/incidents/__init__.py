@@ -143,6 +143,8 @@ from elle.daemon.incidents.store import (
     get_control_surface_snapshot,
     get_control_surface_snapshots,
     get_surface_hashes,
+    # Anonymization
+    get_anonymized_incident,
 )
 from elle.daemon.incidents.telemetry_snapshot import (
     TelemetrySnapshot,
@@ -184,6 +186,25 @@ from elle.daemon.incidents.drift import (
     has_any_drift,
     DriftDetail,
 )
+from elle.daemon.incidents.anonymize import (
+    AnonymizationContext,
+    AnonymizedIncidentReport,
+    ActionSummary,
+    IncidentAnonymizer,
+    anonymize_incident,
+    KNOWN_SERVICES,
+    MOUNT_CATEGORIES,
+    set_anon_secret,
+)
+from elle.daemon.incidents.cloud_sync import (
+    CloudSyncClient,
+    CloudIncidentMatch,
+    CloudSubmissionResult,
+    CloudQueryResult,
+    get_cloud_client,
+    configure_cloud_client,
+    reset_cloud_client,
+)
 
 __all__ = [
     # Models
@@ -217,6 +238,7 @@ __all__ = [
     "upsert_embedding",
     "get_embedding",
     "finalize_outcome",
+    "get_anonymized_incident",
     # Snapshot (legacy)
     "collect_snapshot",
     "extract_fingerprint",
@@ -289,4 +311,21 @@ __all__ = [
     "summarize_drift",
     "has_any_drift",
     "DriftDetail",
+    # Anonymization
+    "AnonymizationContext",
+    "AnonymizedIncidentReport",
+    "ActionSummary",
+    "IncidentAnonymizer",
+    "anonymize_incident",
+    "KNOWN_SERVICES",
+    "MOUNT_CATEGORIES",
+    "set_anon_secret",
+    # Cloud sync
+    "CloudSyncClient",
+    "CloudIncidentMatch",
+    "CloudSubmissionResult",
+    "CloudQueryResult",
+    "get_cloud_client",
+    "configure_cloud_client",
+    "reset_cloud_client",
 ]
