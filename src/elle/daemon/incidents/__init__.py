@@ -135,6 +135,54 @@ from elle.daemon.incidents.store import (
     list_incidents,
     update_incident,
     upsert_embedding,
+    # V4: Telemetry and control surface snapshot CRUD
+    attach_telemetry_snapshot,
+    get_telemetry_snapshot,
+    get_telemetry_snapshots,
+    attach_control_surface_snapshot,
+    get_control_surface_snapshot,
+    get_control_surface_snapshots,
+    get_surface_hashes,
+)
+from elle.daemon.incidents.telemetry_snapshot import (
+    TelemetrySnapshot,
+    CPUPressure,
+    MemoryPressure,
+    DiskIOPressure,
+    DiskInfo,
+    NetworkLiveness,
+    InterfaceInfo,
+    ServiceRuntimeSnapshot,
+    KernelHardwareSignals,
+    collect_telemetry_snapshot,
+)
+from elle.daemon.incidents.control_surface import (
+    ControlSurfaceSnapshot,
+    SystemdServiceSurface,
+    ConfigFileSurface,
+    PackageSurface,
+    PackageInfo,
+    SchedulerSurface,
+    PrivilegeSurface,
+    NetworkControlSurface,
+    KernelPolicySurface,
+    HardwareIdentitySurface,
+    collect_control_surface,
+    KNOWN_CONFIG_ROOTS,
+    KEY_SYSCTLS,
+)
+from elle.daemon.incidents.surface_cache import (
+    SurfaceCache,
+    get_surface_cache,
+    clear_surface_cache,
+)
+from elle.daemon.incidents.drift import (
+    detect_surface_drift,
+    get_drifted_surfaces,
+    explain_drift,
+    summarize_drift,
+    has_any_drift,
+    DriftDetail,
 )
 
 __all__ = [
@@ -169,7 +217,7 @@ __all__ = [
     "upsert_embedding",
     "get_embedding",
     "finalize_outcome",
-    # Snapshot
+    # Snapshot (legacy)
     "collect_snapshot",
     "extract_fingerprint",
     "diff_snapshots",
@@ -198,4 +246,47 @@ __all__ = [
     "init_incident_schema",
     "ensure_schema",
     "get_connection",
+    # V4: Telemetry snapshots
+    "TelemetrySnapshot",
+    "CPUPressure",
+    "MemoryPressure",
+    "DiskIOPressure",
+    "DiskInfo",
+    "NetworkLiveness",
+    "InterfaceInfo",
+    "ServiceRuntimeSnapshot",
+    "KernelHardwareSignals",
+    "collect_telemetry_snapshot",
+    "attach_telemetry_snapshot",
+    "get_telemetry_snapshot",
+    "get_telemetry_snapshots",
+    # V4: Control surface snapshots
+    "ControlSurfaceSnapshot",
+    "SystemdServiceSurface",
+    "ConfigFileSurface",
+    "PackageSurface",
+    "PackageInfo",
+    "SchedulerSurface",
+    "PrivilegeSurface",
+    "NetworkControlSurface",
+    "KernelPolicySurface",
+    "HardwareIdentitySurface",
+    "collect_control_surface",
+    "attach_control_surface_snapshot",
+    "get_control_surface_snapshot",
+    "get_control_surface_snapshots",
+    "get_surface_hashes",
+    "KNOWN_CONFIG_ROOTS",
+    "KEY_SYSCTLS",
+    # V4: Surface cache
+    "SurfaceCache",
+    "get_surface_cache",
+    "clear_surface_cache",
+    # V4: Drift detection
+    "detect_surface_drift",
+    "get_drifted_surfaces",
+    "explain_drift",
+    "summarize_drift",
+    "has_any_drift",
+    "DriftDetail",
 ]

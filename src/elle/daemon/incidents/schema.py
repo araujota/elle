@@ -15,7 +15,7 @@ import sqlite3
 from pathlib import Path
 
 # Schema version - increment when schema changes
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # Database location
 DB_PATH = Path("/var/lib/elle/incidents.db")
@@ -201,6 +201,31 @@ CREATE TABLE IF NOT EXISTS solution_approach_efficacy (
 )
 """
 
+# Telemetry snapshots (v4) - continuous evidence
+TELEMETRY_SNAPSHOTS_TABLE = """
+CREATE TABLE IF NOT EXISTS telemetry_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    incident_id TEXT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+    which TEXT NOT NULL CHECK (which IN ('pre', 'post')),
+    snapshot_json TEXT NOT NULL,
+    collected_at TEXT NOT NULL,
+    UNIQUE(incident_id, which)
+)
+"""
+
+# Control surface snapshots with hash index (v4) - discrete configuration
+CONTROL_SURFACE_SNAPSHOTS_TABLE = """
+CREATE TABLE IF NOT EXISTS control_surface_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    incident_id TEXT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+    which TEXT NOT NULL CHECK (which IN ('pre', 'post')),
+    snapshot_json TEXT NOT NULL,
+    surface_hashes TEXT NOT NULL,
+    collected_at TEXT NOT NULL,
+    UNIQUE(incident_id, which)
+)
+"""
+
 # Meta table for tracking state
 META_TABLE = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -277,6 +302,10 @@ INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_entity_efficacy_total ON entity_efficacy(total_incidents DESC)",
     "CREATE INDEX IF NOT EXISTS idx_approach_efficacy_domain ON solution_approach_efficacy(domain)",
     "CREATE INDEX IF NOT EXISTS idx_approach_efficacy_success ON solution_approach_efficacy(success_rate DESC)",
+    # V4 indexes
+    "CREATE INDEX IF NOT EXISTS idx_telemetry_snapshots_incident ON telemetry_snapshots(incident_id)",
+    "CREATE INDEX IF NOT EXISTS idx_control_surface_snapshots_incident ON control_surface_snapshots(incident_id)",
+    "CREATE INDEX IF NOT EXISTS idx_control_surface_hashes ON control_surface_snapshots(surface_hashes)",
 ]
 
 
@@ -310,6 +339,10 @@ def init_incident_schema(conn: sqlite3.Connection) -> None:
     cursor.execute(DOMAIN_EFFICACY_TABLE)
     cursor.execute(ENTITY_EFFICACY_TABLE)
     cursor.execute(SOLUTION_APPROACH_EFFICACY_TABLE)
+
+    # V4 tables (telemetry/control surface separation)
+    cursor.execute(TELEMETRY_SNAPSHOTS_TABLE)
+    cursor.execute(CONTROL_SURFACE_SNAPSHOTS_TABLE)
 
     # Create FTS table
     cursor.execute(INCIDENTS_FTS)
@@ -384,6 +417,10 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
     if current < 3:
         _migrate_v2_to_v3(conn)
 
+    # V3 -> V4: Add telemetry/control surface separation
+    if current < 4:
+        _migrate_v3_to_v4(conn)
+
     # Update schema version
     cursor = conn.cursor()
     cursor.execute(
@@ -442,6 +479,37 @@ def _migrate_v2_to_v3(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _migrate_v3_to_v4(conn: sqlite3.Connection) -> None:
+    """Migrate from schema v3 to v4.
+
+    Adds telemetry and control surface snapshot tables for
+    separated evidence collection:
+    - telemetry_snapshots: Continuous evidence (what's happening)
+    - control_surface_snapshots: Discrete configuration (what's configured)
+
+    Args:
+        conn: SQLite connection.
+    """
+    cursor = conn.cursor()
+
+    # Create new tables
+    cursor.execute(TELEMETRY_SNAPSHOTS_TABLE)
+    cursor.execute(CONTROL_SURFACE_SNAPSHOTS_TABLE)
+
+    # Create indexes
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_telemetry_snapshots_incident ON telemetry_snapshots(incident_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_control_surface_snapshots_incident ON control_surface_snapshots(incident_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_control_surface_hashes ON control_surface_snapshots(surface_hashes)"
+    )
+
+    conn.commit()
+
+
 def drop_all_tables(conn: sqlite3.Connection) -> None:
     """Drop all Incident Vault tables.
 
@@ -472,6 +540,9 @@ def drop_all_tables(conn: sqlite3.Connection) -> None:
     cursor.execute("DROP TABLE IF EXISTS domain_efficacy")
     cursor.execute("DROP TABLE IF EXISTS entity_efficacy")
     cursor.execute("DROP TABLE IF EXISTS solution_approach_efficacy")
+    # V4 tables
+    cursor.execute("DROP TABLE IF EXISTS telemetry_snapshots")
+    cursor.execute("DROP TABLE IF EXISTS control_surface_snapshots")
     cursor.execute("DROP TABLE IF EXISTS incidents")
     cursor.execute("DROP TABLE IF EXISTS meta")
 

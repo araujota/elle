@@ -36,11 +36,14 @@ Depends: ${misc:Depends},
          libaugeas0,
          augeas-tools,
          polkitd,
-         systemd
-Recommends: ollama,
-            python3-fastapi,
+         systemd,
+         ollama
+Recommends: python3-fastapi,
             python3-uvicorn,
-            elled-telemetryd
+            elled-telemetryd,
+            jq,
+            crudini,
+            xmlstarlet
 Suggests: python3-bcc,
           libgirepository1.0-dev,
           gir1.2-atspi-2.0
@@ -56,8 +59,8 @@ Description: Enabling Layer Learning Everything
   - Intent classification before any system mutation
   - Polkit-gated privilege escalation
  .
- Requires Ollama for local LLM inference (recommended, not required
- for package installation).
+ Requires Ollama for local LLM inference (installed automatically
+ as a dependency).
 
 Package: elled-ebpfd
 Architecture: amd64

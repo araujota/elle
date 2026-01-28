@@ -1321,3 +1321,411 @@ def get_config_state_by_path(
             results.append((str(row["incident_id"]), str(row["snapshot_which"]), state))
 
         return results
+
+
+# =============================================================================
+# Telemetry Snapshot CRUD (V4)
+# =============================================================================
+
+
+def attach_telemetry_snapshot(
+    incident_id: str,
+    which: str,
+    snapshot: "TelemetrySnapshotModel",
+    conn: sqlite3.Connection | None = None,
+) -> None:
+    """Attach a telemetry snapshot to an incident.
+
+    Each incident can have one 'pre' and one 'post' telemetry snapshot.
+    Calling again for the same (incident_id, which) replaces the existing snapshot.
+
+    Args:
+        incident_id: Parent incident ID.
+        which: 'pre' or 'post'.
+        snapshot: The TelemetrySnapshot to attach.
+        conn: SQLite connection.
+    """
+    # Import here to avoid circular imports
+
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
+
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO telemetry_snapshots (
+                incident_id, which, snapshot_json, collected_at
+            ) VALUES (?, ?, ?, ?)
+            """,
+            (
+                incident_id,
+                which,
+                _json_dumps(safe_model_dump(snapshot)),
+                _serialize_datetime(snapshot.collected_at),
+            ),
+        )
+        c.commit()
+
+
+def get_telemetry_snapshot(
+    incident_id: str,
+    which: str,
+    conn: sqlite3.Connection | None = None,
+) -> "TelemetrySnapshotModel | None":
+    """Get a telemetry snapshot for an incident.
+
+    Args:
+        incident_id: The incident UUID.
+        which: 'pre' or 'post'.
+        conn: SQLite connection.
+
+    Returns:
+        TelemetrySnapshot if found, None otherwise.
+    """
+    # Import here to avoid circular imports
+
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
+        cursor.execute(
+            """
+            SELECT snapshot_json FROM telemetry_snapshots
+            WHERE incident_id = ? AND which = ?
+            """,
+            (incident_id, which),
+        )
+        row = cursor.fetchone()
+
+        if not row:
+            return None
+
+        data = _json_loads(row["snapshot_json"])
+        return _parse_telemetry_snapshot(data)
+
+
+def get_telemetry_snapshots(
+    incident_id: str,
+    conn: sqlite3.Connection | None = None,
+) -> dict[str, "TelemetrySnapshotModel"]:
+    """Get all telemetry snapshots for an incident.
+
+    Args:
+        incident_id: The incident UUID.
+        conn: SQLite connection.
+
+    Returns:
+        Dict mapping 'pre'/'post' to TelemetrySnapshot.
+    """
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
+        cursor.execute(
+            "SELECT which, snapshot_json FROM telemetry_snapshots WHERE incident_id = ?",
+            (incident_id,),
+        )
+
+        result: dict[str, Any] = {}
+        for row in cursor.fetchall():
+            data = _json_loads(row["snapshot_json"])
+            snapshot = _parse_telemetry_snapshot(data)
+            if snapshot:
+                result[row["which"]] = snapshot
+
+        return result
+
+
+def _parse_telemetry_snapshot(data: dict[str, Any]) -> "TelemetrySnapshotModel | None":
+    """Parse telemetry snapshot from JSON data."""
+    if not data:
+        return None
+
+    # Import here to avoid circular imports
+    from elle.daemon.incidents.telemetry_snapshot import (
+        CPUPressure,
+        DiskInfo,
+        DiskIOPressure,
+        InterfaceInfo,
+        KernelHardwareSignals,
+        MemoryPressure,
+        NetworkLiveness,
+        ServiceRuntimeSnapshot,
+    )
+    from elle.daemon.incidents.telemetry_snapshot import (
+        TelemetrySnapshot as TelemetrySnapshotModel,
+    )
+
+    try:
+        # Parse nested models
+        cpu_data = data.get("cpu", {})
+        cpu = CPUPressure(**cpu_data)
+
+        memory_data = data.get("memory", {})
+        memory = MemoryPressure(**memory_data)
+
+        disk_data = data.get("disk", {})
+        disks = tuple(DiskInfo(**d) for d in disk_data.get("disks", []))
+        disk = DiskIOPressure(
+            disks=disks,
+            io_wait_pct=disk_data.get("io_wait_pct", 0.0),
+            io_errors_1h=disk_data.get("io_errors_1h", 0),
+            psi_some_pct=disk_data.get("psi_some_pct", 0.0),
+            psi_full_pct=disk_data.get("psi_full_pct", 0.0),
+        )
+
+        network_data = data.get("network", {})
+        interfaces = tuple(InterfaceInfo(**i) for i in network_data.get("interfaces", []))
+        network = NetworkLiveness(
+            interfaces=interfaces,
+            interfaces_up=network_data.get("interfaces_up", 0),
+            interfaces_down=network_data.get("interfaces_down", 0),
+            default_route_present=network_data.get("default_route_present", False),
+            dns_resolution_ok=network_data.get("dns_resolution_ok", False),
+        )
+
+        kernel_data = data.get("kernel", {})
+        kernel = KernelHardwareSignals(**kernel_data)
+
+        services = tuple(ServiceRuntimeSnapshot(**s) for s in data.get("services", []))
+
+        # Parse collected_at
+        collected_at = datetime.utcnow()
+        if "collected_at" in data:
+            if isinstance(data["collected_at"], str):
+                collected_at = _parse_datetime(data["collected_at"])
+            elif isinstance(data["collected_at"], datetime):
+                collected_at = data["collected_at"]
+
+        return TelemetrySnapshotModel(
+            cpu=cpu,
+            memory=memory,
+            disk=disk,
+            network=network,
+            kernel=kernel,
+            services=services,
+            collected_at=collected_at,
+            hostname=data.get("hostname", ""),
+            uptime_sec=data.get("uptime_sec", 0),
+        )
+    except Exception:
+        return None
+
+
+# =============================================================================
+# Control Surface Snapshot CRUD (V4)
+# =============================================================================
+
+
+def attach_control_surface_snapshot(
+    incident_id: str,
+    which: str,
+    snapshot: "ControlSurfaceSnapshotModel",
+    conn: sqlite3.Connection | None = None,
+) -> None:
+    """Attach a control surface snapshot to an incident.
+
+    Each incident can have one 'pre' and one 'post' control surface snapshot.
+    Calling again for the same (incident_id, which) replaces the existing snapshot.
+
+    Args:
+        incident_id: Parent incident ID.
+        which: 'pre' or 'post'.
+        snapshot: The ControlSurfaceSnapshot to attach.
+        conn: SQLite connection.
+    """
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
+
+        # Store surface hashes as JSON for indexing
+        surface_hashes = _json_dumps(snapshot.surface_hashes())
+
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO control_surface_snapshots (
+                incident_id, which, snapshot_json, surface_hashes, collected_at
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                incident_id,
+                which,
+                _json_dumps(safe_model_dump(snapshot)),
+                surface_hashes,
+                _serialize_datetime(snapshot.collected_at),
+            ),
+        )
+        c.commit()
+
+
+def get_control_surface_snapshot(
+    incident_id: str,
+    which: str,
+    conn: sqlite3.Connection | None = None,
+) -> "ControlSurfaceSnapshotModel | None":
+    """Get a control surface snapshot for an incident.
+
+    Args:
+        incident_id: The incident UUID.
+        which: 'pre' or 'post'.
+        conn: SQLite connection.
+
+    Returns:
+        ControlSurfaceSnapshot if found, None otherwise.
+    """
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
+        cursor.execute(
+            """
+            SELECT snapshot_json FROM control_surface_snapshots
+            WHERE incident_id = ? AND which = ?
+            """,
+            (incident_id, which),
+        )
+        row = cursor.fetchone()
+
+        if not row:
+            return None
+
+        data = _json_loads(row["snapshot_json"])
+        return _parse_control_surface_snapshot(data)
+
+
+def get_control_surface_snapshots(
+    incident_id: str,
+    conn: sqlite3.Connection | None = None,
+) -> dict[str, "ControlSurfaceSnapshotModel"]:
+    """Get all control surface snapshots for an incident.
+
+    Args:
+        incident_id: The incident UUID.
+        conn: SQLite connection.
+
+    Returns:
+        Dict mapping 'pre'/'post' to ControlSurfaceSnapshot.
+    """
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
+        cursor.execute(
+            "SELECT which, snapshot_json FROM control_surface_snapshots WHERE incident_id = ?",
+            (incident_id,),
+        )
+
+        result: dict[str, Any] = {}
+        for row in cursor.fetchall():
+            data = _json_loads(row["snapshot_json"])
+            snapshot = _parse_control_surface_snapshot(data)
+            if snapshot:
+                result[row["which"]] = snapshot
+
+        return result
+
+
+def get_surface_hashes(
+    incident_id: str,
+    which: str,
+    conn: sqlite3.Connection | None = None,
+) -> dict[str, str] | None:
+    """Get surface hashes for an incident without loading full snapshot.
+
+    Useful for quick drift detection without deserializing the full snapshot.
+
+    Args:
+        incident_id: The incident UUID.
+        which: 'pre' or 'post'.
+        conn: SQLite connection.
+
+    Returns:
+        Dict of surface hashes if found, None otherwise.
+    """
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
+        cursor.execute(
+            """
+            SELECT surface_hashes FROM control_surface_snapshots
+            WHERE incident_id = ? AND which = ?
+            """,
+            (incident_id, which),
+        )
+        row = cursor.fetchone()
+
+        if not row:
+            return None
+
+        return _json_loads(row["surface_hashes"])
+
+
+def _parse_control_surface_snapshot(data: dict[str, Any]) -> "ControlSurfaceSnapshotModel | None":
+    """Parse control surface snapshot from JSON data."""
+    if not data:
+        return None
+
+    # Import here to avoid circular imports
+    from elle.daemon.incidents.control_surface import (
+        ConfigFileSurface,
+        HardwareIdentitySurface,
+        KernelPolicySurface,
+        NetworkControlSurface,
+        PackageInfo,
+        PackageSurface,
+        PrivilegeSurface,
+        SchedulerSurface,
+        SystemdServiceSurface,
+    )
+    from elle.daemon.incidents.control_surface import (
+        ControlSurfaceSnapshot as ControlSurfaceSnapshotModel,
+    )
+
+    try:
+        # Parse services
+        services = tuple(SystemdServiceSurface(**s) for s in data.get("services", []))
+
+        # Parse configs
+        configs_data = data.get("configs", [])
+        configs = []
+        for c in configs_data:
+            # Handle mtime
+            if "mtime" in c and c["mtime"] and isinstance(c["mtime"], str):
+                c["mtime"] = _parse_datetime(c["mtime"])
+            configs.append(ConfigFileSurface(**c))
+        configs = tuple(configs)
+
+        # Parse packages
+        packages_data = data.get("packages", {})
+        pkg_infos = tuple(PackageInfo(**p) for p in packages_data.get("packages", []))
+        packages = PackageSurface(
+            packages=pkg_infos,
+            surface_hash_value=packages_data.get("surface_hash_value", ""),
+        )
+
+        # Parse other surfaces
+        scheduler = SchedulerSurface(**data.get("scheduler", {}))
+        privilege = PrivilegeSurface(**data.get("privilege", {}))
+        network_control = NetworkControlSurface(**data.get("network_control", {}))
+        kernel_policy_data = data.get("kernel_policy", {})
+        kernel_policy = KernelPolicySurface(**kernel_policy_data)
+        hardware_data = data.get("hardware", {})
+        if "filesystem_types" in hardware_data and isinstance(hardware_data["filesystem_types"], list):
+            hardware_data["filesystem_types"] = tuple(hardware_data["filesystem_types"])
+        hardware = HardwareIdentitySurface(**hardware_data)
+
+        # Parse collected_at
+        collected_at = datetime.utcnow()
+        if "collected_at" in data:
+            if isinstance(data["collected_at"], str):
+                collected_at = _parse_datetime(data["collected_at"])
+            elif isinstance(data["collected_at"], datetime):
+                collected_at = data["collected_at"]
+
+        return ControlSurfaceSnapshotModel(
+            services=services,
+            configs=configs,
+            packages=packages,
+            scheduler=scheduler,
+            privilege=privilege,
+            network_control=network_control,
+            kernel_policy=kernel_policy,
+            hardware=hardware,
+            collected_at=collected_at,
+        )
+    except Exception:
+        return None
+
+
+# Type hints for imports (for documentation purposes)
+TelemetrySnapshotModel = Any  # elle.daemon.incidents.telemetry_snapshot.TelemetrySnapshot
+ControlSurfaceSnapshotModel = Any  # elle.daemon.incidents.control_surface.ControlSurfaceSnapshot

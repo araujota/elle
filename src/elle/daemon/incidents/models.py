@@ -433,6 +433,34 @@ class IncidentReport(BaseModel):
         description="Config files modified during incident resolution",
     )
 
+    # V4: Separated telemetry and control surface snapshots
+    # These are stored separately in the database but can be loaded into the model.
+    # Use telemetry snapshots for continuous evidence (what's happening).
+    # Use control surface snapshots for configuration state (what's configured).
+    # Note: These use Any type to avoid circular imports. The actual types are:
+    #   - TelemetrySnapshot from elle.daemon.incidents.telemetry_snapshot
+    #   - ControlSurfaceSnapshot from elle.daemon.incidents.control_surface
+    telemetry_pre: Any | None = Field(
+        default=None,
+        description="Telemetry snapshot before actions",
+    )
+    telemetry_post: Any | None = Field(
+        default=None,
+        description="Telemetry snapshot after actions",
+    )
+    control_surface_pre: Any | None = Field(
+        default=None,
+        description="Control surface snapshot before actions",
+    )
+    control_surface_post: Any | None = Field(
+        default=None,
+        description="Control surface snapshot after actions",
+    )
+    surface_drift: dict[str, bool] = Field(
+        default_factory=dict,
+        description="Surface drift detection: surface name -> drifted (True = changed)",
+    )
+
 
 class IncidentSearchResult(BaseModel):
     """Search result for incident retrieval."""

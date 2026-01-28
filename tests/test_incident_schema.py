@@ -178,6 +178,144 @@ class TestIndexes:
         assert "idx_incidents_domain" in indexes
         assert "idx_actions_incident" in indexes
 
+    def test_v4_indexes_created(self, temp_db):
+        """Test that V4 indexes are created."""
+        conn, _ = temp_db
+        init_incident_schema(conn)
+
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='index'")
+        indexes = [row[0] for row in cursor.fetchall()]
+
+        assert "idx_telemetry_snapshots_incident" in indexes
+        assert "idx_control_surface_snapshots_incident" in indexes
+        assert "idx_control_surface_hashes" in indexes
+
+
+class TestV4Tables:
+    """Tests for V4 schema tables (telemetry/control surface)."""
+
+    def test_telemetry_snapshots_table_created(self, temp_db):
+        """Test that telemetry_snapshots table is created."""
+        conn, _ = temp_db
+        init_incident_schema(conn)
+
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='telemetry_snapshots'"
+        )
+        assert cursor.fetchone() is not None
+
+    def test_control_surface_snapshots_table_created(self, temp_db):
+        """Test that control_surface_snapshots table is created."""
+        conn, _ = temp_db
+        init_incident_schema(conn)
+
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='control_surface_snapshots'"
+        )
+        assert cursor.fetchone() is not None
+
+    def test_telemetry_snapshots_columns(self, temp_db):
+        """Test that telemetry_snapshots has expected columns."""
+        conn, _ = temp_db
+        init_incident_schema(conn)
+
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(telemetry_snapshots)")
+        columns = {row[1] for row in cursor.fetchall()}
+
+        assert "id" in columns
+        assert "incident_id" in columns
+        assert "which" in columns
+        assert "snapshot_json" in columns
+        assert "collected_at" in columns
+
+    def test_control_surface_snapshots_columns(self, temp_db):
+        """Test that control_surface_snapshots has expected columns."""
+        conn, _ = temp_db
+        init_incident_schema(conn)
+
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(control_surface_snapshots)")
+        columns = {row[1] for row in cursor.fetchall()}
+
+        assert "id" in columns
+        assert "incident_id" in columns
+        assert "which" in columns
+        assert "snapshot_json" in columns
+        assert "surface_hashes" in columns
+        assert "collected_at" in columns
+
+    def test_telemetry_which_constraint(self, temp_db):
+        """Test that telemetry_snapshots enforces which constraint."""
+        conn, _ = temp_db
+        init_incident_schema(conn)
+
+        # First create an incident
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO incidents (id, created_at, updated_at, title)
+            VALUES ('test-id', '2024-01-01', '2024-01-01', 'Test')
+            """
+        )
+
+        # Valid insert
+        cursor.execute(
+            """
+            INSERT INTO telemetry_snapshots (incident_id, which, snapshot_json, collected_at)
+            VALUES ('test-id', 'pre', '{}', '2024-01-01')
+            """
+        )
+        conn.commit()
+
+        # Invalid 'which' value should fail
+        import sqlite3
+        with pytest.raises(sqlite3.IntegrityError):
+            cursor.execute(
+                """
+                INSERT INTO telemetry_snapshots (incident_id, which, snapshot_json, collected_at)
+                VALUES ('test-id', 'invalid', '{}', '2024-01-01')
+                """
+            )
+
+    def test_control_surface_which_constraint(self, temp_db):
+        """Test that control_surface_snapshots enforces which constraint."""
+        conn, _ = temp_db
+        init_incident_schema(conn)
+
+        # First create an incident
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO incidents (id, created_at, updated_at, title)
+            VALUES ('test-id', '2024-01-01', '2024-01-01', 'Test')
+            """
+        )
+
+        # Valid insert
+        cursor.execute(
+            """
+            INSERT INTO control_surface_snapshots
+            (incident_id, which, snapshot_json, surface_hashes, collected_at)
+            VALUES ('test-id', 'post', '{}', '{}', '2024-01-01')
+            """
+        )
+        conn.commit()
+
+        # Invalid 'which' value should fail
+        import sqlite3
+        with pytest.raises(sqlite3.IntegrityError):
+            cursor.execute(
+                """
+                INSERT INTO control_surface_snapshots
+                (incident_id, which, snapshot_json, surface_hashes, collected_at)
+                VALUES ('test-id', 'invalid', '{}', '{}', '2024-01-01')
+                """
+            )
+
 
 class TestTriggers:
     """Tests for FTS triggers."""
