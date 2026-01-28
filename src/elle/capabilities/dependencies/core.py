@@ -93,6 +93,47 @@ NET_TOOLS_DEPENDENCY = DependencySpec(
     optional=True,  # Can fall back to ss
 )
 
+JQ_DEPENDENCY = DependencySpec(
+    name="jq",
+    display_name="jq JSON Processor",
+    description="Required for JSON file editing and transformation",
+    apt_packages=("jq",),
+    check_command="jq",
+    required_by=("file.edit",),
+    optional=True,  # Can fall back to Python json module
+)
+
+YQ_DEPENDENCY = DependencySpec(
+    name="yq",
+    display_name="yq YAML Processor",
+    description="Required for YAML file editing and transformation",
+    apt_packages=(),  # Installed via pip
+    pip_packages=("yq",),
+    check_command="yq",
+    required_by=("file.edit",),
+    optional=True,  # Can fall back to ruamel.yaml
+)
+
+CRUDINI_DEPENDENCY = DependencySpec(
+    name="crudini",
+    display_name="crudini INI Editor",
+    description="Required for INI/CFG configuration file editing",
+    apt_packages=("crudini",),
+    check_command="crudini",
+    required_by=("file.edit",),
+    optional=True,  # Can fall back to configparser
+)
+
+XMLSTARLET_DEPENDENCY = DependencySpec(
+    name="xmlstarlet",
+    display_name="XMLStarlet XML Toolkit",
+    description="Required for XML file editing, validation, and transformation",
+    apt_packages=("xmlstarlet",),
+    check_command="xmlstarlet",
+    required_by=("file.edit",),
+    optional=True,  # Can fall back to Python xml.etree
+)
+
 
 # =============================================================================
 # Core Dependencies Collection
@@ -106,6 +147,10 @@ CORE_DEPENDENCIES: tuple[DependencySpec, ...] = (
     SMARTMONTOOLS_DEPENDENCY,
     LM_SENSORS_DEPENDENCY,
     NET_TOOLS_DEPENDENCY,
+    JQ_DEPENDENCY,
+    YQ_DEPENDENCY,
+    CRUDINI_DEPENDENCY,
+    XMLSTARLET_DEPENDENCY,
 )
 
 
@@ -144,5 +189,9 @@ ALLOWED_PACKAGES: frozenset[str] = frozenset(
         # Python GObject introspection (needed for AT-SPI)
         "gir1.2-atspi-2.0",
         "python3-gi",
+        # File editing tools
+        "jq",
+        "crudini",
+        "xmlstarlet",
     }
 )

@@ -112,10 +112,28 @@ def get_core_capabilities() -> list[type[Capability[Any, Any]]]:
     except ImportError:
         pass
 
+    # File edit capability (tier stack)
+    try:
+        from elle.capabilities.core.file_edit import FILE_EDIT_CAPABILITIES
+
+        capabilities.extend(FILE_EDIT_CAPABILITIES)
+    except ImportError:
+        pass
+
     return capabilities
 
 
 # Re-export commonly used classes
+# File edit capability (tier stack)
+from elle.capabilities.core.file_edit import (
+    FILE_EDIT_CAPABILITIES,
+    FileEditCapability,
+    FileEditInput,
+    FileEditOperation,
+    FileEditOutput,
+    TierEscalationRecord,
+)
+
 # Auth capabilities
 from elle.capabilities.core.auth import (
     AUTH_CAPABILITIES,
@@ -270,6 +288,13 @@ from elle.capabilities.core.service import (
 __all__ = [
     # Factory
     "get_core_capabilities",
+    # File Edit (Tier Stack)
+    "FILE_EDIT_CAPABILITIES",
+    "FileEditCapability",
+    "FileEditInput",
+    "FileEditOperation",
+    "FileEditOutput",
+    "TierEscalationRecord",
     # Service
     "ServiceInput",
     "ServiceOutput",
