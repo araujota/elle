@@ -1,16 +1,27 @@
 """Incident retrieval and similarity search.
 
 Provides multi-tier search for finding similar past incidents:
-- Tier A: Fast fingerprint matching
-- Tier B: Lexical search via FTS5
-- Tier C: Semantic similarity via embeddings
+- Tier A: Fast fingerprint matching (local)
+- Tier B: Lexical search via FTS5 (local)
+- Tier C: Semantic similarity via embeddings (local)
+- Tier D: Cloud vault query (parallel, if configured)
 
 Results are ranked by similarity × success for optimal reuse.
+
+Cloud Retrieval:
+When ELLE Cloud is configured, queries run in parallel against both
+the local vault and the cloud vault. Cloud results are merged with
+local results, with local results prioritized (as they may have
+machine-specific efficacy data). If cloud is unavailable, the search
+continues with local-only results.
 """
 
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any
+
+import structlog
 
 from elle.common.pydantic_compat import safe_model_dump
 from elle.daemon.incidents.models import (
@@ -26,6 +37,8 @@ from elle.daemon.incidents.store import (
     _row_to_incident,
     get_all_embeddings,
 )
+
+logger = structlog.get_logger()
 
 # Static outcome quality weights (fallback when no efficacy data available)
 STATIC_OUTCOME_WEIGHTS = {
@@ -54,15 +67,20 @@ def search(
     k: int = 5,
     search_type: str = "hybrid",
     min_precondition_match: float = 0.5,
+    include_cloud: bool = True,
     conn: sqlite3.Connection | None = None,
 ) -> list[IncidentSearchResult]:
     """Search for similar incidents.
 
-    Uses a multi-tier approach:
-    1. Fingerprint matching (fast filter)
-    2. Lexical search (FTS5)
-    3. Semantic search (embeddings, if available)
-    4. Merge and rank by similarity × outcome quality
+    Uses a multi-tier approach with parallel local+cloud retrieval:
+    1. Fingerprint matching (fast filter, local)
+    2. Lexical search (FTS5, local)
+    3. Semantic search (embeddings, local)
+    4. Cloud vault query (parallel, if configured)
+    5. Merge and rank by similarity × outcome quality
+
+    When cloud is configured, both local and cloud queries run in parallel.
+    Local results are prioritized as they may have machine-specific efficacy data.
 
     Args:
         query: Text query for lexical/semantic search.
@@ -72,6 +90,7 @@ def search(
         k: Number of results to return.
         search_type: "lexical", "semantic", "fingerprint", or "hybrid".
         min_precondition_match: Minimum precondition match ratio.
+        include_cloud: Whether to query cloud vault (if configured).
         conn: SQLite connection.
 
     Returns:
@@ -86,37 +105,228 @@ def search(
     assert conn is not None
 
     try:
-        candidates: list[tuple[IncidentReport, float, str]] = []
+        # Run local and cloud search in parallel
+        local_candidates: list[tuple[IncidentReport, float, str]] = []
+        cloud_results: list[IncidentSearchResult] = []
 
-        # Tier A: Fingerprint matching
-        if search_type in ("fingerprint", "hybrid") and fingerprint:
-            fp_results = _fingerprint_search(fingerprint, domain, k * 4, conn)
-            candidates.extend(fp_results)
+        # Check if cloud is available
+        cloud_available = False
+        if include_cloud and fingerprint:
+            try:
+                from elle.daemon.incidents.cloud_sync import get_cloud_client
 
-        # Tier B: Lexical search
-        if search_type in ("lexical", "hybrid") and query:
-            lex_results = _lexical_search(query, domain, k * 4, conn)
-            candidates.extend(lex_results)
+                cloud_client = get_cloud_client()
+                cloud_available = cloud_client.is_available()
+            except Exception:
+                pass
 
-        # Tier C: Semantic search
-        if search_type in ("semantic", "hybrid") and query:
-            sem_results = _semantic_search(query, domain, k * 4, conn)
-            candidates.extend(sem_results)
+        # Use ThreadPoolExecutor for parallel execution
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = {}
 
-        # Merge and rank
+            # Submit local search
+            futures["local"] = executor.submit(
+                _local_search,
+                query=query,
+                domain=domain,
+                fingerprint=fingerprint,
+                k=k,
+                search_type=search_type,
+                conn=conn,
+            )
+
+            # Submit cloud search if available
+            if cloud_available and fingerprint:
+                futures["cloud"] = executor.submit(
+                    _cloud_search,
+                    fingerprint=fingerprint,
+                    domain=domain,
+                    k=k,
+                )
+
+            # Collect results
+            for name, future in futures.items():
+                try:
+                    result = future.result(timeout=10)  # 10s timeout
+                    if name == "local":
+                        local_candidates = result
+                    elif name == "cloud":
+                        cloud_results = result
+                except Exception as e:
+                    logger.debug(f"{name} search failed", error=str(e))
+
+        # Merge and rank local candidates
         ranked = _merge_and_rank(
-            candidates,
+            local_candidates,
             snapshot=snapshot,
             fingerprint=fingerprint,
             min_precondition_match=min_precondition_match,
             conn=conn,
         )
 
+        # Merge cloud results (with lower priority)
+        if cloud_results:
+            ranked = _merge_local_and_cloud_results(ranked, cloud_results, k)
+
         return ranked[:k]
 
     finally:
         if own_conn and conn is not None:
             conn.close()
+
+
+def _local_search(
+    query: str | None,
+    domain: str | None,
+    fingerprint: Fingerprint | None,
+    k: int,
+    search_type: str,
+    conn: sqlite3.Connection,
+) -> list[tuple[IncidentReport, float, str]]:
+    """Run local search tiers (A, B, C).
+
+    This is extracted to run in a thread pool.
+    """
+    candidates: list[tuple[IncidentReport, float, str]] = []
+
+    # Tier A: Fingerprint matching
+    if search_type in ("fingerprint", "hybrid") and fingerprint:
+        fp_results = _fingerprint_search(fingerprint, domain, k * 4, conn)
+        candidates.extend(fp_results)
+
+    # Tier B: Lexical search
+    if search_type in ("lexical", "hybrid") and query:
+        lex_results = _lexical_search(query, domain, k * 4, conn)
+        candidates.extend(lex_results)
+
+    # Tier C: Semantic search
+    if search_type in ("semantic", "hybrid") and query:
+        sem_results = _semantic_search(query, domain, k * 4, conn)
+        candidates.extend(sem_results)
+
+    return candidates
+
+
+def _cloud_search(
+    fingerprint: Fingerprint,
+    domain: str | None,
+    k: int,
+) -> list[IncidentSearchResult]:
+    """Query cloud vault for similar incidents.
+
+    This is extracted to run in a thread pool.
+
+    Returns:
+        List of IncidentSearchResult from cloud, or empty list if unavailable.
+    """
+    try:
+        from elle.daemon.incidents.cloud_sync import query_cloud_sync
+
+        result = query_cloud_sync(
+            fingerprint=fingerprint,
+            domain=domain,
+            limit=k,
+            min_similarity=0.3,
+        )
+
+        if result is None:
+            return []
+
+        # Convert cloud matches to IncidentSearchResult
+        # Note: Cloud incidents don't have full IncidentReport data,
+        # so we create lightweight proxies
+        search_results = []
+        for match in result.matches:
+            # Create a minimal incident report from cloud data
+            proxy_incident = _create_cloud_incident_proxy(match)
+            search_results.append(
+                IncidentSearchResult(
+                    incident=proxy_incident,
+                    score=match.combined_score,
+                    match_type="cloud",
+                    precondition_match_ratio=1.0,  # Can't evaluate remotely
+                    outcome_weight=STATIC_OUTCOME_WEIGHTS.get(match.outcome, 0.2),
+                    source="cloud",
+                )
+            )
+
+        logger.debug(
+            "Cloud search returned results",
+            count=len(search_results),
+            total_searched=result.total_searched,
+            query_time_ms=result.query_time_ms,
+        )
+
+        return search_results
+
+    except Exception as e:
+        logger.debug("Cloud search failed", error=str(e))
+        return []
+
+
+def _create_cloud_incident_proxy(match: Any) -> IncidentReport:
+    """Create a proxy IncidentReport from cloud match data.
+
+    Cloud matches don't have full incident data, but we can create
+    a lightweight proxy for ranking and display purposes.
+
+    Args:
+        match: A CloudIncidentMatch from cloud_sync module.
+    """
+    return IncidentReport(
+        incident_id=f"cloud:{match.cloud_id}",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        domain=match.domain,  # type: ignore
+        severity="info",
+        status="resolved",
+        title=f"Cloud incident {match.cloud_id[:8]}",
+        summary=f"Similar incident from {match.installation_count} installation(s)",
+        outcome=match.outcome,
+        confidence=match.confidence,
+        fingerprint=Fingerprint(),  # Cloud fingerprint not available
+    )
+
+
+def _merge_local_and_cloud_results(
+    local_results: list[IncidentSearchResult],
+    cloud_results: list[IncidentSearchResult],
+    k: int,
+) -> list[IncidentSearchResult]:
+    """Merge local and cloud results with local priority.
+
+    Local results are prioritized because:
+    1. They have machine-specific efficacy data
+    2. They have full incident details (actions, snapshots)
+    3. They may be more recent/relevant to this machine
+
+    Cloud results fill in gaps and provide collective knowledge.
+    """
+    # Create a set of local incident IDs for deduplication
+    local_ids = {r.incident.incident_id for r in local_results}
+
+    # Start with local results
+    merged = list(local_results)
+
+    # Add cloud results that don't overlap
+    cloud_boost = 0.9  # Slight penalty for cloud results
+    for cloud_result in cloud_results:
+        if cloud_result.incident.incident_id not in local_ids:
+            # Apply cloud boost (slight penalty)
+            boosted = IncidentSearchResult(
+                incident=cloud_result.incident,
+                score=cloud_result.score * cloud_boost,
+                match_type=cloud_result.match_type,
+                precondition_match_ratio=cloud_result.precondition_match_ratio,
+                outcome_weight=cloud_result.outcome_weight,
+                source="cloud",
+            )
+            merged.append(boosted)
+
+    # Re-sort by score
+    merged.sort(key=lambda x: x.score, reverse=True)
+
+    return merged[:k]
 
 
 def find_similar(
@@ -165,6 +375,7 @@ def get_prior_art(
     snapshot: SystemSnapshot | None = None,
     k: int = 3,
     include_actions: bool = True,
+    include_cloud: bool = True,
     conn: sqlite3.Connection | None = None,
 ) -> list[dict[str, Any]]:
     """Get prior art for inclusion in LLM prompts.
@@ -173,6 +384,10 @@ def get_prior_art(
     suitable for injecting into prompt context. Includes successful
     actions from prior incidents so the LLM can reference what worked.
 
+    When cloud is configured, prior art is retrieved from both local
+    and cloud vaults in parallel. Cloud results are marked with
+    source="cloud" and may have limited action data.
+
     Args:
         query: Description of the current problem.
         domain: Incident domain.
@@ -180,6 +395,7 @@ def get_prior_art(
         snapshot: Current system snapshot.
         k: Number of prior incidents to include.
         include_actions: Whether to fetch and include actions.
+        include_cloud: Whether to include cloud vault results.
         conn: SQLite connection.
 
     Returns:
@@ -189,6 +405,7 @@ def get_prior_art(
         - decision, root_cause, verification_steps
         - successful_actions: list of commands that worked
         - fingerprint_match: similarity metrics
+        - source: "local" or "cloud"
     """
     from elle.daemon.incidents.store import get_actions
 
@@ -206,16 +423,18 @@ def get_prior_art(
             k=k,
             search_type="hybrid",
             min_precondition_match=0.4,  # Slightly lower threshold for prior art
+            include_cloud=include_cloud,
             conn=conn,
         )
 
         prior_art = []
         for result in results:
             inc = result.incident
+            is_cloud = result.source == "cloud"
 
-            # Get successful actions from this incident
+            # Get successful actions from this incident (local only)
             successful_actions = []
-            if include_actions:
+            if include_actions and not is_cloud:
                 try:
                     actions = get_actions(inc.incident_id, conn=conn)
                     for action in actions:
@@ -255,6 +474,7 @@ def get_prior_art(
                 "fingerprint_match": fingerprint_match,
                 "trigger_command": inc.trigger_command,
                 "days_ago": (datetime.utcnow() - inc.updated_at).days,
+                "source": result.source,
             }
             prior_art.append(art)
 
@@ -732,6 +952,7 @@ def _merge_and_rank(
                 match_type=match_type,  # type: ignore
                 precondition_match_ratio=precond_ratio,
                 outcome_weight=outcome_weight,
+                source="local",
             )
         )
 
