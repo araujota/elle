@@ -7,19 +7,18 @@ Configuration search order:
 3. Environment variables (ELLE_*)
 """
 
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-# Try to import tomllib (Python 3.11+) or fall back to tomli
+# Try to import tomllib (Python 3.11+) or fall back to tomli/toml
 try:
     import tomllib
 except ImportError:
-    try:
-        import tomli as tomllib  # type: ignore
-    except ImportError:
-        tomllib = None  # type: ignore
+    tomllib = None  # type: ignore[assignment,unused-ignore]
 
 
 # Default configuration paths
@@ -193,13 +192,17 @@ def _deep_get(d: dict[str, Any], *keys: str, default: Any = None) -> Any:
 
 def _load_toml(path: Path) -> dict[str, Any]:
     """Load TOML file if it exists."""
-    if tomllib is None:
-        return {}
     if not path.exists():
         return {}
     try:
-        with open(path, "rb") as f:
-            return tomllib.load(f)
+        if tomllib is not None:
+            with open(path, "rb") as f:
+                result: dict[str, Any] = tomllib.load(f)
+        else:
+            import toml
+
+            result = toml.load(str(path))
+        return result
     except Exception:
         return {}
 

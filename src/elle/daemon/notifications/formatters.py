@@ -437,6 +437,121 @@ def format_temperature_issue(
 
 
 # =============================================================================
+# Forecast Formatters
+# =============================================================================
+
+
+def _metric_to_label(metric: str) -> str:
+    """Convert a metric name to a human-readable label.
+
+    Args:
+        metric: Metric name like "disk./.used_pct" or "mem.used_pct".
+
+    Returns:
+        Human-readable label like "Disk / usage" or "Memory usage".
+    """
+    parts = metric.split(".")
+
+    if not parts:
+        return metric
+
+    domain = parts[0]
+
+    if domain == "disk":
+        # e.g., "disk./.used_pct" -> "Disk /"
+        mount = parts[1] if len(parts) > 1 else "/"
+        return f"Disk {mount}"
+    elif domain in ("mem", "memory"):
+        return "Memory"
+    elif domain == "swap":
+        return "Swap"
+    elif domain == "cpu":
+        return "CPU"
+    elif domain in ("net", "network"):
+        iface = parts[1] if len(parts) > 1 else ""
+        return f"Network {iface}".strip()
+    elif domain in ("temp", "thermal"):
+        return "Temperature"
+
+    return metric
+
+
+def format_forecast_title(metric: str, auto_remediated: bool = False) -> str:
+    """Format a forecast notification title.
+
+    Args:
+        metric: Metric name (e.g., "disk./.used_pct").
+        auto_remediated: Whether auto-remediation occurred.
+
+    Returns:
+        Title like "Disk Space Warning: /" or "Auto-Remediated: Disk /".
+    """
+    label = _metric_to_label(metric)
+
+    if auto_remediated:
+        return f"Auto-Remediated: {label}"
+    return f"{label} Warning"
+
+
+def format_forecast_body(
+    metric: str,
+    current_value: float,
+    threshold: float,
+    time_to_threshold_hours: float | None,
+    cause_description: str | None = None,
+    plan_summary: str | None = None,
+    outcome: str | None = None,
+) -> str:
+    """Format a forecast notification body.
+
+    Args:
+        metric: Metric name.
+        current_value: Current metric value.
+        threshold: Threshold being approached.
+        time_to_threshold_hours: Hours until threshold crossing.
+        cause_description: Description of the probable cause.
+        plan_summary: Summary of the remediation plan.
+        outcome: Outcome of remediation (if auto-remediated).
+
+    Returns:
+        Multi-line body with metric context, cause, and plan.
+    """
+    lines: list[str] = []
+
+    label = _metric_to_label(metric)
+
+    # Metric status line
+    is_pct = "pct" in metric or current_value <= 1.0
+    if is_pct:
+        val = current_value * 100 if current_value <= 1.0 else current_value
+        thr = threshold * 100 if threshold <= 1.0 else threshold
+        lines.append(f"{label} at {val:.0f}% (threshold: {thr:.0f}%)")
+    else:
+        lines.append(f"{label} at {current_value:.1f} (threshold: {threshold:.1f})")
+
+    # Time remaining
+    if time_to_threshold_hours is not None:
+        if time_to_threshold_hours < 1:
+            minutes = time_to_threshold_hours * 60
+            lines.append(f"Projected to cross in {minutes:.0f} minutes")
+        else:
+            lines.append(f"Projected to cross in {time_to_threshold_hours:.1f} hours")
+
+    # Cause
+    if cause_description:
+        lines.append(f"Cause: {cause_description}")
+
+    # Plan or outcome
+    if outcome:
+        lines.append(f"Result: {outcome}")
+    elif plan_summary:
+        summary = plan_summary if len(plan_summary) <= 80 else plan_summary[:77] + "..."
+        lines.append(f"Plan: {summary}")
+
+    return "\n".join(lines)
+
+
+# =============================================================================
 # Incident Formatters
 # =============================================================================
 

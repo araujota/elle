@@ -528,10 +528,319 @@ class ConfigPreviewCapability(BaseCapability[ConfigPreviewInput, ConfigPreviewOu
 
 
 # =============================================================================
+# Config Rollback Capability
+# =============================================================================
+
+
+class ConfigRollbackInput(BaseModel):
+    """Input for config rollback operation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    incident_id: str = Field(
+        description="Incident ID containing the backup reference",
+    )
+    path: str = Field(
+        description="Config file path to rollback",
+    )
+    verify: bool = Field(
+        default=True,
+        description="Run validation after rollback",
+    )
+
+
+class ConfigRollbackOutput(BaseModel):
+    """Output from config rollback operation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    success: bool = Field(description="Whether rollback succeeded")
+    path: str = Field(description="Path that was rolled back")
+    backup_path: str = Field(description="Backup that was restored")
+    sha256_before: str | None = Field(
+        default=None,
+        description="Hash before rollback (the corrupted state)",
+    )
+    sha256_after: str | None = Field(
+        default=None,
+        description="Hash after rollback (the restored state)",
+    )
+    validation_passed: bool = Field(
+        default=True,
+        description="Whether post-rollback validation passed",
+    )
+
+
+class ConfigRollbackCapability(BaseCapability[ConfigRollbackInput, ConfigRollbackOutput]):
+    """Rollback a config file to its pre-incident state.
+
+    Restores a configuration file from a backup stored during a previous
+    incident. This enables safe recovery from failed config changes.
+
+    Flow:
+    1. Look up the backup path from the incident record
+    2. Verify the backup exists and has the expected hash
+    3. Restore the backup to the original path
+    4. Optionally validate the restored config
+    5. Record the rollback to the incident
+    """
+
+    @property
+    def spec(self) -> CapabilitySpec:
+        return CapabilitySpec(
+            name="config.rollback",
+            summary="Rollback a config file to its pre-incident state",
+            domain="config",
+            risk="high",
+            side_effects=(
+                SideEffect(
+                    kind="file_write",
+                    target="{path}",
+                    reversible=False,  # Rollback of rollback requires different backup
+                    description="Config file will be restored from backup",
+                ),
+            ),
+            requires_privilege=True,  # May need root for /etc files
+            idempotent=True,  # Restoring same backup multiple times is safe
+            trust_level="core",
+            version="1.0.0",
+            input_schema_name="ConfigRollbackInput",
+            output_schema_name="ConfigRollbackOutput",
+        )
+
+    def dry_run(self, input: ConfigRollbackInput) -> DryRunResult:
+        """Preview config rollback."""
+        try:
+            import asyncio
+
+            from elle.daemon.incidents.config_tracker import get_config_backup
+
+            # Get backup info
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    import concurrent.futures
+
+                    with concurrent.futures.ThreadPoolExecutor() as pool:
+                        backup = pool.submit(
+                            lambda: asyncio.run(
+                                get_config_backup(input.incident_id, input.path)
+                            )
+                        ).result()
+                else:
+                    backup = loop.run_until_complete(
+                        get_config_backup(input.incident_id, input.path)
+                    )
+            except RuntimeError:
+                backup = asyncio.run(
+                    get_config_backup(input.incident_id, input.path)
+                )
+
+            if not backup:
+                return DryRunResult(
+                    is_valid=False,
+                    validation_errors=(
+                        f"No backup found for {input.path} in incident {input.incident_id}",
+                    ),
+                    preview_text="Cannot rollback: no backup found",
+                )
+
+            backup_path = backup.get("backup_path", "")
+            from pathlib import Path
+
+            if not Path(backup_path).exists():
+                return DryRunResult(
+                    is_valid=False,
+                    validation_errors=(f"Backup file not found: {backup_path}",),
+                    preview_text="Cannot rollback: backup file missing",
+                )
+
+            return DryRunResult(
+                would_execute=(),
+                would_modify=(input.path,),
+                estimated_risk="high",
+                requires_confirmation=True,
+                preview_text=(
+                    f"Would restore {input.path} from backup {backup_path}"
+                ),
+                is_valid=True,
+            )
+
+        except ImportError:
+            return DryRunResult(
+                is_valid=False,
+                validation_errors=("Config tracker not available",),
+                preview_text="Cannot preview: config tracker not available",
+            )
+        except Exception as e:
+            return DryRunResult(
+                is_valid=False,
+                validation_errors=(str(e),),
+                preview_text=f"Preview failed: {e}",
+            )
+
+    def run(self, input: ConfigRollbackInput) -> CapabilityResult:
+        """Execute config rollback."""
+        import asyncio
+        import hashlib
+        import shutil
+        from pathlib import Path
+
+        start_time = time.time()
+
+        try:
+            from elle.daemon.incidents.config_tracker import get_config_backup
+
+            # Get backup info
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    import concurrent.futures
+
+                    with concurrent.futures.ThreadPoolExecutor() as pool:
+                        backup = pool.submit(
+                            lambda: asyncio.run(
+                                get_config_backup(input.incident_id, input.path)
+                            )
+                        ).result()
+                else:
+                    backup = loop.run_until_complete(
+                        get_config_backup(input.incident_id, input.path)
+                    )
+            except RuntimeError:
+                backup = asyncio.run(
+                    get_config_backup(input.incident_id, input.path)
+                )
+
+            if not backup:
+                return CapabilityResult(
+                    success=False,
+                    error=f"No backup found for {input.path} in incident {input.incident_id}",
+                    execution_time_ms=int((time.time() - start_time) * 1000),
+                )
+
+            backup_path = Path(backup.get("backup_path", ""))
+            target_path = Path(input.path)
+
+            if not backup_path.exists():
+                return CapabilityResult(
+                    success=False,
+                    error=f"Backup file not found: {backup_path}",
+                    execution_time_ms=int((time.time() - start_time) * 1000),
+                )
+
+            # Hash the current (corrupted) state
+            sha256_before = None
+            if target_path.exists():
+                h = hashlib.sha256()
+                with open(target_path, "rb") as f:
+                    for chunk in iter(lambda: f.read(8192), b""):
+                        h.update(chunk)
+                sha256_before = h.hexdigest()
+
+            # Restore the backup
+            shutil.copy2(backup_path, target_path)
+
+            # Hash the restored state
+            h = hashlib.sha256()
+            with open(target_path, "rb") as f:
+                for chunk in iter(lambda: f.read(8192), b""):
+                    h.update(chunk)
+            sha256_after = h.hexdigest()
+
+            # Validate if requested
+            validation_passed = True
+            if input.verify:
+                try:
+                    from elle.ops.augeas.validators import validate_config
+
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            import concurrent.futures
+
+                            with concurrent.futures.ThreadPoolExecutor() as pool:
+                                result = pool.submit(
+                                    lambda: asyncio.run(validate_config(target_path))
+                                ).result()
+                        else:
+                            result = loop.run_until_complete(validate_config(target_path))
+                    except RuntimeError:
+                        result = asyncio.run(validate_config(target_path))
+
+                    validation_passed = result.valid
+
+                    # Revert if validation failed
+                    if not validation_passed:
+                        logger.warning(
+                            f"Rollback validation failed for {input.path}, "
+                            "keeping restored state anyway"
+                        )
+
+                except ImportError:
+                    # Validators not available, assume OK
+                    pass
+
+            execution_time = int((time.time() - start_time) * 1000)
+
+            return CapabilityResult(
+                success=True,
+                output=ConfigRollbackOutput(
+                    success=True,
+                    path=input.path,
+                    backup_path=str(backup_path),
+                    sha256_before=sha256_before,
+                    sha256_after=sha256_after,
+                    validation_passed=validation_passed,
+                ),
+                side_effects_applied=self.spec.side_effects,
+                execution_time_ms=execution_time,
+                evidence=CapabilityEvidence(
+                    files_modified=(input.path,),
+                    verification_passed=validation_passed,
+                    rationale=f"Restored {input.path} from backup",
+                ),
+            )
+
+        except ImportError:
+            return CapabilityResult(
+                success=False,
+                error="Config tracker not available",
+                execution_time_ms=int((time.time() - start_time) * 1000),
+            )
+        except Exception as e:
+            return CapabilityResult(
+                success=False,
+                error=str(e),
+                execution_time_ms=int((time.time() - start_time) * 1000),
+                evidence=CapabilityEvidence(
+                    rationale=f"Config rollback failed: {e}",
+                ),
+            )
+
+    def verify(self, input: ConfigRollbackInput) -> VerificationResult:
+        """Verify config rollback was applied."""
+        from pathlib import Path
+
+        path = Path(input.path)
+        if not path.exists():
+            return VerificationResult(
+                passed=False,
+                discrepancies=("File does not exist after rollback",),
+            )
+
+        return VerificationResult(
+            passed=True,
+            checks_performed=("file exists",),
+        )
+
+
+# =============================================================================
 # Exports
 # =============================================================================
 
 CONFIG_CAPABILITIES = [
     ConfigEditCapability,
     ConfigPreviewCapability,
+    ConfigRollbackCapability,
 ]

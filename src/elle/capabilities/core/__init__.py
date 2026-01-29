@@ -117,15 +117,6 @@ def get_core_capabilities() -> list[type[Capability[Any, Any]]]:
 
 # Re-export commonly used classes
 # File edit capability (tier stack)
-from elle.capabilities.core.file_edit import (
-    FILE_EDIT_CAPABILITIES,
-    FileEditCapability,
-    FileEditInput,
-    FileEditOperation,
-    FileEditOutput,
-    TierEscalationRecord,
-)
-
 # Auth capabilities
 from elle.capabilities.core.auth import (
     AUTH_CAPABILITIES,
@@ -190,6 +181,14 @@ from elle.capabilities.core.file import (
     FileWriteCapability,
     FileWriteInput,
     FileWriteOutput,
+)
+from elle.capabilities.core.file_edit import (
+    FILE_EDIT_CAPABILITIES,
+    FileEditCapability,
+    FileEditInput,
+    FileEditOperation,
+    FileEditOutput,
+    TierEscalationRecord,
 )
 
 # Incident capabilities

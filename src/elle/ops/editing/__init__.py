@@ -88,8 +88,7 @@ Integration with Capabilities:
         )
 """
 
-# Core selector
-from elle.ops.editing.tier_selector import TierSelector
+from __future__ import annotations
 
 # Models
 from elle.ops.editing.models import (
@@ -120,6 +119,9 @@ from elle.ops.editing.tier_registry import (
     list_all_tiers,
     matches_pattern,
 )
+
+# Core selector
+from elle.ops.editing.tier_selector import TierSelector
 
 
 def select_tier(

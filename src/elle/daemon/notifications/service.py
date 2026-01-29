@@ -16,6 +16,8 @@ Usage:
     notify_reboot_status("success", goal="Install security updates")
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import logging
@@ -32,6 +34,7 @@ from elle.daemon.notifications.models import (
     NotificationCategory,
     NotificationResult,
     NotificationUrgency,
+    forecast_notification,
     health_notification,
     incident_notification,
     job_complete_notification,
@@ -219,6 +222,11 @@ def _create_action_callback(
             if notification.context_type == "reboot" and notification.context_id:
                 _cancel_reboot(notification.context_id)
 
+        elif action.id == "execute_plan":
+            # Execute the prepared plan for this forecast incident
+            if notification.context_id:
+                _execute_forecast_plan(notification.context_id)
+
         elif action.id == "dismiss":
             # Just dismiss, no action needed
             pass
@@ -312,6 +320,8 @@ def _handle_notify_send_action(action_id: str, notification: Notification) -> No
         _open_elle_repl(notification.context_type, notification.context_id)
     elif action_id == "confirm" and notification.context_type == "reboot":
         _open_elle_repl("reboot", notification.context_id)
+    elif action_id == "execute_plan" and notification.context_id:
+        _execute_forecast_plan(notification.context_id)
 
 
 # =============================================================================
@@ -390,6 +400,29 @@ def _open_elle_repl(
     except Exception as e:
         logger.error(f"Failed to open terminal: {e}")
         return False
+
+
+def _execute_forecast_plan(incident_id: str) -> None:
+    """Execute a prepared forecast remediation plan.
+
+    Calls the daemon API endpoint to trigger plan execution.
+
+    Args:
+        incident_id: The incident with a prepared plan.
+    """
+    try:
+        import httpx
+
+        # Call the local daemon API to execute the plan
+        with httpx.Client(timeout=5.0) as client:
+            client.post(
+                f"http://127.0.0.1:7773/v1/incident/{incident_id}/execute-plan",
+            )
+        logger.info(f"Triggered plan execution for incident: {incident_id}")
+    except Exception as e:
+        logger.error(f"Failed to trigger plan execution: {e}")
+        # Fallback: open ELLE REPL with incident context
+        _open_elle_repl("incident", incident_id)
 
 
 def _cancel_reboot(intent_id: str) -> None:
@@ -634,6 +667,51 @@ def notify_health(
         NotificationResult with status.
     """
     notification = health_notification(severity, component, message, severity, metrics=metrics)
+    return send(notification)
+
+
+def notify_forecast(
+    metric: str,
+    current_value: float,
+    threshold: float,
+    time_to_threshold_hours: float | None,
+    incident_id: str,
+    plan_summary: str | None = None,
+    cause_description: str | None = None,
+    *,
+    auto_remediated: bool = False,
+    outcome: str | None = None,
+) -> NotificationResult:
+    """Send a forecast notification.
+
+    When auto_remediated=False, sends a warning with "Execute Now" action.
+    When auto_remediated=True, sends a post-remediation confirmation.
+
+    Args:
+        metric: Metric that triggered the forecast.
+        current_value: Current metric value.
+        threshold: Threshold being approached.
+        time_to_threshold_hours: Hours until threshold crossing.
+        incident_id: Linked incident ID.
+        plan_summary: Summary of the remediation plan.
+        cause_description: Description of the probable cause.
+        auto_remediated: Whether auto-remediation occurred.
+        outcome: Outcome of auto-remediation.
+
+    Returns:
+        NotificationResult with status.
+    """
+    notification = forecast_notification(
+        metric=metric,
+        current_value=current_value,
+        threshold=threshold,
+        time_to_threshold_hours=time_to_threshold_hours,
+        incident_id=incident_id,
+        plan_summary=plan_summary,
+        cause_description=cause_description,
+        auto_remediated=auto_remediated,
+        outcome=outcome,
+    )
     return send(notification)
 
 

@@ -4,6 +4,8 @@ Provides database operations for reboot intents and verification checks.
 All operations are designed for safe state machine transitions.
 """
 
+from __future__ import annotations
+
 import json
 import sqlite3
 import uuid

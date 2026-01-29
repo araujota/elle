@@ -5,6 +5,8 @@ and consumers (normalizer, processor) to prevent memory exhaustion
 during log storms.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from typing import Any, Generic, TypeVar

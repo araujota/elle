@@ -8,6 +8,8 @@ Provides navigation commands for managing reboot operations:
 - reboot history: View full reboot history
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import re

@@ -12,7 +12,7 @@ of their origin, enabling consistent retrieval, execution, and audit.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -39,7 +39,7 @@ class FailedCommand(BaseModel):
     stderr: str = Field(default="", description="Standard error")
     cwd: str = Field(default="", description="Working directory when command ran")
     timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When the command failed",
     )
 
@@ -183,7 +183,7 @@ class AgenticInput(BaseModel):
     )
     source: InputSource = Field(description="Where this input originated")
     timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When this input was created",
     )
 

@@ -9,6 +9,8 @@ Selects the appropriate tier based on risk classification
 and runs validation accordingly.
 """
 
+from __future__ import annotations
+
 import logging
 import threading
 from typing import Literal

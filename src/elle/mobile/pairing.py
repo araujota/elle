@@ -8,6 +8,8 @@ This module handles the pairing flow:
 5. Device stores cert for future mTLS authentication
 """
 
+from __future__ import annotations
+
 import io
 import logging
 import secrets

@@ -30,7 +30,7 @@ import socket
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -371,7 +371,7 @@ class AgenticLoop:
         except Exception:
             os_info = "Ubuntu 24.04 LTS"
 
-        return hostname, os_info, datetime.now(UTC).isoformat()
+        return hostname, os_info, datetime.now(timezone.utc).isoformat()
 
     async def run(
         self,
@@ -408,6 +408,107 @@ class AgenticLoop:
             stream_callback=stream_callback,
             confirm_callback=confirm_callback,
         )
+
+    async def plan_remediation(
+        self,
+        query: str,
+        *,
+        forecast_context: dict[str, Any] | None = None,
+        incident_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Generate a remediation plan without executing capabilities.
+
+        This runs the Agent Loop in "planning mode" - it gathers context,
+        reasons about the issue, and generates a plan, but does NOT execute
+        any mutating capabilities.
+
+        Used for "prepare" urgency level in forecast-triggered incidents.
+        The generated plan is stored and can be executed later when
+        the "act_now" threshold is reached.
+
+        Args:
+            query: The planning query (e.g., "disk is filling up, plan remediation").
+            forecast_context: Optional forecast data to include in context.
+            incident_id: Optional incident ID for linking.
+
+        Returns:
+            Dict containing the plan details:
+            - summary: Brief summary of the plan
+            - steps: List of planned steps
+            - capabilities: Capabilities that would be used
+            - confidence: Confidence in the plan
+            - response: Full LLM response
+        """
+        from elle.cli.agentic.unified_input import AgenticInput
+
+        # Modify query to emphasize planning only
+        planning_query = (
+            f"{query}\n\n"
+            "IMPORTANT: Generate a remediation PLAN only. "
+            "Do NOT execute any capabilities. "
+            "List the steps you would take to address this issue."
+        )
+
+        # Create input with forecast context
+        agentic_input = AgenticInput.from_user_message(planning_query)
+
+        # Run with verification disabled (we're just planning)
+        old_verification = self.enable_verification
+        self.enable_verification = False
+
+        try:
+            result = await self.run_with_input(agentic_input)
+
+            # Parse the response into plan components
+            plan = {
+                "summary": self._extract_plan_summary(result.response),
+                "steps": self._extract_plan_steps(result.response),
+                "capabilities": self._extract_plan_capabilities(result.response),
+                "confidence": 0.7 if result.success else 0.3,
+                "response": result.response,
+                "incident_id": incident_id,
+                "forecast_context": forecast_context,
+            }
+
+            return plan
+
+        finally:
+            self.enable_verification = old_verification
+
+    def _extract_plan_summary(self, response: str) -> str:
+        """Extract a summary from the planning response."""
+        # Take first paragraph
+        paragraphs = response.split("\n\n")
+        if paragraphs:
+            summary = paragraphs[0].strip()
+            return summary[:200] + "..." if len(summary) > 200 else summary
+        return response[:200]
+
+    def _extract_plan_steps(self, response: str) -> list[str]:
+        """Extract plan steps from the response."""
+        import re
+
+        steps = []
+        # Look for numbered steps
+        numbered = re.findall(r"^\d+\.\s+(.+)$", response, re.MULTILINE)
+        if numbered:
+            steps.extend(numbered)
+        # Look for bullet points
+        bullets = re.findall(r"^[-*]\s+(.+)$", response, re.MULTILINE)
+        if bullets and not numbered:
+            steps.extend(bullets)
+        return steps if steps else ["See response for details"]
+
+    def _extract_plan_capabilities(self, response: str) -> list[str]:
+        """Extract capability names from the response."""
+        import re
+
+        # Look for capability patterns
+        pattern = r"\b([a-z]+\.[a-z_]+)\b"
+        capabilities = set(re.findall(pattern, response.lower()))
+        # Filter to known prefixes
+        known_prefixes = {"service", "file", "config", "docker", "package", "network"}
+        return [c for c in capabilities if c.split(".")[0] in known_prefixes]
 
     async def run_with_input(
         self,

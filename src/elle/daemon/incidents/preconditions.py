@@ -4,6 +4,8 @@ Provides a safe DSL for expressing and evaluating conditions
 against system snapshots and fingerprints.
 """
 
+from __future__ import annotations
+
 import operator
 import re
 from collections.abc import Callable

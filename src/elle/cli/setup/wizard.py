@@ -85,10 +85,15 @@ def is_first_run() -> bool:
         return True
 
     try:
-        import tomllib
+        try:
+            import tomllib
 
-        with open(USER_CONFIG_FILE, "rb") as f:
-            config = tomllib.load(f)
+            with open(USER_CONFIG_FILE, "rb") as f:
+                config = tomllib.load(f)
+        except ImportError:
+            import toml
+
+            config = toml.load(str(USER_CONFIG_FILE))
 
         setup = config.get("setup", {})
         return not setup.get("completed", False)
@@ -107,10 +112,15 @@ def load_setup_state() -> SetupState:
         return SetupState()
 
     try:
-        import tomllib
+        try:
+            import tomllib
 
-        with open(USER_CONFIG_FILE, "rb") as f:
-            config = tomllib.load(f)
+            with open(USER_CONFIG_FILE, "rb") as f:
+                config = tomllib.load(f)
+        except ImportError:
+            import toml
+
+            config = toml.load(str(USER_CONFIG_FILE))
 
         setup_data = config.get("setup", {})
         prefs_data = setup_data.get("preferences", {})
@@ -143,10 +153,15 @@ def save_setup_state(state: SetupState) -> None:
     config: dict[str, Any] = {}
     if USER_CONFIG_FILE.exists():
         try:
-            import tomllib
+            try:
+                import tomllib
 
-            with open(USER_CONFIG_FILE, "rb") as f:
-                config = tomllib.load(f)
+                with open(USER_CONFIG_FILE, "rb") as f:
+                    config = tomllib.load(f)
+            except ImportError:
+                import toml
+
+                config = toml.load(str(USER_CONFIG_FILE))
         except Exception as e:
             logger.debug(f"Error loading existing config: {e}")
 

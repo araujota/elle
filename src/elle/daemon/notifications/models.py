@@ -4,6 +4,8 @@ Defines notification types, urgency levels, and message templates
 for user-friendly desktop notifications.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
 from typing import Any
@@ -44,6 +46,10 @@ class NotificationCategory(str, Enum):
     HEALTH_CRITICAL = "health_critical"
     HEALTH_RECOVERED = "health_recovered"
 
+    # Forecast
+    FORECAST_WARNING = "forecast_warning"
+    FORECAST_REMEDIATED = "forecast_remediated"
+
     # General
     INFO = "info"
     WARNING = "warning"
@@ -66,6 +72,8 @@ CATEGORY_URGENCY: dict[NotificationCategory, NotificationUrgency] = {
     NotificationCategory.HEALTH_WARNING: NotificationUrgency.NORMAL,
     NotificationCategory.HEALTH_CRITICAL: NotificationUrgency.CRITICAL,
     NotificationCategory.HEALTH_RECOVERED: NotificationUrgency.LOW,
+    NotificationCategory.FORECAST_WARNING: NotificationUrgency.NORMAL,
+    NotificationCategory.FORECAST_REMEDIATED: NotificationUrgency.LOW,
     NotificationCategory.INFO: NotificationUrgency.LOW,
     NotificationCategory.WARNING: NotificationUrgency.NORMAL,
     NotificationCategory.ERROR: NotificationUrgency.CRITICAL,
@@ -87,6 +95,8 @@ CATEGORY_ICONS: dict[NotificationCategory, str] = {
     NotificationCategory.HEALTH_WARNING: "dialog-warning-symbolic",
     NotificationCategory.HEALTH_CRITICAL: "dialog-error-symbolic",
     NotificationCategory.HEALTH_RECOVERED: "emblem-ok-symbolic",
+    NotificationCategory.FORECAST_WARNING: "dialog-warning-symbolic",
+    NotificationCategory.FORECAST_REMEDIATED: "emblem-ok-symbolic",
     NotificationCategory.INFO: "dialog-information-symbolic",
     NotificationCategory.WARNING: "dialog-warning-symbolic",
     NotificationCategory.ERROR: "dialog-error-symbolic",
@@ -353,6 +363,84 @@ def reboot_notification(
         actions=(NotificationAction(id=action[0], label=action[1]),),
         default_action="open",
     )
+
+
+def forecast_notification(
+    metric: str,
+    current_value: float,
+    threshold: float,
+    time_to_threshold_hours: float | None,
+    incident_id: str,
+    plan_summary: str | None = None,
+    cause_description: str | None = None,
+    *,
+    auto_remediated: bool = False,
+    outcome: str | None = None,
+) -> Notification:
+    """Create a forecast notification.
+
+    When auto_remediated=False: warning notification with "Execute Now" action.
+    When auto_remediated=True: post-remediation confirmation notification.
+
+    Args:
+        metric: Metric that triggered the forecast.
+        current_value: Current metric value.
+        threshold: Threshold being approached.
+        time_to_threshold_hours: Hours until threshold is crossed.
+        incident_id: Linked incident ID.
+        plan_summary: Summary of the remediation plan.
+        cause_description: Description of the probable cause.
+        auto_remediated: Whether the system auto-remediated.
+        outcome: Outcome of auto-remediation (if applicable).
+
+    Returns:
+        Notification configured for the forecast alert.
+    """
+    from elle.daemon.notifications.formatters import (
+        format_forecast_body,
+        format_forecast_title,
+    )
+
+    title = format_forecast_title(metric, auto_remediated=auto_remediated)
+    body = format_forecast_body(
+        metric=metric,
+        current_value=current_value,
+        threshold=threshold,
+        time_to_threshold_hours=time_to_threshold_hours,
+        cause_description=cause_description,
+        plan_summary=plan_summary,
+        outcome=outcome,
+    )
+
+    if auto_remediated:
+        return Notification(
+            title=title,
+            body=body,
+            category=NotificationCategory.FORECAST_REMEDIATED,
+            context_id=incident_id,
+            context_type="incident",
+            timeout_ms=8000,
+            actions=(
+                NotificationAction(id="view", label="View Details"),
+                NotificationAction(id="dismiss", label="Dismiss"),
+            ),
+            default_action="view",
+        )
+    else:
+        return Notification(
+            title=title,
+            body=body,
+            category=NotificationCategory.FORECAST_WARNING,
+            context_id=incident_id,
+            context_type="incident",
+            timeout_ms=0,  # Don't auto-dismiss warnings needing action
+            actions=(
+                NotificationAction(id="execute_plan", label="Execute Now"),
+                NotificationAction(id="investigate", label="Investigate"),
+                NotificationAction(id="dismiss", label="Dismiss"),
+            ),
+            default_action="investigate",
+        )
 
 
 def health_notification(

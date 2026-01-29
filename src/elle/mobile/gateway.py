@@ -8,6 +8,8 @@ mobile gateway. It handles:
 - Elevation management (localhost only)
 """
 
+from __future__ import annotations
+
 import logging
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager

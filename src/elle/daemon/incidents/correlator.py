@@ -19,6 +19,8 @@ Agentic Integration:
         correlator = IncidentCorrelator(on_incident_created=handler.on_incident_created)
 """
 
+from __future__ import annotations
+
 import asyncio
 import re
 import sqlite3

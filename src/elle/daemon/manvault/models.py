@@ -7,6 +7,8 @@ Data structures for the Man Vault documentation index:
 - ManVaultStatus: Index status report
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Literal
 

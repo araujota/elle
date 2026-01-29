@@ -4,6 +4,8 @@ Generates human-readable reports from incidents with full audit trail,
 efficacy summaries, and trend analysis.
 """
 
+from __future__ import annotations
+
 import sqlite3
 from datetime import datetime, timedelta
 from types import TracebackType

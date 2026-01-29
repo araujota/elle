@@ -5,6 +5,8 @@ human-readable narratives explaining what happened
 and why.
 """
 
+from __future__ import annotations
+
 import re
 import sqlite3
 from datetime import datetime

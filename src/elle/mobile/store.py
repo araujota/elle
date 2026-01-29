@@ -8,6 +8,8 @@ This module provides persistent storage for:
 Database location: /var/lib/elle/mobile.db
 """
 
+from __future__ import annotations
+
 import logging
 import sqlite3
 from collections.abc import Iterator

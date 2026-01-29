@@ -20,7 +20,7 @@ import secrets
 import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
 
@@ -184,7 +184,7 @@ class ApiKeyStore:
                 INSERT INTO api_keys (key_id, key_hash, name, allowed_modes, created_at)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (key_id, key_hash, name, modes_str, datetime.now(UTC).isoformat()),
+                (key_id, key_hash, name, modes_str, datetime.now(timezone.utc).isoformat()),
             )
             conn.commit()
 
@@ -218,7 +218,7 @@ class ApiKeyStore:
             # Update last_used_at
             conn.execute(
                 "UPDATE api_keys SET last_used_at = ? WHERE key_id = ?",
-                (datetime.now(UTC).isoformat(), row["key_id"]),
+                (datetime.now(timezone.utc).isoformat(), row["key_id"]),
             )
             conn.commit()
 

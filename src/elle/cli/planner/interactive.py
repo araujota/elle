@@ -7,6 +7,8 @@ Provides REPL-mode interaction for:
 - Outcome confirmation
 """
 
+from __future__ import annotations
+
 from enum import Enum, auto
 
 from elle.cli.planner.models import (

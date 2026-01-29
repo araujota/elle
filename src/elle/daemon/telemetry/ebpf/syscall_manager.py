@@ -9,6 +9,8 @@ This is designed to be used by the CLI for /trace commands
 and for explaining what commands actually did.
 """
 
+from __future__ import annotations
+
 import logging
 import threading
 import time

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-ELLE (Enabling Layer Learning Everything) is a local-first, agentic system layer for Ubuntu 24.04 LTS that converts kernel-level telemetry into natural language insight and safe system operations.
+ELLE (Enabling Layer Learning Everything) is a local-first, agentic system layer for Ubuntu 22.04+ LTS that converts kernel-level telemetry into natural language insight and safe system operations.
 
 ## The Spine: Core Architecture
 
@@ -92,6 +92,9 @@ src/elle/
       incident_recorder.py # Incident recording utilities
       stages.py            # Execution stages
     terminal/              # REPL and rendering
+    planner/               # Multi-step plan execution
+    fixit/                 # Quick-fix workflows
+    setup/                 # First-run setup wizard
     package_learn_commands.py  # /learn (records to incident vault)
     reactive_commands.py   # /react (records to incident vault)
     mobile_commands.py     # /mobile (records to incident vault)
@@ -99,17 +102,36 @@ src/elle/
     telemetry/             # ALL monitoring lives here
     manvault/              # Documentation index
     incidents/             # Decision memory (THE source of truth)
+      config_tracker.py    # Tracks /etc changes as incidents
+      forecast_handler.py  # Forecast-triggered incident creation
+    notifications/         # Alert delivery (ntfy, mobile push)
+    observability/         # Prometheus/JSON metrics export
+    reboot/                # Managed reboot orchestration
     api/                   # FastAPI bridge
   capabilities/
-    core/                  # Built-in capabilities
+    core/                  # Built-in capabilities (incl. config.rollback)
     autogen/               # Package capability generation
     executor.py            # Policy-enforced execution
     registry.py            # Capability registration
+  ops/                     # Low-level operations
+    editing/               # Tiered config editing (Augeas, crudini, yq, xmlstarlet)
+    preflight/             # Command risk classification and validation
+    files/                 # Text/markdown file handlers
   policy/                  # Access control
-  reactive/                # Event-driven automations
-  mobile/                  # Mobile gateway
+  reactive/                # Event-driven automations with forecast triggers
+  mobile/                  # Mobile gateway (mTLS, QR pairing)
+  rag/                     # RAG pipeline and confgen
 tests/
 ```
+
+## Companion Repository: elle-cloud
+
+The `elle-cloud` repo (at `../elle-cloud`) provides the shared incident vault server. It is a separate deployable service (Docker) that accepts anonymized incident reports over mTLS.
+
+- **Container:** `python:3.10-slim-bookworm` (matches minimum Python version)
+- **Minimum Python:** 3.10 (same compatibility rules apply)
+- **API:** FastAPI with mTLS client certificate auth
+- **Storage:** SQLite with similarity search
 
 ## Development Commands
 
@@ -121,6 +143,22 @@ ruff check src/           # Lint
 ruff format src/          # Format
 mypy src/                 # Type check
 ```
+
+## Python 3.10 Compatibility
+
+The minimum Python version is **3.10**. All code must be compatible. Key rules:
+
+| Avoid (3.11+) | Use instead |
+|----------------|-------------|
+| `datetime.UTC` | `datetime.timezone.utc` |
+| `from typing import Self` | `try: from typing import Self` / `except ImportError: from typing_extensions import Self` |
+| `import tomllib` | `try: import tomllib` / `except ImportError: import toml` (already a dependency) |
+| `X \| Y` in annotations without future import | Add `from __future__ import annotations` as the first import |
+
+- **Every file** must have `from __future__ import annotations` as the first import (enables `X | Y` union syntax at runtime on 3.10)
+- `toml>=0.10` is a direct dependency; use `toml.load(str(path))` as fallback for `tomllib.load(f)`
+- `typing_extensions` is available via Pydantic v2 transitive dependency
+- ruff target: `py310`, mypy target: `3.10`
 
 ## Core Principles
 

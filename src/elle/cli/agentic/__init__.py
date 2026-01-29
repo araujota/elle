@@ -70,52 +70,13 @@ Components (LEGACY - still supported):
 # =============================================================================
 # NEW Unified Input System
 # =============================================================================
-from elle.cli.agentic.unified_input import (
-    AgenticInput,
-    FailedCommand,
-    InputSource,
-    SystemFingerprint,
-)
-
 # =============================================================================
-# NEW ReAct Loop
+# LEGACY Imports (backwards compatibility)
 # =============================================================================
-from elle.cli.agentic.loop import (
-    AgenticLoop,
-    AgenticLoopResult,
-    ToolCallRecord,
-    get_agentic_loop,
-    is_agentic_loop_enabled,
-    reset_agentic_loop,
-    run_agentic_loop,
-    run_for_failed_command,
-    run_for_incident,
-)
-
-# =============================================================================
-# NEW Tools
-# =============================================================================
-from elle.cli.agentic.tools import (
-    ConfirmCallback,
-    ToolRegistry,
-    ToolResult,
-    ToolSpec,
-    get_tool_registry,
-    reset_tool_registry,
-)
-
-# =============================================================================
-# NEW Retrieval Pipeline
-# =============================================================================
-from elle.cli.agentic.retrieval_pipeline import (
-    CapabilityMatch,
-    IncidentMatch,
-    ManSnippet,
-    RetrievalContext,
-    UnifiedRetrievalPipeline,
-    get_retrieval_pipeline,
-    reset_retrieval_pipeline,
-    retrieve_context,
+from elle.cli.agentic.analyzer import (
+    InformationNeedAnalyzer,
+    get_analyzer,
+    reset_analyzer,
 )
 
 # =============================================================================
@@ -125,19 +86,12 @@ from elle.cli.agentic.audit import (
     AuditRecord,
     AuditRecorder,
     Provenance,
-    ToolCallRecord as AuditToolCallRecord,
     VerificationResult,
     get_audit_recorder,
     reset_audit_recorder,
 )
-
-# =============================================================================
-# LEGACY Imports (backwards compatibility)
-# =============================================================================
-from elle.cli.agentic.analyzer import (
-    InformationNeedAnalyzer,
-    get_analyzer,
-    reset_analyzer,
+from elle.cli.agentic.audit import (
+    ToolCallRecord as AuditToolCallRecord,
 )
 from elle.cli.agentic.evaluator import (
     GoalEvaluator,
@@ -166,6 +120,21 @@ from elle.cli.agentic.intent_analyzer import (
     IntentAnalyzer,
     get_intent_analyzer,
     reset_intent_analyzer,
+)
+
+# =============================================================================
+# NEW ReAct Loop
+# =============================================================================
+from elle.cli.agentic.loop import (
+    AgenticLoop,
+    AgenticLoopResult,
+    ToolCallRecord,
+    get_agentic_loop,
+    is_agentic_loop_enabled,
+    reset_agentic_loop,
+    run_agentic_loop,
+    run_for_failed_command,
+    run_for_incident,
 )
 from elle.cli.agentic.models import (
     # NEW models
@@ -197,6 +166,20 @@ from elle.cli.agentic.planner import (
     get_capability_planner,
     reset_capability_planner,
 )
+
+# =============================================================================
+# NEW Retrieval Pipeline
+# =============================================================================
+from elle.cli.agentic.retrieval_pipeline import (
+    CapabilityMatch,
+    IncidentMatch,
+    ManSnippet,
+    RetrievalContext,
+    UnifiedRetrievalPipeline,
+    get_retrieval_pipeline,
+    reset_retrieval_pipeline,
+    retrieve_context,
+)
 from elle.cli.agentic.selector import (
     CapabilitySelector,
     get_selector,
@@ -206,6 +189,24 @@ from elle.cli.agentic.synthesizer import (
     ResponseSynthesizer,
     get_synthesizer,
     reset_synthesizer,
+)
+
+# =============================================================================
+# NEW Tools
+# =============================================================================
+from elle.cli.agentic.tools import (
+    ConfirmCallback,
+    ToolRegistry,
+    ToolResult,
+    ToolSpec,
+    get_tool_registry,
+    reset_tool_registry,
+)
+from elle.cli.agentic.unified_input import (
+    AgenticInput,
+    FailedCommand,
+    InputSource,
+    SystemFingerprint,
 )
 
 __all__ = [

@@ -4,6 +4,8 @@ This module defines the MobileGatewayConfig dataclass and provides
 functions for loading configuration from TOML files and environment.
 """
 
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass, field
 from pathlib import Path

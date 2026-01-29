@@ -17,7 +17,7 @@ import json
 import logging
 import time
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel
@@ -420,7 +420,7 @@ class PlanExecutor:
                     output_text=output,
                     error=error,
                     duration_ms=duration_ms,
-                    timestamp=datetime.now(UTC),
+                    timestamp=datetime.now(timezone.utc),
                 )
             except Exception as e:
                 logger.warning(f"Fallback execution failed: {e}")
@@ -433,7 +433,7 @@ class PlanExecutor:
             success=False,
             error=f"Capability '{call.capability}' not available",
             duration_ms=duration_ms,
-            timestamp=datetime.now(UTC),
+            timestamp=datetime.now(timezone.utc),
         )
 
     async def _execute_via_capability_executor(
@@ -498,7 +498,7 @@ class PlanExecutor:
                 output_text=self._format_output(result.output),
                 error=result.error,
                 duration_ms=duration_ms,
-                timestamp=datetime.now(UTC),
+                timestamp=datetime.now(timezone.utc),
                 warnings=result.warnings,
                 verification_passed=result.evidence.verification_passed if result.evidence else None,
                 verification_details=result.evidence.verification_details if result.evidence else None,
@@ -516,7 +516,7 @@ class PlanExecutor:
                 success=False,
                 error=str(e),
                 duration_ms=duration_ms,
-                timestamp=datetime.now(UTC),
+                timestamp=datetime.now(timezone.utc),
             )
 
     def _build_input(self, capability: Any, args: dict[str, Any]) -> BaseModel | dict[str, Any]:

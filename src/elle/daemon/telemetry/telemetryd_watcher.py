@@ -14,11 +14,13 @@ The C daemon (elled-telemetryd) handles:
 - Deduplication with 60-second window
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 import socket
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, cast
 
@@ -33,6 +35,12 @@ TELEMETRYD_SOCKET = Path("/run/elle/telemetry.sock")
 # Reconnection settings
 RECONNECT_DELAY = 2.0  # seconds
 MAX_RECONNECT_DELAY = 60.0  # seconds
+
+# Health monitoring settings
+HEALTH_CHECK_INTERVAL = 30.0  # seconds between health checks
+STALE_THRESHOLD = 60.0  # seconds without events before considered unhealthy
+MAX_RESTART_ATTEMPTS = 5  # maximum restart attempts before giving up
+RESTART_COOLDOWN = 300.0  # seconds to wait before resetting restart counter
 
 
 def is_telemetryd_available(socket_path: Path | None = None) -> bool:
@@ -92,6 +100,12 @@ class TelemetrydWatcher:
         self._total_events = 0
         self._total_errors = 0
 
+        # Health monitoring
+        self._last_event_time: datetime | None = None
+        self._restart_count = 0
+        self._last_restart_time: datetime | None = None
+        self._health_task: asyncio.Task[None] | None = None
+
         # Connection
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
@@ -110,6 +124,33 @@ class TelemetrydWatcher:
     def total_events(self) -> int:
         """Get total events processed."""
         return self._total_events
+
+    @property
+    def last_event_age_seconds(self) -> float | None:
+        """Get seconds since last event received."""
+        if self._last_event_time is None:
+            return None
+        return (datetime.now(timezone.utc) - self._last_event_time).total_seconds()
+
+    @property
+    def is_healthy(self) -> bool:
+        """Check if the watcher is healthy.
+
+        Healthy means:
+        - Running
+        - Connected
+        - Received an event within STALE_THRESHOLD seconds
+        """
+        if not self._running or not self._connected:
+            return False
+        if self._last_event_time is None:
+            return True  # Just started, no events yet is OK
+        return self.last_event_age_seconds < STALE_THRESHOLD
+
+    @property
+    def restart_count(self) -> int:
+        """Get number of restart attempts."""
+        return self._restart_count
 
     async def check_available(self) -> bool:
         """Check if telemetryd socket is available.
@@ -143,7 +184,7 @@ class TelemetrydWatcher:
         """
         logger.info(f"Connecting to telemetryd at {self._socket_path}")
         self._running = True
-        self._started_at = datetime.now(UTC)
+        self._started_at = datetime.now(timezone.utc)
 
         # Check if telemetryd is available
         if not await self.check_available():
@@ -154,6 +195,9 @@ class TelemetrydWatcher:
             )
 
         logger.info("Connected to elled-telemetryd")
+
+        # Start health monitoring task
+        self._health_task = asyncio.create_task(self._health_check_loop())
 
         try:
             await self._watch_loop()
@@ -168,8 +212,205 @@ class TelemetrydWatcher:
         """Stop the watcher and cleanup."""
         logger.info("Stopping telemetryd watcher")
         self._running = False
+
+        # Cancel health check task
+        if self._health_task and not self._health_task.done():
+            self._health_task.cancel()
+            try:
+                await self._health_task
+            except asyncio.CancelledError:
+                pass
+            self._health_task = None
+
         await self._disconnect()
-        logger.info(f"Telemetryd watcher stopped (events: {self._total_events})")
+        logger.info(
+            f"Telemetryd watcher stopped (events: {self._total_events}, "
+            f"restarts: {self._restart_count})"
+        )
+
+    async def _health_check_loop(self) -> None:
+        """Monitor telemetryd health and attempt recovery if needed.
+
+        Runs continuously while the watcher is running, checking health
+        at regular intervals and attempting recovery if needed.
+        """
+        logger.debug("Health check loop started")
+
+        while self._running:
+            try:
+                await asyncio.sleep(HEALTH_CHECK_INTERVAL)
+
+                if not self._running:
+                    break
+
+                if not await self._check_health():
+                    logger.warning("Telemetryd appears unhealthy, attempting recovery")
+                    await self._attempt_recovery()
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning(f"Health check error: {e}")
+
+        logger.debug("Health check loop stopped")
+
+    async def _check_health(self) -> bool:
+        """Check if telemetryd is functioning properly.
+
+        Returns:
+            True if healthy, False if recovery is needed.
+        """
+        # Check basic connection state
+        if self._reader is None or self._reader.at_eof():
+            logger.debug("Health check: reader is None or at EOF")
+            return False
+
+        if not self._connected:
+            logger.debug("Health check: not connected")
+            return False
+
+        # Check for stale events
+        if self._last_event_time:
+            stale_seconds = (datetime.now(timezone.utc) - self._last_event_time).total_seconds()
+            if stale_seconds > STALE_THRESHOLD:
+                logger.debug(
+                    f"Health check: no events for {stale_seconds:.1f}s "
+                    f"(threshold: {STALE_THRESHOLD}s)"
+                )
+                # Try sending a ping to confirm connection is alive
+                if not await self._send_ping():
+                    return False
+
+        return True
+
+    async def _send_ping(self) -> bool:
+        """Send a ping to verify connection is alive.
+
+        Returns:
+            True if ping succeeded, False otherwise.
+        """
+        # telemetryd doesn't have a ping command, so we just check
+        # if the socket is still writable
+        if self._writer is None:
+            return False
+
+        try:
+            # Try to write an empty line (telemetryd ignores it)
+            self._writer.write(b"\n")
+            await asyncio.wait_for(self._writer.drain(), timeout=5.0)
+            return True
+        except Exception as e:
+            logger.debug(f"Ping failed: {e}")
+            return False
+
+    async def _attempt_recovery(self) -> None:
+        """Attempt to recover telemetryd connection.
+
+        Recovery steps:
+        1. Check if we've exceeded max restart attempts
+        2. Disconnect from the current (broken) connection
+        3. Try to restart the telemetryd service
+        4. Reconnect to the socket
+        5. Create an incident if recovery fails
+        """
+        # Reset restart counter after cooldown period
+        if self._last_restart_time:
+            elapsed = (datetime.now(timezone.utc) - self._last_restart_time).total_seconds()
+            if elapsed > RESTART_COOLDOWN:
+                logger.info(
+                    f"Restart cooldown passed ({elapsed:.0f}s), resetting counter"
+                )
+                self._restart_count = 0
+
+        # Check max restarts
+        if self._restart_count >= MAX_RESTART_ATTEMPTS:
+            logger.error(
+                f"Max telemetryd restart attempts ({MAX_RESTART_ATTEMPTS}) reached"
+            )
+            await self._create_health_incident(
+                "Telemetryd unrecoverable",
+                f"Failed to recover telemetryd after {MAX_RESTART_ATTEMPTS} attempts",
+            )
+            return
+
+        self._restart_count += 1
+        self._last_restart_time = datetime.now(timezone.utc)
+        logger.info(
+            f"Recovery attempt {self._restart_count}/{MAX_RESTART_ATTEMPTS}"
+        )
+
+        # Disconnect current connection
+        await self._disconnect()
+
+        # Try to restart telemetryd service
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "systemctl",
+                "restart",
+                "elled-telemetryd",
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await asyncio.wait_for(proc.wait(), timeout=30.0)
+
+            if proc.returncode == 0:
+                logger.info("Successfully restarted elled-telemetryd service")
+            else:
+                logger.warning(
+                    f"systemctl restart failed with code {proc.returncode}"
+                )
+
+        except TimeoutError:
+            logger.warning("systemctl restart timed out")
+        except Exception as e:
+            logger.warning(f"Failed to restart telemetryd service: {e}")
+
+        # Wait for service to start
+        await asyncio.sleep(2.0)
+
+        # Attempt reconnection
+        if await self._connect():
+            logger.info("Successfully recovered telemetryd connection")
+            # Reset last event time to avoid immediate re-trigger
+            self._last_event_time = datetime.now(timezone.utc)
+        else:
+            logger.warning("Failed to reconnect after service restart")
+
+    async def _create_health_incident(
+        self,
+        title: str,
+        summary: str,
+    ) -> None:
+        """Create an incident for a health failure.
+
+        Args:
+            title: Incident title.
+            summary: Incident summary.
+        """
+        try:
+            from elle.daemon.incidents.store import create_incident
+
+            incident_data = {
+                "domain": "telemetry",
+                "severity": "critical",
+                "status": "open",
+                "title": title,
+                "summary": summary,
+                "trigger_source": "health_monitor",
+                "metrics_json": {
+                    "restart_count": self._restart_count,
+                    "total_events": self._total_events,
+                    "total_errors": self._total_errors,
+                    "last_event_age_seconds": self.last_event_age_seconds,
+                },
+            }
+            await create_incident(incident_data)
+            logger.info(f"Created health incident: {title}")
+
+        except ImportError:
+            logger.debug("Incident store not available")
+        except Exception as e:
+            logger.warning(f"Failed to create health incident: {e}")
 
     async def _connect(self) -> bool:
         """Connect to the telemetryd socket.
@@ -300,9 +541,9 @@ class TelemetrydWatcher:
             # Convert nanosecond timestamp to datetime
             ts_ns = raw.get("ts", 0)
             if ts_ns:
-                ts = datetime.fromtimestamp(ts_ns / 1e9, tz=UTC)
+                ts = datetime.fromtimestamp(ts_ns / 1e9, tz=timezone.utc)
             else:
-                ts = datetime.now(UTC)
+                ts = datetime.now(timezone.utc)
 
             # Map source string to source type
             raw_source = raw.get("source", "journal")
@@ -337,6 +578,8 @@ class TelemetrydWatcher:
         try:
             self._event_queue.put_nowait(event)
             self._total_events += 1
+            # Update last event time for health monitoring
+            self._last_event_time = datetime.now(timezone.utc)
         except Exception as e:
             logger.warning(f"Failed to queue event: {e}")
             self._total_errors += 1

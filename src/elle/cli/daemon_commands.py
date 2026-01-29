@@ -172,9 +172,9 @@ class DaemonStatusDisplay:
 
     def _format_time_ago(self, dt: datetime) -> str:
         """Format datetime as 'X ago' string."""
-        from datetime import UTC
+        from datetime import timezone
 
-        now = datetime.now(UTC) if dt.tzinfo else datetime.now()
+        now = datetime.now(timezone.utc) if dt.tzinfo else datetime.now()
         delta = now - dt
         seconds = int(delta.total_seconds())
 

@@ -4,6 +4,8 @@ Validates plans against current system trends and state
 to predict likelihood of success and generate warnings.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from elle.cli.planner.models import (

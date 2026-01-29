@@ -8,6 +8,8 @@ mobile devices. It handles:
 - Signaling the daemon to reload configuration
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import signal
@@ -340,13 +342,9 @@ class ConfigManager:
                 with open(USER_CONFIG_PATH, "rb") as f:
                     existing = tomllib.load(f)
             except ImportError:
-                try:
-                    import tomli
+                import toml
 
-                    with open(USER_CONFIG_PATH, "rb") as f:
-                        existing = tomli.load(f)
-                except ImportError:
-                    logger.warning("No TOML library available, starting fresh config")
+                existing = toml.load(str(USER_CONFIG_PATH))
 
         # Merge updates
         self._merge_dict(existing, updates)

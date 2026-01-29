@@ -3,6 +3,8 @@
 Defines the primary data structures used across the system.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Any, Literal
 

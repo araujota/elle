@@ -5,7 +5,7 @@
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-❤-ea4aaa?logo=github)](https://github.com/sponsors/araujota)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-A local-first, agentic system layer for Ubuntu 24.04 LTS that converts kernel-level telemetry into natural language insight and safe system operations.
+A local-first, agentic system layer for Ubuntu 22.04+ LTS that converts kernel-level telemetry into natural language insight and safe system operations.
 
 ## Architecture: The Spine
 
@@ -78,6 +78,19 @@ User ──▶ elle (CLI/REPL)
 - **eBPF Probes** - Kernel-level telemetry (OOM, disk I/O, network, thermal)
 - **Watchers** - Journal, kernel, Docker, inotify, package changes
 - **Notifications** - ntfy integration for alerts
+- **Observability** - Prometheus/JSON metrics export for external dashboards
+- **Trend Analysis** - Detects anomalies and forecasts resource exhaustion
+
+### Configuration Management
+- **Tiered Editing** - Structured config editing via Augeas, crudini, yq, xmlstarlet
+- **Config Rollback** - Restore config files from incident-linked backups
+- **Config Tracking** - All `/etc` modifications tracked as incidents for audit trail
+
+### Shared Incident Vault (ELLE Cloud)
+- **Team Knowledge Sharing** - Anonymized incident reports shared across installations
+- **mTLS Security** - Mutual TLS with per-installation client certificates
+- **Self-Hosted** - Deploy via Docker in your own infrastructure
+- **Similarity Search** - Find how other installations resolved similar issues
 
 ### Mobile Gateway
 - **QR Code Pairing** - Secure device pairing
@@ -86,7 +99,7 @@ User ──▶ elle (CLI/REPL)
 
 ## Requirements
 
-- Ubuntu 24.04 LTS
+- Ubuntu 22.04+ LTS (jammy, noble, or later)
 - Python 3.10+
 - [Ollama](https://ollama.ai) for local LLM inference
 
@@ -197,6 +210,16 @@ ELLE includes multiple safety mechanisms:
 - **Incident tracking** - Every action recorded with full provenance
 - **No implicit sudo** - Privileged operations require explicit confirmation
 - **Preview before apply** - Configuration changes show diffs before execution
+
+## ELLE Cloud (Shared Incident Vault)
+
+ELLE Cloud is a companion service that enables teams to share anonymized incident knowledge across installations. See [`elle-cloud/`](https://github.com/araujota/elle-cloud) for deployment instructions.
+
+```bash
+# Quick start with Docker
+cd elle-cloud
+docker compose up -d
+```
 
 ## Development
 

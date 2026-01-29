@@ -272,9 +272,14 @@ class ConfigValidator:
 
         elif result.file_type == "toml":
             try:
-                import tomllib
+                try:
+                    import tomllib
 
-                tomllib.loads(content)
+                    tomllib.loads(content)
+                except ImportError:
+                    import toml
+
+                    toml.loads(content)
             except Exception as e:
                 issues.append(
                     ValidationIssue(

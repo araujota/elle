@@ -9,6 +9,8 @@ Performs basic package validation using apt's simulation mode:
 This is the first validation tier, always run before installation.
 """
 
+from __future__ import annotations
+
 import logging
 import re
 import subprocess

@@ -4,6 +4,8 @@ Provides database operations for incidents, actions, and snapshots.
 All operations are append-only where appropriate for auditability.
 """
 
+from __future__ import annotations
+
 import json
 import sqlite3
 import uuid
@@ -414,6 +416,48 @@ def _row_to_incident(row: sqlite3.Row) -> IncidentReport:
         trigger_source=row["trigger_source"],
         trigger_command=row["trigger_command"],
     )
+
+
+# =============================================================================
+# Prepared Plan Helpers
+# =============================================================================
+
+
+def get_prepared_plan(
+    incident_id: str,
+    conn: sqlite3.Connection | None = None,
+) -> dict[str, Any] | None:
+    """Get the prepared plan JSON for a forecast incident.
+
+    Reads the prepared_plan_json column (added in V5 schema migration).
+
+    Args:
+        incident_id: The incident UUID.
+        conn: SQLite connection.
+
+    Returns:
+        Parsed plan dict if found, None otherwise.
+    """
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
+        try:
+            cursor.execute(
+                "SELECT prepared_plan_json FROM incidents WHERE id = ?",
+                (incident_id,),
+            )
+        except sqlite3.OperationalError:
+            # Column doesn't exist yet (pre-V5 schema)
+            return None
+
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        plan_json = row["prepared_plan_json"] if "prepared_plan_json" in row else None
+        if not plan_json:
+            return None
+
+        return _json_loads(plan_json)
 
 
 # =============================================================================

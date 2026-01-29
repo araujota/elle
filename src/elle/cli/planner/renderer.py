@@ -7,6 +7,8 @@ Provides text output formatting for plans with:
 - Execution progress
 """
 
+from __future__ import annotations
+
 from elle.cli.planner.models import (
     CheckResult,
     CommandPlan,

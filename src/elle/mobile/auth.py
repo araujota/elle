@@ -4,6 +4,8 @@ This module provides mTLS-based authentication for mobile devices.
 Every request must present a valid client certificate signed by our CA.
 """
 
+from __future__ import annotations
+
 import logging
 from collections.abc import Callable
 from datetime import datetime

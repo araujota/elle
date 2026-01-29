@@ -5,6 +5,8 @@ SQLite databases:
 - Man Vault: /var/lib/elle/manvault.db (documentation index)
 """
 
+from __future__ import annotations
+
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager

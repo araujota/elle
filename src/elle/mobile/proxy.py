@@ -10,6 +10,8 @@ The proxy:
 4. Logs all operations for audit
 """
 
+from __future__ import annotations
+
 import logging
 from collections.abc import AsyncIterator
 from typing import Any

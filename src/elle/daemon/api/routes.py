@@ -7,7 +7,9 @@ Implements:
 - GET /v1/incident/{id} - Get incident details
 """
 
-from datetime import UTC, datetime, timedelta
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -82,7 +84,7 @@ async def get_status(
     try:
         from elle.daemon.telemetry.store import count_events
 
-        since_1h = datetime.now(UTC) - timedelta(hours=1)
+        since_1h = datetime.now(timezone.utc) - timedelta(hours=1)
         events_1h = count_events(since=since_1h)
 
         from elle.daemon.incidents.store import list_incidents
@@ -352,6 +354,51 @@ async def get_incident(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@router.post(
+    "/incident/{incident_id}/execute-plan",
+    response_model=dict,
+    responses={
+        401: {"description": "Authentication required"},
+        404: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
+    },
+)
+async def execute_incident_plan(
+    incident_id: str,
+    auth: AuthContext = Depends(get_auth_context),
+) -> dict[str, Any]:
+    """Execute a prepared remediation plan for a forecast incident.
+
+    This endpoint triggers execution of a previously generated plan
+    (stored in prepared_plan_json). Called when the user clicks
+    "Execute Now" on a forecast warning notification.
+
+    Requires authentication.
+    """
+    _ = auth
+    get_daemon()  # Verify daemon is running
+
+    try:
+        from elle.daemon.incidents.forecast_handler import execute_prepared_plan
+
+        result = await execute_prepared_plan(incident_id)
+
+        if not result.success and result.error and "No prepared plan" in result.error:
+            raise HTTPException(status_code=404, detail=result.error)
+
+        return {
+            "incident_id": result.incident_id,
+            "executed": result.executed,
+            "success": result.success,
+            "error": result.error,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 @router.get("/health")
 async def health_check() -> dict[str, Any]:
     """Simple health check endpoint."""
@@ -361,3 +408,80 @@ async def health_check() -> dict[str, Any]:
         "status": "healthy" if status.healthy else "unhealthy",
         "uptime_sec": status.uptime_sec,
     }
+
+
+@router.get(
+    "/metrics",
+    responses={
+        401: {"description": "Authentication required"},
+        503: {"model": ErrorResponse},
+    },
+)
+async def get_metrics(
+    auth: AuthContext = Depends(get_auth_context),
+) -> dict[str, Any]:
+    """Get observability metrics in JSON format.
+
+    Returns comprehensive metrics including:
+    - Event counts and rates
+    - Incident statistics and MTTR
+    - Capability success rates
+    - Forecast health status
+    - System health indicators
+
+    Requires authentication.
+    """
+    _ = auth
+    get_daemon()  # Verify daemon is running
+
+    try:
+        from elle.daemon.observability.metrics import collect_observability_metrics
+
+        metrics = await collect_observability_metrics()
+        return metrics.model_dump(mode="json")
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get(
+    "/metrics/prometheus",
+    response_class=None,  # Will return plain text
+    responses={
+        401: {"description": "Authentication required"},
+        503: {"model": ErrorResponse},
+    },
+)
+async def get_prometheus_metrics(
+    auth: AuthContext = Depends(get_auth_context),
+) -> Any:
+    """Get metrics in Prometheus exposition format.
+
+    Returns metrics formatted for Prometheus scraping:
+    - All metrics prefixed with 'elle_'
+    - Proper HELP and TYPE annotations
+    - Labels for dimensional data
+
+    Requires authentication.
+    """
+    from fastapi.responses import PlainTextResponse
+
+    _ = auth
+    get_daemon()  # Verify daemon is running
+
+    try:
+        from elle.daemon.observability.metrics import (
+            collect_observability_metrics,
+            format_prometheus,
+        )
+
+        metrics = await collect_observability_metrics()
+        prometheus_output = format_prometheus(metrics)
+
+        return PlainTextResponse(
+            content=prometheus_output,
+            media_type="text/plain; version=0.0.4; charset=utf-8",
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e

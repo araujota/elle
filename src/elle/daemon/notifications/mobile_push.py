@@ -76,6 +76,10 @@ class MobileEventType(str, Enum):
     REBOOT_PENDING = "reboot_pending"
     REBOOT_COMPLETE = "reboot_complete"
 
+    # Forecast
+    FORECAST_WARNING = "forecast_warning"
+    FORECAST_REMEDIATED = "forecast_remediated"
+
     # Connection
     HEARTBEAT = "heartbeat"
     CONNECTED = "connected"
@@ -485,6 +489,48 @@ class MobilePushNotifier:
         return await self.push(event)
 
 
+    async def push_forecast_warning(
+        self,
+        incident_id: str,
+        metric: str,
+        title: str,
+        body: str,
+        plan_summary: str | None = None,
+    ) -> int:
+        """Push a forecast warning notification to mobile clients.
+
+        Args:
+            incident_id: Linked incident ID.
+            metric: Metric that triggered the forecast.
+            title: Notification title.
+            body: Notification body.
+            plan_summary: Brief plan summary.
+
+        Returns:
+            Number of clients notified.
+        """
+        data: dict[str, Any] = {"metric": metric}
+        if plan_summary:
+            data["plan_summary"] = plan_summary
+
+        event = MobileNotificationEvent(
+            event_type=MobileEventType.FORECAST_WARNING,
+            title=title,
+            body=body,
+            category="forecast_warning",
+            urgency="normal",
+            context_type="incident",
+            context_id=incident_id,
+            data=data,
+            actions=(
+                {"id": "execute_plan", "label": "Execute Now"},
+                {"id": "investigate", "label": "Investigate"},
+                {"id": "dismiss", "label": "Dismiss"},
+            ),
+        )
+        return await self.push(event)
+
+
 def _map_category_to_event_type(category: str) -> MobileEventType:
     """Map notification category to mobile event type.
 
@@ -509,6 +555,8 @@ def _map_category_to_event_type(category: str) -> MobileEventType:
         "health_warning": MobileEventType.HEALTH_ALERT,
         "health_critical": MobileEventType.HEALTH_ALERT,
         "health_recovered": MobileEventType.HEALTH_RECOVERED,
+        "forecast_warning": MobileEventType.FORECAST_WARNING,
+        "forecast_remediated": MobileEventType.FORECAST_REMEDIATED,
     }
     return category_map.get(category, MobileEventType.NOTIFICATION)
 

@@ -10,7 +10,7 @@ Defines frozen, immutable data structures for:
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal
 
@@ -346,7 +346,7 @@ class GatheredEvidence(BaseModel):
         description="Execution time in milliseconds",
     )
     timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When the capability was executed",
     )
 
@@ -389,7 +389,7 @@ class ExecutionEvidence(BaseModel):
         description="Execution time in milliseconds",
     )
     timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When the capability was executed",
     )
 

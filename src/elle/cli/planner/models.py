@@ -4,6 +4,8 @@ Defines data structures for command plans, verification,
 execution tracking, and outcomes.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
 from pathlib import Path

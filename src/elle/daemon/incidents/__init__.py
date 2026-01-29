@@ -69,10 +69,52 @@ Usage:
     )
 """
 
+from elle.daemon.incidents.anonymize import (
+    KNOWN_SERVICES,
+    MOUNT_CATEGORIES,
+    ActionSummary,
+    AnonymizationContext,
+    AnonymizedIncidentReport,
+    IncidentAnonymizer,
+    anonymize_incident,
+    set_anon_secret,
+)
+from elle.daemon.incidents.cloud_sync import (
+    CloudIncidentMatch,
+    CloudQueryResult,
+    CloudSubmissionResult,
+    CloudSyncClient,
+    configure_cloud_client,
+    get_cloud_client,
+    reset_cloud_client,
+)
+from elle.daemon.incidents.control_surface import (
+    KEY_SYSCTLS,
+    KNOWN_CONFIG_ROOTS,
+    ConfigFileSurface,
+    ControlSurfaceSnapshot,
+    HardwareIdentitySurface,
+    KernelPolicySurface,
+    NetworkControlSurface,
+    PackageInfo,
+    PackageSurface,
+    PrivilegeSurface,
+    SchedulerSurface,
+    SystemdServiceSurface,
+    collect_control_surface,
+)
 from elle.daemon.incidents.correlator import (
     IncidentCorrelator,
     get_correlator,
     reset_correlator,
+)
+from elle.daemon.incidents.drift import (
+    DriftDetail,
+    detect_surface_drift,
+    explain_drift,
+    get_drifted_surfaces,
+    has_any_drift,
+    summarize_drift,
 )
 from elle.daemon.incidents.models import (
     ActionKind,
@@ -121,89 +163,47 @@ from elle.daemon.incidents.snapshot import (
 )
 from elle.daemon.incidents.store import (
     append_action,
+    attach_control_surface_snapshot,
     attach_snapshot,
+    # V4: Telemetry and control surface snapshot CRUD
+    attach_telemetry_snapshot,
     create_incident_draft,
     delete_incident,
     finalize_outcome,
     get_actions,
+    # Anonymization
+    get_anonymized_incident,
+    get_control_surface_snapshot,
+    get_control_surface_snapshots,
     get_embedding,
     get_incident,
     get_linked_events,
     get_snapshot,
     get_snapshots,
+    get_surface_hashes,
+    get_telemetry_snapshot,
+    get_telemetry_snapshots,
     link_events,
     list_incidents,
     update_incident,
     upsert_embedding,
-    # V4: Telemetry and control surface snapshot CRUD
-    attach_telemetry_snapshot,
-    get_telemetry_snapshot,
-    get_telemetry_snapshots,
-    attach_control_surface_snapshot,
-    get_control_surface_snapshot,
-    get_control_surface_snapshots,
-    get_surface_hashes,
-    # Anonymization
-    get_anonymized_incident,
-)
-from elle.daemon.incidents.telemetry_snapshot import (
-    TelemetrySnapshot,
-    CPUPressure,
-    MemoryPressure,
-    DiskIOPressure,
-    DiskInfo,
-    NetworkLiveness,
-    InterfaceInfo,
-    ServiceRuntimeSnapshot,
-    KernelHardwareSignals,
-    collect_telemetry_snapshot,
-)
-from elle.daemon.incidents.control_surface import (
-    ControlSurfaceSnapshot,
-    SystemdServiceSurface,
-    ConfigFileSurface,
-    PackageSurface,
-    PackageInfo,
-    SchedulerSurface,
-    PrivilegeSurface,
-    NetworkControlSurface,
-    KernelPolicySurface,
-    HardwareIdentitySurface,
-    collect_control_surface,
-    KNOWN_CONFIG_ROOTS,
-    KEY_SYSCTLS,
 )
 from elle.daemon.incidents.surface_cache import (
     SurfaceCache,
-    get_surface_cache,
     clear_surface_cache,
+    get_surface_cache,
 )
-from elle.daemon.incidents.drift import (
-    detect_surface_drift,
-    get_drifted_surfaces,
-    explain_drift,
-    summarize_drift,
-    has_any_drift,
-    DriftDetail,
-)
-from elle.daemon.incidents.anonymize import (
-    AnonymizationContext,
-    AnonymizedIncidentReport,
-    ActionSummary,
-    IncidentAnonymizer,
-    anonymize_incident,
-    KNOWN_SERVICES,
-    MOUNT_CATEGORIES,
-    set_anon_secret,
-)
-from elle.daemon.incidents.cloud_sync import (
-    CloudSyncClient,
-    CloudIncidentMatch,
-    CloudSubmissionResult,
-    CloudQueryResult,
-    get_cloud_client,
-    configure_cloud_client,
-    reset_cloud_client,
+from elle.daemon.incidents.telemetry_snapshot import (
+    CPUPressure,
+    DiskInfo,
+    DiskIOPressure,
+    InterfaceInfo,
+    KernelHardwareSignals,
+    MemoryPressure,
+    NetworkLiveness,
+    ServiceRuntimeSnapshot,
+    TelemetrySnapshot,
+    collect_telemetry_snapshot,
 )
 
 __all__ = [

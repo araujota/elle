@@ -7,6 +7,8 @@ Defines the database schema for reboot persistence:
 Schema version is tracked in the meta table for migrations.
 """
 
+from __future__ import annotations
+
 import sqlite3
 from pathlib import Path
 

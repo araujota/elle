@@ -139,9 +139,9 @@ class Tier4Document(BaseTier):
             # Basic RST validation
             if self._is_docutils_available():
                 try:
+                    from docutils.frontend import OptionParser
                     from docutils.parsers.rst import Parser
                     from docutils.utils import new_document
-                    from docutils.frontend import OptionParser
 
                     parser = Parser()
                     settings = OptionParser(components=(Parser,)).get_default_values()

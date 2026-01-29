@@ -6,6 +6,8 @@ operations. All security-relevant events are logged for review.
 Audit log location: /var/lib/elle/mobile_audit.db
 """
 
+from __future__ import annotations
+
 import logging
 import sqlite3
 from collections.abc import Iterator

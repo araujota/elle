@@ -30,6 +30,7 @@ from elle.reactive.models import (
 from elle.reactive.store import (
     get_rate_limit_state,
     list_enabled_with_event_trigger,
+    list_enabled_with_forecast_trigger,
     record_execution,
     update_rate_limit_state,
 )
@@ -37,6 +38,7 @@ from elle.reactive.store import (
 if TYPE_CHECKING:
     from elle.capabilities.executor import CapabilityExecutor
     from elle.daemon.telemetry.models import TelemetryEvent
+    from elle.daemon.telemetry.trends import Forecast
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +160,168 @@ class ReactiveEngine:
             event=None,
             context_override=context_override,
             skip_rate_limit=True,
+        )
+
+    async def process_forecast(
+        self,
+        forecast: Forecast,
+    ) -> list[ExecutionRecord]:
+        """Process a forecast through matching reactive functions.
+
+        Called by the trend aggregator when a metric forecast changes urgency.
+        This enables predictive incident prevention - taking action before
+        thresholds are crossed.
+
+        Flow:
+        1. Find functions with forecast triggers matching this urgency
+        2. Check if metric pattern matches
+        3. Check confidence threshold
+        4. Execute function (which typically runs Agent Loop)
+        5. Record execution
+
+        Args:
+            forecast: The Forecast to process.
+
+        Returns:
+            List of ExecutionRecords for each function that executed.
+        """
+        records: list[ExecutionRecord] = []
+
+        # Only process forecasts with urgency
+        if forecast.urgency == "none":
+            return records
+
+        # Find functions that match this forecast's urgency
+        matching = await self._find_forecast_functions(forecast)
+        if not matching:
+            return records
+
+        logger.info(
+            f"Processing forecast for {forecast.metric} "
+            f"(urgency={forecast.urgency}, confidence={forecast.confidence:.2f}), "
+            f"found {len(matching)} matching functions"
+        )
+
+        for func in matching:
+            try:
+                record = await self._process_forecast_function(func, forecast)
+                if record:
+                    records.append(record)
+            except Exception as e:
+                logger.exception(f"Error processing forecast function {func.name}: {e}")
+                # Record the failure
+                record = ExecutionRecord(
+                    function_id=func.id,
+                    function_name=func.name,
+                    triggered_at=datetime.utcnow(),
+                    trigger_event=_forecast_to_dict(forecast),
+                    condition_result=False,
+                    condition_explanation=f"Processing error: {e}",
+                    success=False,
+                    error=str(e),
+                )
+                record_execution(record)
+                records.append(record)
+
+        return records
+
+    async def _find_forecast_functions(
+        self,
+        forecast: Forecast,
+    ) -> list[ReactiveFunction]:
+        """Find reactive functions whose forecast triggers match this forecast.
+
+        Args:
+            forecast: The Forecast to match.
+
+        Returns:
+            List of matching ReactiveFunctions.
+        """
+        # Get all enabled functions with forecast triggers for this urgency
+        functions = list_enabled_with_forecast_trigger(urgency=forecast.urgency)
+        matching = []
+
+        for func in functions:
+            if self._forecast_matches_trigger(forecast, func):
+                matching.append(func)
+
+        return matching
+
+    def _forecast_matches_trigger(
+        self,
+        forecast: Forecast,
+        func: ReactiveFunction,
+    ) -> bool:
+        """Check if a forecast matches a function's forecast trigger.
+
+        Args:
+            forecast: The Forecast.
+            func: The reactive function.
+
+        Returns:
+            True if the forecast matches the trigger criteria.
+        """
+        trigger = func.trigger
+
+        if trigger.type != "forecast":
+            return False
+
+        if not trigger.forecast:
+            return False
+
+        ft = trigger.forecast
+
+        # Check urgency matches
+        if ft.urgency != forecast.urgency:
+            return False
+
+        # Check confidence threshold
+        if forecast.confidence < ft.min_confidence:
+            logger.debug(
+                f"Function {func.name} skipped: confidence {forecast.confidence:.2f} "
+                f"< min_confidence {ft.min_confidence:.2f}"
+            )
+            return False
+
+        # Check metric pattern
+        if ft.metric is not None:
+            if not _metric_matches_pattern(forecast.metric, ft.metric):
+                return False
+
+        return True
+
+    async def _process_forecast_function(
+        self,
+        func: ReactiveFunction,
+        forecast: Forecast,
+    ) -> ExecutionRecord | None:
+        """Process a single reactive function for a forecast.
+
+        Args:
+            func: The reactive function.
+            forecast: The forecast that triggered.
+
+        Returns:
+            ExecutionRecord, or None if rate-limited or condition failed.
+        """
+        # Build forecast context for condition evaluation
+        context_override = {
+            "forecast": _forecast_to_dict(forecast),
+            "system": {
+                "metric": forecast.metric,
+                "current_value": forecast.current_value,
+                "urgency": forecast.urgency,
+                "time_to_warning_hours": forecast.time_to_warning_hours,
+                "time_to_critical_hours": forecast.time_to_critical_hours,
+                "confidence": forecast.confidence,
+            },
+        }
+
+        return await self._process_function(
+            func,
+            event=None,
+            context_override=context_override,
+            skip_rate_limit=False,
         )
 
     async def dry_run(
@@ -828,6 +992,67 @@ def _regex_match(pattern: str, text: str) -> bool:
         return bool(re.search(pattern, text))
     except re.error:
         return pattern in text
+
+
+def _forecast_to_dict(forecast: Any) -> dict[str, Any]:
+    """Convert a Forecast to a dict for context.
+
+    Args:
+        forecast: The Forecast object.
+
+    Returns:
+        Dict representation.
+    """
+    if forecast is None:
+        return {}
+
+    return {
+        "metric": forecast.metric,
+        "current_value": forecast.current_value,
+        "predicted_value_24h": forecast.predicted_value_24h,
+        "predicted_value_7d": forecast.predicted_value_7d,
+        "warning_threshold": forecast.warning_threshold,
+        "critical_threshold": forecast.critical_threshold,
+        "will_cross_warning": forecast.will_cross_warning,
+        "time_to_warning_hours": forecast.time_to_warning_hours,
+        "will_cross_critical": forecast.will_cross_critical,
+        "time_to_critical_hours": forecast.time_to_critical_hours,
+        "urgency": forecast.urgency,
+        "confidence": forecast.confidence,
+        "rate_of_change": forecast.rate_of_change,
+        "computed_at": forecast.computed_at.isoformat(),
+    }
+
+
+def _metric_matches_pattern(metric: str, pattern: str) -> bool:
+    """Check if a metric name matches a pattern.
+
+    Supports simple wildcard matching:
+    - "*" matches any sequence of characters
+    - "disk.*" matches "disk./.used_pct", "disk./home.used_pct", etc.
+
+    Args:
+        metric: The metric name.
+        pattern: The pattern to match (supports * wildcards).
+
+    Returns:
+        True if metric matches pattern.
+    """
+    if pattern == "*":
+        return True
+
+    if "*" not in pattern:
+        return metric == pattern
+
+    # Convert wildcard pattern to regex
+    # Escape special chars, then replace \* with .*
+    regex_pattern = re.escape(pattern).replace(r"\*", ".*")
+    regex_pattern = f"^{regex_pattern}$"
+
+    try:
+        return bool(re.match(regex_pattern, metric))
+    except re.error:
+        return metric == pattern
 
 
 # =============================================================================

@@ -11,11 +11,13 @@ Defines the database schema for incident reports:
 Schema version is tracked in the meta table for migrations.
 """
 
+from __future__ import annotations
+
 import sqlite3
 from pathlib import Path
 
 # Schema version - increment when schema changes
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # Database location
 DB_PATH = Path("/var/lib/elle/incidents.db")
@@ -306,6 +308,9 @@ INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_telemetry_snapshots_incident ON telemetry_snapshots(incident_id)",
     "CREATE INDEX IF NOT EXISTS idx_control_surface_snapshots_incident ON control_surface_snapshots(incident_id)",
     "CREATE INDEX IF NOT EXISTS idx_control_surface_hashes ON control_surface_snapshots(surface_hashes)",
+    # V5 indexes (forecast tracking)
+    "CREATE INDEX IF NOT EXISTS idx_incidents_forecast_metric ON incidents(forecast_metric)",
+    "CREATE INDEX IF NOT EXISTS idx_incidents_forecast_urgency ON incidents(forecast_urgency)",
 ]
 
 
@@ -421,6 +426,10 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
     if current < 4:
         _migrate_v3_to_v4(conn)
 
+    # V4 -> V5: Add forecast incident tracking fields
+    if current < 5:
+        _migrate_v4_to_v5(conn)
+
     # Update schema version
     cursor = conn.cursor()
     cursor.execute(
@@ -505,6 +514,39 @@ def _migrate_v3_to_v4(conn: sqlite3.Connection) -> None:
     )
     cursor.execute(
         "CREATE INDEX IF NOT EXISTS idx_control_surface_hashes ON control_surface_snapshots(surface_hashes)"
+    )
+
+    conn.commit()
+
+
+def _migrate_v4_to_v5(conn: sqlite3.Connection) -> None:
+    """Migrate from schema v4 to v5.
+
+    Adds forecast incident tracking fields for predictive prevention:
+    - forecast_metric: The metric that triggered this forecast incident
+    - forecast_urgency: The urgency level ('prepare' or 'act_now')
+    - prepared_plan_json: JSON serialized remediation plan (for 'prepare' incidents)
+    - plan_executed_at: When the prepared plan was executed (if at all)
+
+    Args:
+        conn: SQLite connection.
+    """
+    cursor = conn.cursor()
+
+    # Add forecast tracking columns to incidents table
+    cursor.execute("ALTER TABLE incidents ADD COLUMN forecast_metric TEXT")
+    cursor.execute("ALTER TABLE incidents ADD COLUMN forecast_urgency TEXT")
+    cursor.execute("ALTER TABLE incidents ADD COLUMN prepared_plan_json TEXT")
+    cursor.execute("ALTER TABLE incidents ADD COLUMN plan_executed_at TEXT")
+
+    # Create index for forecast queries
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_incidents_forecast_metric "
+        "ON incidents(forecast_metric)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_incidents_forecast_urgency "
+        "ON incidents(forecast_urgency)"
     )
 
     conn.commit()

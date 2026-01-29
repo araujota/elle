@@ -4,6 +4,8 @@ Provides aggregation logic and incremental updates for tracking
 what actually works on THIS machine.
 """
 
+from __future__ import annotations
+
 import hashlib
 import sqlite3
 from collections.abc import Iterator

@@ -10,6 +10,8 @@ Defines the database schema for the Man Vault documentation index:
 Schema version is tracked in the meta table for migrations.
 """
 
+from __future__ import annotations
+
 import sqlite3
 from pathlib import Path
 

@@ -4,6 +4,8 @@ Defines Pydantic models for eBPF raw events, program status,
 and overall watcher status.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Any
 

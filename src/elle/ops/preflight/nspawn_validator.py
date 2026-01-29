@@ -10,6 +10,8 @@ systemd-nspawn with overlay filesystem:
 The container is destroyed after validation, leaving no trace.
 """
 
+from __future__ import annotations
+
 import logging
 import shutil
 import subprocess

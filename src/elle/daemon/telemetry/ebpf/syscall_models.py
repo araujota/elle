@@ -4,6 +4,8 @@ Defines Pydantic models for syscall events, summaries, and traces
 used for command explanation and auditing.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Literal
 

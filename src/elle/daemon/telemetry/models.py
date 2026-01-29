@@ -4,6 +4,8 @@ Extends the base TelemetryEvent with daemon-specific fields
 and defines additional models for probe results and queue items.
 """
 
+from __future__ import annotations
+
 import hashlib
 from datetime import datetime
 from typing import Any, Literal

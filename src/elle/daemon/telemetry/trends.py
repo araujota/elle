@@ -4,6 +4,8 @@ Defines data structures for metric aggregations, trend windows,
 forecasts, and anomaly detection.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Any, Literal
 
@@ -100,9 +102,15 @@ class MetricBaseline(BaseModel):
 
 
 class Forecast(BaseModel):
-    """Simple linear forecast for a metric.
+    """Two-level forecast for a metric.
 
-    Predicts future values based on current trends.
+    Predicts future values based on current trends and detects
+    when warning (prepare plan) and critical (act now) thresholds
+    will be crossed.
+
+    Two-level detection:
+    - Warning level: "heading wrong direction" → prepare remediation plan
+    - Critical level: "point of no return" → execute plan immediately
     """
 
     model_config = ConfigDict(frozen=True)
@@ -114,7 +122,7 @@ class Forecast(BaseModel):
     predicted_value_24h: float = Field(description="Predicted value in 24 hours")
     predicted_value_7d: float = Field(description="Predicted value in 7 days")
 
-    # Threshold crossing
+    # Legacy single threshold (for backwards compatibility)
     threshold: float | None = Field(
         default=None,
         description="Critical threshold (e.g., 95% for disk)",
@@ -126,6 +134,46 @@ class Forecast(BaseModel):
     will_cross_threshold: bool = Field(
         default=False,
         description="Whether threshold will be crossed",
+    )
+
+    # Two-level thresholds
+    warning_threshold: float | None = Field(
+        default=None,
+        description="Warning threshold - 'heading wrong direction' (prepare plan)",
+    )
+    critical_threshold: float | None = Field(
+        default=None,
+        description="Critical threshold - 'point of no return' (act now)",
+    )
+
+    # Warning level detection (prepare plan)
+    will_cross_warning: bool = Field(
+        default=False,
+        description="Whether warning threshold will be crossed within forecast horizon",
+    )
+    time_to_warning_hours: float | None = Field(
+        default=None,
+        description="Estimated hours until warning threshold is crossed",
+    )
+
+    # Critical level detection (act now)
+    will_cross_critical: bool = Field(
+        default=False,
+        description="Whether critical threshold will be crossed within forecast horizon",
+    )
+    time_to_critical_hours: float | None = Field(
+        default=None,
+        description="Estimated hours until critical threshold is crossed",
+    )
+
+    # Urgency classification - the key field for triggering reactive functions
+    urgency: Literal["none", "prepare", "act_now"] = Field(
+        default="none",
+        description=(
+            "'none': No action needed, "
+            "'prepare': Warning threshold crossing imminent - prepare remediation plan, "
+            "'act_now': Critical threshold crossing imminent - execute plan immediately"
+        ),
     )
 
     # Confidence
@@ -383,21 +431,176 @@ TRACKED_METRICS = [
     "cpu.load_15m",
 ]
 
-# Default thresholds for warnings
-METRIC_THRESHOLDS = {
-    "disk./.used_pct": 90.0,
-    "disk./home.used_pct": 90.0,
-    "disk./var.used_pct": 90.0,
-    "mem.used_pct": 90.0,
-    "swap.used_pct": 80.0,
-    "cpu.load_1m": 4.0,  # Depends on CPU count
+# =============================================================================
+# Two-Level Forecast Thresholds
+# =============================================================================
+
+# Warning thresholds - "heading wrong direction" (prepare remediation plan)
+# When a metric is projected to cross this threshold, we prepare a plan
+# but don't execute it yet
+WARNING_THRESHOLDS = {
+    "disk./.used_pct": 80.0,
+    "disk./home.used_pct": 80.0,
+    "disk./var.used_pct": 80.0,
+    "mem.used_pct": 80.0,
+    "swap.used_pct": 70.0,
+    "cpu.load_1m": 3.0,
 }
 
-# Critical thresholds (action required)
+# Critical thresholds - "point of no return" (act immediately)
+# When a metric is projected to cross this threshold, we execute
+# the prepared remediation plan immediately
 CRITICAL_THRESHOLDS = {
-    "disk./.used_pct": 95.0,
-    "disk./home.used_pct": 95.0,
-    "disk./var.used_pct": 95.0,
-    "mem.used_pct": 95.0,
-    "swap.used_pct": 95.0,
+    "disk./.used_pct": 92.0,
+    "disk./home.used_pct": 92.0,
+    "disk./var.used_pct": 92.0,
+    "mem.used_pct": 92.0,
+    "swap.used_pct": 90.0,
+    "cpu.load_1m": 4.0,
 }
+
+# Time-based urgency thresholds (hours)
+# These determine when to trigger based on time-to-threshold
+TIME_TO_WARNING_HOURS = 24.0   # Prepare plan when <24h to warning threshold
+TIME_TO_CRITICAL_HOURS = 4.0  # Act immediately when <4h to critical threshold
+
+# Legacy alias for backwards compatibility
+METRIC_THRESHOLDS = WARNING_THRESHOLDS
+
+
+# =============================================================================
+# Forecast Urgency Computation
+# =============================================================================
+
+
+def compute_forecast_urgency(
+    metric: str,
+    current_value: float,
+    rate_of_change: float,
+    confidence: float = 0.5,
+) -> tuple[Literal["none", "prepare", "act_now"], float | None, float | None]:
+    """Compute the urgency level for a metric based on its forecast.
+
+    Determines whether action is needed based on projected threshold crossings:
+    - "prepare": Warning threshold will be crossed within TIME_TO_WARNING_HOURS
+    - "act_now": Critical threshold will be crossed within TIME_TO_CRITICAL_HOURS
+    - "none": No immediate action needed
+
+    Args:
+        metric: The metric identifier (e.g., "disk./.used_pct").
+        current_value: Current metric value.
+        rate_of_change: Rate of change per hour.
+        confidence: Forecast confidence (0-1).
+
+    Returns:
+        Tuple of (urgency, time_to_warning_hours, time_to_critical_hours).
+    """
+    warning_threshold = WARNING_THRESHOLDS.get(metric)
+    critical_threshold = CRITICAL_THRESHOLDS.get(metric)
+
+    if warning_threshold is None or critical_threshold is None:
+        return "none", None, None
+
+    time_to_warning: float | None = None
+    time_to_critical: float | None = None
+
+    # Only calculate times if rate_of_change is positive (increasing toward thresholds)
+    if rate_of_change > 0.001:  # Small epsilon to avoid division issues
+        if current_value < warning_threshold:
+            time_to_warning = (warning_threshold - current_value) / rate_of_change
+
+        if current_value < critical_threshold:
+            time_to_critical = (critical_threshold - current_value) / rate_of_change
+
+    # Determine urgency level
+    urgency: Literal["none", "prepare", "act_now"] = "none"
+
+    # Check critical first (higher priority)
+    if time_to_critical is not None and time_to_critical <= TIME_TO_CRITICAL_HOURS:
+        urgency = "act_now"
+    # Then check warning
+    elif time_to_warning is not None and time_to_warning <= TIME_TO_WARNING_HOURS:
+        urgency = "prepare"
+    # Also trigger if already above thresholds
+    elif current_value >= critical_threshold:
+        urgency = "act_now"
+        time_to_critical = 0.0
+    elif current_value >= warning_threshold:
+        urgency = "prepare"
+        time_to_warning = 0.0
+
+    return urgency, time_to_warning, time_to_critical
+
+
+def create_forecast_with_urgency(
+    metric: str,
+    current_value: float,
+    rate_of_change: float,
+    confidence: float = 0.5,
+    computed_at: datetime | None = None,
+) -> Forecast:
+    """Create a Forecast with two-level urgency computation.
+
+    This is a convenience function that creates a fully-populated Forecast
+    with warning and critical threshold detection.
+
+    Args:
+        metric: The metric identifier.
+        current_value: Current metric value.
+        rate_of_change: Rate of change per hour.
+        confidence: Forecast confidence (0-1).
+        computed_at: When the forecast was computed (defaults to now).
+
+    Returns:
+        Forecast with all urgency fields populated.
+    """
+    if computed_at is None:
+        computed_at = datetime.utcnow()
+
+    # Get thresholds
+    warning_threshold = WARNING_THRESHOLDS.get(metric)
+    critical_threshold = CRITICAL_THRESHOLDS.get(metric)
+
+    # Compute predictions
+    predicted_24h = current_value + (rate_of_change * 24.0)
+    predicted_7d = current_value + (rate_of_change * 24.0 * 7.0)
+
+    # Compute urgency
+    urgency, time_to_warning, time_to_critical = compute_forecast_urgency(
+        metric, current_value, rate_of_change, confidence
+    )
+
+    # Determine threshold crossing
+    will_cross_warning = time_to_warning is not None
+    will_cross_critical = time_to_critical is not None
+
+    # Legacy fields (use critical threshold)
+    threshold = critical_threshold
+    time_to_threshold = time_to_critical
+    will_cross_threshold = will_cross_critical
+
+    return Forecast(
+        metric=metric,
+        current_value=current_value,
+        predicted_value_24h=predicted_24h,
+        predicted_value_7d=predicted_7d,
+        # Legacy fields
+        threshold=threshold,
+        time_to_threshold_hours=time_to_threshold,
+        will_cross_threshold=will_cross_threshold,
+        # Two-level thresholds
+        warning_threshold=warning_threshold,
+        critical_threshold=critical_threshold,
+        # Warning level
+        will_cross_warning=will_cross_warning,
+        time_to_warning_hours=time_to_warning,
+        # Critical level
+        will_cross_critical=will_cross_critical,
+        time_to_critical_hours=time_to_critical,
+        # Urgency classification
+        urgency=urgency,
+        # Metadata
+        confidence=confidence,
+        rate_of_change=rate_of_change,
+        computed_at=computed_at,
+    )

@@ -4,11 +4,13 @@ Provides efficient batch operations and queries for
 telemetry events and probe results.
 """
 
+from __future__ import annotations
+
 import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from elle.daemon.telemetry.models import ProbeResult, TelemetryEvent
@@ -365,7 +367,7 @@ def get_recent_fingerprints(
         Set of fingerprints.
     """
     with _ensure_connection(conn) as c:
-        since = datetime.now(UTC) - timedelta(seconds=window_sec)
+        since = datetime.now(timezone.utc) - timedelta(seconds=window_sec)
         cursor = c.cursor()
         cursor.execute(
             """
@@ -392,7 +394,7 @@ def delete_old_events(
         Number of deleted events.
     """
     with _ensure_connection(conn) as c:
-        cutoff = datetime.now(UTC) - timedelta(days=older_than_days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
         cursor = c.cursor()
         cursor.execute(
             "DELETE FROM events WHERE ts < ?",
@@ -507,7 +509,7 @@ def delete_old_probe_results(
         Number of deleted results.
     """
     with _ensure_connection(conn) as c:
-        cutoff = datetime.now(UTC) - timedelta(days=older_than_days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
         cursor = c.cursor()
         cursor.execute(
             "DELETE FROM probe_results WHERE ts < ?",

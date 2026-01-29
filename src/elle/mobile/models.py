@@ -7,6 +7,8 @@ This module defines the core data models used throughout the mobile gateway:
 - QRPayload: Data encoded in pairing QR code
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
 

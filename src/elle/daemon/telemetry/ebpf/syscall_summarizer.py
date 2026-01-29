@@ -4,8 +4,10 @@ Collects syscall events from tracing and aggregates them into
 a SyscallSummary that can be used for command explanation.
 """
 
+from __future__ import annotations
+
 import logging
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from elle.daemon.telemetry.ebpf.syscall_models import (
@@ -147,9 +149,9 @@ class SyscallSummarizer:
         # Track timing
         if self._start_ns is None:
             self._start_ns = event.ts_ns
-            self._start_time = datetime.now(UTC)
+            self._start_time = datetime.now(timezone.utc)
         self._end_ns = event.ts_ns
-        self._end_time = datetime.now(UTC)
+        self._end_time = datetime.now(timezone.utc)
 
         # Check truncation limit
         if len(self._events) >= self._max_events:

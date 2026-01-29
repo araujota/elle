@@ -4,6 +4,8 @@ Defines Pydantic models for validation results, issues,
 and test specifications.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
 from typing import Literal

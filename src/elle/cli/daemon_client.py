@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -92,7 +92,7 @@ class DockerState(BaseModel):
     volumes: tuple[str, ...] = Field(default_factory=tuple)
     compose_services: tuple[str, ...] = Field(default_factory=tuple)
     swarm_active: bool = Field(default=False)
-    collected_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    collected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class InterfaceInfo(BaseModel):
@@ -130,7 +130,7 @@ class FirewallState(BaseModel):
     default_incoming: str = Field(default="allow")
     default_outgoing: str = Field(default="allow")
     rules: tuple[FirewallRule, ...] = Field(default_factory=tuple)
-    collected_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    collected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class NetworkState(BaseModel):
@@ -146,7 +146,7 @@ class NetworkState(BaseModel):
     wireguard_interfaces: tuple[str, ...] = Field(default_factory=tuple)
     firewall_active: bool = Field(default=False)
     firewall_backend: str = Field(default="unknown")
-    collected_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    collected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class Listener(BaseModel):
@@ -278,7 +278,7 @@ class DaemonClient:
                     volumes=tuple(data.get("volumes", [])),
                     compose_services=tuple(data.get("compose_services", [])),
                     swarm_active=data.get("swarm_active", False),
-                    collected_at=datetime.fromisoformat(data.get("collected_at", datetime.now(UTC).isoformat())),
+                    collected_at=datetime.fromisoformat(data.get("collected_at", datetime.now(timezone.utc).isoformat())),
                 )
             else:
                 logger.warning(f"Daemon returned {response.status_code} for docker state")
@@ -318,7 +318,7 @@ class DaemonClient:
                     wireguard_interfaces=tuple(data.get("wireguard_interfaces", [])),
                     firewall_active=data.get("firewall_active", False),
                     firewall_backend=data.get("firewall_backend", "unknown"),
-                    collected_at=datetime.fromisoformat(data.get("collected_at", datetime.now(UTC).isoformat())),
+                    collected_at=datetime.fromisoformat(data.get("collected_at", datetime.now(timezone.utc).isoformat())),
                 )
             else:
                 logger.warning(f"Daemon returned {response.status_code} for network state")
@@ -346,7 +346,7 @@ class DaemonClient:
                     default_incoming=data.get("default_incoming", "allow"),
                     default_outgoing=data.get("default_outgoing", "allow"),
                     rules=tuple(FirewallRule(**r) for r in data.get("rules", [])),
-                    collected_at=datetime.fromisoformat(data.get("collected_at", datetime.now(UTC).isoformat())),
+                    collected_at=datetime.fromisoformat(data.get("collected_at", datetime.now(timezone.utc).isoformat())),
                 )
             else:
                 return FirewallState()

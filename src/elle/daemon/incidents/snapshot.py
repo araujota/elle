@@ -4,6 +4,8 @@ Gathers point-in-time system metrics for incident analysis,
 precondition matching, and comparison.
 """
 
+from __future__ import annotations
+
 import os
 import platform
 import re

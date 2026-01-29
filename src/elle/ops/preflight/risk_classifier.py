@@ -15,6 +15,8 @@ Risk factors:
 - Major version changes
 """
 
+from __future__ import annotations
+
 import fnmatch
 import logging
 from enum import Enum

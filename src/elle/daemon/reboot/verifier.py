@@ -6,6 +6,8 @@ and determine whether to confirm boot or trigger rollback.
 Includes comprehensive diagnostic collection for LLM-assisted retry.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import re

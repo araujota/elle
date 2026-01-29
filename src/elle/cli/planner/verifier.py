@@ -8,6 +8,8 @@ Ensures generated plans are safe to execute by checking:
 - Denylist compliance
 """
 
+from __future__ import annotations
+
 import logging
 import shlex
 import subprocess

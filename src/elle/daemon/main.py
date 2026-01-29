@@ -11,13 +11,15 @@ by the C daemon. This Python daemon receives pre-normalized events
 via Unix socket and handles storage, correlation, and API.
 """
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import logging
 import os
 import signal
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -89,7 +91,7 @@ class ElledDaemon:
         """Get daemon uptime in seconds."""
         if not self.started_at:
             return 0
-        return int((datetime.now(UTC) - self.started_at).total_seconds())
+        return int((datetime.now(timezone.utc) - self.started_at).total_seconds())
 
     def get_status(self) -> DaemonStatus:
         """Get current daemon status.
@@ -110,7 +112,7 @@ class ElledDaemon:
             errors.append("Telemetryd watcher not running - restart elled-telemetryd")
 
         return DaemonStatus(
-            started_at=self.started_at or datetime.now(UTC),
+            started_at=self.started_at or datetime.now(timezone.utc),
             uptime_sec=self.uptime_sec,
             pid=os.getpid(),
             journal_active=True,  # Handled by telemetryd
@@ -128,7 +130,7 @@ class ElledDaemon:
     async def start(self) -> None:
         """Start all daemon components."""
         logger.info("Starting elled daemon")
-        self.started_at = datetime.now(UTC)
+        self.started_at = datetime.now(timezone.utc)
 
         # Check if telemetryd is available
         if not is_telemetryd_available():

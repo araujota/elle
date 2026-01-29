@@ -12,6 +12,8 @@ SAFETY-CRITICAL:
 - 60-second user intervention window
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from collections.abc import Callable

@@ -7,6 +7,8 @@ SAFETY-CRITICAL: This module handles persistent reboot operations
 with automatic verification and GRUB-based rollback.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Any, Literal
 

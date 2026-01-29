@@ -4,6 +4,8 @@ Provides database operations for reactive functions, execution history,
 and function state. All operations follow ELLE's store patterns.
 """
 
+from __future__ import annotations
+
 import json
 import sqlite3
 from collections.abc import Iterator
@@ -18,6 +20,7 @@ from elle.reactive.models import (
     Condition,
     EventTrigger,
     ExecutionRecord,
+    ForecastTrigger,
     PolicySpec,
     RateLimitState,
     ReactiveFunction,
@@ -341,6 +344,49 @@ def list_enabled_with_schedule_trigger(
         return [_row_to_function(row) for row in cursor.fetchall()]
 
 
+def list_enabled_with_forecast_trigger(
+    urgency: str | None = None,
+    conn: sqlite3.Connection | None = None,
+) -> list[ReactiveFunction]:
+    """List enabled functions that have forecast triggers.
+
+    Used by the forecast handler to find functions to evaluate
+    when a metric's urgency changes.
+
+    Args:
+        urgency: Optional urgency filter ('prepare' or 'act_now').
+        conn: SQLite connection.
+
+    Returns:
+        List of enabled ReactiveFunctions with forecast triggers.
+    """
+    with _ensure_connection(conn) as c:
+        cursor = c.cursor()
+
+        if urgency:
+            cursor.execute(
+                """
+                SELECT * FROM reactive_functions
+                WHERE enabled = 1
+                AND json_extract(trigger_json, '$.type') = 'forecast'
+                AND json_extract(trigger_json, '$.forecast.urgency') = ?
+                ORDER BY name
+                """,
+                (urgency,),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT * FROM reactive_functions
+                WHERE enabled = 1
+                AND json_extract(trigger_json, '$.type') = 'forecast'
+                ORDER BY name
+                """
+            )
+
+        return [_row_to_function(row) for row in cursor.fetchall()]
+
+
 def delete_function(
     function_id: str,
     conn: sqlite3.Connection | None = None,
@@ -434,6 +480,7 @@ def _parse_trigger(data: dict[str, Any]) -> Trigger:
     """Parse a trigger dict into a Trigger model."""
     event_trigger = None
     schedule_trigger = None
+    forecast_trigger = None
 
     if data.get("event"):
         event_trigger = EventTrigger(**data["event"])
@@ -441,10 +488,14 @@ def _parse_trigger(data: dict[str, Any]) -> Trigger:
     if data.get("schedule"):
         schedule_trigger = ScheduleTrigger(**data["schedule"])
 
+    if data.get("forecast"):
+        forecast_trigger = ForecastTrigger(**data["forecast"])
+
     return Trigger(
         type=data["type"],
         event=event_trigger,
         schedule=schedule_trigger,
+        forecast=forecast_trigger,
     )
 
 

@@ -10,6 +10,8 @@ Flow:
     input + session -> classify -> policy check -> route -> execute -> result + new_session
 """
 
+from __future__ import annotations
+
 import contextlib
 import logging
 from enum import Enum, auto

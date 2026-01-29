@@ -14,7 +14,7 @@ import json
 import logging
 import re
 import subprocess
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -60,7 +60,7 @@ class DockerState(BaseModel):
     compose_services: tuple[str, ...] = Field(default_factory=tuple, description="Compose-managed services")
     swarm_active: bool = Field(default=False, description="Is swarm mode active")
     collected_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When this state was collected",
     )
 
@@ -102,7 +102,7 @@ class FirewallState(BaseModel):
     default_outgoing: str = Field(default="allow", description="Default outgoing policy")
     rules: tuple[FirewallRule, ...] = Field(default_factory=tuple, description="Firewall rules")
     collected_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When this state was collected",
     )
 
@@ -120,7 +120,7 @@ class NetworkState(BaseModel):
     wireguard_interfaces: tuple[str, ...] = Field(default_factory=tuple, description="WireGuard interface names")
     firewall: FirewallState = Field(default_factory=FirewallState, description="Firewall state")
     collected_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When this state was collected",
     )
 
@@ -147,7 +147,7 @@ class SystemState(BaseModel):
     network: NetworkState = Field(default_factory=NetworkState)
     listeners: tuple[Listener, ...] = Field(default_factory=tuple, description="Network listeners")
     collected_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When this state was collected",
     )
 
@@ -275,9 +275,9 @@ class StateCache:
             if not docker_available:
                 self._docker_state = DockerState(
                     docker_available=False,
-                    collected_at=datetime.now(UTC),
+                    collected_at=datetime.now(timezone.utc),
                 )
-                self._last_docker_refresh = datetime.now(UTC)
+                self._last_docker_refresh = datetime.now(timezone.utc)
                 return
 
             # Get running containers
@@ -311,14 +311,14 @@ class StateCache:
                 volumes=tuple(volumes[:50]),  # Limit to 50
                 compose_services=tuple(compose_services),
                 swarm_active=swarm_active,
-                collected_at=datetime.now(UTC),
+                collected_at=datetime.now(timezone.utc),
             )
-            self._last_docker_refresh = datetime.now(UTC)
+            self._last_docker_refresh = datetime.now(timezone.utc)
 
         except FileNotFoundError:
             self._docker_state = DockerState(
                 docker_available=False,
-                collected_at=datetime.now(UTC),
+                collected_at=datetime.now(timezone.utc),
             )
         except subprocess.TimeoutExpired:
             logger.warning("Docker state refresh timed out")
@@ -449,9 +449,9 @@ class StateCache:
                 hostname=hostname,
                 wireguard_interfaces=wireguard_interfaces,
                 firewall=firewall,
-                collected_at=datetime.now(UTC),
+                collected_at=datetime.now(timezone.utc),
             )
-            self._last_network_refresh = datetime.now(UTC)
+            self._last_network_refresh = datetime.now(timezone.utc)
 
         except Exception as e:
             logger.warning(f"Failed to refresh network state: {e}")
@@ -600,13 +600,13 @@ class StateCache:
                 return FirewallState(
                     active=active,
                     backend="iptables",
-                    collected_at=datetime.now(UTC),
+                    collected_at=datetime.now(timezone.utc),
                 )
 
         except FileNotFoundError:
             pass
 
-        return FirewallState(collected_at=datetime.now(UTC))
+        return FirewallState(collected_at=datetime.now(timezone.utc))
 
     def _parse_ufw_status(self, output: str) -> FirewallState:
         """Parse UFW status verbose output."""
@@ -643,7 +643,7 @@ class StateCache:
             default_incoming=default_incoming,
             default_outgoing=default_outgoing,
             rules=tuple(rules),
-            collected_at=datetime.now(UTC),
+            collected_at=datetime.now(timezone.utc),
         )
 
     async def _get_listeners(self) -> tuple[Listener, ...]:
@@ -728,7 +728,7 @@ class StateCache:
             docker=self._docker_state,
             network=self._network_state,
             listeners=self._listeners,
-            collected_at=datetime.now(UTC),
+            collected_at=datetime.now(timezone.utc),
         )
 
     async def refresh_now(self) -> None:

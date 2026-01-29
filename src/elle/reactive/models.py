@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 # =============================================================================
 
 # Trigger types for reactive functions
-TriggerType = Literal["event", "schedule", "manual"]
+TriggerType = Literal["event", "schedule", "manual", "forecast"]
 
 # Failure handling modes for actions
 OnFailureMode = Literal["continue", "stop", "rollback"]
@@ -78,19 +78,61 @@ class ScheduleTrigger(BaseModel):
     )
 
 
+class ForecastTrigger(BaseModel):
+    """Trigger on metric forecast conditions.
+
+    Fires when a metric is predicted to cross warning or critical thresholds.
+    This enables proactive incident prevention:
+    - "prepare" urgency: Warning threshold crossing imminent, prepare remediation plan
+    - "act_now" urgency: Critical threshold crossing imminent, execute plan immediately
+
+    Example:
+        ForecastTrigger(
+            metric="disk.*",       # Match any disk metric
+            urgency="prepare",     # Trigger on warning level
+            min_confidence=0.6,    # Only trigger if forecast confidence >= 60%
+        )
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    metric: str | None = Field(
+        default=None,
+        description=(
+            "Metric pattern to match. Can be exact (e.g., 'disk./.used_pct') "
+            "or use wildcards (e.g., 'disk.*' for all disk metrics). "
+            "If None, matches all metrics."
+        ),
+    )
+    urgency: Literal["prepare", "act_now"] = Field(
+        description=(
+            "'prepare' triggers when warning threshold crossing is imminent "
+            "(prepare remediation plan), 'act_now' triggers when critical "
+            "threshold crossing is imminent (execute plan immediately)"
+        ),
+    )
+    min_confidence: float = Field(
+        default=0.6,
+        ge=0.0,
+        le=1.0,
+        description="Minimum forecast confidence required to trigger (0.0-1.0)",
+    )
+
+
 class Trigger(BaseModel):
     """When the reactive function should evaluate.
 
-    Supports three trigger types:
+    Supports four trigger types:
     - event: Fire on matching telemetry events
     - schedule: Fire on cron schedule
     - manual: Fire only via explicit invocation
+    - forecast: Fire on metric forecast conditions (predictive prevention)
     """
 
     model_config = ConfigDict(frozen=True)
 
     type: TriggerType = Field(
-        description="Trigger type (event, schedule, or manual)",
+        description="Trigger type (event, schedule, manual, or forecast)",
     )
     event: EventTrigger | None = Field(
         default=None,
@@ -99,6 +141,10 @@ class Trigger(BaseModel):
     schedule: ScheduleTrigger | None = Field(
         default=None,
         description="Schedule trigger configuration (required if type='schedule')",
+    )
+    forecast: ForecastTrigger | None = Field(
+        default=None,
+        description="Forecast trigger configuration (required if type='forecast')",
     )
 
 

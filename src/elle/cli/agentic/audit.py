@@ -20,7 +20,7 @@ import json
 import logging
 import sqlite3
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -53,7 +53,7 @@ class ToolCallRecord(BaseModel):
     result_error: str | None = Field(default=None, description="Error message if failed")
     duration_ms: int = Field(default=0, description="Execution time")
     timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When the call was made",
     )
     iteration: int = Field(default=1, description="Which loop iteration this was in")
@@ -99,7 +99,7 @@ class VerificationResult(BaseModel):
     passed: bool = Field(description="Whether verification passed")
     method: str = Field(description="Verification method used")
     evidence: str = Field(default="", description="Evidence supporting the result")
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class Provenance(BaseModel):
@@ -155,7 +155,7 @@ class AuditRecord(BaseModel):
         description="Unique execution ID",
     )
     started_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When execution started",
     )
     completed_at: datetime | None = Field(
@@ -380,7 +380,7 @@ class AuditRecorder:
         record = AuditRecord(
             execution_id=base_record.execution_id,
             started_at=base_record.started_at,
-            completed_at=datetime.now(UTC),
+            completed_at=datetime.now(timezone.utc),
             trigger=base_record.trigger,
             linked_incident_id=base_record.linked_incident_id,
             retrieval_contexts=tuple(data["retrieval_contexts"]),
@@ -419,7 +419,7 @@ class AuditRecorder:
         record = AuditRecord(
             execution_id=base_record.execution_id,
             started_at=base_record.started_at,
-            completed_at=datetime.now(UTC),
+            completed_at=datetime.now(timezone.utc),
             trigger=base_record.trigger,
             linked_incident_id=base_record.linked_incident_id,
             retrieval_contexts=tuple(data["retrieval_contexts"]),

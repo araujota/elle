@@ -5,6 +5,8 @@ between events and incidents, and for synthesizing human-readable
 narratives from those chains.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Literal
 

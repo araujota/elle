@@ -5,6 +5,8 @@ enabling dynamic outcome weighting based on what actually works
 on THIS machine rather than static weights.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field

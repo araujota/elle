@@ -9,6 +9,8 @@ This module handles:
 Certificates are stored in /var/lib/elle/mobile/
 """
 
+from __future__ import annotations
+
 import logging
 from datetime import datetime, timedelta
 from ipaddress import IPv4Address, IPv6Address

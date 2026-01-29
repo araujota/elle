@@ -7,6 +7,8 @@ Provides database operations for the Man Vault:
 - Batch operations for efficient indexing
 """
 
+from __future__ import annotations
+
 import sqlite3
 import struct
 from collections.abc import Iterator

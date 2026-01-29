@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 try:
@@ -133,7 +133,7 @@ class ReactiveScheduler:
                 self._add_schedule(func)
 
         # Check which functions should run now
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         for func in functions:
             if self._should_run(func, now):
                 await self._run_function(func)
@@ -154,7 +154,7 @@ class ReactiveScheduler:
             # tz = func.trigger.schedule.timezone
 
             # Create croniter with current time
-            now = datetime.now(UTC)
+            now = datetime.now(timezone.utc)
             cron = croniter(cron_expr, now)
             self._schedules[func.id] = cron
 
@@ -188,7 +188,7 @@ class ReactiveScheduler:
             cron.get_next(datetime)  # Reset iterator
 
             # Check if we're within the check interval of the scheduled time
-            time_since_scheduled = (now - prev_time.replace(tzinfo=UTC)).total_seconds()
+            time_since_scheduled = (now - prev_time.replace(tzinfo=timezone.utc)).total_seconds()
 
             # Run if we're within the check interval of the scheduled time
             if 0 <= time_since_scheduled < self.check_interval:

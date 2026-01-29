@@ -5,6 +5,8 @@ or event to discover related events, incidents, and causal
 relationships.
 """
 
+from __future__ import annotations
+
 import re
 import sqlite3
 import uuid
