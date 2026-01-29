@@ -894,12 +894,6 @@ class SetupWizard:
                 self.prefs.api_enabled,
             ),
             (
-                "gui_automation",
-                str(FEATURE_INFO["gui_automation"]["name"]),
-                str(FEATURE_INFO["gui_automation"]["description"]),
-                self.prefs.gui_automation_enabled,
-            ),
-            (
                 "auto_learn_packages",
                 str(FEATURE_INFO["auto_learn_packages"]["name"]),
                 str(FEATURE_INFO["auto_learn_packages"]["description"]),
@@ -917,7 +911,6 @@ class SetupWizard:
 
         if selected is not None:
             self.prefs.api_enabled = "api" in selected
-            self.prefs.gui_automation_enabled = "gui_automation" in selected
             self.prefs.auto_learn_packages = "auto_learn_packages" in selected
 
         console.print()
@@ -1061,8 +1054,6 @@ class SetupWizard:
         features_enabled = []
         if self.prefs.api_enabled:
             features_enabled.append("API")
-        if self.prefs.gui_automation_enabled:
-            features_enabled.append("GUI")
         if self.prefs.auto_learn_packages:
             features_enabled.append("Auto-Learn")
 
@@ -1136,7 +1127,7 @@ class SetupWizard:
             Text.from_markup(
                 "[bold]ELLE needs these services running to work properly:[/bold]\n"
                 "  1. Ollama (local AI inference server)\n"
-                "  2. Language models (SLM for classification, LLM for generation)\n"
+                "  2. Language model (LLM for reasoning and generation)\n"
                 "  3. elled-telemetryd (C telemetry daemon - collects system events)\n"
                 "  4. elled (Python daemon - API and event processing)\n"
             )
@@ -1296,23 +1287,22 @@ class SetupWizard:
         Returns:
             True if models are ready.
         """
-        from elle.rag.constants import LLM_MODEL, SLM_MODEL
+        from elle.rag.constants import LLM_MODEL
 
-        console.print(f"  {Icons.INFO} Setting up language models...")
+        console.print(f"  {Icons.INFO} Setting up language model...")
         console.print()
 
         # Run async setup in sync context
         try:
-            return asyncio.get_event_loop().run_until_complete(self._setup_models_async(SLM_MODEL, LLM_MODEL))
+            return asyncio.get_event_loop().run_until_complete(self._setup_models_async(LLM_MODEL))
         except RuntimeError:
             # No event loop running, create one
-            return asyncio.run(self._setup_models_async(SLM_MODEL, LLM_MODEL))
+            return asyncio.run(self._setup_models_async(LLM_MODEL))
 
-    async def _setup_models_async(self, slm_model: str, llm_model: str) -> bool:
+    async def _setup_models_async(self, llm_model: str) -> bool:
         """Async implementation of model setup.
 
         Args:
-            slm_model: SLM model name.
             llm_model: LLM model name.
 
         Returns:
@@ -1325,7 +1315,6 @@ class SetupWizard:
         try:
             # Check which models are already available
             available = await warmup.list_models()
-            slm_exists = any(slm_model in m for m in available)
             llm_exists = any(llm_model in m for m in available)
 
             # Pull models with progress
@@ -1336,20 +1325,6 @@ class SetupWizard:
                 TaskProgressColumn(),
                 console=console,
             ) as progress:
-                # Pull SLM if needed
-                if not slm_exists:
-                    task = progress.add_task(f"Pulling {slm_model}...", total=None)
-                    success = await self._pull_model_with_progress(slm_model, progress, task)
-                    if success:
-                        desc = f"[green]{Icons.SUCCESS}[/green] {slm_model}"
-                        progress.update(task, description=desc)
-                    else:
-                        desc = f"[red]{Icons.ERROR}[/red] Failed: {slm_model}"
-                        progress.update(task, description=desc)
-                        return False
-                else:
-                    console.print(f"    {Icons.SUCCESS} {slm_model} already available")
-
                 # Pull LLM if needed
                 if not llm_exists:
                     task = progress.add_task(f"Pulling {llm_model}...", total=None)
@@ -1366,77 +1341,44 @@ class SetupWizard:
 
             console.print()
 
-            # Warm up models with progress spinner
-            console.print(f"    {Icons.INFO} Warming up models (first load can take 1-2 minutes)...")
-            console.print("    [dim]Press Ctrl+C to skip warmup - models will load on first use[/dim]")
+            # Warm up model with progress spinner
+            console.print(f"    {Icons.INFO} Warming up model (first load can take 1-2 minutes)...")
+            console.print("    [dim]Press Ctrl+C to skip warmup - model will load on first use[/dim]")
             console.print()
 
             warmup_skipped = False
             try:
-                # Warm SLM with spinner
                 with Progress(
                     SpinnerColumn(),
                     TextColumn("[progress.description]{task.description}"),
                     console=console,
                     transient=True,
                 ) as progress:
-                    slm_task = progress.add_task(f"    Loading {slm_model}...", total=None)
+                    llm_task = progress.add_task(f"    Loading {llm_model}...", total=None)
 
-                    # Run warmup with timeout handling
                     try:
-                        slm_result = await asyncio.wait_for(warmup.warm_slm(), timeout=300.0)
+                        llm_result = await asyncio.wait_for(warmup.warm_llm(), timeout=300.0)
                     except TimeoutError:
                         from elle.rag.model_warmup import WarmupResult
-                        slm_result = WarmupResult(
+                        llm_result = WarmupResult(
                             success=False,
-                            model=slm_model,
+                            model=llm_model,
                             message="Warmup timed out after 5 minutes",
                             error="timeout",
                         )
 
-                    progress.remove_task(slm_task)
+                    progress.remove_task(llm_task)
 
-                if slm_result.success:
-                    console.print(f"    {Icons.SUCCESS} SLM ready ({slm_result.duration_ms:.0f}ms)")
+                if llm_result.success:
+                    console.print(f"    {Icons.SUCCESS} LLM ready ({llm_result.duration_ms:.0f}ms)")
                 else:
-                    console.print(f"    {Icons.WARNING} SLM warmup failed: {slm_result.error}")
-                    console.print(f"    {Icons.INFO} SLM will load on first use (may be slow)")
-
-                # Warm LLM if sufficient VRAM
-                if warmup.has_sufficient_vram():
-                    with Progress(
-                        SpinnerColumn(),
-                        TextColumn("[progress.description]{task.description}"),
-                        console=console,
-                        transient=True,
-                    ) as progress:
-                        llm_task = progress.add_task(f"    Loading {llm_model}...", total=None)
-
-                        try:
-                            llm_result = await asyncio.wait_for(warmup.warm_llm(), timeout=300.0)
-                        except TimeoutError:
-                            from elle.rag.model_warmup import WarmupResult
-                            llm_result = WarmupResult(
-                                success=False,
-                                model=llm_model,
-                                message="Warmup timed out after 5 minutes",
-                                error="timeout",
-                            )
-
-                        progress.remove_task(llm_task)
-
-                    if llm_result.success:
-                        console.print(f"    {Icons.SUCCESS} LLM ready ({llm_result.duration_ms:.0f}ms)")
-                    else:
-                        console.print(f"    {Icons.WARNING} LLM warmup failed: {llm_result.error}")
-                        console.print(f"    {Icons.INFO} LLM will load on first use (may be slow)")
-                else:
-                    console.print(f"    {Icons.INFO} LLM will load on-demand (limited VRAM)")
+                    console.print(f"    {Icons.WARNING} LLM warmup failed: {llm_result.error}")
+                    console.print(f"    {Icons.INFO} LLM will load on first use (may be slow)")
 
             except (KeyboardInterrupt, asyncio.CancelledError):
                 warmup_skipped = True
                 console.print()
-                console.print(f"    {Icons.INFO} Warmup skipped - models will load on first use")
+                console.print(f"    {Icons.INFO} Warmup skipped - model will load on first use")
 
             if warmup_skipped:
                 console.print(f"    {Icons.INFO} This may cause a delay on your first query")

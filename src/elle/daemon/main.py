@@ -78,6 +78,7 @@ class ElledDaemon:
 
         # Services
         self._notification_service: Any = None
+        self._warmup_service: Any = None
 
         # Counters
         self._events_total = 0
@@ -263,6 +264,9 @@ class ElledDaemon:
         # Stop notification service
         await self._stop_notification_service()
 
+        # Stop warmup service (periodic warmup)
+        await self._stop_warmup_service()
+
         logger.info(f"elled stopped (uptime: {self.uptime_sec}s, events: {self._events_total})")
 
     async def run(self) -> None:
@@ -295,41 +299,44 @@ class ElledDaemon:
             logger.error(f"Failed to initialize database: {e}")
 
     async def _warmup_models(self) -> None:
-        """Pre-load LLM models into GPU memory for fast inference."""
+        """Pre-load LLM models into GPU memory for fast inference.
+
+        For local inference, the LLM is kept warm via:
+        1. keep_alive=-1 in Ollama (never unload)
+        2. Periodic warmup pings every 5 minutes (belt-and-suspenders)
+        """
         try:
             from elle.rag.model_warmup import ModelWarmupService
 
-            warmup = ModelWarmupService()
+            self._warmup_service = ModelWarmupService()
 
-            # Ensure models are pulled
-            slm_ready, llm_ready = await warmup.ensure_models_ready()
-
-            if not slm_ready:
-                logger.warning("SLM model not available, classification may be slow")
-            else:
-                slm_result = await warmup.warm_slm()
-                if slm_result.success:
-                    logger.info(f"SLM warmed: {slm_result.model} ({slm_result.duration_ms:.0f}ms)")
-                else:
-                    logger.warning(f"SLM warmup failed: {slm_result.error}")
+            # Ensure LLM model is available
+            llm_ready = await self._warmup_service.ensure_model_ready()
 
             if not llm_ready:
                 logger.warning("LLM model not available, generation will use fallbacks")
-            elif warmup.has_sufficient_vram():
-                llm_result = await warmup.warm_llm()
+            else:
+                llm_result = await self._warmup_service.warm_llm()
                 if llm_result.success:
                     logger.info(f"LLM warmed: {llm_result.model} ({llm_result.duration_ms:.0f}ms)")
+
+                    # Start periodic warmup to keep model loaded
+                    await self._warmup_service.start_periodic_warmup()
                 else:
                     logger.warning(f"LLM warmup failed: {llm_result.error}")
-            else:
-                logger.info("Skipping LLM warmup due to limited VRAM (will load on-demand)")
-
-            await warmup.close()
 
         except ImportError:
             logger.debug("Model warmup service not available")
         except Exception as e:
             logger.warning(f"Model warmup failed: {e}")
+
+    async def _stop_warmup_service(self) -> None:
+        """Stop the model warmup service."""
+        if hasattr(self, "_warmup_service") and self._warmup_service:
+            try:
+                await self._warmup_service.close()
+            except Exception as e:
+                logger.warning(f"Failed to stop warmup service: {e}")
 
     async def _start_notification_service(self) -> None:
         """Start the notification service."""

@@ -12,21 +12,6 @@ from elle.capabilities.dependencies.models import DependencySpec
 # Core Dependencies
 # =============================================================================
 
-ATSPI_DEPENDENCY = DependencySpec(
-    name="atspi",
-    display_name="AT-SPI Accessibility",
-    description="Required for GUI automation and learning application interfaces",
-    apt_packages=("python3-pyatspi", "at-spi2-core"),
-    check_import="gi.repository.Atspi",
-    required_by=(
-        "gui.learn",
-        "gui.click",
-        "gui.type",
-        "gui.navigate",
-        "gui.execute_task",
-    ),
-)
-
 AUGEAS_DEPENDENCY = DependencySpec(
     name="augeas",
     display_name="Augeas Configuration Editor",
@@ -140,7 +125,6 @@ XMLSTARLET_DEPENDENCY = DependencySpec(
 # =============================================================================
 
 CORE_DEPENDENCIES: tuple[DependencySpec, ...] = (
-    ATSPI_DEPENDENCY,
     AUGEAS_DEPENDENCY,
     DOCKER_DEPENDENCY,
     WIREGUARD_DEPENDENCY,
@@ -162,9 +146,6 @@ CORE_DEPENDENCIES: tuple[DependencySpec, ...] = (
 # This prevents arbitrary package installation via prompt injection or other attacks.
 ALLOWED_PACKAGES: frozenset[str] = frozenset(
     {
-        # AT-SPI for GUI automation
-        "python3-pyatspi",
-        "at-spi2-core",
         # Augeas for config editing
         "augeas-tools",
         "python3-augeas",
@@ -186,8 +167,7 @@ ALLOWED_PACKAGES: frozenset[str] = frozenset(
         "lm-sensors",
         "htop",
         "iotop",
-        # Python GObject introspection (needed for AT-SPI)
-        "gir1.2-atspi-2.0",
+        # Python GObject introspection
         "python3-gi",
         # File editing tools
         "jq",

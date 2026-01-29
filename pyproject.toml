@@ -99,7 +99,6 @@ warn_unused_ignores = true
 module = [
     "cryptography.*",
     "bcc.*",
-    "pyatspi.*",
     "gi.*",
     "inotify_simple.*",
     "aiohttp.*",

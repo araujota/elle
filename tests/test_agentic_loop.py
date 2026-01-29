@@ -640,3 +640,297 @@ class TestAgenticLoopResult:
         assert result.tool_call_count == 2
         assert result.total_tokens == 150
         assert result.iterations == 3
+
+
+# =============================================================================
+# Verification System Tests
+# =============================================================================
+
+
+class TestVerificationResult:
+    """Tests for VerificationResult model."""
+
+    def test_verification_result_creation(self):
+        """VerificationResult should store all fields."""
+        from elle.cli.agentic.audit import VerificationResult
+
+        result = VerificationResult(
+            verification_id="test-123",
+            tool_call_id="call-456",
+            passed=True,
+            method="systemctl_status",
+            evidence="Service is active (running)",
+        )
+
+        assert result.verification_id == "test-123"
+        assert result.tool_call_id == "call-456"
+        assert result.passed is True
+        assert result.method == "systemctl_status"
+        assert result.evidence == "Service is active (running)"
+
+    def test_verification_result_failure(self):
+        """VerificationResult should handle failures."""
+        from elle.cli.agentic.audit import VerificationResult
+
+        result = VerificationResult(
+            verification_id="test-789",
+            tool_call_id="call-012",
+            passed=False,
+            method="docker_inspect",
+            evidence="Container still running after stop command",
+        )
+
+        assert result.passed is False
+        assert "Container still running" in result.evidence
+
+
+class TestVerificationStrategies:
+    """Tests for domain-specific verification strategies."""
+
+    @pytest.mark.asyncio
+    async def test_verify_service_start(self):
+        """_verify_service should verify service start operations."""
+        loop = AgenticLoop(prefetch_context=False, enable_verification=True)
+
+        with patch.object(loop.tools, "execute") as mock_execute:
+            mock_execute.return_value = ToolResult(
+                tool_name="get_system_info",
+                success=True,
+                output="Active: active (running)",
+            )
+
+            result = await loop._verify_service(
+                "ver-123", "call-456", "service.start", {"service": "nginx"}
+            )
+
+            assert result.passed is True
+            assert result.method == "systemctl_status"
+            assert "active" in result.evidence.lower()
+
+    @pytest.mark.asyncio
+    async def test_verify_service_stop(self):
+        """_verify_service should verify service stop operations."""
+        loop = AgenticLoop(prefetch_context=False, enable_verification=True)
+
+        with patch.object(loop.tools, "execute") as mock_execute:
+            mock_execute.return_value = ToolResult(
+                tool_name="get_system_info",
+                success=True,
+                output="Active: inactive (dead)",
+            )
+
+            result = await loop._verify_service(
+                "ver-123", "call-456", "service.stop", {"service": "nginx"}
+            )
+
+            assert result.passed is True
+            assert "inactive" in result.evidence.lower()
+
+    @pytest.mark.asyncio
+    async def test_verify_file_write(self):
+        """_verify_file should verify file write operations."""
+        loop = AgenticLoop(prefetch_context=False, enable_verification=True)
+
+        with patch.object(loop.tools, "execute") as mock_execute:
+            mock_execute.return_value = ToolResult(
+                tool_name="shell_command",
+                success=True,
+                output="  File: /etc/hosts\n  Size: 158",
+            )
+
+            result = await loop._verify_file(
+                "ver-123", "call-456", "file.write", {"path": "/etc/hosts"}
+            )
+
+            assert result.passed is True
+            assert result.method == "stat_check"
+
+    @pytest.mark.asyncio
+    async def test_verify_file_delete(self):
+        """_verify_file should verify file delete operations."""
+        loop = AgenticLoop(prefetch_context=False, enable_verification=True)
+
+        with patch.object(loop.tools, "execute") as mock_execute:
+            mock_execute.return_value = ToolResult(
+                tool_name="shell_command",
+                success=True,
+                output="File successfully deleted",
+            )
+
+            result = await loop._verify_file(
+                "ver-123", "call-456", "file.delete", {"path": "/tmp/test.txt"}
+            )
+
+            assert result.passed is True
+            assert result.method == "existence_check"
+
+    @pytest.mark.asyncio
+    async def test_verify_docker_start(self):
+        """_verify_docker should verify container start operations."""
+        loop = AgenticLoop(prefetch_context=False, enable_verification=True)
+
+        with patch.object(loop.tools, "execute") as mock_execute:
+            mock_execute.return_value = ToolResult(
+                tool_name="shell_command",
+                success=True,
+                output="true",
+            )
+
+            result = await loop._verify_docker(
+                "ver-123", "call-456", "docker.start", {"container": "myapp"}
+            )
+
+            assert result.passed is True
+            assert result.method == "docker_inspect"
+
+    @pytest.mark.asyncio
+    async def test_verify_docker_stop(self):
+        """_verify_docker should verify container stop operations."""
+        loop = AgenticLoop(prefetch_context=False, enable_verification=True)
+
+        with patch.object(loop.tools, "execute") as mock_execute:
+            mock_execute.return_value = ToolResult(
+                tool_name="shell_command",
+                success=True,
+                output="false",
+            )
+
+            result = await loop._verify_docker(
+                "ver-123", "call-456", "docker.stop", {"container": "myapp"}
+            )
+
+            assert result.passed is True
+            assert result.method == "docker_inspect"
+
+    @pytest.mark.asyncio
+    async def test_verify_package_install(self):
+        """_verify_package should verify package installation."""
+        loop = AgenticLoop(prefetch_context=False, enable_verification=True)
+
+        with patch.object(loop.tools, "execute") as mock_execute:
+            mock_execute.return_value = ToolResult(
+                tool_name="shell_command",
+                success=True,
+                output="Status: install ok installed\nVersion: 1.2.3",
+            )
+
+            result = await loop._verify_package(
+                "ver-123", "call-456", "package.install", {"package": "nginx"}
+            )
+
+            assert result.passed is True
+            assert result.method == "dpkg_status"
+
+    @pytest.mark.asyncio
+    async def test_verify_config_edit_json(self):
+        """_verify_config should validate JSON config files."""
+        loop = AgenticLoop(prefetch_context=False, enable_verification=True)
+
+        call_count = 0
+
+        async def mock_execute_side_effect(tool_name, args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return ToolResult(
+                    tool_name="shell_command",
+                    success=True,
+                    output='{"key": "value"}',
+                )
+            else:
+                return ToolResult(
+                    tool_name="shell_command",
+                    success=True,
+                    output="VALID",
+                )
+
+        with patch.object(loop.tools, "execute", side_effect=mock_execute_side_effect):
+            result = await loop._verify_config(
+                "ver-123", "call-456", "config.edit", {"path": "/etc/app/config.json"}
+            )
+
+            assert result.passed is True
+            assert "JSON syntax: valid" in result.evidence
+
+
+class TestVerificationIntegration:
+    """Integration tests for verification in the agent loop."""
+
+    @pytest.mark.asyncio
+    async def test_verify_outcome_returns_tuple(self):
+        """_verify_outcome should return tuple of (passed, VerificationResult)."""
+        loop = AgenticLoop(prefetch_context=False, enable_verification=True)
+
+        # Mock tool call
+        mock_tool_call = MagicMock()
+        mock_tool_call.name = "execute_capability"
+        mock_tool_call.id = "call_123"
+        mock_tool_call.arguments = {"capability_name": "service.restart", "args": {"service": "nginx"}}
+
+        # Mock result
+        mock_result = ToolResult(
+            tool_name="execute_capability",
+            success=True,
+            output="Service restarted successfully",
+        )
+
+        with patch.object(loop.tools, "execute") as mock_execute:
+            mock_execute.return_value = ToolResult(
+                tool_name="get_system_info",
+                success=True,
+                output="Active: active (running)",
+            )
+
+            passed, verification = await loop._verify_outcome(mock_tool_call, mock_result)
+
+            assert isinstance(passed, bool)
+            assert passed is True
+            assert verification is not None
+            assert verification.passed is True
+            assert verification.method == "systemctl_status"
+
+    @pytest.mark.asyncio
+    async def test_verify_outcome_failure_returns_false(self):
+        """_verify_outcome should return False for failed capability execution."""
+        loop = AgenticLoop(prefetch_context=False, enable_verification=True)
+
+        mock_tool_call = MagicMock()
+        mock_tool_call.name = "execute_capability"
+        mock_tool_call.id = "call_123"
+        mock_tool_call.arguments = {"capability_name": "service.restart"}
+
+        mock_result = ToolResult(
+            tool_name="execute_capability",
+            success=False,
+            output="",
+            error="Service not found",
+        )
+
+        passed, verification = await loop._verify_outcome(mock_tool_call, mock_result)
+
+        assert passed is False
+        assert verification is not None
+        assert verification.passed is False
+        assert "failed" in verification.method.lower()
+
+    @pytest.mark.asyncio
+    async def test_verify_outcome_unknown_domain(self):
+        """_verify_outcome should trust result for unknown domains."""
+        loop = AgenticLoop(prefetch_context=False, enable_verification=True)
+
+        mock_tool_call = MagicMock()
+        mock_tool_call.name = "execute_capability"
+        mock_tool_call.id = "call_123"
+        mock_tool_call.arguments = {"capability_name": "custom.operation", "args": {}}
+
+        mock_result = ToolResult(
+            tool_name="execute_capability",
+            success=True,
+            output="Operation completed",
+        )
+
+        passed, verification = await loop._verify_outcome(mock_tool_call, mock_result)
+
+        assert passed is True
+        assert verification is not None
+        assert verification.method == "result_trust"

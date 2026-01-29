@@ -1,0 +1,36 @@
+[Unit]
+Description=ELLE GPU Telemetry Daemon
+Documentation=https://github.com/elle-project/elle
+After=network.target elled-telemetryd.service
+Wants=elled-telemetryd.service
+ConditionPathExists=/usr/bin/nvidia-smi
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/elled-gpud
+Restart=on-failure
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+
+# Allow access to GPU devices and NVML
+PrivateDevices=no
+DeviceAllow=/dev/nvidia* rw
+DeviceAllow=/dev/nvidiactl rw
+DeviceAllow=/dev/nvidia-uvm rw
+
+# Read access to /proc for process names
+ReadOnlyPaths=/proc
+
+# Socket access
+ReadWritePaths=/run/elle
+
+[Install]
+WantedBy=multi-user.target

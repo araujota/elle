@@ -533,12 +533,11 @@ def record_arm_action(
 
     Arms that use this:
     - /learn (package capability learning)
-    - /map (GUI automation learning)
     - /react (reactive function management)
     - /mobile (mobile gateway management)
 
     Args:
-        arm_name: Name of the arm (e.g., "package_learning", "gui_mapping")
+        arm_name: Name of the arm (e.g., "package_learning")
         action: Action performed (e.g., "learn_package", "approve_capability")
         target: Target of the action (e.g., package name, capability name)
         success: Whether the action succeeded

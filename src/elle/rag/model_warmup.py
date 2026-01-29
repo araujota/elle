@@ -1,20 +1,16 @@
 """Model warmup service for ELLE.
 
-Provides async methods to pre-load SLM and LLM models into GPU memory
+Provides async methods to pre-load the LLM model into GPU memory
 for reduced inference latency. The service handles:
 
 - Model availability checking and pulling
-- VRAM detection for intelligent warmup decisions
 - Keeping models warm via Ollama's keep_alive mechanism
 - Periodic health checks to maintain model warmth
 
 Usage:
     warmup = ModelWarmupService()
-    await warmup.ensure_models_ready()
-    await warmup.warm_slm()  # Always warm SLM
-
-    if warmup.has_sufficient_vram(threshold_gb=14):
-        await warmup.warm_llm()  # Warm LLM if enough VRAM
+    await warmup.ensure_model_ready()
+    await warmup.warm_llm()
 """
 
 from __future__ import annotations
@@ -29,13 +25,10 @@ from typing import Any
 import httpx
 
 from elle.rag.constants import (
-    DUAL_MODEL_VRAM_THRESHOLD,
     LLM_KEEP_ALIVE,
     LLM_MODEL,
     LLM_NUM_CTX,
-    SLM_KEEP_ALIVE,
-    SLM_MODEL,
-    SLM_NUM_CTX,
+    LLM_WARMUP_INTERVAL,
     WARMUP_PROMPT,
     WARMUP_TIMEOUT,
 )
@@ -66,35 +59,32 @@ class WarmupResult:
 
 
 class ModelWarmupService:
-    """Service for warming up SLM and LLM models.
+    """Service for warming up the LLM model.
 
-    Pre-loads models into GPU memory to minimize inference latency.
-    The SLM is kept warm indefinitely for instant classification,
-    while the LLM uses a configurable timeout.
+    Pre-loads the model into GPU memory to minimize inference latency.
+    Supports periodic warmup to keep the model loaded for local inference.
 
     Attributes:
-        slm_model: SLM model name (default: phi3.5 Q8).
         llm_model: LLM model name (default: qwen2.5 Q8).
         host: Ollama API host URL.
     """
 
     def __init__(
         self,
-        slm_model: str = SLM_MODEL,
         llm_model: str = LLM_MODEL,
         host: str = "http://localhost:11434",
     ) -> None:
         """Initialize the warmup service.
 
         Args:
-            slm_model: SLM model name for classification.
             llm_model: LLM model name for generation.
             host: Ollama API host URL.
         """
-        self.slm_model = slm_model
         self.llm_model = llm_model
         self.host = host
         self._client: httpx.AsyncClient | None = None
+        self._warmup_task: asyncio.Task[None] | None = None
+        self._shutdown_event: asyncio.Event | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create the async HTTP client."""
@@ -106,7 +96,10 @@ class ModelWarmupService:
         return self._client
 
     async def close(self) -> None:
-        """Close the HTTP client."""
+        """Close the HTTP client and stop periodic warmup."""
+        # Stop periodic warmup if running
+        await self.stop_periodic_warmup()
+
         if self._client:
             await self._client.aclose()
             self._client = None
@@ -228,15 +221,13 @@ class ModelWarmupService:
             logger.error(f"Failed to pull model {model}: {e}")
             return False
 
-    async def ensure_models_ready(self) -> tuple[bool, bool]:
-        """Ensure both SLM and LLM models are available.
+    async def ensure_model_ready(self) -> bool:
+        """Ensure the LLM model is available.
 
         Returns:
-            Tuple of (slm_ready, llm_ready).
+            True if ready.
         """
-        slm_ready = await self.ensure_model_exists(self.slm_model)
-        llm_ready = await self.ensure_model_exists(self.llm_model)
-        return slm_ready, llm_ready
+        return await self.ensure_model_exists(self.llm_model)
 
     # -------------------------------------------------------------------------
     # Model Warmup
@@ -308,25 +299,8 @@ class ModelWarmupService:
                 error=str(e),
             )
 
-    async def warm_slm(self) -> WarmupResult:
-        """Warm the SLM for instant classification.
-
-        The SLM is kept warm indefinitely (keep_alive=-1).
-
-        Returns:
-            WarmupResult with status.
-        """
-        logger.info(f"Warming SLM: {self.slm_model}")
-        return await self._warm_model(
-            model=self.slm_model,
-            keep_alive=SLM_KEEP_ALIVE,
-            num_ctx=SLM_NUM_CTX,
-        )
-
     async def warm_llm(self) -> WarmupResult:
         """Warm the LLM for generation.
-
-        The LLM uses a configurable keep_alive duration.
 
         Returns:
             WarmupResult with status.
@@ -338,18 +312,95 @@ class ModelWarmupService:
             num_ctx=LLM_NUM_CTX,
         )
 
-    async def warm_both(self) -> tuple[WarmupResult, WarmupResult]:
-        """Warm both SLM and LLM models.
+    # -------------------------------------------------------------------------
+    # Periodic Warmup (Keep Model Warm)
+    # -------------------------------------------------------------------------
 
-        Returns:
-            Tuple of (slm_result, llm_result).
+    async def start_periodic_warmup(
+        self,
+        interval: int = LLM_WARMUP_INTERVAL,
+    ) -> None:
+        """Start periodic warmup to keep the LLM loaded in memory.
+
+        This runs a background task that periodically pings the model
+        to ensure it stays loaded for fast local inference.
+
+        Args:
+            interval: Seconds between warmup pings (default: 5 minutes).
         """
-        # Run warmups concurrently
-        slm_task = asyncio.create_task(self.warm_slm())
-        llm_task = asyncio.create_task(self.warm_llm())
+        if self._warmup_task is not None:
+            logger.warning("Periodic warmup already running")
+            return
 
-        slm_result, llm_result = await asyncio.gather(slm_task, llm_task)
-        return slm_result, llm_result
+        self._shutdown_event = asyncio.Event()
+        self._warmup_task = asyncio.create_task(
+            self._periodic_warmup_loop(interval),
+            name="llm-warmup",
+        )
+        logger.info(f"Started periodic LLM warmup (interval={interval}s)")
+
+    async def stop_periodic_warmup(self) -> None:
+        """Stop the periodic warmup task."""
+        if self._warmup_task is None:
+            return
+
+        if self._shutdown_event:
+            self._shutdown_event.set()
+
+        self._warmup_task.cancel()
+        try:
+            await self._warmup_task
+        except asyncio.CancelledError:
+            pass
+
+        self._warmup_task = None
+        self._shutdown_event = None
+        logger.info("Stopped periodic LLM warmup")
+
+    async def _periodic_warmup_loop(self, interval: int) -> None:
+        """Background loop that periodically warms the LLM.
+
+        Args:
+            interval: Seconds between warmup pings.
+        """
+        while True:
+            try:
+                # Wait for the interval or shutdown
+                if self._shutdown_event:
+                    try:
+                        await asyncio.wait_for(
+                            self._shutdown_event.wait(),
+                            timeout=interval,
+                        )
+                        # Event was set, time to shut down
+                        break
+                    except TimeoutError:
+                        # Timeout expired, time to warm up
+                        pass
+                else:
+                    await asyncio.sleep(interval)
+
+                # Check if model is still loaded
+                if not await self.is_model_loaded(self.llm_model):
+                    logger.info("LLM not loaded, warming up...")
+                    result = await self.warm_llm()
+                    if result.success:
+                        logger.debug(f"LLM warmup ping successful ({result.duration_ms:.0f}ms)")
+                    else:
+                        logger.warning(f"LLM warmup ping failed: {result.error}")
+                else:
+                    logger.debug("LLM still loaded, skipping warmup ping")
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in periodic warmup: {e}")
+                # Continue the loop, don't crash
+
+    @property
+    def is_periodic_warmup_running(self) -> bool:
+        """Check if periodic warmup is running."""
+        return self._warmup_task is not None and not self._warmup_task.done()
 
     # -------------------------------------------------------------------------
     # VRAM Detection
@@ -418,27 +469,6 @@ class ModelWarmupService:
             pass
 
         return None
-
-    def has_sufficient_vram(
-        self,
-        threshold_gb: float = DUAL_MODEL_VRAM_THRESHOLD,
-    ) -> bool:
-        """Check if system has sufficient VRAM for both models.
-
-        Args:
-            threshold_gb: Minimum VRAM in GB.
-
-        Returns:
-            True if VRAM >= threshold.
-        """
-        available = self.get_available_vram_gb()
-        if available is None:
-            logger.warning("Unable to detect VRAM, assuming sufficient")
-            return True
-
-        sufficient = available >= threshold_gb
-        logger.debug(f"VRAM: {available:.1f}GB available, threshold={threshold_gb}GB, sufficient={sufficient}")
-        return sufficient
 
 
 # Module-level singleton

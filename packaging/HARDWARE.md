@@ -40,17 +40,16 @@ Recommended configuration provides comfortable headroom for:
 | SQLite databases | 10-50 MB |
 | eBPF programs | 5-20 MB |
 
-### Ollama LLM Models
+### Ollama LLM Model
 
 | Model | Memory (Quantized) |
 |-------|-------------------|
-| phi3.5:3.8b-mini-instruct-q8_0 | ~4 GB |
 | qwen2.5:7b-instruct-q8_0 | ~8 GB |
-| Both loaded | ~12 GB peak |
 
-**Important:** Ollama keeps models in memory. The SLM (classification model)
-is kept loaded permanently (`keep_alive=-1`) while the LLM (generation model)
-unloads after 10 minutes of inactivity.
+**Note:** For local inference, the LLM stays loaded permanently in GPU memory
+(`keep_alive=-1`). The daemon sends periodic warmup pings to ensure the model
+remains ready for fast response times. Intent routing uses rule-based
+classification and does not require the LLM.
 
 ## Storage Requirements
 
@@ -63,14 +62,13 @@ unloads after 10 minutes of inactivity.
 | Man Vault (indexed) | ~100 MB |
 | Incident Vault (grows over time) | Variable |
 
-### Ollama Models
+### Ollama Model
 
 | Model | Size on Disk |
 |-------|--------------|
-| phi3.5:3.8b-mini-instruct-q8_0 | ~4 GB |
 | qwen2.5:7b-instruct-q8_0 | ~8 GB |
 
-**Total initial storage:** ~15 GB (with both models)
+**Total initial storage:** ~10 GB (with LLM model)
 
 ## GPU Acceleration (Optional)
 
@@ -170,7 +168,7 @@ For systems with limited RAM:
 
 1. Use smaller models:
    ```bash
-   ollama pull phi3.5:3.8b-mini-instruct-q4_0  # Lower quantization
+   ollama pull qwen2.5:3b-instruct-q8_0  # Smaller LLM (~4GB)
    ```
 
 2. Reduce daemon memory limit:
@@ -190,7 +188,7 @@ For systems with limited RAM:
 
 For systems with limited storage:
 
-1. Use only the SLM (skip 7B model for generation)
+1. Use a smaller quantized model (q4 instead of q8)
 2. Periodically prune incident vault
 3. Limit Man Vault to essential commands
 

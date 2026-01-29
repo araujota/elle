@@ -415,52 +415,6 @@ curl http://localhost:8377/v1/chat/completions \
 
 ---
 
-## GUI Automation
-
-ELLE can control desktop applications via AT-SPI accessibility APIs.
-
-### Learning Application UIs
-
-```
-elle> /learn firefox
-Learning Firefox's UI structure...
-✓ Recorded 47 elements across 3 windows
-✓ Recipe saved: firefox v1
-
-elle> /learn list
-firefox  v1  47 elements  2024-01-15
-settings v1  23 elements  2024-01-14
-```
-
-### Executing GUI Tasks
-
-```
-elle> open firefox and go to github.com
-elle> in settings, enable dark mode
-elle> click the Save button in the dialog
-```
-
-### Self-Healing
-
-ELLE's GUI automation is self-healing:
-
-- Adapts when UIs change between versions
-- Uses fuzzy matching to find elements
-- Falls back to role/sibling context matching
-- Records adaptations for future use
-
-### GUI Commands
-
-| Command | Description |
-|---------|-------------|
-| `/learn <app>` | Learn an application's UI |
-| `/learn list` | List all recipes |
-| `/learn show <app>` | Show recipe details |
-| `/learn rebuild <app>` | Re-learn UI |
-| `/learn delete <app>` | Delete recipe |
-
----
-
 ## Incident Memory
 
 The Incident Vault stores ELLE's decision memory.

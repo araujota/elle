@@ -19,7 +19,6 @@ IntentLabel = Literal[
     "fixit",
     "navigation",
     "meta",
-    "gui_task",
     "explain_command",
     "learn_package",
     "capabilities",
@@ -38,7 +37,6 @@ class Intent(str, Enum):
     FIXIT = "fixit"
     NAVIGATION = "navigation"
     META = "meta"
-    GUI_TASK = "gui_task"
     EXPLAIN_COMMAND = "explain_command"
     LEARN_PACKAGE = "learn_package"
     CAPABILITIES = "capabilities"
@@ -69,8 +67,7 @@ class Intent(str, Enum):
 class IntentResult(BaseModel):
     """Result of intent classification.
 
-    This schema is returned by both rule-based and SLM classification.
-    The SLM is instructed to output JSON matching this exact schema.
+    This schema is returned by the rule-based classifier.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -90,8 +87,8 @@ class IntentResult(BaseModel):
         default=False,
         description="True if confidence is too low to proceed",
     )
-    classified_by: Literal["rule", "slm", "fallback"] = Field(
-        default="slm",
+    classified_by: Literal["rule", "fallback"] = Field(
+        default="rule",
         description="How the classification was determined",
     )
 

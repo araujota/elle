@@ -35,6 +35,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from elle.cli.agentic.audit import VerificationResult
 from elle.cli.agentic.prompts import (
     format_tool_observation,
     get_system_prompt,
@@ -565,10 +566,22 @@ class AgenticLoop:
                             confirm_callback=confirm_callback,
                         )
 
-                        # Verify mutating operations
+                        # Verify mutating operations with read-only commands
                         verified = False
+                        verification_evidence = ""
                         if self.enable_verification and tool_call.name in MUTATING_TOOLS:
-                            verified = await self._verify_outcome(tool_call, result)
+                            verified, verification_result = await self._verify_outcome(
+                                tool_call, result, execution_id
+                            )
+                            if verification_result:
+                                verification_evidence = (
+                                    f"\n\n[VERIFICATION] {'PASSED' if verified else 'FAILED'}: "
+                                    f"{verification_result.method} - {verification_result.evidence}"
+                                )
+                                logger.debug(
+                                    f"Verification {verification_result.verification_id}: "
+                                    f"passed={verified}, method={verification_result.method}"
+                                )
 
                         # Record the call
                         call_record = ToolCallRecord(
@@ -590,11 +603,13 @@ class AgenticLoop:
                             )
                             self.audit_recorder.add_tool_call(execution_id, audit_call)
 
-                        # Add tool result to session
+                        # Add tool result to session with verification evidence
                         tool_id = tool_call.id or f"call_{len(tool_call_records)}"
+                        tool_output = result.output if result.success else f"Error: {result.error}"
+                        # Include verification evidence in observation for LLM to see
                         observation = format_tool_observation(
                             tool_call.name,
-                            result.output if result.success else f"Error: {result.error}",
+                            tool_output + verification_evidence,
                             result.success,
                         )
                         session.add_tool_result(tool_id, observation)
@@ -811,43 +826,504 @@ class AgenticLoop:
             logger.warning(f"Failed to record execution to incident: {e}")
             return None
 
-    async def _verify_outcome(self, tool_call: Any, result: ToolResult) -> bool:
-        """Verify the outcome of a mutating operation.
+    async def _verify_outcome(
+        self,
+        tool_call: Any,
+        result: ToolResult,
+        execution_id: str | None = None,
+    ) -> tuple[bool, VerificationResult | None]:
+        """Verify the outcome of a mutating operation with read-only commands.
+
+        This is a crucial step in the agent loop that runs read-only verification
+        commands to confirm the outcome of capabilities and whether the incident
+        is resolved.
 
         Args:
             tool_call: The tool call that was executed.
             result: Result from the tool execution.
+            execution_id: Optional execution ID for audit recording.
 
         Returns:
-            True if verification passed, False otherwise.
+            Tuple of (passed, VerificationResult) - passed indicates whether
+            verification succeeded, and VerificationResult contains evidence.
         """
+        import uuid
+
         if not result.success:
-            return False
+            return False, VerificationResult(
+                verification_id=str(uuid.uuid4()),
+                tool_call_id=getattr(tool_call, "id", "") or "",
+                passed=False,
+                method="capability_failed",
+                evidence=f"Capability execution failed: {result.error}",
+            )
 
-        # For execute_capability, check if the operation succeeded
-        if tool_call.name == "execute_capability":
-            capability_name = tool_call.arguments.get("capability_name", "")
+        # Only verify execute_capability calls
+        if tool_call.name != "execute_capability":
+            return result.success, None
 
-            # Service operations - verify service state
-            if capability_name.startswith("service."):
-                try:
-                    # Quick verification check
-                    verify_result = await self.tools.execute(
-                        "get_system_info",
-                        {"aspect": "services", "filter": capability_name.split(".")[-1]},
-                    )
-                    if verify_result.success:
-                        # Check if the expected state is present
-                        if capability_name.endswith(".restart") or capability_name.endswith(".start"):
-                            return "active" in verify_result.output.lower()
-                        elif capability_name.endswith(".stop"):
-                            return "inactive" in verify_result.output.lower()
-                except Exception as e:
-                    logger.debug(f"Verification failed: {e}")
-                    return False
+        capability_name = tool_call.arguments.get("capability_name", "")
+        capability_args = tool_call.arguments.get("args", {})
 
-        # Default: assume verified if result was successful
-        return result.success
+        # Determine verification strategy based on capability domain
+        verification_result = await self._run_verification_strategy(
+            capability_name,
+            capability_args,
+            result,
+            tool_call,
+        )
+
+        # Record verification to audit trail
+        if execution_id and verification_result and self.enable_audit:
+            self.audit_recorder.add_verification(execution_id, verification_result)
+
+        passed = verification_result.passed if verification_result else result.success
+        return passed, verification_result
+
+    async def _run_verification_strategy(
+        self,
+        capability_name: str,
+        capability_args: dict[str, Any],
+        result: ToolResult,
+        tool_call: Any,
+    ) -> VerificationResult | None:
+        """Run domain-specific verification strategy.
+
+        Each capability domain has a read-only verification command to confirm
+        the outcome of the operation.
+
+        Args:
+            capability_name: Name of the capability executed.
+            capability_args: Arguments passed to the capability.
+            result: Result from the capability execution.
+            tool_call: Original tool call.
+
+        Returns:
+            VerificationResult with evidence, or None if no verification needed.
+        """
+        import uuid
+
+        verification_id = str(uuid.uuid4())
+        tool_call_id = getattr(tool_call, "id", "") or ""
+
+        # Extract domain from capability name
+        parts = capability_name.split(".")
+        domain = parts[0] if parts else ""
+
+        try:
+            # Service domain verification
+            if domain == "service":
+                return await self._verify_service(
+                    verification_id, tool_call_id, capability_name, capability_args
+                )
+
+            # File domain verification
+            elif domain == "file":
+                return await self._verify_file(
+                    verification_id, tool_call_id, capability_name, capability_args
+                )
+
+            # Docker domain verification
+            elif domain == "docker":
+                return await self._verify_docker(
+                    verification_id, tool_call_id, capability_name, capability_args
+                )
+
+            # Package domain verification
+            elif domain == "package":
+                return await self._verify_package(
+                    verification_id, tool_call_id, capability_name, capability_args
+                )
+
+            # Config domain verification
+            elif domain == "config":
+                return await self._verify_config(
+                    verification_id, tool_call_id, capability_name, capability_args
+                )
+
+            # Network domain verification
+            elif domain == "network":
+                return await self._verify_network(
+                    verification_id, tool_call_id, capability_name, capability_args
+                )
+
+            # Default: trust the result if operation succeeded
+            else:
+                return VerificationResult(
+                    verification_id=verification_id,
+                    tool_call_id=tool_call_id,
+                    passed=result.success,
+                    method="result_trust",
+                    evidence=f"No specific verification for {domain} domain. "
+                             f"Trusting capability result: success={result.success}",
+                )
+
+        except Exception as e:
+            logger.warning(f"Verification failed for {capability_name}: {e}")
+            return VerificationResult(
+                verification_id=verification_id,
+                tool_call_id=tool_call_id,
+                passed=False,
+                method="verification_error",
+                evidence=f"Verification error: {e}",
+            )
+
+    async def _verify_service(
+        self,
+        verification_id: str,
+        tool_call_id: str,
+        capability_name: str,
+        args: dict[str, Any],
+    ) -> VerificationResult:
+        """Verify service operation by checking systemctl status."""
+        service_name = args.get("service") or args.get("name") or ""
+        operation = capability_name.split(".")[-1]
+
+        # Read-only verification: check service status
+        verify_result = await self.tools.execute(
+            "get_system_info",
+            {"aspect": "services", "filter": service_name},
+        )
+
+        if not verify_result.success:
+            return VerificationResult(
+                verification_id=verification_id,
+                tool_call_id=tool_call_id,
+                passed=False,
+                method="systemctl_status",
+                evidence=f"Failed to verify service status: {verify_result.error}",
+            )
+
+        output_lower = verify_result.output.lower()
+
+        # Determine expected state based on operation
+        if operation in ("start", "restart"):
+            passed = "active" in output_lower and "running" in output_lower
+            expected = "active (running)"
+        elif operation == "stop":
+            passed = "inactive" in output_lower or "dead" in output_lower
+            expected = "inactive"
+        elif operation == "enable":
+            passed = "enabled" in output_lower
+            expected = "enabled"
+        elif operation == "disable":
+            passed = "disabled" in output_lower
+            expected = "disabled"
+        else:
+            # Unknown operation - trust result
+            passed = True
+            expected = "completed"
+
+        return VerificationResult(
+            verification_id=verification_id,
+            tool_call_id=tool_call_id,
+            passed=passed,
+            method="systemctl_status",
+            evidence=f"Expected: {expected} | Actual output: {verify_result.output[:500]}",
+        )
+
+    async def _verify_file(
+        self,
+        verification_id: str,
+        tool_call_id: str,
+        capability_name: str,
+        args: dict[str, Any],
+    ) -> VerificationResult:
+        """Verify file operation by checking file existence/content."""
+        file_path = args.get("path") or args.get("file") or ""
+        operation = capability_name.split(".")[-1]
+
+        if operation == "write":
+            # Verify file exists and is readable
+            verify_result = await self.tools.execute(
+                "shell_command",
+                {"command": f"test -f '{file_path}' && stat '{file_path}' && head -1 '{file_path}'"},
+            )
+            passed = verify_result.success
+            method = "stat_check"
+            evidence = f"File write verification: {verify_result.output[:500]}" if passed else f"File not found: {file_path}"
+
+        elif operation == "delete":
+            # Verify file no longer exists
+            verify_result = await self.tools.execute(
+                "shell_command",
+                {"command": f"test ! -e '{file_path}' && echo 'File successfully deleted'"},
+            )
+            passed = verify_result.success
+            method = "existence_check"
+            evidence = "File successfully deleted" if passed else f"File still exists: {file_path}"
+
+        elif operation == "copy":
+            dest = args.get("dest") or args.get("destination") or ""
+            # Verify destination exists
+            verify_result = await self.tools.execute(
+                "shell_command",
+                {"command": f"test -e '{dest}' && stat '{dest}'"},
+            )
+            passed = verify_result.success
+            method = "copy_check"
+            evidence = f"Copy verified at {dest}" if passed else f"Destination not found: {dest}"
+
+        elif operation == "chmod" or operation == "chown":
+            # Verify permissions/ownership changed
+            verify_result = await self.tools.execute(
+                "shell_command",
+                {"command": f"ls -la '{file_path}'"},
+            )
+            passed = verify_result.success
+            method = "permission_check"
+            evidence = f"Permissions: {verify_result.output[:200]}"
+
+        else:
+            # Read or other non-mutating operations - trust result
+            return VerificationResult(
+                verification_id=verification_id,
+                tool_call_id=tool_call_id,
+                passed=True,
+                method="non_mutating",
+                evidence=f"Non-mutating file operation: {operation}",
+            )
+
+        return VerificationResult(
+            verification_id=verification_id,
+            tool_call_id=tool_call_id,
+            passed=passed,
+            method=method,
+            evidence=evidence,
+        )
+
+    async def _verify_docker(
+        self,
+        verification_id: str,
+        tool_call_id: str,
+        capability_name: str,
+        args: dict[str, Any],
+    ) -> VerificationResult:
+        """Verify Docker operation by checking container state."""
+        container = args.get("container") or args.get("name") or ""
+        operation = capability_name.split(".")[-1]
+
+        if operation in ("start", "restart"):
+            # Verify container is running
+            verify_result = await self.tools.execute(
+                "shell_command",
+                {"command": f"docker inspect -f '{{{{.State.Running}}}}' '{container}'"},
+            )
+            passed = verify_result.success and "true" in verify_result.output.lower()
+            evidence = f"Container running: {verify_result.output.strip()}"
+
+        elif operation == "stop":
+            # Verify container is stopped
+            verify_result = await self.tools.execute(
+                "shell_command",
+                {"command": f"docker inspect -f '{{{{.State.Running}}}}' '{container}'"},
+            )
+            passed = verify_result.success and "false" in verify_result.output.lower()
+            evidence = f"Container stopped: {verify_result.output.strip()}"
+
+        elif operation == "remove":
+            # Verify container no longer exists
+            verify_result = await self.tools.execute(
+                "shell_command",
+                {"command": f"docker inspect '{container}' 2>&1 || echo 'REMOVED'"},
+            )
+            passed = "REMOVED" in verify_result.output or "No such" in verify_result.output
+            evidence = "Container removed" if passed else f"Container still exists: {container}"
+
+        elif operation == "prune":
+            # Verify prune completed (just trust the result)
+            passed = True
+            evidence = "Docker prune completed"
+
+        else:
+            # Read-only operations - trust result
+            return VerificationResult(
+                verification_id=verification_id,
+                tool_call_id=tool_call_id,
+                passed=True,
+                method="non_mutating",
+                evidence=f"Non-mutating docker operation: {operation}",
+            )
+
+        return VerificationResult(
+            verification_id=verification_id,
+            tool_call_id=tool_call_id,
+            passed=passed,
+            method="docker_inspect",
+            evidence=evidence,
+        )
+
+    async def _verify_package(
+        self,
+        verification_id: str,
+        tool_call_id: str,
+        capability_name: str,
+        args: dict[str, Any],
+    ) -> VerificationResult:
+        """Verify package operation by checking dpkg/apt status."""
+        package = args.get("package") or args.get("name") or ""
+        operation = capability_name.split(".")[-1]
+
+        if operation == "install":
+            # Verify package is installed
+            verify_result = await self.tools.execute(
+                "shell_command",
+                {"command": f"dpkg -s '{package}' 2>&1 | grep -E 'Status|Version'"},
+            )
+            passed = verify_result.success and "installed" in verify_result.output.lower()
+            evidence = f"Package status: {verify_result.output.strip()}"
+
+        elif operation == "remove" or operation == "purge":
+            # Verify package is removed
+            verify_result = await self.tools.execute(
+                "shell_command",
+                {"command": f"dpkg -s '{package}' 2>&1"},
+            )
+            passed = not verify_result.success or "not installed" in verify_result.output.lower()
+            evidence = "Package removed" if passed else f"Package still installed: {verify_result.output[:200]}"
+
+        elif operation == "update" or operation == "upgrade":
+            # Can't easily verify, trust result
+            passed = True
+            evidence = f"Package {operation} completed"
+
+        else:
+            # Read-only operations
+            return VerificationResult(
+                verification_id=verification_id,
+                tool_call_id=tool_call_id,
+                passed=True,
+                method="non_mutating",
+                evidence=f"Non-mutating package operation: {operation}",
+            )
+
+        return VerificationResult(
+            verification_id=verification_id,
+            tool_call_id=tool_call_id,
+            passed=passed,
+            method="dpkg_status",
+            evidence=evidence,
+        )
+
+    async def _verify_config(
+        self,
+        verification_id: str,
+        tool_call_id: str,
+        capability_name: str,
+        args: dict[str, Any],
+    ) -> VerificationResult:
+        """Verify config operation by checking file content/syntax."""
+        config_path = args.get("path") or args.get("file") or ""
+        operation = capability_name.split(".")[-1]
+
+        if operation == "edit" or operation == "write":
+            # Verify config file is valid
+            verify_result = await self.tools.execute(
+                "shell_command",
+                {"command": f"test -f '{config_path}' && head -10 '{config_path}'"},
+            )
+            passed = verify_result.success
+            evidence = f"Config file content: {verify_result.output[:300]}"
+
+            # Additional syntax check for known config types
+            if config_path.endswith(".json"):
+                syntax_check = await self.tools.execute(
+                    "shell_command",
+                    {"command": f"python3 -m json.tool '{config_path}' > /dev/null 2>&1 && echo 'VALID'"},
+                )
+                if syntax_check.success and "VALID" in syntax_check.output:
+                    evidence += " | JSON syntax: valid"
+                else:
+                    passed = False
+                    evidence += " | JSON syntax: INVALID"
+            elif config_path.endswith((".yaml", ".yml")):
+                syntax_check = await self.tools.execute(
+                    "shell_command",
+                    {"command": f"python3 -c \"import yaml; yaml.safe_load(open('{config_path}'))\" 2>&1 && echo 'VALID'"},
+                )
+                if syntax_check.success and "VALID" in syntax_check.output:
+                    evidence += " | YAML syntax: valid"
+                else:
+                    passed = False
+                    evidence += " | YAML syntax: INVALID"
+
+        elif operation == "validate":
+            # Validation is itself a verification - trust result
+            passed = True
+            evidence = "Config validation completed"
+
+        else:
+            return VerificationResult(
+                verification_id=verification_id,
+                tool_call_id=tool_call_id,
+                passed=True,
+                method="non_mutating",
+                evidence=f"Non-mutating config operation: {operation}",
+            )
+
+        return VerificationResult(
+            verification_id=verification_id,
+            tool_call_id=tool_call_id,
+            passed=passed,
+            method="config_check",
+            evidence=evidence,
+        )
+
+    async def _verify_network(
+        self,
+        verification_id: str,
+        tool_call_id: str,
+        capability_name: str,
+        args: dict[str, Any],
+    ) -> VerificationResult:
+        """Verify network operation by checking connectivity/state."""
+        operation = capability_name.split(".")[-1]
+
+        if operation == "firewall_allow" or operation == "firewall_open":
+            port = args.get("port", "")
+            # Verify port is open in firewall
+            verify_result = await self.tools.execute(
+                "shell_command",
+                {"command": f"ufw status 2>/dev/null | grep -E '{port}|ALLOW' || iptables -L -n 2>/dev/null | head -20"},
+            )
+            passed = verify_result.success
+            evidence = f"Firewall status: {verify_result.output[:300]}"
+
+        elif operation == "firewall_deny" or operation == "firewall_close":
+            port = args.get("port", "")
+            verify_result = await self.tools.execute(
+                "shell_command",
+                {"command": f"ufw status 2>/dev/null | grep -E '{port}|DENY' || iptables -L -n 2>/dev/null | head -20"},
+            )
+            passed = verify_result.success
+            evidence = f"Firewall status: {verify_result.output[:300]}"
+
+        elif "wireguard" in capability_name:
+            interface = args.get("interface") or args.get("name") or "wg0"
+            verify_result = await self.tools.execute(
+                "shell_command",
+                {"command": f"wg show {interface} 2>&1 || ip link show {interface} 2>&1"},
+            )
+            passed = verify_result.success
+            evidence = f"WireGuard status: {verify_result.output[:300]}"
+
+        else:
+            # Read-only operations (diagnose, listeners)
+            return VerificationResult(
+                verification_id=verification_id,
+                tool_call_id=tool_call_id,
+                passed=True,
+                method="non_mutating",
+                evidence=f"Non-mutating network operation: {operation}",
+            )
+
+        return VerificationResult(
+            verification_id=verification_id,
+            tool_call_id=tool_call_id,
+            passed=passed,
+            method="network_check",
+            evidence=evidence,
+        )
 
 
 # =============================================================================

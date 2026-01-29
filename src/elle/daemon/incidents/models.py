@@ -171,6 +171,14 @@ class SystemSnapshot(BaseModel):
         description="Recent apt operations: action, package, version, timestamp",
     )
 
+    # GPU metrics (optional - only present if NVIDIA GPU available)
+    gpu_available: bool = Field(default=False, description="Whether GPU metrics are available")
+    gpu_count: int = Field(ge=0, default=0, description="Number of GPUs detected")
+    gpu_max_memory_pct: float = Field(ge=0.0, le=100.0, default=0.0, description="Max VRAM usage across GPUs")
+    gpu_max_util_pct: float = Field(ge=0.0, le=100.0, default=0.0, description="Max utilization across GPUs")
+    gpu_max_temp_c: int = Field(ge=0, default=0, description="Max temperature across GPUs")
+    gpu_ecc_errors: int = Field(ge=0, default=0, description="Total ECC errors across GPUs")
+
     # Collected at timestamp
     collected_at: datetime = Field(
         default_factory=datetime.utcnow,
@@ -233,6 +241,31 @@ class Fingerprint(BaseModel):
 
     # Docker
     docker_exited_count: int = Field(ge=0, default=0)
+
+    # GPU metrics (0.0 if no GPU available)
+    gpu_mem_pressure: float = Field(
+        ge=0.0,
+        le=1.0,
+        default=0.0,
+        description="Max GPU memory usage ratio across GPUs",
+    )
+    gpu_util_pressure: float = Field(
+        ge=0.0,
+        le=1.0,
+        default=0.0,
+        description="Max GPU utilization ratio across GPUs",
+    )
+    gpu_thermal_pressure: float = Field(
+        ge=0.0,
+        le=1.0,
+        default=0.0,
+        description="Max GPU temperature normalized (0=0C, 1=100C)",
+    )
+    gpu_ecc_errors_1h: int = Field(
+        ge=0,
+        default=0,
+        description="GPU ECC errors in last hour",
+    )
 
     # Custom features (extensible)
     custom: dict[str, Any] = Field(default_factory=dict)

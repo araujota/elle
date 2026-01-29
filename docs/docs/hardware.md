@@ -36,14 +36,13 @@ System specifications for running ELLE.
 
 | Model | Memory | Purpose |
 |-------|--------|---------|
-| `phi3.5:3.8b-mini-instruct-q8_0` | ~4 GB | Classification (always loaded) |
-| `qwen2.5:7b-instruct-q8_0` | ~8 GB | Generation (unloads after 10m) |
-| **Peak usage** | **~12 GB** | Both models active |
+| `qwen2.5:7b-instruct-q8_0` | ~8 GB | LLM for reasoning (kept warm for local inference) |
 
 <div class="callout callout-info">
-<strong>Memory Optimization</strong><br>
-The classification model stays loaded permanently for fast intent detection.
-The generation model unloads after 10 minutes of inactivity to free memory.
+<strong>Local Inference</strong><br>
+For local inference, the LLM stays loaded in GPU memory permanently for fast response times.
+The daemon sends periodic warmup pings to ensure the model remains ready.
+Intent routing uses rule-based classification (no LLM required).
 </div>
 
 ### Low Memory Options

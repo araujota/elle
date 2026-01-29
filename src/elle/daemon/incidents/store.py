@@ -1441,6 +1441,8 @@ def _parse_telemetry_snapshot(data: dict[str, Any]) -> "TelemetrySnapshotModel |
         CPUPressure,
         DiskInfo,
         DiskIOPressure,
+        GPUDevice,
+        GPUMetrics,
         InterfaceInfo,
         KernelHardwareSignals,
         MemoryPressure,
@@ -1482,6 +1484,19 @@ def _parse_telemetry_snapshot(data: dict[str, Any]) -> "TelemetrySnapshotModel |
         kernel_data = data.get("kernel", {})
         kernel = KernelHardwareSignals(**kernel_data)
 
+        # Parse GPU metrics
+        gpu_data = data.get("gpu", {})
+        gpu_devices = tuple(GPUDevice(**d) for d in gpu_data.get("devices", []))
+        gpu = GPUMetrics(
+            available=gpu_data.get("available", False),
+            device_count=gpu_data.get("device_count", 0),
+            devices=gpu_devices,
+            max_memory_pct=gpu_data.get("max_memory_pct", 0.0),
+            max_utilization_pct=gpu_data.get("max_utilization_pct", 0.0),
+            max_temperature_c=gpu_data.get("max_temperature_c", 0),
+            total_ecc_errors=gpu_data.get("total_ecc_errors", 0),
+        )
+
         services = tuple(ServiceRuntimeSnapshot(**s) for s in data.get("services", []))
 
         # Parse collected_at
@@ -1498,6 +1513,7 @@ def _parse_telemetry_snapshot(data: dict[str, Any]) -> "TelemetrySnapshotModel |
             disk=disk,
             network=network,
             kernel=kernel,
+            gpu=gpu,
             services=services,
             collected_at=collected_at,
             hostname=data.get("hostname", ""),

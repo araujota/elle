@@ -17,24 +17,24 @@ Example:
         InstallationRequest,
     )
 
-    # Check if AT-SPI is available
-    result = check_dependency("atspi")
+    # Check if Augeas is available
+    result = check_dependency("augeas")
     if not result.available:
         print(f"Missing: {result.install_command}")
 
     # Check dependencies for a capability
-    missing = check_dependencies_for_capability("gui.learn")
+    missing = check_dependencies_for_capability("config.edit")
     for dep_result in missing:
         print(f"Need to install: {dep_result.dependency}")
 
     # Check user preference
-    pref = get_preference("atspi")
+    pref = get_preference("augeas")
     if pref == "always_install":
         # Auto-install
         request = InstallationRequest(
-            dependency="atspi",
-            apt_packages=("python3-pyatspi", "at-spi2-core"),
-            reason="Required for GUI automation",
+            dependency="augeas",
+            apt_packages=("augeas-tools", "python3-augeas"),
+            reason="Required for config editing",
         )
         install_result = await install_dependency(request)
 """
@@ -53,7 +53,6 @@ from elle.capabilities.dependencies.checker import (
 # Core dependencies
 from elle.capabilities.dependencies.core import (
     ALLOWED_PACKAGES,
-    ATSPI_DEPENDENCY,
     AUGEAS_DEPENDENCY,
     CORE_DEPENDENCIES,
     DOCKER_DEPENDENCY,
@@ -106,7 +105,6 @@ __all__ = [
     # Core dependencies
     "ALLOWED_PACKAGES",
     "CORE_DEPENDENCIES",
-    "ATSPI_DEPENDENCY",
     "AUGEAS_DEPENDENCY",
     "DOCKER_DEPENDENCY",
     "WIREGUARD_DEPENDENCY",

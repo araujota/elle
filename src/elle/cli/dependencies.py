@@ -106,7 +106,7 @@ class SystemCapabilities(BaseModel):
 
     @property
     def can_classify_with_llm(self) -> bool:
-        """Check if SLM classification is available."""
+        """Check if LLM is available for agent loop."""
         return self.llm_available
 
     @property

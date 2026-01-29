@@ -33,7 +33,7 @@ class DependencyChecker:
     Example:
         checker = DependencyChecker(registry)
 
-        result = checker.check("atspi")
+        result = checker.check("augeas")
         if not result.available:
             print(f"Missing: {result.install_command}")
     """
@@ -191,13 +191,13 @@ class DependencyChecker:
         """Check if a Python module can be imported.
 
         Args:
-            module: Module path (e.g., 'gi.repository.Atspi').
+            module: Module path (e.g., 'augeas').
 
         Returns:
             Tuple of (success, error_message).
         """
         try:
-            # Handle nested modules like gi.repository.Atspi
+            # Handle nested modules like gi.repository.GLib
             parts = module.split(".")
             if len(parts) == 1:
                 importlib.import_module(module)

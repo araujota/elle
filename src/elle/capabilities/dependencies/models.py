@@ -26,14 +26,14 @@ class DependencySpec(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     # Identity
-    name: str = Field(description="Unique identifier (e.g., 'atspi', 'augeas')")
-    display_name: str = Field(description="Human-readable name (e.g., 'AT-SPI Accessibility')")
+    name: str = Field(description="Unique identifier (e.g., 'augeas', 'docker')")
+    display_name: str = Field(description="Human-readable name (e.g., 'Augeas Configuration Editor')")
     description: str = Field(description="Why this dependency is needed")
 
     # Installation
     apt_packages: tuple[str, ...] = Field(
         default_factory=tuple,
-        description="APT packages to install (e.g., ('python3-pyatspi', 'at-spi2-core'))",
+        description="APT packages to install (e.g., ('augeas-tools', 'python3-augeas'))",
     )
     pip_packages: tuple[str, ...] = Field(
         default_factory=tuple,
@@ -43,7 +43,7 @@ class DependencySpec(BaseModel):
     # Detection methods (at least one should be set)
     check_import: str | None = Field(
         default=None,
-        description="Python import to check (e.g., 'gi.repository.Atspi')",
+        description="Python import to check (e.g., 'augeas')",
     )
     check_command: str | None = Field(
         default=None,
@@ -91,7 +91,7 @@ class DependencyCheckResult(BaseModel):
 
     # Installation info (if unavailable)
     install_command: str | None = Field(
-        default=None, description="Command to install (e.g., 'sudo apt install python3-pyatspi at-spi2-core')"
+        default=None, description="Command to install (e.g., 'sudo apt install augeas-tools python3-augeas')"
     )
 
 

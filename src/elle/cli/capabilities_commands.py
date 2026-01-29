@@ -470,7 +470,6 @@ def _get_domain_description(domain: CapabilityDomain) -> str:
         "auth": "Authentication and authorization management",
         "notification": "Desktop and push notifications",
         "incident": "Incident vault management",
-        "gui": "GUI automation via AT-SPI accessibility APIs",
     }
     return descriptions.get(domain, f"Operations in the {domain} domain")
 

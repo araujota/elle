@@ -9,6 +9,8 @@ from elle.daemon.incidents.telemetry_snapshot import (
     CPUPressure,
     DiskIOPressure,
     DiskInfo,
+    GPUDevice,
+    GPUMetrics,
     InterfaceInfo,
     KernelHardwareSignals,
     MemoryPressure,
@@ -208,3 +210,150 @@ class TestTelemetryCollection:
         size = len(json_str)
         # Allow some slack for variation
         assert size < 25000, f"Snapshot too large: {size} bytes"
+
+
+class TestGPUMetrics:
+    """Tests for GPU metrics models."""
+
+    def test_gpu_device_defaults(self) -> None:
+        """GPUDevice should have sensible defaults."""
+        device = GPUDevice(index=0)
+        assert device.index == 0
+        assert device.name == ""
+        assert device.memory_used_mb == 0
+        assert device.memory_total_mb == 0
+        assert device.memory_pct == 0.0
+        assert device.utilization_pct == 0.0
+        assert device.temperature_c == 0
+        assert device.power_watts == 0
+        assert device.throttle_reasons == 0
+        assert device.ecc_errors == 0
+
+    def test_gpu_device_with_values(self) -> None:
+        """GPUDevice should store all metrics."""
+        device = GPUDevice(
+            index=0,
+            name="NVIDIA GeForce RTX 4090",
+            uuid="GPU-abc123",
+            memory_used_mb=20000,
+            memory_total_mb=24576,
+            memory_pct=81.4,
+            utilization_pct=95.0,
+            temperature_c=72,
+            power_watts=350,
+            throttle_reasons=0,
+            ecc_errors=0,
+        )
+        assert device.name == "NVIDIA GeForce RTX 4090"
+        assert device.memory_pct == 81.4
+        assert device.utilization_pct == 95.0
+        assert device.temperature_c == 72
+
+    def test_gpu_device_frozen(self) -> None:
+        """GPUDevice should be immutable."""
+        device = GPUDevice(index=0)
+        with pytest.raises(Exception):
+            device.index = 1  # type: ignore[misc]
+
+    def test_gpu_metrics_defaults(self) -> None:
+        """GPUMetrics should have sensible defaults."""
+        gpu = GPUMetrics()
+        assert gpu.available is False
+        assert gpu.device_count == 0
+        assert len(gpu.devices) == 0
+        assert gpu.max_memory_pct == 0.0
+        assert gpu.max_utilization_pct == 0.0
+        assert gpu.max_temperature_c == 0
+        assert gpu.total_ecc_errors == 0
+
+    def test_gpu_metrics_with_devices(self) -> None:
+        """GPUMetrics should contain device info."""
+        devices = (
+            GPUDevice(
+                index=0,
+                name="GPU 0",
+                memory_pct=50.0,
+                utilization_pct=80.0,
+                temperature_c=65,
+            ),
+            GPUDevice(
+                index=1,
+                name="GPU 1",
+                memory_pct=75.0,
+                utilization_pct=90.0,
+                temperature_c=70,
+            ),
+        )
+        gpu = GPUMetrics(
+            available=True,
+            device_count=2,
+            devices=devices,
+            max_memory_pct=75.0,
+            max_utilization_pct=90.0,
+            max_temperature_c=70,
+        )
+        assert gpu.available is True
+        assert gpu.device_count == 2
+        assert len(gpu.devices) == 2
+        assert gpu.max_memory_pct == 75.0
+        assert gpu.max_utilization_pct == 90.0
+        assert gpu.max_temperature_c == 70
+
+    def test_gpu_metrics_serialization(self) -> None:
+        """GPUMetrics should serialize to JSON."""
+        device = GPUDevice(
+            index=0,
+            name="Test GPU",
+            memory_pct=50.0,
+            utilization_pct=80.0,
+            temperature_c=65,
+        )
+        gpu = GPUMetrics(
+            available=True,
+            device_count=1,
+            devices=(device,),
+            max_memory_pct=50.0,
+            max_utilization_pct=80.0,
+            max_temperature_c=65,
+        )
+        data = gpu.model_dump()
+        json_str = json.dumps(data)
+        assert "Test GPU" in json_str
+        assert "50.0" in json_str
+
+
+class TestTelemetrySnapshotWithGPU:
+    """Tests for TelemetrySnapshot with GPU metrics."""
+
+    def test_snapshot_includes_gpu(self) -> None:
+        """TelemetrySnapshot should include GPU metrics."""
+        snap = TelemetrySnapshot(
+            cpu=CPUPressure(load_1m=1.0, load_5m=0.5, load_15m=0.3),
+            memory=MemoryPressure(total_mb=8000, available_mb=4000),
+            disk=DiskIOPressure(disks=()),
+            network=NetworkLiveness(interfaces=()),
+            kernel=KernelHardwareSignals(),
+            gpu=GPUMetrics(available=True, device_count=1),
+        )
+        assert snap.gpu.available is True
+        assert snap.gpu.device_count == 1
+
+    def test_snapshot_gpu_default(self) -> None:
+        """TelemetrySnapshot should have default GPU metrics."""
+        snap = TelemetrySnapshot(
+            cpu=CPUPressure(load_1m=1.0, load_5m=0.5, load_15m=0.3),
+            memory=MemoryPressure(total_mb=8000, available_mb=4000),
+            disk=DiskIOPressure(disks=()),
+            network=NetworkLiveness(interfaces=()),
+            kernel=KernelHardwareSignals(),
+        )
+        assert snap.gpu.available is False
+        assert snap.gpu.device_count == 0
+
+    def test_collected_snapshot_has_gpu_field(self) -> None:
+        """Collected snapshot should have GPU field (even if unavailable)."""
+        snap = collect_telemetry_snapshot()
+        assert hasattr(snap, 'gpu')
+        assert isinstance(snap.gpu, GPUMetrics)
+        # GPU may or may not be available, just check the field exists
+        assert snap.gpu.device_count >= 0

@@ -7,9 +7,8 @@
 ## Prerequisites
 
 1. Ubuntu 24.04 LTS (or VM)
-2. Ollama installed with models:
-   - `phi3.5:3.8b-mini-instruct-q8_0` (classification)
-   - `qwen2.5:7b-instruct-q8_0` (generation)
+2. Ollama installed with model:
+   - `qwen2.5:7b-instruct-q8_0` (LLM for reasoning)
 3. ELLE installed: `pip install -e ".[dev]"`
 4. Daemon running: `sudo systemctl start elled`
 5. Test services: `nginx`, `ssh` installed

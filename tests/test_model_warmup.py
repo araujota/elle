@@ -1,10 +1,6 @@
 """Tests for ModelWarmupService."""
 
-from elle.rag.constants import (
-    DUAL_MODEL_VRAM_THRESHOLD,
-    LLM_MODEL,
-    SLM_MODEL,
-)
+from elle.rag.constants import LLM_MODEL
 from elle.rag.model_warmup import (
     ModelStatus,
     ModelWarmupService,
@@ -18,8 +14,8 @@ class TestModelStatus:
 
     def test_basic_status(self) -> None:
         """Test creating a basic model status."""
-        status = ModelStatus(name="phi3.5:3.8b")
-        assert status.name == "phi3.5:3.8b"
+        status = ModelStatus(name="qwen2.5:7b")
+        assert status.name == "qwen2.5:7b"
         assert not status.loaded
         assert status.size_bytes is None
         assert status.vram_bytes is None
@@ -27,15 +23,15 @@ class TestModelStatus:
     def test_loaded_status(self) -> None:
         """Test creating a loaded model status."""
         status = ModelStatus(
-            name="phi3.5:3.8b",
+            name="qwen2.5:7b",
             loaded=True,
-            size_bytes=4_000_000_000,
-            vram_bytes=3_500_000_000,
+            size_bytes=8_000_000_000,
+            vram_bytes=7_500_000_000,
             expires_at="2024-01-01T12:00:00Z",
         )
         assert status.loaded
-        assert status.size_bytes == 4_000_000_000
-        assert status.vram_bytes == 3_500_000_000
+        assert status.size_bytes == 8_000_000_000
+        assert status.vram_bytes == 7_500_000_000
 
 
 class TestWarmupResult:
@@ -45,12 +41,12 @@ class TestWarmupResult:
         """Test successful warmup result."""
         result = WarmupResult(
             success=True,
-            model="phi3.5:3.8b",
+            model="qwen2.5:7b",
             message="Model warmed successfully",
             duration_ms=1500.0,
         )
         assert result.success
-        assert result.model == "phi3.5:3.8b"
+        assert result.model == "qwen2.5:7b"
         assert result.duration_ms == 1500.0
         assert result.error is None
 
@@ -58,7 +54,7 @@ class TestWarmupResult:
         """Test failed warmup result."""
         result = WarmupResult(
             success=False,
-            model="phi3.5:3.8b",
+            model="qwen2.5:7b",
             message="Warmup failed",
             error="timeout",
         )
@@ -73,46 +69,22 @@ class TestModelWarmupService:
         """Test default initialization."""
         service = ModelWarmupService()
 
-        assert service.slm_model == SLM_MODEL
         assert service.llm_model == LLM_MODEL
         assert service.host == "http://localhost:11434"
 
     def test_custom_initialization(self) -> None:
         """Test custom initialization."""
         service = ModelWarmupService(
-            slm_model="custom:slm",
             llm_model="custom:llm",
             host="http://localhost:11435",
         )
 
-        assert service.slm_model == "custom:slm"
         assert service.llm_model == "custom:llm"
         assert service.host == "http://localhost:11435"
 
 
 class TestVRAMDetection:
     """Tests for VRAM detection."""
-
-    def test_has_sufficient_vram_default_threshold(self) -> None:
-        """Test has_sufficient_vram with default threshold."""
-        service = ModelWarmupService()
-
-        # This will use actual system detection
-        # Just verify it doesn't crash and returns a boolean
-        result = service.has_sufficient_vram()
-        assert isinstance(result, bool)
-
-    def test_has_sufficient_vram_custom_threshold(self) -> None:
-        """Test has_sufficient_vram with custom threshold."""
-        service = ModelWarmupService()
-
-        # Very low threshold should return True
-        assert service.has_sufficient_vram(threshold_gb=0.001)
-
-        # Very high threshold would likely return False (unless massive system)
-        # But we can't guarantee this, so just verify it's a boolean
-        result = service.has_sufficient_vram(threshold_gb=1000.0)
-        assert isinstance(result, bool)
 
     def test_get_available_vram_gb(self) -> None:
         """Test VRAM detection returns None or a valid number."""
@@ -144,12 +116,40 @@ class TestModelWarmupServiceSingleton:
 class TestModelWarmupConstants:
     """Tests for warmup-related constants."""
 
-    def test_dual_model_threshold(self) -> None:
-        """Test DUAL_MODEL_VRAM_THRESHOLD is reasonable."""
-        # Should be around 12-16GB for both models
-        assert 10 <= DUAL_MODEL_VRAM_THRESHOLD <= 20
-
-    def test_model_names_are_q8(self) -> None:
-        """Test that default model names use Q8 quantization."""
-        assert "q8" in SLM_MODEL.lower() or "q8_0" in SLM_MODEL.lower()
+    def test_model_name_is_q8(self) -> None:
+        """Test that default model name uses Q8 quantization."""
         assert "q8" in LLM_MODEL.lower() or "q8_0" in LLM_MODEL.lower()
+
+
+class TestPeriodicWarmup:
+    """Tests for periodic warmup functionality."""
+
+    def test_periodic_warmup_not_running_by_default(self) -> None:
+        """Test that periodic warmup is not running by default."""
+        service = ModelWarmupService()
+        assert not service.is_periodic_warmup_running
+
+    def test_warmup_service_has_periodic_methods(self) -> None:
+        """Test that warmup service has periodic warmup methods."""
+        service = ModelWarmupService()
+        assert hasattr(service, "start_periodic_warmup")
+        assert hasattr(service, "stop_periodic_warmup")
+        assert hasattr(service, "is_periodic_warmup_running")
+
+
+class TestKeepAliveConfiguration:
+    """Tests for keep_alive configuration."""
+
+    def test_keep_alive_is_permanent(self) -> None:
+        """Test that LLM_KEEP_ALIVE is set to keep model loaded permanently."""
+        from elle.rag.constants import LLM_KEEP_ALIVE
+
+        # -1 means keep forever in Ollama
+        assert LLM_KEEP_ALIVE == "-1"
+
+    def test_warmup_interval_is_reasonable(self) -> None:
+        """Test that warmup interval is a reasonable value."""
+        from elle.rag.constants import LLM_WARMUP_INTERVAL
+
+        # Should be between 1 and 30 minutes
+        assert 60 <= LLM_WARMUP_INTERVAL <= 1800

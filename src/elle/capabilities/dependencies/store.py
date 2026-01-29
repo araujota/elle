@@ -70,10 +70,10 @@ class DependencyPreferenceStore:
         store = DependencyPreferenceStore()
 
         # Set preference
-        store.set_preference("atspi", "always_install")
+        store.set_preference("augeas", "always_install")
 
         # Get preference
-        pref = store.get_preference("atspi")
+        pref = store.get_preference("augeas")
         if pref == "always_install":
             # Auto-install without prompting
             ...

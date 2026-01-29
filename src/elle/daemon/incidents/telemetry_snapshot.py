@@ -225,6 +225,60 @@ class KernelHardwareSignals(BaseModel):
 
 
 # =============================================================================
+# Domain 7: GPU Metrics
+# =============================================================================
+
+
+class GPUDevice(BaseModel):
+    """Single GPU device metrics."""
+
+    model_config = ConfigDict(frozen=True)
+
+    index: int = Field(ge=0, description="GPU index")
+    name: str = Field(default="", description="GPU name, e.g., 'NVIDIA RTX 4090'")
+    uuid: str = Field(default="", description="GPU UUID")
+
+    # Memory
+    memory_used_mb: int = Field(ge=0, default=0, description="Used VRAM in MB")
+    memory_total_mb: int = Field(ge=0, default=0, description="Total VRAM in MB")
+    memory_pct: float = Field(ge=0.0, le=100.0, default=0.0, description="VRAM usage percentage")
+
+    # Utilization
+    utilization_pct: float = Field(ge=0.0, le=100.0, default=0.0, description="GPU utilization percentage")
+
+    # Thermal
+    temperature_c: int = Field(ge=0, default=0, description="GPU temperature in Celsius")
+
+    # Power
+    power_watts: int = Field(ge=0, default=0, description="Power draw in watts")
+
+    # Throttling
+    throttle_reasons: int = Field(ge=0, default=0, description="Throttle reason bitmask")
+
+    # ECC errors
+    ecc_errors: int = Field(ge=0, default=0, description="Total ECC errors")
+
+
+class GPUMetrics(BaseModel):
+    """GPU subsystem metrics."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # Availability
+    available: bool = Field(default=False, description="Whether GPU monitoring is available")
+    device_count: int = Field(ge=0, default=0, description="Number of GPUs detected")
+
+    # Devices
+    devices: tuple[GPUDevice, ...] = Field(default_factory=tuple, description="Per-GPU metrics")
+
+    # Aggregated metrics (for quick fingerprinting)
+    max_memory_pct: float = Field(ge=0.0, le=100.0, default=0.0, description="Max VRAM usage across GPUs")
+    max_utilization_pct: float = Field(ge=0.0, le=100.0, default=0.0, description="Max utilization across GPUs")
+    max_temperature_c: int = Field(ge=0, default=0, description="Max temperature across GPUs")
+    total_ecc_errors: int = Field(ge=0, default=0, description="Total ECC errors across GPUs")
+
+
+# =============================================================================
 # Complete Telemetry Snapshot
 # =============================================================================
 
@@ -247,6 +301,9 @@ class TelemetrySnapshot(BaseModel):
     disk: DiskIOPressure
     network: NetworkLiveness
     kernel: KernelHardwareSignals
+
+    # GPU (optional - only present if NVIDIA GPU available)
+    gpu: GPUMetrics = Field(default_factory=GPUMetrics, description="GPU metrics (if available)")
 
     # Service-scoped (only for implicated services)
     services: tuple[ServiceRuntimeSnapshot, ...] = Field(
@@ -664,6 +721,118 @@ def _get_hostname() -> str:
         return "unknown"
 
 
+def _collect_gpu_metrics() -> GPUMetrics:
+    """Collect GPU metrics from nvidia-smi.
+
+    Uses nvidia-smi for simplicity. Falls back gracefully if not available.
+
+    Returns:
+        GPUMetrics with current GPU state, or empty metrics if no GPU.
+    """
+    try:
+        # Query GPU metrics via nvidia-smi
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=index,name,uuid,memory.used,memory.total,utilization.gpu,temperature.gpu,power.draw,clocks_throttle_reasons.active",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return GPUMetrics(available=False)
+
+        devices: list[GPUDevice] = []
+        max_memory_pct = 0.0
+        max_utilization_pct = 0.0
+        max_temperature_c = 0
+
+        for line in result.stdout.strip().split("\n"):
+            if not line:
+                continue
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) < 7:
+                continue
+
+            try:
+                index = int(parts[0])
+                name = parts[1]
+                uuid = parts[2]
+
+                # Memory (nvidia-smi returns in MiB)
+                memory_used_mb = int(float(parts[3])) if parts[3] != "[N/A]" else 0
+                memory_total_mb = int(float(parts[4])) if parts[4] != "[N/A]" else 0
+                memory_pct = (memory_used_mb / memory_total_mb * 100.0) if memory_total_mb > 0 else 0.0
+
+                # Utilization
+                utilization_pct = float(parts[5]) if parts[5] != "[N/A]" else 0.0
+
+                # Temperature
+                temperature_c = int(float(parts[6])) if parts[6] != "[N/A]" else 0
+
+                # Power (may not be available on all GPUs)
+                power_watts = 0
+                if len(parts) > 7 and parts[7] != "[N/A]":
+                    try:
+                        power_watts = int(float(parts[7]))
+                    except ValueError:
+                        pass
+
+                # Throttle reasons (bitmask, may not be available)
+                throttle_reasons = 0
+                if len(parts) > 8 and parts[8] != "[N/A]" and parts[8] != "Not Active":
+                    # nvidia-smi returns hex or "Not Active"
+                    try:
+                        if parts[8].startswith("0x"):
+                            throttle_reasons = int(parts[8], 16)
+                    except ValueError:
+                        pass
+
+                device = GPUDevice(
+                    index=index,
+                    name=name,
+                    uuid=uuid,
+                    memory_used_mb=memory_used_mb,
+                    memory_total_mb=memory_total_mb,
+                    memory_pct=round(memory_pct, 1),
+                    utilization_pct=utilization_pct,
+                    temperature_c=temperature_c,
+                    power_watts=power_watts,
+                    throttle_reasons=throttle_reasons,
+                    ecc_errors=0,  # Would need separate query for ECC
+                )
+                devices.append(device)
+
+                # Track aggregates
+                if memory_pct > max_memory_pct:
+                    max_memory_pct = memory_pct
+                if utilization_pct > max_utilization_pct:
+                    max_utilization_pct = utilization_pct
+                if temperature_c > max_temperature_c:
+                    max_temperature_c = temperature_c
+
+            except (ValueError, IndexError):
+                continue
+
+        if not devices:
+            return GPUMetrics(available=False)
+
+        return GPUMetrics(
+            available=True,
+            device_count=len(devices),
+            devices=tuple(devices),
+            max_memory_pct=round(max_memory_pct, 1),
+            max_utilization_pct=round(max_utilization_pct, 1),
+            max_temperature_c=max_temperature_c,
+            total_ecc_errors=sum(d.ecc_errors for d in devices),
+        )
+
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return GPUMetrics(available=False)
+
+
 def _get_uptime_sec() -> int:
     """Get system uptime in seconds."""
     try:
@@ -713,6 +882,7 @@ def collect_telemetry_snapshot(
             kernel_warnings_1h=kernel_warnings_1h,
             hardware_faults_1h=hardware_faults_1h,
         ),
+        gpu=_collect_gpu_metrics(),
         services=tuple(service_snapshots),
         collected_at=datetime.utcnow(),
         hostname=_get_hostname(),

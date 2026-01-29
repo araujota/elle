@@ -387,83 +387,6 @@ Generate capabilities for:
 
 
 # =============================================================================
-# GUI Automation Segment
-# =============================================================================
-
-GUI_AUTOMATION_SEGMENT = PromptSegment(
-    id="gui_automation",
-    intent="gui_task",
-    priority=80,
-    content="""## GUI Automation Guidelines
-
-ELLE can learn and automate desktop applications via AT-SPI (accessibility).
-
-### Learning Applications
-
-Use `/learn <appname>` to capture an application's UI structure:
-- **Passive mode** (default): Automatically traverses the UI tree
-- **Interactive mode**: User-guided exploration (future)
-
-Learned recipes are stored locally and enable natural language automation.
-
-### Executing GUI Tasks
-
-Natural language requests like "disable bluetooth in settings" are converted to:
-1. Recipe lookup (find learned application)
-2. Task planning (map intent to UI actions)
-3. Element matching (find targets via path or fuzzy search)
-4. Action execution (click, type, toggle)
-5. State verification (confirm expected outcome)
-
-### GUI Capabilities
-
-- `gui.learn` - Learn an application's UI structure
-- `gui.click` - Click a UI element by name
-- `gui.type` - Type text into an input field
-- `gui.navigate` - Navigate/scroll to an element
-- `gui.execute_task` - Execute a natural language GUI task
-
-### Self-Healing
-
-When UI elements move or change names, ELLE adapts:
-1. **Direct path**: Try recorded element path first
-2. **Exact name**: Search for element by exact name
-3. **Fuzzy match**: Levenshtein distance for typos/abbreviations
-4. **Sibling context**: Find element near known siblings
-5. **Role search**: Find by role (button, toggle) and partial name
-6. **Tree search**: Full tree traversal as last resort
-
-User is informed when adaptation occurs.
-
-### Prerequisites
-
-AT-SPI accessibility must be enabled:
-```bash
-gsettings set org.gnome.desktop.interface toolkit-accessibility true
-```
-
-### Incident Integration
-
-All GUI automation creates incidents for:
-- Audit trail of actions taken
-- Learning from successful patterns
-- Tracking when UI changes require adaptation
-
-### Example Patterns
-
-- "open settings and disable bluetooth"
-- "in gnome-control-center, click on Wi-Fi"
-- "toggle the dark mode switch in appearance settings"
-- "type 'hello world' in the search field of nautilus"
-
-When handling GUI tasks:
-1. Check if application has a learned recipe (`/learn list`)
-2. If not learned, suggest learning it first
-3. Explain what actions will be taken before executing
-4. Report outcome and any adaptations made""",
-)
-
-
 # =============================================================================
 # Default Segments List
 # =============================================================================
@@ -478,6 +401,5 @@ DEFAULT_SEGMENTS: tuple[PromptSegment, ...] = (
     NETWORK_DIAGNOSTICS_SEGMENT,
     WIREGUARD_SEGMENT,
     SERVICE_MANAGEMENT_SEGMENT,
-    GUI_AUTOMATION_SEGMENT,
     PACKAGE_CAPABILITY_GENERATION_SEGMENT,
 )

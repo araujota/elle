@@ -27,7 +27,6 @@ Provides subsystems for:
 - augeas: Structured config file editing via Augeas -> use config.edit capability
 - files: General file operations -> use file.* capabilities
 - wireguard: WireGuard key operations -> use wireguard.* capabilities
-- stack: Stack deployment -> use stack.* capabilities (in development)
 """
 
 import warnings
@@ -41,4 +40,4 @@ warnings.warn(
     stacklevel=2,
 )
 
-__all__ = ["augeas", "files", "wireguard", "stack"]
+__all__ = ["augeas", "files", "wireguard"]

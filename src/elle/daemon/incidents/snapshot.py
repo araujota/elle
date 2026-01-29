@@ -613,6 +613,21 @@ def extract_fingerprint(
         if c > temp_max_c:
             temp_max_c = c
 
+    # GPU pressure metrics (if available)
+    gpu_mem_pressure = 0.0
+    gpu_util_pressure = 0.0
+    gpu_thermal_pressure = 0.0
+
+    if snapshot.gpu_available:
+        # Normalize percentages to 0.0-1.0 range
+        if snapshot.gpu_max_memory_pct > 0:
+            gpu_mem_pressure = min(1.0, snapshot.gpu_max_memory_pct / 100.0)
+        if snapshot.gpu_max_util_pct > 0:
+            gpu_util_pressure = min(1.0, snapshot.gpu_max_util_pct / 100.0)
+        if snapshot.gpu_max_temp_c > 0:
+            # Normalize: 0°C=0.0, 100°C=1.0
+            gpu_thermal_pressure = min(1.0, snapshot.gpu_max_temp_c / 100.0)
+
     return Fingerprint(
         disk_pressure=min(1.0, disk_pressure),
         mem_pressure=min(1.0, max(0.0, mem_pressure)),
@@ -627,6 +642,10 @@ def extract_fingerprint(
         smart_media_errors=smart_media_errors,
         temp_max_c=temp_max_c,
         docker_exited_count=snapshot.docker_exited,
+        gpu_mem_pressure=gpu_mem_pressure,
+        gpu_util_pressure=gpu_util_pressure,
+        gpu_thermal_pressure=gpu_thermal_pressure,
+        gpu_ecc_errors_1h=snapshot.gpu_ecc_errors if hasattr(snapshot, 'gpu_ecc_errors') else 0,
     )
 
 

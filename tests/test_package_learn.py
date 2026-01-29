@@ -124,14 +124,6 @@ class TestIntentClassification:
         assert "/learn" in PREFIX_COMMANDS
         assert PREFIX_COMMANDS["/learn"] == Intent.LEARN_PACKAGE
 
-    def test_classifier_map_routes_to_navigation(self):
-        """Test that /map routes to NAVIGATION (for GUI mapping)."""
-        from elle.cli.terminal.classifier import PREFIX_COMMANDS
-        from elle.cli.terminal.intent import Intent
-
-        assert "/map" in PREFIX_COMMANDS
-        assert PREFIX_COMMANDS["/map"] == Intent.NAVIGATION
-
 
 class TestNaturalLanguagePatterns:
     """Tests for natural language pattern matching."""

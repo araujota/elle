@@ -23,13 +23,13 @@ class DependencyRegistry:
 
     Example:
         registry = DependencyRegistry()
-        registry.register(ATSPI_DEPENDENCY)
+        registry.register(AUGEAS_DEPENDENCY)
 
         # Lookup by name
-        dep = registry.get("atspi")
+        dep = registry.get("augeas")
 
         # Lookup by capability
-        deps = registry.get_for_capability("gui.learn")
+        deps = registry.get_for_capability("config.edit")
     """
 
     def __init__(self) -> None:
@@ -61,7 +61,7 @@ class DependencyRegistry:
         """Get a dependency by name.
 
         Args:
-            name: The dependency name (e.g., 'atspi').
+            name: The dependency name (e.g., 'augeas').
 
         Returns:
             The DependencySpec if found, None otherwise.

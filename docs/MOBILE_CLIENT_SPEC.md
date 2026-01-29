@@ -244,7 +244,6 @@ interface DaemonConfig {
 
 interface LLMConfig {
   ollama_host: string;
-  slm_model: string;
   llm_model: string;
   embedding_model: string;
   context_window: number;
@@ -429,11 +428,8 @@ Menu-driven configuration management.
 │ │ Ollama Host                 │ │
 │ │ [http://127.0.0.1:11434  ]  │ │
 │ │                             │ │
-│ │ SLM Model                   │ │
-│ │ [phi3.5:3.8b-mini-instr▾]   │ │  ← Picker
-│ │                             │ │
 │ │ LLM Model                   │ │
-│ │ [qwen2.5:7b-instruct-q8▾]   │ │
+│ │ [qwen2.5:7b-instruct-q8▾]   │ │  ← Picker
 │ │                             │ │
 │ │ Context Window    [32768]   │ │
 │ └─────────────────────────────┘ │
@@ -1543,7 +1539,6 @@ async def get_config(
         },
         "llm": {
             "ollama_host": config.llm.ollama_host,
-            "slm_model": config.llm.slm_model,
             "llm_model": config.llm.llm_model,
             "embedding_model": config.llm.embedding_model,
             "context_window": config.llm.context_window,

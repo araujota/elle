@@ -328,3 +328,147 @@ class TestSnapshotDiff:
 
         assert diff["docker_running_delta"] == -1
         assert diff["docker_exited_delta"] == 1
+
+
+class TestGPUFingerprintExtraction:
+    """Tests for GPU fingerprint extraction."""
+
+    def test_extract_with_gpu_metrics(self):
+        """Test fingerprint with GPU metrics."""
+        snapshot = SystemSnapshot(
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=100,
+            cpu_load=(0.5, 0.5, 0.5),
+            mem_total_mb=8192,
+            mem_free_mb=4096,
+            mem_available_mb=6144,
+            gpu_available=True,
+            gpu_count=2,
+            gpu_max_memory_pct=85.0,
+            gpu_max_util_pct=95.0,
+            gpu_max_temp_c=75,
+            gpu_ecc_errors=0,
+        )
+
+        fingerprint = extract_fingerprint(snapshot)
+
+        # GPU memory pressure: 85% -> 0.85
+        assert fingerprint.gpu_mem_pressure == 0.85
+        # GPU utilization pressure: 95% -> 0.95
+        assert fingerprint.gpu_util_pressure == 0.95
+        # GPU thermal pressure: 75C / 100 = 0.75
+        assert fingerprint.gpu_thermal_pressure == 0.75
+        assert fingerprint.gpu_ecc_errors_1h == 0
+
+    def test_extract_without_gpu(self):
+        """Test fingerprint without GPU."""
+        snapshot = SystemSnapshot(
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=100,
+            cpu_load=(0.5, 0.5, 0.5),
+            mem_total_mb=8192,
+            mem_free_mb=4096,
+            mem_available_mb=6144,
+            gpu_available=False,
+            gpu_count=0,
+        )
+
+        fingerprint = extract_fingerprint(snapshot)
+
+        assert fingerprint.gpu_mem_pressure == 0.0
+        assert fingerprint.gpu_util_pressure == 0.0
+        assert fingerprint.gpu_thermal_pressure == 0.0
+        assert fingerprint.gpu_ecc_errors_1h == 0
+
+    def test_extract_gpu_high_temp_capped(self):
+        """Test GPU thermal pressure is capped at 1.0."""
+        snapshot = SystemSnapshot(
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=100,
+            cpu_load=(0.5, 0.5, 0.5),
+            mem_total_mb=8192,
+            mem_free_mb=4096,
+            mem_available_mb=6144,
+            gpu_available=True,
+            gpu_count=1,
+            gpu_max_memory_pct=50.0,
+            gpu_max_util_pct=50.0,
+            gpu_max_temp_c=120,  # Very high temp
+            gpu_ecc_errors=5,
+        )
+
+        fingerprint = extract_fingerprint(snapshot)
+
+        # Thermal pressure should be capped at 1.0
+        assert fingerprint.gpu_thermal_pressure == 1.0
+        assert fingerprint.gpu_ecc_errors_1h == 5
+
+    def test_fingerprint_gpu_fields_exist(self):
+        """Test that Fingerprint has GPU fields."""
+        fingerprint = Fingerprint(
+            disk_pressure=0.5,
+            mem_pressure=0.5,
+            cpu_pressure=0.5,
+            gpu_mem_pressure=0.8,
+            gpu_util_pressure=0.9,
+            gpu_thermal_pressure=0.7,
+            gpu_ecc_errors_1h=0,
+        )
+
+        assert hasattr(fingerprint, 'gpu_mem_pressure')
+        assert hasattr(fingerprint, 'gpu_util_pressure')
+        assert hasattr(fingerprint, 'gpu_thermal_pressure')
+        assert hasattr(fingerprint, 'gpu_ecc_errors_1h')
+        assert fingerprint.gpu_mem_pressure == 0.8
+        assert fingerprint.gpu_util_pressure == 0.9
+        assert fingerprint.gpu_thermal_pressure == 0.7
+
+
+class TestSystemSnapshotGPU:
+    """Tests for SystemSnapshot GPU fields."""
+
+    def test_system_snapshot_gpu_defaults(self):
+        """Test SystemSnapshot GPU fields have defaults."""
+        snapshot = SystemSnapshot(
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=100,
+            cpu_load=(0.5, 0.5, 0.5),
+            mem_total_mb=8192,
+            mem_free_mb=4096,
+            mem_available_mb=6144,
+        )
+
+        assert snapshot.gpu_available is False
+        assert snapshot.gpu_count == 0
+        assert snapshot.gpu_max_memory_pct == 0.0
+        assert snapshot.gpu_max_util_pct == 0.0
+        assert snapshot.gpu_max_temp_c == 0
+        assert snapshot.gpu_ecc_errors == 0
+
+    def test_system_snapshot_with_gpu(self):
+        """Test SystemSnapshot with GPU data."""
+        snapshot = SystemSnapshot(
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=100,
+            cpu_load=(0.5, 0.5, 0.5),
+            mem_total_mb=8192,
+            mem_free_mb=4096,
+            mem_available_mb=6144,
+            gpu_available=True,
+            gpu_count=2,
+            gpu_max_memory_pct=90.5,
+            gpu_max_util_pct=100.0,
+            gpu_max_temp_c=82,
+            gpu_ecc_errors=0,
+        )
+
+        assert snapshot.gpu_available is True
+        assert snapshot.gpu_count == 2
+        assert snapshot.gpu_max_memory_pct == 90.5
+        assert snapshot.gpu_max_util_pct == 100.0
+        assert snapshot.gpu_max_temp_c == 82

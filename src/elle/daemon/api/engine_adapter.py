@@ -403,8 +403,8 @@ class EngineAdapter:
                 success=result.success,
             )
 
-        # GUI tasks and fixit - blocked in readonly
-        if intent in (Intent.GUI_TASK, Intent.FIXIT):
+        # Fixit - blocked in readonly
+        if intent == Intent.FIXIT:
             return EngineResponse(
                 content=(
                     f"[READONLY MODE] {intent.value} blocked.\n\n"

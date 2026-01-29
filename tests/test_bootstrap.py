@@ -139,7 +139,7 @@ class TestPackageDetection:
         """Test getting ELLE dependencies."""
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout="python3, python3-gi, gir1.2-atspi-2.0",
+            stdout="python3, python3-gi, python3-pydantic",
         )
 
         deps = get_elle_dependencies()

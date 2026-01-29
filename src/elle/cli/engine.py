@@ -486,8 +486,6 @@ class Engine:
             return self._handle_man_command(f"man -k {query}", session)
         elif lower.startswith("/preflight") or lower == "preflight":
             return self._handle_preflight_command(user_input, session)
-        elif lower.startswith("/map"):
-            return self._handle_map_command(user_input, session)
         elif lower.startswith("/mobile"):
             return self._handle_mobile_command(user_input, session)
         elif lower.startswith("/react"):
@@ -537,48 +535,6 @@ class Engine:
             logger.exception("Failed to handle reboot command")
             return EngineResult(
                 output=f"{Colors.RED}Error handling reboot command: {e}{Colors.RESET}",
-                session=session,
-                success=False,
-            )
-
-    def _handle_map_command(self, user_input: str, session: Session) -> EngineResult:
-        """Handle /map command for GUI tree traces.
-
-        Args:
-            user_input: The map command.
-            session: Current session state.
-
-        Returns:
-            EngineResult for the map action.
-        """
-        import asyncio
-
-        try:
-            from elle.cli.map_commands import handle_map_command
-
-            # Extract args (remove /map prefix)
-            args = user_input.strip()
-            if args.startswith("/map"):
-                args = args[4:].strip()
-
-            # Run async handler
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
-            output = loop.run_until_complete(handle_map_command(args))
-            return EngineResult(
-                output=output,
-                session=session,
-                success=True,
-            )
-
-        except Exception as e:
-            logger.exception("Failed to handle map command")
-            return EngineResult(
-                output=f"{Colors.RED}Error handling map command: {e}{Colors.RESET}",
                 session=session,
                 success=False,
             )
@@ -2380,7 +2336,6 @@ Validates package operations before execution to detect potential issues.
 
             # Show key settings
             lines.append(f"  LLM model: {config.llm.model}")
-            lines.append(f"  SLM model: {config.slm.model}")
             lines.append(f"  Ollama URL: {config.ollama.base_url}")
             lines.append("")
             lines.append(f"{Colors.DIM}Config file: ~/.config/elle/config.toml{Colors.RESET}")

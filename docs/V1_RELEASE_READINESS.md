@@ -47,7 +47,7 @@ ELLE v1 demonstrates **strong architectural foundations** with a well-designed s
 Depends: python3 (>= 3.11), python3-pydantic, python3-httpx,
          libaugeas0, polkitd, systemd
 Recommends: ollama, python3-fastapi
-Suggests: python3-bcc, gir1.2-atspi-2.0
+Suggests: python3-bcc
 ```
 
 ### Blocking Issues
@@ -306,26 +306,7 @@ This is where ELLE truly shines. The architecture enables **compound intelligenc
 
 **User experience:** "I fixed this last month and ELLE remembered how"
 
-### Holy Shit Scenario 3: GUI Automation with Self-Healing
-
-**Trigger:** User says "Open Settings and enable dark mode"
-
-**What Happens:**
-1. AT-SPI client discovers application UI tree
-2. Recipe store checked: Have we learned GNOME Settings?
-3. If not → `/learn gnome-settings` auto-triggers
-4. Element matcher tries:
-   - Direct path (fastest, 1.0 confidence)
-   - Exact name match (0.95)
-   - Fuzzy match with Levenshtein (0.85)
-   - Sibling context (0.85)
-   - Tree search (0.65)
-5. **Self-healing:** If UI changed, matcher adapts and updates recipe
-6. Action executes: click toggle for "Dark Mode"
-
-**User experience:** "It just works, even after Settings got a UI update"
-
-### Holy Shit Scenario 4: Proactive System Stabilization
+### Holy Shit Scenario 3: Proactive System Stabilization
 
 **Setup:** Reactive function configured:
 ```yaml
@@ -464,7 +445,6 @@ The blocking issues are **packaging papercuts**, not fundamental flaws. With 10 
 
 The "holy shit" moments are real. This is a system that:
 - **Learns from its mistakes** (Incident Vault)
-- **Adapts to UI changes** (AT-SPI self-healing)
 - **Automates before problems escalate** (Reactive Functions)
 - **Gets better the more you use it** (efficacy learning)
 

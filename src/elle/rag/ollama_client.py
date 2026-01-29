@@ -99,7 +99,7 @@ class OllamaClient:
     Usage:
         client = OllamaClient()
         if client.is_available():
-            response = client.generate("phi3.5", "Classify this: hello")
+            response = client.generate("qwen2.5:7b", "Hello, how are you?")
     """
 
     def __init__(self, config: OllamaConfig | None = None) -> None:
@@ -177,7 +177,7 @@ class OllamaClient:
         """Generate a completion.
 
         Args:
-            model: Model name (e.g., "phi3.5", "gemma2:2b").
+            model: Model name (e.g., "qwen2.5:7b", "llama3.2:3b").
             prompt: The prompt to complete.
             system: Optional system prompt.
             json_mode: If True, request JSON output format.

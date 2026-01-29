@@ -10,7 +10,6 @@ elle (1.0.0) unstable; urgency=medium
   * Man Vault documentation search (SQLite+FTS5)
   * Incident Vault decision memory
   * Reactive Functions for event-driven automation
-  * AT-SPI GUI automation with self-healing
   * Policy engine for safe command execution
   * Capability auto-generation from installed packages
 

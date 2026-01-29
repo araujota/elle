@@ -1,63 +1,23 @@
 """Configuration constants for local LLM inference.
 
-Centralized configuration for SLM (Small Language Model) and LLM (Large Language Model)
-inference via Ollama, including model names, keep_alive settings, context window sizes,
-and context management thresholds.
-
-Model Strategy:
-- SLM: Fast classification model, kept warm indefinitely for instant response
-- LLM: General-purpose generation model, kept warm with timeout between requests
+Centralized configuration for LLM inference via Ollama, including model names,
+keep_alive settings, context window sizes, and context management thresholds.
 
 Memory Requirements (Q8_0 quantization):
-- phi3.5:3.8b-mini-instruct-q8_0: ~4GB VRAM (weights)
 - qwen2.5:7b-instruct-q8_0: ~8GB VRAM (weights) + ~2GB KV cache at 32K context
-- Combined: ~14GB VRAM (suitable for 16GB+ systems)
 
 Context Window:
 - Qwen2.5-7B supports up to 128K tokens
 - Default: 32K tokens (practical for consumer hardware, ample for conversations)
 - Compaction triggers at 80% (~26K tokens), targets 60% (~19K tokens)
+
+Keep Warm Strategy (for local inference):
+- LLM_KEEP_ALIVE = "-1" keeps the model loaded indefinitely in Ollama
+- Periodic warmup pings every 5 minutes ensure the model stays loaded
+- This provides fast response times for local users
 """
 
 from __future__ import annotations
-
-# =============================================================================
-# SLM Configuration (Small Language Model) - Classification
-# =============================================================================
-
-# Default SLM model for intent classification
-# Q8_0 quantization for reduced memory with minimal quality loss
-SLM_MODEL = "phi3.5:3.8b-mini-instruct-q8_0"
-
-# Fallback models in order of preference (if primary unavailable)
-SLM_FALLBACK_MODELS = (
-    "phi3.5:3.8b-mini-instruct",
-    "phi3.5",
-    "gemma2:2b",
-    "phi3",
-    "llama3.2:1b",
-    "qwen2.5:1.5b",
-)
-
-# Keep SLM warm indefinitely (never unload)
-# Critical for instant classification response (<100ms)
-# Note: Ollama requires duration format - use very large value for "indefinite"
-SLM_KEEP_ALIVE = "24h"
-
-# Smaller context window for classification (reduces memory)
-SLM_NUM_CTX = 2048
-
-# Low temperature for deterministic classification
-SLM_TEMPERATURE = 0.1
-
-# Max tokens for classification responses
-SLM_MAX_TOKENS = 150
-
-# Timeout for SLM requests
-# 120s to allow for cold starts (model loading into VRAM)
-# Once warm, classification is typically <100ms
-SLM_TIMEOUT = 120.0
-
 
 # =============================================================================
 # LLM Configuration (Large Language Model) - Generation
@@ -77,9 +37,14 @@ LLM_FALLBACK_MODELS = (
     "gemma2:9b",
 )
 
-# Keep LLM warm for 10 minutes between requests
-# Balances memory usage with response latency
-LLM_KEEP_ALIVE = "10m"
+# Keep LLM loaded indefinitely for local inference
+# -1 means "keep forever" in Ollama - model stays in GPU memory
+# This ensures fast response times for local users
+LLM_KEEP_ALIVE = "-1"
+
+# Interval for periodic warmup pings (in seconds)
+# Sends a minimal request to ensure model stays loaded
+LLM_WARMUP_INTERVAL = 300  # 5 minutes
 
 # 32K context window for multi-turn conversations
 # Qwen2.5-7B supports up to 128K, but 32K is practical for consumer hardware
@@ -119,10 +84,6 @@ CHARS_PER_TOKEN = 4
 # =============================================================================
 # Model Warmup Configuration
 # =============================================================================
-
-# VRAM threshold for keeping both models warm (in GB)
-# Below this, only SLM stays warm; LLM loads on-demand
-DUAL_MODEL_VRAM_THRESHOLD = 14.0
 
 # Warmup ping prompt (minimal generation to load model)
 WARMUP_PROMPT = "hi"

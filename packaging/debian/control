@@ -44,9 +44,7 @@ Recommends: python3-fastapi,
             jq,
             crudini,
             xmlstarlet
-Suggests: python3-bcc,
-          libgirepository1.0-dev,
-          gir1.2-atspi-2.0
+Suggests: python3-bcc
 Description: Enabling Layer Learning Everything
  A local-first, agentic system layer for Ubuntu that converts
  kernel-level telemetry into natural language insight and safe

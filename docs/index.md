@@ -156,16 +156,6 @@ ELLE is your **AI-powered system administrator** that runs entirely on your mach
         </div>
       </li>
       <li>
-        <div class="collapsible-header"><i class="material-icons">desktop_windows</i>GUI Automation</div>
-        <div class="collapsible-body">
-          <p>ELLE can control desktop applications via AT-SPI accessibility APIs:</p>
-          <pre><code>elle> /learn firefox     # Learn Firefox's UI structure
-elle> open firefox and go to github.com
-elle> in settings, enable dark mode</code></pre>
-          <p>GUI recipes are versioned and self-healing — ELLE adapts when UIs change.</p>
-        </div>
-      </li>
-      <li>
         <div class="collapsible-header"><i class="material-icons">lock</i>Polkit Integration</div>
         <div class="collapsible-body">
           <p>ELLE never uses <code>sudo</code>. Privileged operations go through Polkit, which:</p>

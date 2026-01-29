@@ -73,7 +73,6 @@ User ──▶ elle (CLI/REPL)
 
 ### Automations
 - **Reactive Functions** - Event-driven automations from natural language
-- **GUI Automation** - `/map <app>` learns UI structure via AT-SPI accessibility APIs
 
 ### Monitoring & Telemetry
 - **eBPF Probes** - Kernel-level telemetry (OOM, disk I/O, network, thermal)
@@ -98,9 +97,8 @@ User ──▶ elle (CLI/REPL)
 ```bash
 curl -fsSL https://ollama.ai/install.sh | sh
 
-# Pull the default models
-ollama pull qwen2.5:7b-instruct-q8_0   # LLM for generation
-ollama pull phi3.5:3.8b-mini-instruct-q8_0  # SLM for classification
+# Pull the LLM model
+ollama pull qwen2.5:7b-instruct-q8_0
 ```
 
 ### 2. Install ELLE
@@ -181,16 +179,6 @@ elle > /react create "when disk > 90%, clean docker images and notify me"
 # Manage reactive functions
 elle > /react list
 elle > /react enable disk-cleanup
-```
-
-### GUI Automation
-
-```bash
-# Learn an application's UI
-elle > /map gnome-control-center
-
-# Execute GUI tasks
-elle > disable bluetooth in settings
 ```
 
 ### Mobile Gateway

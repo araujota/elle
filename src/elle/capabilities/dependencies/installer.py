@@ -45,9 +45,9 @@ class DependencyInstaller:
         installer = DependencyInstaller(registry, checker, store)
 
         request = InstallationRequest(
-            dependency="atspi",
-            apt_packages=("python3-pyatspi", "at-spi2-core"),
-            reason="Required for GUI automation",
+            dependency="augeas",
+            apt_packages=("augeas-tools", "python3-augeas"),
+            reason="Required for config editing",
         )
 
         result = await installer.install(request)

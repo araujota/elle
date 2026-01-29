@@ -51,7 +51,6 @@ class SetupPreferences(BaseModel):
     docker_enabled: bool = True
 
     # Features
-    gui_automation_enabled: bool = False  # AT-SPI requires additional setup
     api_enabled: bool = True
 
     # Capability learning
@@ -147,14 +146,6 @@ TELEMETRY_INFO = {
 }
 
 FEATURE_INFO = {
-    "gui_automation": {
-        "name": "GUI Automation",
-        "description": (
-            "Control desktop applications via AT-SPI accessibility APIs. "
-            "Requires a graphical session and accessibility to be enabled."
-        ),
-        "default": False,
-    },
     "api": {
         "name": "REST API",
         "description": ("OpenAI-compatible API endpoint for external integrations. Bound to localhost by default."),

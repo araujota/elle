@@ -232,9 +232,8 @@ def get_elle_dependencies() -> list[str]:
     # Also check common Python package system dependencies
     python_pkg_deps = [
         "python3",
-        "python3-gi",  # PyGObject for AT-SPI
+        "python3-gi",  # PyGObject
         "python3-dbus",  # D-Bus bindings
-        "gir1.2-atspi-2.0",  # AT-SPI introspection
     ]
 
     for dep in python_pkg_deps:

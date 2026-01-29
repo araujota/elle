@@ -173,27 +173,7 @@ elle
 
 ---
 
-## 6. GUI Automation (`/map`)
-
-### Learning UI (requires GUI session)
-```bash
-/map firefox
-```
-
-- [ ] AT-SPI connection established
-- [ ] UI tree captured
-- [ ] Recipe saved to database
-
-### Listing
-```bash
-/map list
-```
-
-- [ ] Shows learned applications
-
----
-
-## 7. Daemon (`elled`)
+## 6. Daemon (`elled`)
 
 ### Startup
 ```bash

@@ -29,7 +29,6 @@ CapabilityDomain = Literal[
     "auth",  # Authentication/authorization
     "notification",  # Desktop/push notifications
     "incident",  # Incident management
-    "gui",  # GUI automation via AT-SPI
 ]
 
 # Types of side effects capabilities can have
@@ -43,8 +42,6 @@ SideEffectKind = Literal[
     "container_change",  # Container state change
     "notification_sent",  # Sends a notification
     "incident_created",  # Creates/updates an incident
-    "ui_interaction",  # Interacts with UI via AT-SPI
-    "window_focus",  # Changes window focus
 ]
 
 # Trust level for capabilities
@@ -143,7 +140,7 @@ class CapabilitySpec(BaseModel):
     # Dependencies
     dependencies: tuple[str, ...] = Field(
         default_factory=tuple,
-        description="Dependency names required by this capability (e.g., ('atspi', 'augeas'))",
+        description="Dependency names required by this capability (e.g., ('augeas', 'docker'))",
     )
 
 

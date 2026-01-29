@@ -49,15 +49,12 @@ ELLE requires Ollama for AI inference. Install it from [ollama.ai](https://ollam
 curl -fsSL https://ollama.ai/install.sh | sh
 ```
 
-### 4. Download AI Models
+### 4. Download AI Model
 
-ELLE uses two models: a fast classifier and a capable generator.
+ELLE uses a local LLM for reasoning and generation.
 
 ```bash
-# Classification model (required, ~4GB)
-ollama pull phi3.5:3.8b-mini-instruct-q8_0
-
-# Generation model (required, ~8GB)
+# LLM model (required, ~8GB)
 ollama pull qwen2.5:7b-instruct-q8_0
 ```
 
@@ -93,7 +90,7 @@ On first launch, ELLE guides you through configuration with an interactive setup
     </div>
     <div><span style="color: #3fb950;">✓</span> Python 3.11</div>
     <div><span style="color: #3fb950;">✓</span> Ollama is running</div>
-    <div><span style="color: #8b949e;">&nbsp;&nbsp;• Models: phi3.5:3.8b, qwen2.5:7b</span></div>
+    <div><span style="color: #8b949e;">&nbsp;&nbsp;• Model: qwen2.5:7b</span></div>
   </div>
 </div>
 
@@ -134,7 +131,6 @@ On first launch, ELLE guides you through configuration with an interactive setup
         <span class="card-title"><i class="material-icons left">extension</i>Optional Features</span>
         <ul>
           <li><strong>REST API:</strong> OpenAI-compatible endpoint</li>
-          <li><strong>GUI Automation:</strong> Control desktop apps via AT-SPI</li>
         </ul>
       </div>
     </div>
@@ -292,9 +288,8 @@ journalctl -u elled -f  # View logs</code></pre>
     <div class="collapsible-body">
       <p>Verify models are downloaded:</p>
       <pre><code>ollama list</code></pre>
-      <p>If models are missing, pull them again:</p>
-      <pre><code>ollama pull phi3.5:3.8b-mini-instruct-q8_0
-ollama pull qwen2.5:7b-instruct-q8_0</code></pre>
+      <p>If the model is missing, pull it again:</p>
+      <pre><code>ollama pull qwen2.5:7b-instruct-q8_0</code></pre>
     </div>
   </li>
   <li>

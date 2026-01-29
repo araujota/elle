@@ -96,14 +96,6 @@ def get_core_capabilities() -> list[type[Capability[Any, Any]]]:
     except ImportError:
         pass
 
-    # GUI capabilities
-    try:
-        from elle.capabilities.core.gui import GUI_CAPABILITIES
-
-        capabilities.extend(GUI_CAPABILITIES)
-    except ImportError:
-        pass
-
     # Auth capabilities
     try:
         from elle.capabilities.core.auth import AUTH_CAPABILITIES
@@ -198,26 +190,6 @@ from elle.capabilities.core.file import (
     FileWriteCapability,
     FileWriteInput,
     FileWriteOutput,
-)
-
-# GUI capabilities
-from elle.capabilities.core.gui import (
-    GUI_CAPABILITIES,
-    GuiClickCapability,
-    GuiClickInput,
-    GuiClickOutput,
-    GuiExecuteTaskCapability,
-    GuiExecuteTaskInput,
-    GuiExecuteTaskOutput,
-    GuiLearnCapability,
-    GuiLearnInput,
-    GuiLearnOutput,
-    GuiNavigateCapability,
-    GuiNavigateInput,
-    GuiNavigateOutput,
-    GuiTypeCapability,
-    GuiTypeInput,
-    GuiTypeOutput,
 )
 
 # Incident capabilities
@@ -397,23 +369,6 @@ __all__ = [
     "IncidentAttachCapability",
     "IncidentAttachInput",
     "IncidentAttachOutput",
-    # GUI
-    "GUI_CAPABILITIES",
-    "GuiLearnCapability",
-    "GuiLearnInput",
-    "GuiLearnOutput",
-    "GuiClickCapability",
-    "GuiClickInput",
-    "GuiClickOutput",
-    "GuiTypeCapability",
-    "GuiTypeInput",
-    "GuiTypeOutput",
-    "GuiNavigateCapability",
-    "GuiNavigateInput",
-    "GuiNavigateOutput",
-    "GuiExecuteTaskCapability",
-    "GuiExecuteTaskInput",
-    "GuiExecuteTaskOutput",
     # Auth
     "AUTH_CAPABILITIES",
     "SessionTokenCapability",

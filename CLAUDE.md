@@ -93,7 +93,6 @@ src/elle/
       stages.py            # Execution stages
     terminal/              # REPL and rendering
     package_learn_commands.py  # /learn (records to incident vault)
-    map_commands.py        # /map (records to incident vault)
     reactive_commands.py   # /react (records to incident vault)
     mobile_commands.py     # /mobile (records to incident vault)
   daemon/
@@ -186,7 +185,6 @@ All system mutations go through capabilities:
 | docker | list, inspect, stop, prune |
 | package | install, remove, info |
 | auth | session_token, mobile_certs |
-| gui | click, type, navigate, learn |
 
 **Execution flow:**
 ```
@@ -216,24 +214,21 @@ These modules have their own commands but MUST:
 | Module | Commands | Records To |
 |--------|----------|-----------|
 | `/learn` | package capability generation | `package_learning` arm |
-| `/map` | GUI automation learning | `gui_mapping` arm |
 | `/react` | reactive function management | `reactive_functions` arm |
 | `/mobile` | mobile gateway management | `mobile_gateway` arm |
 
 ## LLM Configuration
 
-**SLM (Classification):** `phi3.5:3.8b-mini-instruct-q8_0`
-**LLM (Generation):** `qwen2.5:7b-instruct-q8_0`
+**LLM:** `qwen2.5:7b-instruct-q8_0`
 
-## Intent Classification
+## Intent Routing
 
-Inputs are classified before routing:
+Inputs are routed using rule-based classification:
 
 | Intent | Handler |
 |--------|---------|
 | `system_question` | Agent Loop |
 | `system_task` | Agent Loop |
-| `gui_task` | Agent Loop (GUI tools) |
 | `shell_passthrough` | Safe subprocess |
 | `meta` | Direct handlers |
 

@@ -13,7 +13,6 @@ from elle.capabilities.dependencies.checker import (
 )
 from elle.capabilities.dependencies.core import (
     ALLOWED_PACKAGES,
-    ATSPI_DEPENDENCY,
     AUGEAS_DEPENDENCY,
     CORE_DEPENDENCIES,
 )
@@ -245,7 +244,6 @@ class TestGlobalRegistry:
         registry = get_registry()
 
         # Should have core dependencies registered
-        assert registry.has("atspi")
         assert registry.has("augeas")
         assert registry.has("docker")
         assert registry.has("wireguard")
@@ -373,10 +371,10 @@ class TestDependencyChecker:
         """Test checking dependencies for a capability."""
         checker = get_checker()
 
-        # GUI capabilities require atspi
-        missing = checker.check_for_capability("gui.learn")
+        # Config capabilities require augeas
+        missing = checker.check_for_capability("config.edit")
 
-        # Result depends on whether atspi is installed
+        # Result depends on whether augeas is installed
         # Just verify it returns a list
         assert isinstance(missing, list)
 
@@ -501,7 +499,7 @@ class TestDependencyInstaller:
         installer = DependencyInstaller(registry, checker, store)
 
         # These should not raise
-        assert installer.can_install(("python3-pyatspi",))
+        assert installer.can_install(("augeas-tools",))
         assert installer.can_install(("docker.io",))
         assert installer.can_install(("wireguard",))
 
@@ -521,11 +519,11 @@ class TestDependencyInstaller:
         checker = DependencyChecker(registry)
         installer = DependencyInstaller(registry, checker, store)
 
-        disallowed = installer.get_disallowed_packages(("python3-pyatspi", "malicious", "docker.io", "evil"))
+        disallowed = installer.get_disallowed_packages(("augeas-tools", "malicious", "docker.io", "evil"))
 
         assert "malicious" in disallowed
         assert "evil" in disallowed
-        assert "python3-pyatspi" not in disallowed
+        assert "augeas-tools" not in disallowed
         assert "docker.io" not in disallowed
 
     @pytest.mark.asyncio
@@ -553,14 +551,6 @@ class TestDependencyInstaller:
 class TestCoreDependencies:
     """Tests for core dependency definitions."""
 
-    def test_atspi_dependency(self):
-        """Test ATSPI dependency definition."""
-        assert ATSPI_DEPENDENCY.name == "atspi"
-        assert "python3-pyatspi" in ATSPI_DEPENDENCY.apt_packages
-        assert "at-spi2-core" in ATSPI_DEPENDENCY.apt_packages
-        assert ATSPI_DEPENDENCY.check_import == "gi.repository.Atspi"
-        assert "gui.learn" in ATSPI_DEPENDENCY.required_by
-
     def test_augeas_dependency(self):
         """Test Augeas dependency definition."""
         assert AUGEAS_DEPENDENCY.name == "augeas"
@@ -569,7 +559,7 @@ class TestCoreDependencies:
 
     def test_core_dependencies_count(self):
         """Test that core dependencies are defined."""
-        assert len(CORE_DEPENDENCIES) >= 4
+        assert len(CORE_DEPENDENCIES) >= 3
 
     def test_allowed_packages_includes_core(self):
         """Test that ALLOWED_PACKAGES includes packages from core deps."""
