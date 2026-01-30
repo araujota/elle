@@ -65,6 +65,9 @@ AGENTIC_LOOP_ENABLED_VAR = "ELLE_AGENTIC_LOOP"
 # Mutating tools that require verification
 MUTATING_TOOLS = frozenset(["execute_capability"])
 
+# Progress callback type: (stage, description, iteration) -> None
+ProgressCallback = Callable[[str, str, int], None]
+
 
 def is_agentic_loop_enabled() -> bool:
     """Check if the agentic loop is enabled via environment variable."""
@@ -383,6 +386,7 @@ class AgenticLoop:
         user_input: str,
         *,
         stream_callback: Callable[[str], None] | None = None,
+        progress_callback: ProgressCallback | None = None,
         confirm_callback: ConfirmCallback | None = None,
         session_id: str | None = None,
     ) -> AgenticLoopResult:
@@ -394,6 +398,8 @@ class AgenticLoop:
         Args:
             user_input: The user's input (question or task).
             stream_callback: Optional callback for streaming response tokens.
+            progress_callback: Optional callback for stage progress updates.
+                Signature: (stage, description, iteration) -> None
             confirm_callback: Optional callback for confirming mutating operations.
             session_id: Optional session ID for audit linking.
 
@@ -411,6 +417,7 @@ class AgenticLoop:
         return await self.run_with_input(
             agentic_input,
             stream_callback=stream_callback,
+            progress_callback=progress_callback,
             confirm_callback=confirm_callback,
         )
 
@@ -520,6 +527,7 @@ class AgenticLoop:
         input: Any,  # AgenticInput, but avoid circular import
         *,
         stream_callback: Callable[[str], None] | None = None,
+        progress_callback: ProgressCallback | None = None,
         confirm_callback: ConfirmCallback | None = None,
     ) -> AgenticLoopResult:
         """Run the agentic loop for an AgenticInput.
@@ -532,6 +540,8 @@ class AgenticLoop:
         Args:
             input: AgenticInput to process.
             stream_callback: Optional callback for streaming response tokens.
+            progress_callback: Optional callback for stage progress updates.
+                Signature: (stage, description, iteration) -> None
             confirm_callback: Optional callback for confirming mutating operations.
 
         Returns:
@@ -587,6 +597,8 @@ class AgenticLoop:
             # 1. Run unified retrieval
             retrieval_context = None
             if self.prefetch_context:
+                if progress_callback:
+                    progress_callback("retrieve", "Querying knowledge vaults...", 0)
                 retrieval_context = await self.retrieval_pipeline.retrieve(input)
                 logger.debug(f"Retrieval took {retrieval_context.retrieval_duration_ms}ms")
 
@@ -618,6 +630,8 @@ class AgenticLoop:
                 keep_alive="30m",
             ) as session:
                 # 5. Initial LLM call
+                if progress_callback:
+                    progress_callback("hypothesize", "Reasoning...", 0)
                 response = await session.chat(
                     user_message,
                     stream_callback=stream_callback,
@@ -665,6 +679,9 @@ class AgenticLoop:
                             f"Executing tool: {tool_call.name} with args {tool_call.arguments}"
                         )
 
+                        if progress_callback:
+                            progress_callback("act", f"Executing {tool_call.name}...", iterations)
+
                         # Execute the tool
                         result = await self.tools.execute(
                             tool_call.name,
@@ -676,6 +693,8 @@ class AgenticLoop:
                         verified = False
                         verification_evidence = ""
                         if self.enable_verification and tool_call.name in MUTATING_TOOLS:
+                            if progress_callback:
+                                progress_callback("verify", "Verifying outcome...", iterations)
                             verified, verification_result = await self._verify_outcome(
                                 tool_call, result, execution_id
                             )
@@ -763,6 +782,8 @@ class AgenticLoop:
                 )
 
             # Record to incident vault - ESSENTIAL for the Spine architecture
+            if progress_callback:
+                progress_callback("record", "Recording to incident vault...", iterations)
             incident_id = self._record_to_incident(
                 execution_id=execution_id,
                 input=input,

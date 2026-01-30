@@ -8,9 +8,10 @@ and why.
 from __future__ import annotations
 
 import re
-import sqlite3
 from datetime import datetime
 from typing import Any
+
+import psycopg
 
 from elle.common.pydantic_compat import safe_model_dump
 from elle.daemon.incidents.narrative import (
@@ -18,20 +19,21 @@ from elle.daemon.incidents.narrative import (
     CausalLink,
     Narrative,
 )
-from elle.daemon.incidents.schema import ensure_schema, get_connection
+from elle.daemon.incidents.schema import PG_SCHEMA
+from elle.storage.engine import get_conn
 
 # Schema additions for storing narratives
 NARRATIVES_TABLE = """
 CREATE TABLE IF NOT EXISTS narratives (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     chain_id TEXT UNIQUE NOT NULL,
     incident_id TEXT,
     summary TEXT NOT NULL,
-    timeline_json TEXT NOT NULL DEFAULT '[]',
+    timeline_json JSONB NOT NULL DEFAULT '[]'::jsonb,
     explanation TEXT NOT NULL DEFAULT '',
-    keywords_json TEXT NOT NULL DEFAULT '[]',
-    chain_json TEXT NOT NULL,
-    generated_at TEXT NOT NULL,
+    keywords_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+    chain_json JSONB NOT NULL,
+    generated_at TIMESTAMPTZ NOT NULL,
     model_used TEXT NOT NULL DEFAULT ''
 )
 """
@@ -41,7 +43,7 @@ CREATE INDEX IF NOT EXISTS idx_narratives_incident ON narratives(incident_id)
 """
 
 
-def _ensure_narrative_schema(conn: sqlite3.Connection) -> None:
+def _ensure_narrative_schema(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
     """Ensure narrative tables exist."""
     cursor = conn.cursor()
     cursor.execute(NARRATIVES_TABLE)
@@ -90,14 +92,14 @@ class NarrativeBuilder:
         self,
         chain: CausalChain,
         incident_id: str | None = None,
-        conn: sqlite3.Connection | None = None,
+        store: bool = False,
     ) -> Narrative:
         """Build a narrative from a causal chain.
 
         Args:
             chain: The causal chain to narrate.
             incident_id: Associated incident ID (optional).
-            conn: SQLite connection for storing the narrative.
+            store: Whether to persist the narrative to the database.
 
         Returns:
             Generated Narrative.
@@ -126,9 +128,9 @@ class NarrativeBuilder:
             model_used=model_used,
         )
 
-        # Store if connection provided
-        if conn is not None:
-            self._store_narrative(narrative, incident_id, conn)
+        # Store if requested
+        if store:
+            self._store_narrative(narrative, incident_id)
 
         return narrative
 
@@ -402,59 +404,60 @@ Focus on:
         self,
         narrative: Narrative,
         incident_id: str | None,
-        conn: sqlite3.Connection,
     ) -> None:
         """Store narrative in database."""
-        _ensure_narrative_schema(conn)
+        with get_conn(schema=PG_SCHEMA) as conn:
+            _ensure_narrative_schema(conn)
 
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO narratives (
-                chain_id, incident_id, summary, timeline_json,
-                explanation, keywords_json, chain_json,
-                generated_at, model_used
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                narrative.chain.chain_id,
-                incident_id,
-                narrative.summary,
-                _json_dumps(list(narrative.timeline)),
-                narrative.explanation,
-                _json_dumps(list(narrative.keywords)),
-                _json_dumps(safe_model_dump(narrative.chain)),
-                narrative.generated_at.isoformat(),
-                narrative.model_used,
-            ),
-        )
-        conn.commit()
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO narratives (
+                    chain_id, incident_id, summary, timeline_json,
+                    explanation, keywords_json, chain_json,
+                    generated_at, model_used
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (chain_id) DO UPDATE SET
+                    incident_id = EXCLUDED.incident_id,
+                    summary = EXCLUDED.summary,
+                    timeline_json = EXCLUDED.timeline_json,
+                    explanation = EXCLUDED.explanation,
+                    keywords_json = EXCLUDED.keywords_json,
+                    chain_json = EXCLUDED.chain_json,
+                    generated_at = EXCLUDED.generated_at,
+                    model_used = EXCLUDED.model_used
+                """,
+                (
+                    narrative.chain.chain_id,
+                    incident_id,
+                    narrative.summary,
+                    _json_dumps(list(narrative.timeline)),
+                    narrative.explanation,
+                    _json_dumps(list(narrative.keywords)),
+                    _json_dumps(safe_model_dump(narrative.chain)),
+                    narrative.generated_at.isoformat(),
+                    narrative.model_used,
+                ),
+            )
 
 
 def get_narrative(
     chain_id: str,
-    conn: sqlite3.Connection | None = None,
 ) -> Narrative | None:
     """Retrieve a stored narrative by chain ID.
 
     Args:
         chain_id: The chain ID to look up.
-        conn: SQLite connection.
 
     Returns:
         Narrative if found, None otherwise.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
+    with get_conn(schema=PG_SCHEMA) as conn:
         _ensure_narrative_schema(conn)
-    assert conn is not None
 
-    try:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT * FROM narratives WHERE chain_id = ?",
+            "SELECT * FROM narratives WHERE chain_id = %s",
             (chain_id,),
         )
         row = cursor.fetchone()
@@ -507,49 +510,37 @@ def get_narrative(
             model_used=row["model_used"],
         )
 
-    finally:
-        if own_conn and conn is not None:
-            conn.close()
-
 
 def get_narratives_for_incident(
     incident_id: str,
-    conn: sqlite3.Connection | None = None,
 ) -> list[Narrative]:
     """Get all narratives associated with an incident.
 
     Args:
         incident_id: The incident ID.
-        conn: SQLite connection.
 
     Returns:
         List of Narratives.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
+    with get_conn(schema=PG_SCHEMA) as conn:
         _ensure_narrative_schema(conn)
-    assert conn is not None
 
-    try:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT chain_id FROM narratives WHERE incident_id = ?",
+            "SELECT chain_id FROM narratives WHERE incident_id = %s",
             (incident_id,),
         )
 
-        narratives = []
-        for row in cursor.fetchall():
-            narrative = get_narrative(row["chain_id"], conn)
-            if narrative:
-                narratives.append(narrative)
+        chain_ids = [row["chain_id"] for row in cursor.fetchall()]
 
-        return narratives
+    # Fetch each narrative (each call gets its own connection)
+    narratives = []
+    for chain_id in chain_ids:
+        narrative = get_narrative(chain_id)
+        if narrative:
+            narratives.append(narrative)
 
-    finally:
-        if own_conn and conn is not None:
-            conn.close()
+    return narratives
 
 
 # =============================================================================
@@ -559,7 +550,6 @@ def get_narratives_for_incident(
 
 def generate_narrative_for_incident(
     incident_id: str,
-    conn: sqlite3.Connection | None = None,
 ) -> Narrative | None:
     """Generate a narrative for an incident.
 
@@ -568,7 +558,6 @@ def generate_narrative_for_incident(
 
     Args:
         incident_id: The incident to generate narrative for.
-        conn: SQLite connection.
 
     Returns:
         Generated Narrative, or None if unable to build chain.
@@ -576,39 +565,29 @@ def generate_narrative_for_incident(
     from elle.daemon.incidents.multihop import MultiHopSearch
     from elle.daemon.incidents.store import get_incident
 
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
+    # Get incident (uses its own connection)
+    incident = get_incident(incident_id)
+    if not incident:
+        return None
 
-    try:
-        # Get incident
-        incident = get_incident(incident_id, conn=conn)
-        if not incident:
-            return None
+    # Build query from incident
+    query = f"{incident.title} {incident.summary}"
+    if incident.symptoms:
+        query += " " + " ".join(incident.symptoms[:3])
 
-        # Build query from incident
-        query = f"{incident.title} {incident.summary}"
-        if incident.symptoms:
-            query += " " + " ".join(incident.symptoms[:3])
+    # Perform multi-hop search (uses its own connection)
+    searcher = MultiHopSearch()
+    result = searcher.search(query)
 
-        # Perform multi-hop search
-        searcher = MultiHopSearch()
-        result = searcher.search(query, conn=conn)
+    if not result.best_chain:
+        return None
 
-        if not result.best_chain:
-            return None
+    # Generate narrative and store it
+    builder = NarrativeBuilder()
+    narrative = builder.build_narrative(
+        result.best_chain,
+        incident_id=incident_id,
+        store=True,
+    )
 
-        # Generate narrative
-        builder = NarrativeBuilder()
-        narrative = builder.build_narrative(
-            result.best_chain,
-            incident_id=incident_id,
-            conn=conn,
-        )
-
-        return narrative
-
-    finally:
-        if own_conn and conn is not None:
-            conn.close()
+    return narrative

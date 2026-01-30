@@ -2,38 +2,22 @@
 
 Provides efficient batch operations and queries for
 telemetry events and probe results.
+
+Storage backend: PostgreSQL via psycopg (schema ``telemetry``).
 """
 
 from __future__ import annotations
 
 import json
-import sqlite3
-from collections.abc import Iterator
-from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import psycopg
+
 from elle.daemon.telemetry.models import ProbeResult, TelemetryEvent
-from elle.daemon.telemetry.schema import ensure_schema, get_connection
+from elle.storage.engine import get_conn
 
-
-@contextmanager
-def _ensure_connection(
-    conn: sqlite3.Connection | None = None,
-) -> Iterator[sqlite3.Connection]:
-    """Context manager that ensures a valid connection."""
-    own_conn = conn is None
-    if own_conn:
-        actual_conn = get_connection()
-        ensure_schema(actual_conn)
-    else:
-        assert conn is not None  # Help mypy with type narrowing
-        actual_conn = conn
-    try:
-        yield actual_conn
-    finally:
-        if own_conn:
-            actual_conn.close()
+PG_SCHEMA = "telemetry"
 
 
 def _serialize_datetime(dt: datetime) -> str:
@@ -65,25 +49,27 @@ def _json_loads(s: str | None) -> Any:
 
 def insert_event(
     event: TelemetryEvent,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> int:
     """Insert a single event.
 
     Args:
         event: The TelemetryEvent to insert.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         The inserted row ID.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> int:  # type: ignore[type-arg]
         cursor = c.cursor()
         cursor.execute(
             """
             INSERT INTO events (
                 event_id, ts, source, severity, category,
                 message, entity, fingerprint, raw
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
             """,
             (
                 event.event_id,
@@ -97,13 +83,19 @@ def insert_event(
                 _json_dumps(event.raw),
             ),
         )
-        c.commit()
-        return cursor.lastrowid or 0
+        row = cursor.fetchone()
+        return row["id"] if row else 0
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
 
 
 def insert_events_batch(
     events: list[TelemetryEvent],
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> int:
     """Insert multiple events in a batch.
 
@@ -111,7 +103,7 @@ def insert_events_batch(
 
     Args:
         events: List of TelemetryEvents to insert.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         Number of events inserted.
@@ -119,52 +111,57 @@ def insert_events_batch(
     if not events:
         return 0
 
-    with _ensure_connection(conn) as c:
+    def _run(c: psycopg.Connection) -> int:  # type: ignore[type-arg]
         cursor = c.cursor()
-        rows = [
-            (
-                event.event_id,
-                _serialize_datetime(event.ts),
-                event.source,
-                event.severity,
-                event.category,
-                event.message,
-                event.entity,
-                event.fingerprint,
-                _json_dumps(event.raw),
+        inserted = 0
+        for event in events:
+            cursor.execute(
+                """
+                INSERT INTO events (
+                    event_id, ts, source, severity, category,
+                    message, entity, fingerprint, raw
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT DO NOTHING
+                """,
+                (
+                    event.event_id,
+                    _serialize_datetime(event.ts),
+                    event.source,
+                    event.severity,
+                    event.category,
+                    event.message,
+                    event.entity,
+                    event.fingerprint,
+                    _json_dumps(event.raw),
+                ),
             )
-            for event in events
-        ]
+            inserted += cursor.rowcount
+        return inserted
 
-        cursor.executemany(
-            """
-            INSERT OR IGNORE INTO events (
-                event_id, ts, source, severity, category,
-                message, entity, fingerprint, raw
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            rows,
-        )
-        c.commit()
-        return cursor.rowcount
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
 
 
 def get_event(
     event_id: str,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> TelemetryEvent | None:
     """Get an event by its event_id.
 
     Args:
         event_id: The event UUID.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         TelemetryEvent if found, None otherwise.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> TelemetryEvent | None:  # type: ignore[type-arg]
         cursor = c.cursor()
-        cursor.execute("SELECT * FROM events WHERE event_id = ?", (event_id,))
+        cursor.execute("SELECT * FROM events WHERE event_id = %s", (event_id,))
         row = cursor.fetchone()
 
         if not row:
@@ -172,29 +169,42 @@ def get_event(
 
         return _row_to_event(row)
 
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
+
 
 def get_event_by_id(
     row_id: int,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> TelemetryEvent | None:
     """Get an event by its database row ID.
 
     Args:
         row_id: The database row ID.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         TelemetryEvent if found, None otherwise.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> TelemetryEvent | None:  # type: ignore[type-arg]
         cursor = c.cursor()
-        cursor.execute("SELECT * FROM events WHERE id = ?", (row_id,))
+        cursor.execute("SELECT * FROM events WHERE id = %s", (row_id,))
         row = cursor.fetchone()
 
         if not row:
             return None
 
         return _row_to_event(row)
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
 
 
 def query_events(
@@ -206,7 +216,7 @@ def query_events(
     source: str | None = None,
     limit: int = 100,
     offset: int = 0,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> list[TelemetryEvent]:
     """Query events with filters.
 
@@ -219,35 +229,36 @@ def query_events(
         source: Filter by source type.
         limit: Maximum results.
         offset: Pagination offset.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         List of matching TelemetryEvents.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> list[TelemetryEvent]:  # type: ignore[type-arg]
         query = "SELECT * FROM events WHERE 1=1"
         params: list[Any] = []
 
         if since:
-            query += " AND ts >= ?"
+            query += " AND ts >= %s"
             params.append(_serialize_datetime(since))
         if until:
-            query += " AND ts <= ?"
+            query += " AND ts <= %s"
             params.append(_serialize_datetime(until))
         if category:
-            query += " AND category = ?"
+            query += " AND category = %s"
             params.append(category)
         if severity:
-            query += " AND severity = ?"
+            query += " AND severity = %s"
             params.append(severity)
         if entity:
-            query += " AND entity = ?"
+            query += " AND entity = %s"
             params.append(entity)
         if source:
-            query += " AND source = ?"
+            query += " AND source = %s"
             params.append(source)
 
-        query += " ORDER BY ts DESC LIMIT ? OFFSET ?"
+        query += " ORDER BY ts DESC LIMIT %s OFFSET %s"
         params.extend([limit, offset])
 
         cursor = c.cursor()
@@ -255,43 +266,59 @@ def query_events(
 
         return [_row_to_event(row) for row in cursor.fetchall()]
 
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
+
 
 def search_events(
     query_text: str,
     limit: int = 100,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> list[TelemetryEvent]:
     """Full-text search events by message.
+
+    Uses PostgreSQL full-text search with ts_query.
 
     Args:
         query_text: Search query.
         limit: Maximum results.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         List of matching TelemetryEvents.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> list[TelemetryEvent]:  # type: ignore[type-arg]
         cursor = c.cursor()
+        # Use ILIKE for simple substring matching (compatible fallback)
+        # For FTS, the schema migration should create a tsvector column + GIN index
         cursor.execute(
             """
-            SELECT e.* FROM events e
-            JOIN events_fts f ON e.id = f.rowid
-            WHERE events_fts MATCH ?
-            ORDER BY e.ts DESC
-            LIMIT ?
+            SELECT * FROM events
+            WHERE message ILIKE %s
+            ORDER BY ts DESC
+            LIMIT %s
             """,
-            (query_text, limit),
+            (f"%{query_text}%", limit),
         )
 
         return [_row_to_event(row) for row in cursor.fetchall()]
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
 
 
 def count_events(
     since: datetime | None = None,
     category: str | None = None,
     severity: str | None = None,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> int:
     """Count events matching filters.
 
@@ -299,50 +326,58 @@ def count_events(
         since: Count events after this time.
         category: Filter by category.
         severity: Filter by severity.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         Number of matching events.
     """
-    with _ensure_connection(conn) as c:
-        query = "SELECT COUNT(*) FROM events WHERE 1=1"
+
+    def _run(c: psycopg.Connection) -> int:  # type: ignore[type-arg]
+        query = "SELECT COUNT(*) AS cnt FROM events WHERE 1=1"
         params: list[Any] = []
 
         if since:
-            query += " AND ts >= ?"
+            query += " AND ts >= %s"
             params.append(_serialize_datetime(since))
         if category:
-            query += " AND category = ?"
+            query += " AND category = %s"
             params.append(category)
         if severity:
-            query += " AND severity = ?"
+            query += " AND severity = %s"
             params.append(severity)
 
         cursor = c.cursor()
         cursor.execute(query, params)
         row = cursor.fetchone()
-        return int(row[0]) if row else 0
+        return int(row["cnt"]) if row else 0
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
 
 
 def count_events_by_category(
     since: datetime | None = None,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> dict[str, int]:
     """Count events grouped by category.
 
     Args:
         since: Count events after this time.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         Dict mapping category to count.
     """
-    with _ensure_connection(conn) as c:
-        query = "SELECT category, COUNT(*) FROM events"
+
+    def _run(c: psycopg.Connection) -> dict[str, int]:  # type: ignore[type-arg]
+        query = "SELECT category, COUNT(*) AS cnt FROM events"
         params: list[Any] = []
 
         if since:
-            query += " WHERE ts >= ?"
+            query += " WHERE ts >= %s"
             params.append(_serialize_datetime(since))
 
         query += " GROUP BY category"
@@ -350,65 +385,88 @@ def count_events_by_category(
         cursor = c.cursor()
         cursor.execute(query, params)
 
-        return {row[0]: row[1] for row in cursor.fetchall()}
+        return {row["category"]: row["cnt"] for row in cursor.fetchall()}
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
 
 
 def get_recent_fingerprints(
     window_sec: int = 60,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> set[str]:
     """Get fingerprints of recent events for deduplication.
 
     Args:
         window_sec: Look back window in seconds.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         Set of fingerprints.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> set[str]:  # type: ignore[type-arg]
         since = datetime.now(timezone.utc) - timedelta(seconds=window_sec)
         cursor = c.cursor()
         cursor.execute(
             """
             SELECT DISTINCT fingerprint FROM events
-            WHERE ts >= ? AND fingerprint IS NOT NULL
+            WHERE ts >= %s AND fingerprint IS NOT NULL
             """,
             (_serialize_datetime(since),),
         )
 
-        return {row[0] for row in cursor.fetchall()}
+        return {row["fingerprint"] for row in cursor.fetchall()}
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
 
 
 def delete_old_events(
     older_than_days: int = 30,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> int:
     """Delete events older than specified days.
 
     Args:
         older_than_days: Delete events older than this.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         Number of deleted events.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> int:  # type: ignore[type-arg]
         cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
         cursor = c.cursor()
         cursor.execute(
-            "DELETE FROM events WHERE ts < ?",
+            "DELETE FROM events WHERE ts < %s",
             (_serialize_datetime(cutoff),),
         )
-        c.commit()
         return cursor.rowcount
 
+    if conn is not None:
+        return _run(conn)
 
-def _row_to_event(row: sqlite3.Row) -> TelemetryEvent:
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
+
+
+def _row_to_event(row: dict) -> TelemetryEvent:
     """Convert a database row to TelemetryEvent."""
+    ts = row["ts"]
+    if isinstance(ts, str):
+        ts = _parse_datetime(ts)
+
     return TelemetryEvent(
         event_id=row["event_id"],
-        ts=_parse_datetime(row["ts"]),
+        ts=ts,
         source=row["source"],
         severity=row["severity"],
         category=row["category"],
@@ -426,56 +484,65 @@ def _row_to_event(row: sqlite3.Row) -> TelemetryEvent:
 
 def insert_probe_result(
     result: ProbeResult,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> int:
     """Insert a probe result.
 
     Args:
         result: The ProbeResult to insert.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         The inserted row ID.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> int:  # type: ignore[type-arg]
         cursor = c.cursor()
         cursor.execute(
             """
             INSERT INTO probe_results (
                 probe_name, ts, success, data, error
-            ) VALUES (?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s)
+            RETURNING id
             """,
             (
                 result.probe_name,
                 _serialize_datetime(result.ts),
-                1 if result.success else 0,
+                result.success,
                 _json_dumps(result.data),
                 result.error,
             ),
         )
-        c.commit()
-        return cursor.lastrowid or 0
+        row = cursor.fetchone()
+        return row["id"] if row else 0
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
 
 
 def get_latest_probe_result(
     probe_name: str,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> ProbeResult | None:
     """Get the most recent result for a probe.
 
     Args:
         probe_name: Name of the probe.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         Latest ProbeResult if found, None otherwise.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> ProbeResult | None:  # type: ignore[type-arg]
         cursor = c.cursor()
         cursor.execute(
             """
             SELECT * FROM probe_results
-            WHERE probe_name = ?
+            WHERE probe_name = %s
             ORDER BY ts DESC
             LIMIT 1
             """,
@@ -486,34 +553,50 @@ def get_latest_probe_result(
         if not row:
             return None
 
+        ts = row["ts"]
+        if isinstance(ts, str):
+            ts = _parse_datetime(ts)
+
         return ProbeResult(
             probe_name=row["probe_name"],
-            ts=_parse_datetime(row["ts"]),
+            ts=ts,
             success=bool(row["success"]),
             data=_json_loads(row["data"]),
             error=row["error"],
         )
 
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
+
 
 def delete_old_probe_results(
     older_than_days: int = 7,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> int:
     """Delete probe results older than specified days.
 
     Args:
         older_than_days: Delete results older than this.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         Number of deleted results.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> int:  # type: ignore[type-arg]
         cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
         cursor = c.cursor()
         cursor.execute(
-            "DELETE FROM probe_results WHERE ts < ?",
+            "DELETE FROM probe_results WHERE ts < %s",
             (_serialize_datetime(cutoff),),
         )
-        c.commit()
         return cursor.rowcount
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)

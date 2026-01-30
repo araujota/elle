@@ -2,16 +2,17 @@
 
 Provides database operations for reactive functions, execution history,
 and function state. All operations follow ELLE's store patterns.
+
+Storage backend: PostgreSQL via psycopg (schema ``reactive``).
 """
 
 from __future__ import annotations
 
 import json
-import sqlite3
-from collections.abc import Iterator
-from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
+
+import psycopg
 
 from elle.common.pydantic_compat import safe_model_dump
 from elle.reactive.models import (
@@ -28,27 +29,9 @@ from elle.reactive.models import (
     StateProbe,
     Trigger,
 )
-from elle.reactive.schema import ensure_schema, get_connection
+from elle.storage.engine import get_conn
 
-
-@contextmanager
-def _ensure_connection(
-    conn: sqlite3.Connection | None = None,
-) -> Iterator[sqlite3.Connection]:
-    """Context manager that ensures a valid connection with schema."""
-    own_conn = conn is None
-    actual_conn: sqlite3.Connection
-    if own_conn:
-        actual_conn = get_connection()
-        ensure_schema(actual_conn)
-    else:
-        assert conn is not None  # for type narrowing
-        actual_conn = conn
-    try:
-        yield actual_conn
-    finally:
-        if own_conn:
-            actual_conn.close()
+PG_SCHEMA = "reactive"
 
 
 def _serialize_datetime(dt: datetime) -> str:
@@ -80,21 +63,22 @@ def _json_loads(s: str | None) -> Any:
 
 def create_function(
     func: ReactiveFunction,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> ReactiveFunction:
     """Create a new reactive function.
 
     Args:
         func: The ReactiveFunction to create.
-        conn: SQLite connection. Uses default if not provided.
+        conn: psycopg connection. Uses pool if not provided.
 
     Returns:
         The created ReactiveFunction.
 
     Raises:
-        sqlite3.IntegrityError: If name already exists.
+        psycopg.errors.UniqueViolation: If name already exists.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> ReactiveFunction:  # type: ignore[type-arg]
         cursor = c.cursor()
         cursor.execute(
             """
@@ -103,13 +87,13 @@ def create_function(
                 created_at, updated_at, created_by,
                 trigger_json, condition_json, actions_json,
                 policy_json, state_json, tags_json, source_prompt
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 func.id,
                 func.name,
                 func.description,
-                1 if func.enabled else 0,
+                func.enabled,
                 _serialize_datetime(func.created_at),
                 _serialize_datetime(func.updated_at),
                 func.created_by,
@@ -122,8 +106,13 @@ def create_function(
                 func.source_prompt,
             ),
         )
-        c.commit()
         return func
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
 
 
 def update_function(
@@ -138,7 +127,7 @@ def update_function(
     policy: PolicySpec | None = None,
     state: dict[str, StateProbe] | None = None,
     tags: tuple[str, ...] | None = None,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> ReactiveFunction | None:
     """Update an existing reactive function.
 
@@ -147,105 +136,129 @@ def update_function(
     Args:
         function_id: ID of the function to update.
         **kwargs: Fields to update.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         Updated ReactiveFunction, or None if not found.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> ReactiveFunction | None:  # type: ignore[type-arg]
         # Build update statement dynamically
-        updates = ["updated_at = ?"]
+        updates = ["updated_at = %s"]
         values: list[Any] = [_serialize_datetime(datetime.utcnow())]
 
         if name is not None:
-            updates.append("name = ?")
+            updates.append("name = %s")
             values.append(name)
         if description is not None:
-            updates.append("description = ?")
+            updates.append("description = %s")
             values.append(description)
         if enabled is not None:
-            updates.append("enabled = ?")
-            values.append(1 if enabled else 0)
+            updates.append("enabled = %s")
+            values.append(enabled)
         if trigger is not None:
-            updates.append("trigger_json = ?")
+            updates.append("trigger_json = %s")
             values.append(_json_dumps(safe_model_dump(trigger)))
         if condition is not None:
-            updates.append("condition_json = ?")
+            updates.append("condition_json = %s")
             values.append(_json_dumps(safe_model_dump(condition)))
         if actions is not None:
-            updates.append("actions_json = ?")
+            updates.append("actions_json = %s")
             values.append(_json_dumps([safe_model_dump(a) for a in actions]))
         if policy is not None:
-            updates.append("policy_json = ?")
+            updates.append("policy_json = %s")
             values.append(_json_dumps(safe_model_dump(policy)))
         if state is not None:
-            updates.append("state_json = ?")
+            updates.append("state_json = %s")
             values.append(_json_dumps({k: safe_model_dump(v) for k, v in state.items()}))
         if tags is not None:
-            updates.append("tags_json = ?")
+            updates.append("tags_json = %s")
             values.append(_json_dumps(list(tags)))
 
         values.append(function_id)
 
         cursor = c.cursor()
         cursor.execute(
-            f"UPDATE reactive_functions SET {', '.join(updates)} WHERE id = ?",
+            f"UPDATE reactive_functions SET {', '.join(updates)} WHERE id = %s",
             values,
         )
-        c.commit()
 
         if cursor.rowcount == 0:
             return None
 
-        return get_function(function_id, conn=c)
+        return _get_function_inner(c, function_id)
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
 
 
 def get_function(
     function_id: str,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> ReactiveFunction | None:
     """Get a reactive function by ID.
 
     Args:
         function_id: The function UUID.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         ReactiveFunction if found, None otherwise.
     """
-    with _ensure_connection(conn) as c:
-        cursor = c.cursor()
-        cursor.execute("SELECT * FROM reactive_functions WHERE id = ?", (function_id,))
-        row = cursor.fetchone()
+    if conn is not None:
+        return _get_function_inner(conn, function_id)
 
-        if not row:
-            return None
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _get_function_inner(c, function_id)
 
-        return _row_to_function(row)
+
+def _get_function_inner(
+    c: psycopg.Connection,  # type: ignore[type-arg]
+    function_id: str,
+) -> ReactiveFunction | None:
+    """Internal helper to get a function within an existing connection."""
+    cursor = c.cursor()
+    cursor.execute("SELECT * FROM reactive_functions WHERE id = %s", (function_id,))
+    row = cursor.fetchone()
+
+    if not row:
+        return None
+
+    return _row_to_function(row)
 
 
 def get_function_by_name(
     name: str,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> ReactiveFunction | None:
     """Get a reactive function by name.
 
     Args:
         name: The function name.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         ReactiveFunction if found, None otherwise.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> ReactiveFunction | None:  # type: ignore[type-arg]
         cursor = c.cursor()
-        cursor.execute("SELECT * FROM reactive_functions WHERE name = ?", (name,))
+        cursor.execute("SELECT * FROM reactive_functions WHERE name = %s", (name,))
         row = cursor.fetchone()
 
         if not row:
             return None
 
         return _row_to_function(row)
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
 
 
 def list_functions(
@@ -253,7 +266,7 @@ def list_functions(
     tags: list[str] | None = None,
     limit: int = 100,
     offset: int = 0,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> list[ReactiveFunction]:
     """List reactive functions with optional filtering.
 
@@ -262,19 +275,20 @@ def list_functions(
         tags: Filter by tags (any match).
         limit: Maximum number of results.
         offset: Offset for pagination.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         List of ReactiveFunctions.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> list[ReactiveFunction]:  # type: ignore[type-arg]
         query = "SELECT * FROM reactive_functions WHERE 1=1"
         params: list[Any] = []
 
         if enabled_only:
-            query += " AND enabled = 1"
+            query += " AND enabled = TRUE"
 
-        query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
+        query += " ORDER BY updated_at DESC LIMIT %s OFFSET %s"
         params.extend([limit, offset])
 
         cursor = c.cursor()
@@ -288,65 +302,85 @@ def list_functions(
 
         return functions
 
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
+
 
 def list_enabled_with_event_trigger(
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> list[ReactiveFunction]:
     """List enabled functions that have event triggers.
 
     Used by the event router to find functions to evaluate.
 
     Args:
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         List of enabled ReactiveFunctions with event triggers.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> list[ReactiveFunction]:  # type: ignore[type-arg]
         cursor = c.cursor()
-        # Filter for enabled functions with event triggers
+        # Use PostgreSQL JSONB extraction for trigger type
         cursor.execute(
             """
             SELECT * FROM reactive_functions
-            WHERE enabled = 1
-            AND json_extract(trigger_json, '$.type') = 'event'
+            WHERE enabled = TRUE
+            AND trigger_json::jsonb->>'type' = 'event'
             ORDER BY name
             """
         )
 
         return [_row_to_function(row) for row in cursor.fetchall()]
 
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
+
 
 def list_enabled_with_schedule_trigger(
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> list[ReactiveFunction]:
     """List enabled functions that have schedule triggers.
 
     Used by the scheduler to find functions to schedule.
 
     Args:
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         List of enabled ReactiveFunctions with schedule triggers.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> list[ReactiveFunction]:  # type: ignore[type-arg]
         cursor = c.cursor()
         cursor.execute(
             """
             SELECT * FROM reactive_functions
-            WHERE enabled = 1
-            AND json_extract(trigger_json, '$.type') = 'schedule'
+            WHERE enabled = TRUE
+            AND trigger_json::jsonb->>'type' = 'schedule'
             ORDER BY name
             """
         )
 
         return [_row_to_function(row) for row in cursor.fetchall()]
 
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
+
 
 def list_enabled_with_forecast_trigger(
     urgency: str | None = None,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> list[ReactiveFunction]:
     """List enabled functions that have forecast triggers.
 
@@ -355,21 +389,22 @@ def list_enabled_with_forecast_trigger(
 
     Args:
         urgency: Optional urgency filter ('prepare' or 'act_now').
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         List of enabled ReactiveFunctions with forecast triggers.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> list[ReactiveFunction]:  # type: ignore[type-arg]
         cursor = c.cursor()
 
         if urgency:
             cursor.execute(
                 """
                 SELECT * FROM reactive_functions
-                WHERE enabled = 1
-                AND json_extract(trigger_json, '$.type') = 'forecast'
-                AND json_extract(trigger_json, '$.forecast.urgency') = ?
+                WHERE enabled = TRUE
+                AND trigger_json::jsonb->>'type' = 'forecast'
+                AND trigger_json::jsonb->'forecast'->>'urgency' = %s
                 ORDER BY name
                 """,
                 (urgency,),
@@ -378,56 +413,74 @@ def list_enabled_with_forecast_trigger(
             cursor.execute(
                 """
                 SELECT * FROM reactive_functions
-                WHERE enabled = 1
-                AND json_extract(trigger_json, '$.type') = 'forecast'
+                WHERE enabled = TRUE
+                AND trigger_json::jsonb->>'type' = 'forecast'
                 ORDER BY name
                 """
             )
 
         return [_row_to_function(row) for row in cursor.fetchall()]
 
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
+
 
 def delete_function(
     function_id: str,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> bool:
     """Delete a reactive function and all related data.
 
     Args:
         function_id: The function UUID.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         True if deleted, False if not found.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> bool:  # type: ignore[type-arg]
         cursor = c.cursor()
-        cursor.execute("DELETE FROM reactive_functions WHERE id = ?", (function_id,))
-        c.commit()
+        cursor.execute("DELETE FROM reactive_functions WHERE id = %s", (function_id,))
         return cursor.rowcount > 0
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
 
 
 def delete_function_by_name(
     name: str,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> bool:
     """Delete a reactive function by name.
 
     Args:
         name: The function name.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         True if deleted, False if not found.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> bool:  # type: ignore[type-arg]
         cursor = c.cursor()
-        cursor.execute("DELETE FROM reactive_functions WHERE name = ?", (name,))
-        c.commit()
+        cursor.execute("DELETE FROM reactive_functions WHERE name = %s", (name,))
         return cursor.rowcount > 0
 
+    if conn is not None:
+        return _run(conn)
 
-def _row_to_function(row: sqlite3.Row) -> ReactiveFunction:
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
+
+
+def _row_to_function(row: dict) -> ReactiveFunction:
     """Convert a database row to a ReactiveFunction."""
     # Parse trigger
     trigger_data = _json_loads(row["trigger_json"])
@@ -453,24 +506,32 @@ def _row_to_function(row: sqlite3.Row) -> ReactiveFunction:
 
     # Parse state probes
     state_data = _json_loads(row["state_json"]) or {}
-    state = {k: StateProbe(**v) for k, v in state_data.items()}
+    state_map = {k: StateProbe(**v) for k, v in state_data.items()}
 
     # Parse tags
     tags = tuple(_json_loads(row["tags_json"]) or [])
+
+    created_at = row["created_at"]
+    if isinstance(created_at, str):
+        created_at = _parse_datetime(created_at)
+
+    updated_at = row["updated_at"]
+    if isinstance(updated_at, str):
+        updated_at = _parse_datetime(updated_at)
 
     return ReactiveFunction(
         id=row["id"],
         name=row["name"],
         description=row["description"] or "",
         enabled=bool(row["enabled"]),
-        created_at=_parse_datetime(row["created_at"]),
-        updated_at=_parse_datetime(row["updated_at"]),
+        created_at=created_at,
+        updated_at=updated_at,
         created_by=row["created_by"] or "user",
         trigger=trigger,
         condition=condition,
         actions=actions,
         policy=policy,
-        state=state,
+        state=state_map,
         tags=tags,
         source_prompt=row["source_prompt"],
     )
@@ -506,18 +567,19 @@ def _parse_trigger(data: dict[str, Any]) -> Trigger:
 
 def record_execution(
     record: ExecutionRecord,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> ExecutionRecord:
     """Record a reactive function execution.
 
     Args:
         record: The ExecutionRecord to store.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         The stored ExecutionRecord.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> ExecutionRecord:  # type: ignore[type-arg]
         cursor = c.cursor()
         cursor.execute(
             """
@@ -526,7 +588,7 @@ def record_execution(
                 trigger_event_json, condition_result, condition_explanation,
                 actions_executed_json, actions_results_json,
                 success, error, execution_time_ms, incident_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 record.id,
@@ -534,25 +596,30 @@ def record_execution(
                 record.function_name,
                 _serialize_datetime(record.triggered_at),
                 _json_dumps(record.trigger_event) if record.trigger_event else None,
-                1 if record.condition_result else 0,
+                record.condition_result,
                 record.condition_explanation,
                 _json_dumps(list(record.actions_executed)),
                 _json_dumps([safe_model_dump(r) for r in record.actions_results]),
-                1 if record.success else 0,
+                record.success,
                 record.error,
                 record.execution_time_ms,
                 record.incident_id,
             ),
         )
-        c.commit()
         return record
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
 
 
 def get_execution_history(
     function_id: str,
     limit: int = 50,
     offset: int = 0,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> list[ExecutionRecord]:
     """Get execution history for a function.
 
@@ -560,49 +627,57 @@ def get_execution_history(
         function_id: The function UUID.
         limit: Maximum number of results.
         offset: Offset for pagination.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         List of ExecutionRecords, most recent first.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> list[ExecutionRecord]:  # type: ignore[type-arg]
         cursor = c.cursor()
         cursor.execute(
             """
             SELECT * FROM execution_history
-            WHERE function_id = ?
+            WHERE function_id = %s
             ORDER BY triggered_at DESC
-            LIMIT ? OFFSET ?
+            LIMIT %s OFFSET %s
             """,
             (function_id, limit, offset),
         )
 
         return [_row_to_execution(row) for row in cursor.fetchall()]
 
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
+
 
 def get_recent_executions(
     limit: int = 50,
     success_only: bool = False,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> list[ExecutionRecord]:
     """Get recent executions across all functions.
 
     Args:
         limit: Maximum number of results.
         success_only: Only return successful executions.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         List of ExecutionRecords, most recent first.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> list[ExecutionRecord]:  # type: ignore[type-arg]
         query = "SELECT * FROM execution_history"
         params: list[Any] = []
 
         if success_only:
-            query += " WHERE success = 1"
+            query += " WHERE success = TRUE"
 
-        query += " ORDER BY triggered_at DESC LIMIT ?"
+        query += " ORDER BY triggered_at DESC LIMIT %s"
         params.append(limit)
 
         cursor = c.cursor()
@@ -610,18 +685,28 @@ def get_recent_executions(
 
         return [_row_to_execution(row) for row in cursor.fetchall()]
 
+    if conn is not None:
+        return _run(conn)
 
-def _row_to_execution(row: sqlite3.Row) -> ExecutionRecord:
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
+
+
+def _row_to_execution(row: dict) -> ExecutionRecord:
     """Convert a database row to an ExecutionRecord."""
     # Parse actions_results
     actions_results_data = _json_loads(row["actions_results_json"]) or []
     actions_results = tuple(ActionResult(**r) for r in actions_results_data)
 
+    triggered_at = row["triggered_at"]
+    if isinstance(triggered_at, str):
+        triggered_at = _parse_datetime(triggered_at)
+
     return ExecutionRecord(
         id=row["id"],
         function_id=row["function_id"],
         function_name=row["function_name"],
-        triggered_at=_parse_datetime(row["triggered_at"]),
+        triggered_at=triggered_at,
         trigger_event=_json_loads(row["trigger_event_json"]) if row["trigger_event_json"] else None,
         condition_result=bool(row["condition_result"]),
         condition_explanation=row["condition_explanation"] or "",
@@ -641,23 +726,24 @@ def _row_to_execution(row: sqlite3.Row) -> ExecutionRecord:
 
 def get_rate_limit_state(
     function_id: str,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> RateLimitState:
     """Get rate limiting state for a function.
 
     Args:
         function_id: The function UUID.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         RateLimitState (with defaults if no state exists).
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> RateLimitState:  # type: ignore[type-arg]
         cursor = c.cursor()
         cursor.execute(
             """
             SELECT key, value_json FROM function_state
-            WHERE function_id = ?
+            WHERE function_id = %s
             """,
             (function_id,),
         )
@@ -677,13 +763,19 @@ def get_rate_limit_state(
             daily_reset_date=state_dict.get("daily_reset_date", ""),
         )
 
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
+
 
 def update_rate_limit_state(
     function_id: str,
     last_execution: datetime,
     daily_executions: int,
     daily_reset_date: str,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> None:
     """Update rate limiting state for a function.
 
@@ -692,9 +784,10 @@ def update_rate_limit_state(
         last_execution: Last execution timestamp.
         daily_executions: Daily execution count.
         daily_reset_date: Date string for daily counter.
-        conn: SQLite connection.
+        conn: psycopg connection.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> None:  # type: ignore[type-arg]
         cursor = c.cursor()
         now = _serialize_datetime(datetime.utcnow())
 
@@ -708,20 +801,27 @@ def update_rate_limit_state(
         for key, value in state_items:
             cursor.execute(
                 """
-                INSERT OR REPLACE INTO function_state (function_id, key, value_json, updated_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO function_state (function_id, key, value_json, updated_at)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (function_id, key) DO UPDATE
+                SET value_json = EXCLUDED.value_json, updated_at = EXCLUDED.updated_at
                 """,
                 (function_id, key, _json_dumps(value), now),
             )
 
-        c.commit()
+    if conn is not None:
+        _run(conn)
+        return
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        _run(c)
 
 
 def set_function_state(
     function_id: str,
     key: str,
     value: Any,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> None:
     """Set a custom state value for a function.
 
@@ -729,41 +829,51 @@ def set_function_state(
         function_id: The function UUID.
         key: State key.
         value: State value (will be JSON serialized).
-        conn: SQLite connection.
+        conn: psycopg connection.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> None:  # type: ignore[type-arg]
         cursor = c.cursor()
         cursor.execute(
             """
-            INSERT OR REPLACE INTO function_state (function_id, key, value_json, updated_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO function_state (function_id, key, value_json, updated_at)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (function_id, key) DO UPDATE
+            SET value_json = EXCLUDED.value_json, updated_at = EXCLUDED.updated_at
             """,
             (function_id, key, _json_dumps(value), _serialize_datetime(datetime.utcnow())),
         )
-        c.commit()
+
+    if conn is not None:
+        _run(conn)
+        return
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        _run(c)
 
 
 def get_function_state(
     function_id: str,
     key: str,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> Any:
     """Get a custom state value for a function.
 
     Args:
         function_id: The function UUID.
         key: State key.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         State value, or None if not found.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> Any:  # type: ignore[type-arg]
         cursor = c.cursor()
         cursor.execute(
             """
             SELECT value_json FROM function_state
-            WHERE function_id = ? AND key = ?
+            WHERE function_id = %s AND key = %s
             """,
             (function_id, key),
         )
@@ -774,6 +884,12 @@ def get_function_state(
 
         return _json_loads(row["value_json"])
 
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
+
 
 # =============================================================================
 # Statistics
@@ -782,55 +898,69 @@ def get_function_state(
 
 def get_function_count(
     enabled_only: bool = False,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> int:
     """Get total number of reactive functions.
 
     Args:
         enabled_only: Only count enabled functions.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         Total function count.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> int:  # type: ignore[type-arg]
         cursor = c.cursor()
         if enabled_only:
-            cursor.execute("SELECT COUNT(*) FROM reactive_functions WHERE enabled = 1")
+            cursor.execute("SELECT COUNT(*) AS cnt FROM reactive_functions WHERE enabled = TRUE")
         else:
-            cursor.execute("SELECT COUNT(*) FROM reactive_functions")
+            cursor.execute("SELECT COUNT(*) AS cnt FROM reactive_functions")
         row = cursor.fetchone()
-        return int(row[0]) if row else 0
+        return int(row["cnt"]) if row else 0
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
 
 
 def get_execution_count(
     function_id: str | None = None,
     since: datetime | None = None,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> int:
     """Get total number of executions.
 
     Args:
         function_id: Filter by function (optional).
         since: Only count executions after this time.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         Total execution count.
     """
-    with _ensure_connection(conn) as c:
-        query = "SELECT COUNT(*) FROM execution_history WHERE 1=1"
+
+    def _run(c: psycopg.Connection) -> int:  # type: ignore[type-arg]
+        query = "SELECT COUNT(*) AS cnt FROM execution_history WHERE 1=1"
         params: list[Any] = []
 
         if function_id:
-            query += " AND function_id = ?"
+            query += " AND function_id = %s"
             params.append(function_id)
 
         if since:
-            query += " AND triggered_at >= ?"
+            query += " AND triggered_at >= %s"
             params.append(_serialize_datetime(since))
 
         cursor = c.cursor()
         cursor.execute(query, params)
         row = cursor.fetchone()
-        return int(row[0]) if row else 0
+        return int(row["cnt"]) if row else 0
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)

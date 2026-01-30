@@ -11,6 +11,7 @@ Usage:
 
 from __future__ import annotations
 
+import os
 import sys
 
 from elle.cli.engine import EngineAction, get_engine
@@ -57,11 +58,17 @@ def main(args: list[str] | None = None) -> int:
         args = sys.argv[1:]
 
     if not args:
-        # No arguments - launch REPL
-        from elle.cli.terminal.repl import run
+        # No arguments - launch interactive interface
+        if os.environ.get("ELLE_LEGACY_REPL", "").lower() in ("1", "true", "yes"):
+            from elle.cli.terminal.repl import run
 
-        run()
-        return 0  # run() calls sys.exit, so this is unreachable
+            run()
+            return 0  # run() calls sys.exit, so this is unreachable
+
+        from elle.cli.tui import launch_tui
+
+        launch_tui()
+        return 0
 
     # Join all arguments as the command
     command = " ".join(args)

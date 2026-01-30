@@ -3,48 +3,59 @@
 This module provides persistent audit logging for all mobile gateway
 operations. All security-relevant events are logged for review.
 
-Audit log location: /var/lib/elle/mobile_audit.db
+Storage backend: PostgreSQL via psycopg (schema ``mobile``).
+The audit_log table lives in the same schema as the mobile store.
 """
 
 from __future__ import annotations
 
 import logging
-import sqlite3
-from collections.abc import Iterator
-from contextlib import contextmanager
 from datetime import datetime, timedelta
+
+import psycopg
 
 from elle.mobile.config import MobileGatewayConfig, get_mobile_config
 from elle.mobile.models import MobileAuditAction, MobileAuditEntry
+from elle.storage.engine import get_conn
+from elle.storage.migrate import register_migration
 
 logger = logging.getLogger(__name__)
 
+PG_SCHEMA = "mobile"
 
-AUDIT_SCHEMA = """
--- Audit log entries
-CREATE TABLE IF NOT EXISTS audit_log (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    device_id TEXT,
-    device_name TEXT,
-    action TEXT NOT NULL,
-    endpoint TEXT,
-    execution_mode TEXT,
-    success INTEGER NOT NULL,
-    error TEXT,
-    ip_address TEXT NOT NULL,
-    extra_data TEXT
-);
 
--- Indexes for common queries
-CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp);
-CREATE INDEX IF NOT EXISTS idx_audit_device ON audit_log(device_id);
-CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);
-"""
+# =============================================================================
+# Migration registration (shares schema with mobile/store.py)
+# =============================================================================
+
+
+def _migrate_audit_v2(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+    """Create the audit_log table in the mobile schema."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id SERIAL PRIMARY KEY,
+            timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
+            device_id TEXT,
+            device_name TEXT,
+            action TEXT NOT NULL,
+            endpoint TEXT,
+            execution_mode TEXT,
+            success BOOLEAN NOT NULL,
+            error TEXT,
+            ip_address TEXT NOT NULL,
+            extra_data TEXT
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_device ON audit_log(device_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action)")
+
+
+register_migration(PG_SCHEMA, 2, _migrate_audit_v2)
 
 
 class MobileAuditStore:
-    """SQLite storage for mobile gateway audit logs.
+    """PostgreSQL storage for mobile gateway audit logs.
 
     Provides append-only logging and query capabilities.
     """
@@ -56,27 +67,6 @@ class MobileAuditStore:
             config: Mobile gateway configuration.
         """
         self.config = config or get_mobile_config()
-        self.db_path = self.config.audit_db_path
-        self._init_db()
-
-    def _init_db(self) -> None:
-        """Initialize database schema."""
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-
-        with self._connection() as conn:
-            conn.executescript(AUDIT_SCHEMA)
-            conn.commit()
-
-    @contextmanager
-    def _connection(self) -> Iterator[sqlite3.Connection]:
-        """Context manager for database connections."""
-        conn = sqlite3.connect(str(self.db_path), timeout=30.0)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode = WAL")
-        try:
-            yield conn
-        finally:
-            conn.close()
 
     def log(self, entry: MobileAuditEntry) -> None:
         """Log an audit entry.
@@ -84,13 +74,13 @@ class MobileAuditStore:
         Args:
             entry: Audit entry to log.
         """
-        with self._connection() as conn:
+        with get_conn(schema=PG_SCHEMA) as conn:
             conn.execute(
                 """
                 INSERT INTO audit_log (
                     timestamp, device_id, device_name, action,
                     endpoint, execution_mode, success, error, ip_address
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     entry.timestamp.isoformat(),
@@ -99,12 +89,11 @@ class MobileAuditStore:
                     entry.action.value,
                     entry.endpoint,
                     entry.execution_mode,
-                    1 if entry.success else 0,
+                    entry.success,
                     entry.error,
                     entry.ip_address,
                 ),
             )
-            conn.commit()
 
     def log_pair(
         self,
@@ -275,37 +264,37 @@ class MobileAuditStore:
             List of matching audit entries.
         """
         conditions: list[str] = []
-        params: list[str | int] = []
+        params: list[str | int | bool] = []
 
         if device_id:
-            conditions.append("device_id = ?")
+            conditions.append("device_id = %s")
             params.append(device_id)
 
         if action:
-            conditions.append("action = ?")
+            conditions.append("action = %s")
             params.append(action.value)
 
         if since:
-            conditions.append("timestamp >= ?")
+            conditions.append("timestamp >= %s")
             params.append(since.isoformat())
 
         if until:
-            conditions.append("timestamp <= ?")
+            conditions.append("timestamp <= %s")
             params.append(until.isoformat())
 
         if success_only:
-            conditions.append("success = 1")
+            conditions.append("success = TRUE")
 
         where_clause = " AND ".join(conditions) if conditions else "1=1"
         params.append(limit)
 
-        with self._connection() as conn:
+        with get_conn(schema=PG_SCHEMA) as conn:
             cursor = conn.execute(
                 f"""
                 SELECT * FROM audit_log
                 WHERE {where_clause}
                 ORDER BY timestamp DESC
-                LIMIT ?
+                LIMIT %s
                 """,
                 params,
             )
@@ -348,13 +337,13 @@ class MobileAuditStore:
         """
         since = datetime.utcnow() - timedelta(hours=hours)
 
-        with self._connection() as conn:
+        with get_conn(schema=PG_SCHEMA) as conn:
             cursor = conn.execute(
                 """
                 SELECT * FROM audit_log
-                WHERE timestamp >= ? AND success = 0
+                WHERE timestamp >= %s AND success = FALSE
                 ORDER BY timestamp DESC
-                LIMIT ?
+                LIMIT %s
                 """,
                 (since.isoformat(), limit),
             )
@@ -371,18 +360,21 @@ class MobileAuditStore:
         """
         cutoff = datetime.utcnow() - timedelta(days=days)
 
-        with self._connection() as conn:
+        with get_conn(schema=PG_SCHEMA) as conn:
             cursor = conn.execute(
-                "DELETE FROM audit_log WHERE timestamp < ?",
+                "DELETE FROM audit_log WHERE timestamp < %s",
                 (cutoff.isoformat(),),
             )
-            conn.commit()
             return cursor.rowcount
 
-    def _row_to_entry(self, row: sqlite3.Row) -> MobileAuditEntry:
+    def _row_to_entry(self, row: dict) -> MobileAuditEntry:
         """Convert database row to MobileAuditEntry."""
+        timestamp = row["timestamp"]
+        if isinstance(timestamp, str):
+            timestamp = datetime.fromisoformat(timestamp)
+
         return MobileAuditEntry(
-            timestamp=datetime.fromisoformat(row["timestamp"]),
+            timestamp=timestamp,
             device_id=row["device_id"],
             device_name=row["device_name"],
             action=MobileAuditAction(row["action"]),

@@ -8,7 +8,6 @@ relationships.
 from __future__ import annotations
 
 import re
-import sqlite3
 import uuid
 from datetime import datetime, timedelta
 from typing import Any, cast
@@ -29,7 +28,6 @@ from elle.daemon.incidents.narrative import (
     SearchHop,
 )
 from elle.daemon.incidents.retriever import search as incident_search
-from elle.daemon.incidents.schema import ensure_schema, get_connection
 
 
 def _parse_datetime(s: str) -> datetime:
@@ -60,7 +58,6 @@ class MultiHopSearch:
         self,
         query: str,
         initial_event: dict[str, Any] | None = None,
-        conn: sqlite3.Connection | None = None,
     ) -> MultiHopResult:
         """Perform multi-hop search to build causal chains.
 
@@ -71,7 +68,7 @@ class MultiHopSearch:
 
         Iteration 2+ (Contextual Expansion):
           - For high-relevance results: search related entities
-          - Keyword extraction → new search terms
+          - Keyword extraction -> new search terms
           - Temporal expansion: look earlier for causes
 
         Stop conditions:
@@ -83,130 +80,113 @@ class MultiHopSearch:
         Args:
             query: Initial search query.
             initial_event: Starting event if available.
-            conn: SQLite connection.
 
         Returns:
             MultiHopResult with discovered chains and search metadata.
         """
-        own_conn = conn is None
-        if own_conn:
-            conn = get_connection()
-            ensure_schema(conn)
+        start_time = datetime.utcnow()
+        hops: list[SearchHop] = []
+        all_incidents: dict[str, IncidentSearchResult] = {}
+        all_events: dict[str, dict[str, Any]] = {}
+        discovered_entities: set[str] = set()
+        discovered_keywords: set[str] = set()
 
-        # At this point conn is guaranteed to be non-None
-        assert conn is not None
+        # Set initial time bounds
+        if initial_event:
+            event_time = self._get_event_time(initial_event)
+            time_end = event_time + timedelta(hours=1)
+            time_start = event_time - timedelta(hours=self.config.time_window_hours)
+            all_events[initial_event.get("event_id", "")] = initial_event
+        else:
+            time_end = datetime.utcnow()
+            time_start = time_end - timedelta(hours=self.config.time_window_hours)
 
-        try:
-            start_time = datetime.utcnow()
-            hops: list[SearchHop] = []
-            all_incidents: dict[str, IncidentSearchResult] = {}
-            all_events: dict[str, dict[str, Any]] = {}
-            discovered_entities: set[str] = set()
-            discovered_keywords: set[str] = set()
+        current_query = query
+        iteration = 0
 
-            # Set initial time bounds
-            if initial_event:
-                event_time = self._get_event_time(initial_event)
-                time_end = event_time + timedelta(hours=1)
-                time_start = event_time - timedelta(hours=self.config.time_window_hours)
-                all_events[initial_event.get("event_id", "")] = initial_event
+        while iteration < self.config.max_iterations:
+            # Perform search hop
+            hop = self._search_hop(
+                iteration=iteration,
+                query=current_query,
+                time_start=time_start,
+                time_end=time_end,
+                known_entities=discovered_entities,
+            )
+            hops.append(hop)
+
+            # Collect results
+            hop_incidents = self._search_incidents(
+                current_query,
+                time_start,
+                time_end,
+            )
+            for inc in hop_incidents:
+                if inc.incident.incident_id not in all_incidents:
+                    all_incidents[inc.incident.incident_id] = inc
+
+            hop_events = self._search_events(
+                current_query,
+                time_start,
+                time_end,
+                entities=list(discovered_entities)[:5],
+            )
+            for evt in hop_events:
+                evt_id = evt.get("event_id", "")
+                if evt_id and evt_id not in all_events:
+                    all_events[evt_id] = evt
+
+            # Update discovered entities and keywords
+            new_entities = set(hop.entities_discovered) - discovered_entities
+            new_keywords = set(hop.keywords_extracted) - discovered_keywords
+            discovered_entities.update(new_entities)
+            discovered_keywords.update(new_keywords)
+
+            # Check stop conditions
+            if hop.high_relevance_count == 0 and iteration > 0:
+                break
+
+            # Prepare next iteration
+            iteration += 1
+            if self.config.expand_entities and new_entities:
+                # Search for related entities
+                current_query = " ".join(list(new_entities)[:3])
+            elif self.config.extract_keywords and new_keywords:
+                # Expand with keywords
+                current_query = query + " " + " ".join(list(new_keywords)[:3])
             else:
-                time_end = datetime.utcnow()
-                time_start = time_end - timedelta(hours=self.config.time_window_hours)
+                # Expand time window backward
+                time_start = time_start - timedelta(hours=6)
+                current_query = query
 
-            current_query = query
-            iteration = 0
+        # Build causal chains from collected data
+        chains = self._build_chains(
+            all_incidents,
+            all_events,
+            initial_event,
+        )
 
-            while iteration < self.config.max_iterations:
-                # Perform search hop
-                hop = self._search_hop(
-                    iteration=iteration,
-                    query=current_query,
-                    time_start=time_start,
-                    time_end=time_end,
-                    known_entities=discovered_entities,
-                    conn=conn,
-                )
-                hops.append(hop)
+        # Find best chain
+        best_chain = None
+        if chains:
+            best_chain = max(chains, key=lambda c: c.overall_confidence)
 
-                # Collect results
-                hop_incidents = self._search_incidents(
-                    current_query,
-                    time_start,
-                    time_end,
-                    conn=conn,
-                )
-                for inc in hop_incidents:
-                    if inc.incident.incident_id not in all_incidents:
-                        all_incidents[inc.incident.incident_id] = inc
+        end_time = datetime.utcnow()
+        duration_ms = int((end_time - start_time).total_seconds() * 1000)
 
-                hop_events = self._search_events(
-                    current_query,
-                    time_start,
-                    time_end,
-                    entities=list(discovered_entities)[:5],
-                    conn=conn,
-                )
-                for evt in hop_events:
-                    evt_id = evt.get("event_id", "")
-                    if evt_id and evt_id not in all_events:
-                        all_events[evt_id] = evt
-
-                # Update discovered entities and keywords
-                new_entities = set(hop.entities_discovered) - discovered_entities
-                new_keywords = set(hop.keywords_extracted) - discovered_keywords
-                discovered_entities.update(new_entities)
-                discovered_keywords.update(new_keywords)
-
-                # Check stop conditions
-                if hop.high_relevance_count == 0 and iteration > 0:
-                    break
-
-                # Prepare next iteration
-                iteration += 1
-                if self.config.expand_entities and new_entities:
-                    # Search for related entities
-                    current_query = " ".join(list(new_entities)[:3])
-                elif self.config.extract_keywords and new_keywords:
-                    # Expand with keywords
-                    current_query = query + " " + " ".join(list(new_keywords)[:3])
-                else:
-                    # Expand time window backward
-                    time_start = time_start - timedelta(hours=6)
-                    current_query = query
-
-            # Build causal chains from collected data
-            chains = self._build_chains(
-                all_incidents,
-                all_events,
-                initial_event,
-            )
-
-            # Find best chain
-            best_chain = None
-            if chains:
-                best_chain = max(chains, key=lambda c: c.overall_confidence)
-
-            end_time = datetime.utcnow()
-            duration_ms = int((end_time - start_time).total_seconds() * 1000)
-
-            return MultiHopResult(
-                initial_query=query,
-                initial_event_id=initial_event.get("event_id") if initial_event else None,
-                chains=tuple(chains),
-                best_chain=best_chain,
-                hops=tuple(hops),
-                total_iterations=iteration,
-                total_events_examined=len(all_events),
-                total_incidents_examined=len(all_incidents),
-                search_started=start_time,
-                search_completed=end_time,
-                duration_ms=duration_ms,
-            )
-
-        finally:
-            if own_conn and conn is not None:
-                conn.close()
+        return MultiHopResult(
+            initial_query=query,
+            initial_event_id=initial_event.get("event_id") if initial_event else None,
+            chains=tuple(chains),
+            best_chain=best_chain,
+            hops=tuple(hops),
+            total_iterations=iteration,
+            total_events_examined=len(all_events),
+            total_incidents_examined=len(all_incidents),
+            search_started=start_time,
+            search_completed=end_time,
+            duration_ms=duration_ms,
+        )
 
     def _search_hop(
         self,
@@ -215,11 +195,10 @@ class MultiHopSearch:
         time_start: datetime,
         time_end: datetime,
         known_entities: set[str],
-        conn: sqlite3.Connection,
     ) -> SearchHop:
         """Perform a single search hop and record results."""
         # Search incidents
-        incidents = self._search_incidents(query, time_start, time_end, conn)
+        incidents = self._search_incidents(query, time_start, time_end)
 
         # Search events
         events = self._search_events(
@@ -227,7 +206,6 @@ class MultiHopSearch:
             time_start,
             time_end,
             entities=list(known_entities)[:5],
-            conn=conn,
         )
 
         # Extract entities from results
@@ -265,7 +243,6 @@ class MultiHopSearch:
         query: str,
         time_start: datetime,
         time_end: datetime,
-        conn: sqlite3.Connection,
     ) -> list[IncidentSearchResult]:
         """Search incidents matching the query."""
         try:
@@ -273,7 +250,6 @@ class MultiHopSearch:
                 query=query,
                 k=self.config.max_results_per_hop,
                 search_type="hybrid",
-                conn=conn,
             )
             # Filter by time window
             filtered = [r for r in results if time_start <= r.incident.created_at <= time_end]
@@ -287,17 +263,13 @@ class MultiHopSearch:
         time_start: datetime,
         time_end: datetime,
         entities: list[str] | None = None,
-        conn: sqlite3.Connection | None = None,
     ) -> list[dict[str, Any]]:
         """Search telemetry events matching the query."""
-        if conn is None:
-            return []
-
         try:
             from elle.daemon.telemetry.store import query_events, search_events
 
             # First try text search
-            results = search_events(query, limit=self.config.max_results_per_hop, conn=conn)
+            results = search_events(query, limit=self.config.max_results_per_hop)
 
             # Also search by entity if provided
             if entities:
@@ -305,7 +277,6 @@ class MultiHopSearch:
                     entity_results = query_events(
                         entity=entity,
                         limit=self.config.max_results_per_hop // 3,
-                        conn=conn,
                     )
                     for evt in entity_results:
                         if evt not in results:

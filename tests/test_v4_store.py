@@ -1,13 +1,10 @@
 """Tests for V4 store operations (telemetry and control surface snapshots)."""
 
 import json
-import tempfile
 from datetime import datetime, timezone
-from pathlib import Path
 
 import pytest
 
-from elle.daemon.incidents.schema import get_connection, init_incident_schema
 from elle.daemon.incidents.store import (
     attach_control_surface_snapshot,
     attach_telemetry_snapshot,
@@ -38,23 +35,9 @@ from elle.daemon.incidents.control_surface import (
 
 
 @pytest.fixture
-def temp_db():
-    """Create a temporary database for testing."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = Path(f.name)
-
-    conn = get_connection(db_path)
-    init_incident_schema(conn)
-    yield conn, db_path
-
-    conn.close()
-    db_path.unlink()
-
-
-@pytest.fixture
-def incident_with_db(temp_db):
+def incident_with_db(incidents_conn):
     """Create an incident for testing."""
-    conn, _ = temp_db
+    conn = incidents_conn
     incident = create_incident_draft(
         title="Test incident",
         domain="other",

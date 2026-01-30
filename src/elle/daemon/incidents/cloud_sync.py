@@ -452,6 +452,60 @@ def reset_cloud_client() -> None:
 # =============================================================================
 
 
+async def submit_incident_with_retry(
+    incident: AnonymizedIncidentReport,
+    original_hash: str,
+) -> CloudSubmissionResult | None:
+    """Submit an incident to the cloud, falling back to queue on failure.
+
+    Tries a direct submission first. If the cloud is unreachable or
+    returns a server error, enqueues the incident for automatic retry.
+
+    Args:
+        incident: The anonymized incident report to submit.
+        original_hash: Hash for deduplication in the retry queue.
+
+    Returns:
+        CloudSubmissionResult if direct submission succeeded, None if queued.
+    """
+    client = get_cloud_client()
+    if not client.is_configured():
+        return None
+
+    try:
+        result = await client.submit_incident(incident)
+        return result
+    except Exception as e:
+        logger.warning(
+            "Direct cloud submission failed, enqueuing for retry",
+            error=str(e),
+            incident_id=incident.incident_id,
+        )
+
+        # Enqueue for retry
+        try:
+            from elle.daemon.incidents.cloud_queue import get_cloud_queue
+
+            queue = get_cloud_queue()
+            payload = incident.model_dump(mode="json")
+            queue.enqueue(
+                incident_id=incident.incident_id,
+                payload=payload,
+                original_hash=original_hash,
+            )
+        except RuntimeError:
+            # Queue not configured -- this is fine during startup
+            logger.debug("Cloud queue not configured, cannot enqueue for retry")
+        except Exception as queue_err:
+            logger.error(
+                "Failed to enqueue incident for retry",
+                error=str(queue_err),
+                incident_id=incident.incident_id,
+            )
+
+        return None
+
+
 def query_cloud_sync(
     fingerprint: Fingerprint,
     domain: str | None = None,

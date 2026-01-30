@@ -1,0 +1,92 @@
+/* ELLE TUI - Global Stylesheet */
+
+Screen {
+    background: $surface;
+}
+
+/* Status header */
+StatusHeader {
+    dock: top;
+    height: 1;
+    background: $panel;
+    color: $text-muted;
+    padding: 0 1;
+}
+
+/* Conversation area */
+ConversationView {
+    height: 1fr;
+    padding: 0 1;
+    scrollbar-size-vertical: 1;
+    scrollbar-color: $accent;
+    scrollbar-color-hover: $accent;
+    scrollbar-color-active: $accent;
+}
+
+/* Message bubbles */
+MessageBubble {
+    width: 1fr;
+    height: auto;
+    padding: 0 1;
+    margin: 0 0 1 0;
+}
+
+MessageBubble.user-message {
+    padding: 0 1 0 2;
+    color: $text;
+}
+
+MessageBubble.elle-message {
+    padding: 0 1 0 2;
+    color: $text;
+}
+
+/* Input bar */
+ElleInput {
+    dock: bottom;
+    height: 3;
+    padding: 0 1;
+    border-top: solid $accent;
+    background: $surface;
+}
+
+ElleInput:focus {
+    border-top: solid $accent;
+}
+
+/* Banner */
+BannerWidget {
+    width: 1fr;
+    height: auto;
+    padding: 1 2;
+    margin: 1 0;
+    text-align: center;
+}
+
+/* Footer */
+Footer {
+    dock: bottom;
+    background: $panel;
+}
+
+/* Agent progress panel */
+AgentProgressPanel {
+    width: 1fr;
+    height: auto;
+    padding: 0 2 1 4;
+    margin: 0 0 1 0;
+}
+
+/* System sidebar */
+SystemSidebar {
+    dock: left;
+    width: 28;
+    padding: 1;
+    border-right: solid $accent-darken-2;
+    background: $panel;
+    display: none;
+}
+
+SystemSidebar.visible {
+    display: block;
+}

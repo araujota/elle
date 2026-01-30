@@ -2,8 +2,8 @@
 
 Provides multi-tier search for capabilities:
 - Tier A: Exact name/keyword match (fast)
-- Tier B: FTS5 lexical search (BM25)
-- Tier C: Semantic embedding similarity
+- Tier B: PostgreSQL tsvector lexical search (ts_rank_cd)
+- Tier C: Semantic embedding similarity (pgvector <=>)
 - Merge: Reciprocal Rank Fusion
 
 This enables the LLM to find capabilities by natural language description
@@ -14,19 +14,23 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+import psycopg
 from pydantic import BaseModel, ConfigDict, Field
 
-from elle.capabilities.autogen.store import DEFAULT_DB_PATH, get_store
+from elle.capabilities.autogen.store import get_store
+from elle.storage.engine import get_conn
+from elle.storage.migrate import register_migration
 
 if TYPE_CHECKING:
     from elle.rag.ollama_client import OllamaClient
 
 logger = logging.getLogger(__name__)
+
+# PostgreSQL schema name (matches store.py)
+PG_SCHEMA = "autogen"
 
 
 # =============================================================================
@@ -61,87 +65,95 @@ class CapabilitySearchResult(BaseModel):
 
 
 # =============================================================================
-# FTS5 and Embedding Schema Extensions
+# PostgreSQL FTS and Embedding Schema (via migrations)
 # =============================================================================
 
-FTS_SCHEMA = """
--- FTS5 virtual table for lexical search
-CREATE VIRTUAL TABLE IF NOT EXISTS capabilities_fts USING fts5(
-    capability_name,
-    description,
-    summary,
-    keywords,
-    domain,
-    source_command,
-    tokenize='porter unicode61'
-);
 
--- Trigger to populate FTS on insert
-CREATE TRIGGER IF NOT EXISTS capabilities_fts_insert
-AFTER INSERT ON generated_capabilities
-BEGIN
-    INSERT INTO capabilities_fts(
-        rowid, capability_name, description, summary, keywords, domain, source_command
-    ) VALUES (
-        NEW.rowid,
-        NEW.capability_name,
-        json_extract(NEW.spec_json, '$.description'),
-        json_extract(NEW.spec_json, '$.summary'),
-        json_extract(NEW.spec_json, '$.keywords'),
-        json_extract(NEW.spec_json, '$.domain'),
-        NEW.source_command
-    );
-END;
+def _migrate_to_v2(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+    """Add tsvector FTS column, GIN index, and embedding/history tables."""
+    # --- tsvector column + GIN index for lexical search ---
+    conn.execute("""
+        ALTER TABLE generated_capabilities
+        ADD COLUMN IF NOT EXISTS search_tsv tsvector
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_capabilities_search_tsv
+        ON generated_capabilities USING GIN (search_tsv)
+    """)
 
--- Trigger to update FTS on update
-CREATE TRIGGER IF NOT EXISTS capabilities_fts_update
-AFTER UPDATE ON generated_capabilities
-BEGIN
-    DELETE FROM capabilities_fts WHERE rowid = OLD.rowid;
-    INSERT INTO capabilities_fts(
-        rowid, capability_name, description, summary, keywords, domain, source_command
-    ) VALUES (
-        NEW.rowid,
-        NEW.capability_name,
-        json_extract(NEW.spec_json, '$.description'),
-        json_extract(NEW.spec_json, '$.summary'),
-        json_extract(NEW.spec_json, '$.keywords'),
-        json_extract(NEW.spec_json, '$.domain'),
-        NEW.source_command
-    );
-END;
+    # Populate tsvector from existing rows
+    conn.execute("""
+        UPDATE generated_capabilities
+        SET search_tsv =
+            setweight(to_tsvector('english', COALESCE(capability_name, '')), 'A') ||
+            setweight(to_tsvector('english', COALESCE(spec_json->>'description', '')), 'B') ||
+            setweight(to_tsvector('english', COALESCE(spec_json->>'summary', '')), 'C') ||
+            setweight(to_tsvector('english', COALESCE(spec_json->>'keywords', '')), 'C') ||
+            setweight(to_tsvector('english', COALESCE(spec_json->>'domain', '')), 'D') ||
+            setweight(to_tsvector('english', COALESCE(source_command, '')), 'D')
+    """)
 
--- Trigger to delete from FTS on delete
-CREATE TRIGGER IF NOT EXISTS capabilities_fts_delete
-AFTER DELETE ON generated_capabilities
-BEGIN
-    DELETE FROM capabilities_fts WHERE rowid = OLD.rowid;
-END;
-"""
+    # Trigger to keep tsvector in sync on INSERT
+    conn.execute("""
+        CREATE OR REPLACE FUNCTION capabilities_search_tsv_trigger() RETURNS trigger AS $$
+        BEGIN
+            NEW.search_tsv :=
+                setweight(to_tsvector('english', COALESCE(NEW.capability_name, '')), 'A') ||
+                setweight(to_tsvector('english', COALESCE(NEW.spec_json->>'description', '')), 'B') ||
+                setweight(to_tsvector('english', COALESCE(NEW.spec_json->>'summary', '')), 'C') ||
+                setweight(to_tsvector('english', COALESCE(NEW.spec_json->>'keywords', '')), 'C') ||
+                setweight(to_tsvector('english', COALESCE(NEW.spec_json->>'domain', '')), 'D') ||
+                setweight(to_tsvector('english', COALESCE(NEW.source_command, '')), 'D');
+            RETURN NEW;
+        END
+        $$ LANGUAGE plpgsql
+    """)
+    conn.execute("""
+        DROP TRIGGER IF EXISTS trg_capabilities_search_tsv
+        ON generated_capabilities
+    """)
+    conn.execute("""
+        CREATE TRIGGER trg_capabilities_search_tsv
+        BEFORE INSERT OR UPDATE ON generated_capabilities
+        FOR EACH ROW
+        EXECUTE FUNCTION capabilities_search_tsv_trigger()
+    """)
 
-EMBEDDING_SCHEMA = """
--- Embeddings for semantic search
-CREATE TABLE IF NOT EXISTS capability_embeddings (
-    capability_name TEXT PRIMARY KEY,
-    embedding BLOB NOT NULL,
-    model TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
+    # --- Embeddings table (pgvector) ---
+    conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS capability_embeddings (
+            capability_name TEXT PRIMARY KEY
+                REFERENCES generated_capabilities(capability_name) ON DELETE CASCADE,
+            embedding vector(768) NOT NULL,
+            model TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL
+        )
+    """)
 
--- Execution history for success rate calculation
-CREATE TABLE IF NOT EXISTS capability_execution_history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    capability_name TEXT NOT NULL,
-    success INTEGER NOT NULL,
-    incident_id TEXT,
-    context_query TEXT,
-    executed_at TEXT NOT NULL,
-    FOREIGN KEY (capability_name) REFERENCES generated_capabilities(capability_name)
-);
+    # --- Execution history table ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS capability_execution_history (
+            id SERIAL PRIMARY KEY,
+            capability_name TEXT NOT NULL
+                REFERENCES generated_capabilities(capability_name) ON DELETE CASCADE,
+            success BOOLEAN NOT NULL,
+            incident_id TEXT,
+            context_query TEXT,
+            executed_at TIMESTAMPTZ NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_exec_history_name
+        ON capability_execution_history(capability_name)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_exec_history_success
+        ON capability_execution_history(success)
+    """)
 
-CREATE INDEX IF NOT EXISTS idx_exec_history_name ON capability_execution_history(capability_name);
-CREATE INDEX IF NOT EXISTS idx_exec_history_success ON capability_execution_history(success);
-"""
+
+register_migration(PG_SCHEMA, 2, _migrate_to_v2)
 
 
 # =============================================================================
@@ -154,12 +166,12 @@ class CapabilityRetriever:
 
     Search tiers:
     1. Exact name/keyword match (O(1))
-    2. FTS5 lexical search with BM25 (O(log n))
-    3. Semantic embedding similarity (O(n))
+    2. PostgreSQL tsvector lexical search with ts_rank_cd (O(log n))
+    3. Semantic embedding similarity via pgvector (O(n))
     4. Reciprocal Rank Fusion merge
 
     Ranking formula:
-        score = RRF_score × trust_weight × success_rate × domain_boost × precondition_factor
+        score = RRF_score * trust_weight * success_rate * domain_boost * precondition_factor
 
     Where:
         - RRF_score = sum(1/(rank + 60)) across search tiers
@@ -185,44 +197,9 @@ class CapabilityRetriever:
     # RRF constant
     RRF_K = 60
 
-    def __init__(self, db_path: Path | str | None = None) -> None:
-        """Initialize the retriever.
-
-        Args:
-            db_path: Path to SQLite database file.
-        """
-        self.db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
-        self._ensure_schema()
+    def __init__(self) -> None:
+        """Initialize the retriever."""
         self._embedder: OllamaClient | None = None
-
-    def _ensure_schema(self) -> None:
-        """Ensure FTS and embedding schema exists."""
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                # Try to create FTS schema
-                try:
-                    conn.executescript(FTS_SCHEMA)
-                except sqlite3.OperationalError as e:
-                    # FTS table may already exist
-                    if "already exists" not in str(e):
-                        logger.warning(f"Failed to create FTS schema: {e}")
-
-                # Create embedding schema
-                try:
-                    conn.executescript(EMBEDDING_SCHEMA)
-                except sqlite3.OperationalError as e:
-                    if "already exists" not in str(e):
-                        logger.warning(f"Failed to create embedding schema: {e}")
-
-                conn.commit()
-        except Exception as e:
-            logger.error(f"Failed to ensure retriever schema: {e}")
-
-    def _get_connection(self) -> sqlite3.Connection:
-        """Get database connection."""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
 
     @property
     def embedder(self) -> OllamaClient | None:
@@ -269,7 +246,7 @@ class CapabilityRetriever:
                 results_by_name[result.capability_name] = result
                 rankings.setdefault(result.capability_name, []).append(i)
 
-        # Tier B: FTS5 lexical search
+        # Tier B: tsvector lexical search
         if search_type in ("lexical", "hybrid"):
             fts_results = self._search_fts(query, domain, k * 2, include_unapproved)
             for i, result in enumerate(fts_results):
@@ -342,13 +319,13 @@ class CapabilityRetriever:
         query_lower = query.lower()
         query_words = set(query_lower.split())
 
-        with self._get_connection() as conn:
+        with get_conn(schema=PG_SCHEMA) as conn:
             # Build SQL with optional filters
-            sql = "SELECT * FROM generated_capabilities WHERE enabled = 1"
+            sql = "SELECT * FROM generated_capabilities WHERE enabled = TRUE"
             params: list[Any] = []
 
             if not include_unapproved:
-                sql += " AND approved = 1"
+                sql += " AND approved = TRUE"
 
             cursor = conn.execute(sql, params)
 
@@ -392,56 +369,43 @@ class CapabilityRetriever:
         k: int,
         include_unapproved: bool,
     ) -> list[CapabilitySearchResult]:
-        """Search using FTS5 full-text search."""
+        """Search using PostgreSQL tsvector full-text search."""
         results: list[CapabilitySearchResult] = []
 
         try:
-            with self._get_connection() as conn:
-                # Check if FTS table exists and is populated
-                try:
-                    cursor = conn.execute("SELECT COUNT(*) FROM capabilities_fts")
-                    count = cursor.fetchone()[0]
-                    if count == 0:
-                        # Populate FTS from existing capabilities
-                        self._populate_fts(conn)
-                except sqlite3.OperationalError:
-                    # FTS table doesn't exist, try to create and populate
-                    self._ensure_schema()
-                    self._populate_fts(conn)
-
-                # Escape special FTS characters
-                safe_query = self._escape_fts_query(query)
-
-                # Build FTS query
+            with get_conn(schema=PG_SCHEMA) as conn:
+                # Build FTS query using plainto_tsquery for safe escaping
                 sql = """
-                    SELECT g.*, bm25(capabilities_fts) AS rank
-                    FROM capabilities_fts f
-                    JOIN generated_capabilities g ON f.rowid = g.rowid
-                    WHERE capabilities_fts MATCH ?
-                    AND g.enabled = 1
+                    SELECT g.*,
+                           ts_rank_cd(g.search_tsv, plainto_tsquery('english', %s)) AS rank
+                    FROM generated_capabilities g
+                    WHERE g.search_tsv @@ plainto_tsquery('english', %s)
+                    AND g.enabled = TRUE
                 """
-                params: list[Any] = [safe_query]
+                params: list[Any] = [query, query]
 
                 if not include_unapproved:
-                    sql += " AND g.approved = 1"
+                    sql += " AND g.approved = TRUE"
 
                 if domain:
-                    sql += " AND json_extract(g.spec_json, '$.domain') = ?"
+                    sql += " AND g.spec_json->>'domain' = %s"
                     params.append(domain)
 
-                sql += " ORDER BY rank LIMIT ?"
+                sql += " ORDER BY rank DESC LIMIT %s"
                 params.append(k)
 
                 cursor = conn.execute(sql, params)
 
                 for row in cursor.fetchall():
                     spec = self._parse_spec_json(row["spec_json"])
-                    # BM25 returns negative scores, closer to 0 is better
-                    bm25_score = abs(row["rank"])
-                    normalized_score = max(0.0, min(1.0, 1.0 / (1.0 + bm25_score / 10)))
+                    # ts_rank_cd returns positive scores, higher is better
+                    ts_rank = row["rank"]
+                    normalized_score = max(0.0, min(1.0, float(ts_rank)))
                     results.append(self._row_to_search_result(row, spec, "lexical", normalized_score))
 
-        except sqlite3.OperationalError as e:
+        except psycopg.errors.UndefinedColumn:
+            logger.warning("FTS column search_tsv not found; run migrations")
+        except psycopg.Error as e:
             logger.warning(f"FTS search failed: {e}")
 
         return results
@@ -453,7 +417,7 @@ class CapabilityRetriever:
         k: int,
         include_unapproved: bool,
     ) -> list[CapabilitySearchResult]:
-        """Search using semantic embeddings."""
+        """Search using pgvector semantic embeddings."""
         results: list[CapabilitySearchResult] = []
 
         # Get query embedding
@@ -462,47 +426,45 @@ class CapabilityRetriever:
             return results
 
         try:
-            with self._get_connection() as conn:
-                # Get all capability embeddings
+            with get_conn(schema=PG_SCHEMA) as conn:
+                # pgvector cosine distance: <=> returns distance (0 = identical)
                 sql = """
-                    SELECT e.capability_name, e.embedding, g.*
+                    SELECT g.*, e.embedding <=> %s::vector AS distance
                     FROM capability_embeddings e
                     JOIN generated_capabilities g ON e.capability_name = g.capability_name
-                    WHERE g.enabled = 1
+                    WHERE g.enabled = TRUE
                 """
-                params: list[Any] = []
+                params: list[Any] = [query_embedding]
 
                 if not include_unapproved:
-                    sql += " AND g.approved = 1"
+                    sql += " AND g.approved = TRUE"
 
                 if domain:
-                    sql += " AND json_extract(g.spec_json, '$.domain') = ?"
+                    sql += " AND g.spec_json->>'domain' = %s"
                     params.append(domain)
+
+                sql += " ORDER BY e.embedding <=> %s::vector LIMIT %s"
+                params.append(query_embedding)
+                params.append(k)
 
                 cursor = conn.execute(sql, params)
 
-                scored_results: list[tuple[float, sqlite3.Row]] = []
                 for row in cursor.fetchall():
-                    cap_embedding = self._deserialize_embedding(row["embedding"])
-                    if cap_embedding:
-                        similarity = self._cosine_similarity(query_embedding, cap_embedding)
-                        scored_results.append((similarity, row))
-
-                # Sort by similarity
-                scored_results.sort(key=lambda x: x[0], reverse=True)
-
-                for similarity, row in scored_results[:k]:
                     spec = self._parse_spec_json(row["spec_json"])
+                    # Convert distance to similarity (1 - distance)
+                    similarity = max(0.0, min(1.0, 1.0 - float(row["distance"])))
                     results.append(self._row_to_search_result(row, spec, "semantic", similarity))
 
-        except sqlite3.OperationalError as e:
+        except psycopg.errors.UndefinedTable:
+            logger.warning("Embedding table not found; run migrations")
+        except psycopg.Error as e:
             logger.warning(f"Semantic search failed: {e}")
 
         return results
 
     def _row_to_search_result(
         self,
-        row: sqlite3.Row,
+        row: dict[str, Any],
         spec: dict[str, Any],
         match_type: str,
         score: float,
@@ -532,14 +494,14 @@ class CapabilityRetriever:
     def _get_success_rate(self, capability_name: str) -> float:
         """Get Bayesian-smoothed success rate for a capability."""
         try:
-            with self._get_connection() as conn:
+            with get_conn(schema=PG_SCHEMA) as conn:
                 cursor = conn.execute(
                     """
                     SELECT
-                        SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) AS successes,
+                        SUM(CASE WHEN success THEN 1 ELSE 0 END) AS successes,
                         COUNT(*) AS total
                     FROM capability_execution_history
-                    WHERE capability_name = ?
+                    WHERE capability_name = %s
                     """,
                     (capability_name,),
                 )
@@ -550,7 +512,7 @@ class CapabilityRetriever:
                     total = row["total"] + self.PRIOR_TOTAL
                     return float(successes / total)
 
-        except sqlite3.OperationalError:
+        except psycopg.Error:
             pass
 
         # Default: prior success rate
@@ -586,89 +548,18 @@ class CapabilityRetriever:
             logger.warning(f"Failed to get embedding: {e}")
             return None
 
-    def _serialize_embedding(self, embedding: list[float]) -> bytes:
-        """Serialize embedding to bytes."""
-        import struct
+    def _parse_spec_json(self, spec_json: str | dict[str, Any]) -> dict[str, Any]:
+        """Parse spec JSON safely.
 
-        return struct.pack(f"{len(embedding)}f", *embedding)
-
-    def _deserialize_embedding(self, data: bytes) -> list[float] | None:
-        """Deserialize embedding from bytes."""
-        import struct
-
-        try:
-            count = len(data) // 4  # 4 bytes per float
-            return list(struct.unpack(f"{count}f", data))
-        except Exception:
-            return None
-
-    def _cosine_similarity(self, a: list[float], b: list[float]) -> float:
-        """Calculate cosine similarity between two vectors."""
-        import math
-
-        if len(a) != len(b):
-            return 0.0
-
-        dot_product = sum(x * y for x, y in zip(a, b, strict=False))
-        norm_a = math.sqrt(sum(x * x for x in a))
-        norm_b = math.sqrt(sum(x * x for x in b))
-
-        if norm_a == 0 or norm_b == 0:
-            return 0.0
-
-        return dot_product / (norm_a * norm_b)
-
-    def _escape_fts_query(self, query: str) -> str:
-        """Escape special FTS5 characters."""
-        # Remove/escape special characters
-        special_chars = '"*()-'
-        for char in special_chars:
-            query = query.replace(char, " ")
-        # Join words with OR for broader matching
-        words = query.split()
-        if len(words) > 1:
-            return " OR ".join(words)
-        return query
-
-    def _parse_spec_json(self, spec_json: str) -> dict[str, Any]:
-        """Parse spec JSON safely."""
+        PostgreSQL JSONB columns may be returned as dicts directly,
+        or as strings depending on the driver configuration.
+        """
+        if isinstance(spec_json, dict):
+            return spec_json
         try:
             return dict(json.loads(spec_json))
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, TypeError):
             return {}
-
-    def _populate_fts(self, conn: sqlite3.Connection) -> None:
-        """Populate FTS table from existing capabilities."""
-        try:
-            # Clear existing FTS data
-            conn.execute("DELETE FROM capabilities_fts")
-
-            # Insert all capabilities
-            cursor = conn.execute("SELECT rowid, * FROM generated_capabilities")
-            for row in cursor.fetchall():
-                spec = self._parse_spec_json(row["spec_json"])
-                conn.execute(
-                    """
-                    INSERT INTO capabilities_fts(
-                        rowid, capability_name, description, summary, keywords, domain, source_command
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        row["rowid"],
-                        row["capability_name"],
-                        spec.get("description", ""),
-                        spec.get("summary", ""),
-                        json.dumps(spec.get("keywords", [])),
-                        spec.get("domain", ""),
-                        row["source_command"],
-                    ),
-                )
-
-            conn.commit()
-            logger.info("Populated FTS table from existing capabilities")
-
-        except sqlite3.OperationalError as e:
-            logger.warning(f"Failed to populate FTS: {e}")
 
     def record_execution(
         self,
@@ -686,26 +577,25 @@ class CapabilityRetriever:
             context_query: Optional query that led to this execution.
         """
         try:
-            from datetime import datetime
+            from datetime import datetime, timezone
 
-            with self._get_connection() as conn:
+            with get_conn(schema=PG_SCHEMA) as conn:
                 conn.execute(
                     """
                     INSERT INTO capability_execution_history
                     (capability_name, success, incident_id, context_query, executed_at)
-                    VALUES (?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s)
                     """,
                     (
                         capability_name,
-                        1 if success else 0,
+                        success,
                         incident_id,
                         context_query,
-                        datetime.utcnow().isoformat(),
+                        datetime.now(timezone.utc),
                     ),
                 )
-                conn.commit()
 
-        except sqlite3.OperationalError as e:
+        except psycopg.Error as e:
             logger.warning(f"Failed to record execution: {e}")
 
     def update_embedding(self, capability_name: str) -> bool:
@@ -719,7 +609,7 @@ class CapabilityRetriever:
         """
         try:
             # Get capability spec
-            store = get_store(self.db_path)
+            store = get_store()
             stored = store.get(capability_name)
             if not stored:
                 return False
@@ -741,24 +631,27 @@ class CapabilityRetriever:
             if embedding is None:
                 return False
 
-            # Store embedding
-            from datetime import datetime
+            # Store embedding -- pgvector handles list[float] natively
+            from datetime import datetime, timezone
 
-            with self._get_connection() as conn:
+            with get_conn(schema=PG_SCHEMA) as conn:
                 conn.execute(
                     """
-                    INSERT OR REPLACE INTO capability_embeddings
+                    INSERT INTO capability_embeddings
                     (capability_name, embedding, model, created_at)
-                    VALUES (?, ?, ?, ?)
+                    VALUES (%s, %s::vector, %s, %s)
+                    ON CONFLICT (capability_name) DO UPDATE SET
+                        embedding = EXCLUDED.embedding,
+                        model = EXCLUDED.model,
+                        created_at = EXCLUDED.created_at
                     """,
                     (
                         capability_name,
-                        self._serialize_embedding(embedding),
-                        "nomic-embed-text",  # Model name
-                        datetime.utcnow().isoformat(),
+                        embedding,
+                        "nomic-embed-text",
+                        datetime.now(timezone.utc),
                     ),
                 )
-                conn.commit()
 
             return True
 
@@ -774,18 +667,15 @@ class CapabilityRetriever:
 _retriever: CapabilityRetriever | None = None
 
 
-def get_retriever(db_path: Path | str | None = None) -> CapabilityRetriever:
+def get_retriever() -> CapabilityRetriever:
     """Get the shared retriever instance.
-
-    Args:
-        db_path: Optional database path override.
 
     Returns:
         CapabilityRetriever instance.
     """
     global _retriever
-    if _retriever is None or (db_path and Path(db_path) != _retriever.db_path):
-        _retriever = CapabilityRetriever(db_path)
+    if _retriever is None:
+        _retriever = CapabilityRetriever()
     return _retriever
 
 

@@ -1,4 +1,4 @@
-"""Man Vault background service.
+"""Man Vault background service (PostgreSQL).
 
 Provides background indexing and embedding for the Man Vault.
 Runs as part of the elled daemon.
@@ -25,7 +25,7 @@ from elle.daemon.manvault.indexer import (
     seed_core_commands,
 )
 from elle.daemon.manvault.models import ManVaultStatus
-from elle.daemon.manvault.schema import ensure_schema, get_connection, get_db_path
+from elle.daemon.manvault.schema import ensure_schema
 from elle.daemon.manvault.store import (
     count_chunks,
     count_docs,
@@ -34,8 +34,11 @@ from elle.daemon.manvault.store import (
     get_section_counts,
 )
 from elle.rag.ollama_client import OllamaUnavailableError
+from elle.storage.engine import get_conn
 
 logger = logging.getLogger(__name__)
+
+PG_SCHEMA = "manvault"
 
 # Service intervals
 PERIODIC_CHECK_INTERVAL = 3600  # 1 hour
@@ -94,11 +97,8 @@ class ManVaultService:
         logger.info("ManVault service starting")
 
         # Initialize schema
-        conn = get_connection()
-        try:
+        with get_conn(schema=PG_SCHEMA) as conn:
             ensure_schema(conn)
-        finally:
-            conn.close()
 
         # Seed core commands first (fast, ensures essentials are available)
         if not is_core_seeded():
@@ -161,11 +161,8 @@ class ManVaultService:
         Returns:
             True if the database is empty.
         """
-        conn = get_connection()
-        try:
+        with get_conn(schema=PG_SCHEMA) as conn:
             return count_docs(conn) == 0
-        finally:
-            conn.close()
 
     def _needs_incremental_index(self) -> bool:
         """Check if incremental indexing is due.
@@ -173,16 +170,13 @@ class ManVaultService:
         Returns:
             True if more than 24 hours since last incremental index.
         """
-        conn = get_connection()
-        try:
+        with get_conn(schema=PG_SCHEMA) as conn:
             last_indexed = get_meta(conn, "indexed_at")
             if not last_indexed:
                 return True
 
             last_dt = datetime.fromisoformat(last_indexed)
             return datetime.now() - last_dt > timedelta(seconds=INCREMENTAL_INDEX_INTERVAL)
-        finally:
-            conn.close()
 
     async def _do_core_seed(self) -> int:
         """Seed core commands in background thread.
@@ -284,8 +278,7 @@ class ManVaultService:
         Returns:
             ManVaultStatus with current state.
         """
-        conn = get_connection()
-        try:
+        with get_conn(schema=PG_SCHEMA) as conn:
             # Get counts
             total_docs = count_docs(conn)
             total_chunks = count_chunks(conn)
@@ -298,9 +291,22 @@ class ManVaultService:
             # Get section counts
             sections = get_section_counts(conn)
 
-            # Get database size
-            db_path = get_db_path()
-            db_size = db_path.stat().st_size if db_path.exists() else 0
+            # Get database size (PostgreSQL -- query pg_total_relation_size)
+            try:
+                cur = conn.execute(
+                    """
+                    SELECT COALESCE(
+                        SUM(pg_total_relation_size(quote_ident(tablename)::regclass)), 0
+                    )::bigint AS total
+                    FROM pg_tables
+                    WHERE schemaname = %s
+                    """,
+                    (PG_SCHEMA,),
+                )
+                row = cur.fetchone()
+                db_size = int(row["total"]) if row else 0
+            except Exception:
+                db_size = 0
 
             # Get embedding model
             embedding_model = self.embedder.model if self.embedder.is_available() else None
@@ -316,8 +322,6 @@ class ManVaultService:
                 is_indexing=self._indexing,
                 is_embedding=self._embedding,
             )
-        finally:
-            conn.close()
 
 
 # Module-level service instance
@@ -345,8 +349,7 @@ def get_status() -> ManVaultStatus:
     Returns:
         ManVaultStatus with current state.
     """
-    conn = get_connection()
-    try:
+    with get_conn(schema=PG_SCHEMA) as conn:
         ensure_schema(conn)
 
         # Get counts
@@ -361,9 +364,22 @@ def get_status() -> ManVaultStatus:
         # Get section counts
         sections = get_section_counts(conn)
 
-        # Get database size
-        db_path = get_db_path()
-        db_size = db_path.stat().st_size if db_path.exists() else 0
+        # Get database size (PostgreSQL -- query pg_total_relation_size)
+        try:
+            cur = conn.execute(
+                """
+                SELECT COALESCE(
+                    SUM(pg_total_relation_size(quote_ident(tablename)::regclass)), 0
+                )::bigint AS total
+                FROM pg_tables
+                WHERE schemaname = %s
+                """,
+                (PG_SCHEMA,),
+            )
+            row = cur.fetchone()
+            db_size = int(row["total"]) if row else 0
+        except Exception:
+            db_size = 0
 
         # Try to get embedding model
         try:
@@ -383,5 +399,3 @@ def get_status() -> ManVaultStatus:
             is_indexing=False,  # Can't determine without service
             is_embedding=False,
         )
-    finally:
-        conn.close()

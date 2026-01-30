@@ -6,11 +6,11 @@ efficacy summaries, and trend analysis.
 
 from __future__ import annotations
 
-import sqlite3
 from datetime import datetime, timedelta
 from types import TracebackType
 from typing import Any, Literal
 
+import psycopg
 from pydantic import BaseModel, ConfigDict, Field
 
 from elle.daemon.incidents.efficacy import (
@@ -26,7 +26,8 @@ from elle.daemon.incidents.models import (
     IncidentReport,
 )
 from elle.daemon.incidents.narrative import Narrative
-from elle.daemon.incidents.schema import ensure_schema, get_connection
+from elle.daemon.incidents.schema import PG_SCHEMA
+from elle.storage.engine import get_conn
 
 # =============================================================================
 # Report Models
@@ -122,22 +123,11 @@ class TrendReport(BaseModel):
 class ReportGenerator:
     """Generates reports from incidents and efficacy data."""
 
-    def __init__(self, conn: sqlite3.Connection | None = None):
-        """Initialize the report generator.
-
-        Args:
-            conn: SQLite connection. Creates new connection if not provided.
-        """
-        self._own_conn = conn is None
-        self._conn = conn if conn else get_connection()
-        if self._own_conn:
-            ensure_schema(self._conn)
+    def __init__(self) -> None:
+        """Initialize the report generator."""
 
     def close(self) -> None:
-        """Close the connection if we own it."""
-        if self._own_conn and self._conn:
-            self._conn.close()
-            self._conn = None  # type: ignore[assignment]
+        """No-op; connections are obtained per-operation from the pool."""
 
     def __enter__(self) -> ReportGenerator:
         return self
@@ -177,12 +167,12 @@ class ReportGenerator:
         )
 
         # Get incident
-        incident = get_incident(incident_id, conn=self._conn)
+        incident = get_incident(incident_id)
         if not incident:
             raise ValueError(f"Incident not found: {incident_id}")
 
         # Get actions
-        actions = tuple(get_actions(incident_id, conn=self._conn))
+        actions = tuple(get_actions(incident_id))
 
         # Get narrative (if exists)
         narrative = self._get_narrative(incident_id)
@@ -214,42 +204,42 @@ class ReportGenerator:
         if no narrative has been generated for this incident.
         """
         import json
-        import sqlite3
 
         from elle.daemon.incidents.narrative import CausalChain
 
         try:
-            cursor = self._conn.cursor()
-            cursor.execute(
-                """
-                SELECT chain_json, summary, timeline_json, explanation, keywords_json,
-                       generated_at, model_used
-                FROM narratives
-                WHERE incident_id = ?
-                ORDER BY generated_at DESC
-                LIMIT 1
-                """,
-                (incident_id,),
-            )
-            row = cursor.fetchone()
-            if not row:
-                return None
+            with get_conn(schema=PG_SCHEMA) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT chain_json, summary, timeline_json, explanation, keywords_json,
+                           generated_at, model_used
+                    FROM narratives
+                    WHERE incident_id = %s
+                    ORDER BY generated_at DESC
+                    LIMIT 1
+                    """,
+                    (incident_id,),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    return None
 
-            chain_data = json.loads(row["chain_json"]) if row["chain_json"] else {}
-            chain = CausalChain(**chain_data) if chain_data else CausalChain(chain_id="")
-            timeline = tuple(json.loads(row["timeline_json"])) if row["timeline_json"] else ()
-            keywords = tuple(json.loads(row["keywords_json"])) if row["keywords_json"] else ()
+                chain_data = json.loads(row["chain_json"]) if row["chain_json"] else {}
+                chain = CausalChain(**chain_data) if chain_data else CausalChain(chain_id="")
+                timeline = tuple(json.loads(row["timeline_json"])) if row["timeline_json"] else ()
+                keywords = tuple(json.loads(row["keywords_json"])) if row["keywords_json"] else ()
 
-            return Narrative(
-                chain=chain,
-                summary=row["summary"] or "",
-                timeline=timeline,
-                explanation=row["explanation"] or "",
-                keywords=keywords,
-                generated_at=datetime.fromisoformat(row["generated_at"]) if row["generated_at"] else datetime.utcnow(),
-                model_used=row["model_used"] or "",
-            )
-        except sqlite3.OperationalError:
+                return Narrative(
+                    chain=chain,
+                    summary=row["summary"] or "",
+                    timeline=timeline,
+                    explanation=row["explanation"] or "",
+                    keywords=keywords,
+                    generated_at=datetime.fromisoformat(row["generated_at"]) if row["generated_at"] else datetime.utcnow(),
+                    model_used=row["model_used"] or "",
+                )
+        except psycopg.errors.UndefinedTable:
             # Table doesn't exist yet - that's OK
             return None
         except Exception:
@@ -269,7 +259,6 @@ class ReportGenerator:
             domain=incident.domain,
             status="resolved",
             limit=limit * 2,
-            conn=self._conn,
         )
 
         for inc in domain_incidents:
@@ -518,7 +507,7 @@ class ReportGenerator:
         Returns:
             EfficacyReport with rendered content.
         """
-        stats = get_efficacy_stats(conn=self._conn)
+        stats = get_efficacy_stats()
 
         if format == "markdown":
             report_text = self._render_efficacy_markdown(stats, domain)
@@ -673,7 +662,7 @@ class ReportGenerator:
         from_time = to_time - timedelta(days=days)
 
         # Get incidents in range
-        incidents = list_incidents(limit=10000, conn=self._conn)
+        incidents = list_incidents(limit=10000)
         incidents_in_range = [i for i in incidents if i.created_at >= from_time]
 
         # Aggregate by domain
@@ -691,7 +680,7 @@ class ReportGenerator:
         avg_resolve = sum(resolve_times) / len(resolve_times) if resolve_times else None
 
         # Get domain trends
-        domain_trends = tuple(get_all_domain_efficacy(conn=self._conn))
+        domain_trends = tuple(get_all_domain_efficacy())
 
         # Generate report text
         if format == "markdown":
@@ -810,19 +799,17 @@ class ReportGenerator:
 def generate_incident_report(
     incident_id: str,
     format: ReportFormat = "markdown",
-    conn: sqlite3.Connection | None = None,
 ) -> str:
     """Generate a full incident report.
 
     Args:
         incident_id: The incident UUID.
         format: Output format.
-        conn: SQLite connection.
 
     Returns:
         Rendered report text.
     """
-    with ReportGenerator(conn) as gen:
+    with ReportGenerator() as gen:
         report = gen.generate_incident_report(incident_id, format)
         return report.report_text
 
@@ -830,19 +817,17 @@ def generate_incident_report(
 def generate_efficacy_report(
     domain: str | None = None,
     format: ReportFormat = "markdown",
-    conn: sqlite3.Connection | None = None,
 ) -> str:
     """Generate an efficacy report.
 
     Args:
         domain: Filter to specific domain.
         format: Output format.
-        conn: SQLite connection.
 
     Returns:
         Rendered report text.
     """
-    with ReportGenerator(conn) as gen:
+    with ReportGenerator() as gen:
         report = gen.generate_efficacy_report(domain, format)
         return report.report_text
 
@@ -850,18 +835,16 @@ def generate_efficacy_report(
 def generate_trend_report(
     days: int = 7,
     format: ReportFormat = "markdown",
-    conn: sqlite3.Connection | None = None,
 ) -> str:
     """Generate a trend report.
 
     Args:
         days: Number of days to analyze.
         format: Output format.
-        conn: SQLite connection.
 
     Returns:
         Rendered report text.
     """
-    with ReportGenerator(conn) as gen:
+    with ReportGenerator() as gen:
         report = gen.generate_trend_report(days, format)
         return report.report_text

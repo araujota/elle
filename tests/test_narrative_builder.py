@@ -8,7 +8,6 @@ elle.daemon.incidents.narrative_builder.
 from __future__ import annotations
 
 import json
-import sqlite3
 from datetime import datetime, timedelta
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -172,12 +171,10 @@ def empty_chain() -> CausalChain:
 
 
 @pytest.fixture
-def in_memory_db() -> sqlite3.Connection:
-    """Create an in-memory SQLite database with narrative schema."""
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    _ensure_narrative_schema(conn)
-    return conn
+def in_memory_db(incidents_conn):
+    """Use the conftest incidents_conn fixture for narrative tests."""
+    _ensure_narrative_schema(incidents_conn)
+    return incidents_conn
 
 
 # =============================================================================
@@ -702,7 +699,7 @@ class TestBuildNarrative:
         assert narrative.timeline == ()
 
     def test_build_narrative_stores_to_db(
-        self, builder: NarrativeBuilder, in_memory_db: sqlite3.Connection
+        self, builder: NarrativeBuilder, in_memory_db
     ) -> None:
         """Test that narrative is stored when connection is provided."""
         chain = _make_chain(chain_id="chain-store-test")
@@ -751,21 +748,21 @@ class TestBuildNarrative:
 class TestNarrativeStorage:
     """Tests for narrative database storage and retrieval."""
 
-    def test_ensure_narrative_schema(self, in_memory_db: sqlite3.Connection) -> None:
+    def test_ensure_narrative_schema(self, in_memory_db) -> None:
         """Test that the narrative schema is created properly."""
         cursor = in_memory_db.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='narratives'")
+        cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_name='narratives'")
         row = cursor.fetchone()
         assert row is not None
 
-    def test_ensure_narrative_schema_idempotent(self, in_memory_db: sqlite3.Connection) -> None:
+    def test_ensure_narrative_schema_idempotent(self, in_memory_db) -> None:
         """Test that calling schema creation twice is safe."""
         _ensure_narrative_schema(in_memory_db)
         _ensure_narrative_schema(in_memory_db)
         # Should not raise
 
     def test_store_and_retrieve_narrative(
-        self, builder: NarrativeBuilder, in_memory_db: sqlite3.Connection
+        self, builder: NarrativeBuilder, in_memory_db
     ) -> None:
         """Test round-trip storage and retrieval of a narrative."""
         chain = _make_chain(chain_id="chain-roundtrip-001")
@@ -789,7 +786,7 @@ class TestNarrativeStorage:
         assert retrieved.explanation == original.explanation
         assert retrieved.model_used == original.model_used
 
-    def test_get_narrative_not_found(self, in_memory_db: sqlite3.Connection) -> None:
+    def test_get_narrative_not_found(self, in_memory_db) -> None:
         """Test retrieving a narrative that does not exist."""
         with patch(
             "elle.daemon.incidents.narrative_builder.get_connection",
@@ -801,7 +798,7 @@ class TestNarrativeStorage:
         assert result is None
 
     def test_store_narrative_replaces_on_duplicate(
-        self, builder: NarrativeBuilder, in_memory_db: sqlite3.Connection
+        self, builder: NarrativeBuilder, in_memory_db
     ) -> None:
         """Test that storing with same chain_id replaces the previous entry."""
         chain = _make_chain(chain_id="chain-dup-001")
@@ -822,7 +819,7 @@ class TestNarrativeStorage:
         assert count == 1
 
     def test_get_narratives_for_incident(
-        self, builder: NarrativeBuilder, in_memory_db: sqlite3.Connection
+        self, builder: NarrativeBuilder, in_memory_db
     ) -> None:
         """Test retrieving all narratives for an incident."""
         chain1 = _make_chain(chain_id="chain-inc-001")
@@ -841,7 +838,7 @@ class TestNarrativeStorage:
 
         assert len(narratives) == 2
 
-    def test_get_narratives_for_incident_none(self, in_memory_db: sqlite3.Connection) -> None:
+    def test_get_narratives_for_incident_none(self, in_memory_db) -> None:
         """Test retrieving narratives for an incident with none."""
         with patch(
             "elle.daemon.incidents.narrative_builder.get_connection",

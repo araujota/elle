@@ -27,6 +27,13 @@ class ConfirmationPreference(str, Enum):
     NEVER = "never"  # Never ask (experienced users)
 
 
+class LLMProviderChoice(str, Enum):
+    """LLM provider selection for setup wizard."""
+
+    LOCAL = "local"  # Local Ollama (default)
+    REMOTE = "remote"  # Remote OpenAI-compatible endpoint
+
+
 class PrivilegeLevel(str, Enum):
     """Polkit privilege configuration level."""
 
@@ -62,6 +69,10 @@ class SetupPreferences(BaseModel):
 
     # LLM
     ollama_verified: bool = False
+    llm_provider: LLMProviderChoice = LLMProviderChoice.LOCAL
+    llm_remote_host: str = ""
+    llm_remote_model: str = "gpt-4o"
+    llm_remote_verified: bool = False
 
 
 class SetupState(BaseModel):
@@ -159,6 +170,24 @@ FEATURE_INFO = {
             "them in the background."
         ),
         "default": True,
+    },
+}
+
+LLM_PROVIDER_INFO = {
+    LLMProviderChoice.LOCAL: {
+        "name": "Local Ollama (Recommended)",
+        "description": (
+            "Run inference locally via Ollama. Keeps all data on-device. "
+            "Requires Ollama installed with a supported model."
+        ),
+    },
+    LLMProviderChoice.REMOTE: {
+        "name": "Remote OpenAI-Compatible",
+        "description": (
+            "Use a remote LLM endpoint (OpenAI, Azure, vLLM, etc.). "
+            "Requires network access and an API key. "
+            "Local Ollama can be used as fallback when remote is unavailable."
+        ),
     },
 }
 

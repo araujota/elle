@@ -1,33 +1,41 @@
-"""Incident Vault SQLite schema.
+"""Incident Vault PostgreSQL schema.
 
-Defines the database schema for incident reports:
-- incidents: Core incident records
-- incident_actions: Ordered actions taken
-- incident_snapshots: Pre/post system snapshots
-- incident_events: Many-to-many link to telemetry events
-- incident_embeddings: Vector storage for semantic search
-- incidents_fts: FTS5 virtual table for lexical search
+Defines the database schema for incident reports.  Uses:
+- JSONB for structured nested data (replaces TEXT JSON columns)
+- TIMESTAMPTZ for all timestamps (replaces TEXT ISO 8601)
+- tsvector + GIN index for full-text search (replaces FTS5)
+- vector(768) via pgvector for embeddings (replaces BLOB + struct.pack)
 
-Schema version is tracked in the meta table for migrations.
+Schema version is tracked in the ``_meta`` table.
+Current version: 6
 """
 
 from __future__ import annotations
 
-import sqlite3
-from pathlib import Path
+import logging
+
+import psycopg
+
+from elle.storage.migrate import register_migration
+
+logger = logging.getLogger(__name__)
 
 # Schema version - increment when schema changes
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
-# Database location
-DB_PATH = Path("/var/lib/elle/incidents.db")
+# PostgreSQL schema name
+PG_SCHEMA = "incidents"
 
-# Core incidents table
+
+# ---------------------------------------------------------------------------
+# Table DDL
+# ---------------------------------------------------------------------------
+
 INCIDENTS_TABLE = """
 CREATE TABLE IF NOT EXISTS incidents (
     id TEXT PRIMARY KEY,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
 
     -- Classification
     domain TEXT NOT NULL DEFAULT 'other',
@@ -37,28 +45,28 @@ CREATE TABLE IF NOT EXISTS incidents (
     -- What happened
     title TEXT NOT NULL,
     summary TEXT NOT NULL DEFAULT '',
-    symptoms_json TEXT NOT NULL DEFAULT '[]',
-    suspected_causes_json TEXT NOT NULL DEFAULT '[]',
+    symptoms_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+    suspected_causes_json JSONB NOT NULL DEFAULT '[]'::jsonb,
     root_cause TEXT,
 
     -- Evidence
-    event_ids_json TEXT NOT NULL DEFAULT '[]',
-    log_snippets_json TEXT NOT NULL DEFAULT '[]',
-    metrics_json TEXT NOT NULL DEFAULT '{}',
+    event_ids_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+    log_snippets_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+    metrics_json JSONB NOT NULL DEFAULT '{}'::jsonb,
 
     -- Decision
-    decision_json TEXT NOT NULL DEFAULT '{}',
-    preconditions_json TEXT NOT NULL DEFAULT '[]',
+    decision_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    preconditions_json JSONB NOT NULL DEFAULT '[]'::jsonb,
 
     -- Outcome
     outcome TEXT NOT NULL DEFAULT 'unknown',
-    verification_steps_json TEXT NOT NULL DEFAULT '[]',
+    verification_steps_json JSONB NOT NULL DEFAULT '[]'::jsonb,
     time_to_mitigate_sec INTEGER,
     time_to_resolve_sec INTEGER,
 
     -- Similarity
-    fingerprint_json TEXT NOT NULL DEFAULT '{}',
-    tags_json TEXT NOT NULL DEFAULT '[]',
+    fingerprint_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    tags_json JSONB NOT NULL DEFAULT '[]'::jsonb,
     confidence REAL NOT NULL DEFAULT 0.0,
 
     -- Trigger
@@ -68,52 +76,52 @@ CREATE TABLE IF NOT EXISTS incidents (
     -- V5: Forecast incident tracking
     forecast_metric TEXT,
     forecast_urgency TEXT,
-    prepared_plan_json TEXT,
-    plan_executed_at TEXT
+    prepared_plan_json JSONB,
+    plan_executed_at TIMESTAMPTZ,
+
+    -- Full-text search (trigger-maintained because JSONB columns are included)
+    search_tsv TSVECTOR
 )
 """
 
-# Actions table (append-only log of what was done)
 ACTIONS_TABLE = """
 CREATE TABLE IF NOT EXISTS incident_actions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     incident_id TEXT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
     step_index INTEGER NOT NULL,
     kind TEXT NOT NULL,
 
     -- Action details
     command TEXT,
-    payload_json TEXT NOT NULL DEFAULT '{}',
+    payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
 
     -- Results
     exit_code INTEGER,
     stdout TEXT,
     stderr TEXT,
-    success INTEGER NOT NULL DEFAULT 0,
-    privileged INTEGER NOT NULL DEFAULT 0,
+    success BOOLEAN NOT NULL DEFAULT FALSE,
+    privileged BOOLEAN NOT NULL DEFAULT FALSE,
 
     -- Timing
-    created_at TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
     duration_ms INTEGER,
 
     UNIQUE(incident_id, step_index)
 )
 """
 
-# Snapshots table (pre/post system state)
 SNAPSHOTS_TABLE = """
 CREATE TABLE IF NOT EXISTS incident_snapshots (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     incident_id TEXT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
     which TEXT NOT NULL CHECK (which IN ('pre', 'post')),
-    snapshot_json TEXT NOT NULL,
-    created_at TEXT NOT NULL,
+    snapshot_json JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
 
     UNIQUE(incident_id, which)
 )
 """
 
-# Events link table (many-to-many)
 EVENTS_TABLE = """
 CREATE TABLE IF NOT EXISTS incident_events (
     incident_id TEXT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
@@ -122,48 +130,43 @@ CREATE TABLE IF NOT EXISTS incident_events (
 )
 """
 
-# Embeddings table (for semantic search)
 EMBEDDINGS_TABLE = """
 CREATE TABLE IF NOT EXISTS incident_embeddings (
     incident_id TEXT PRIMARY KEY REFERENCES incidents(id) ON DELETE CASCADE,
-    embedding BLOB NOT NULL,
+    embedding vector(768) NOT NULL,
     model TEXT NOT NULL,
-    dim INTEGER NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TIMESTAMPTZ NOT NULL
 )
 """
 
-# Structured decision records (v2)
 DECISION_RECORDS_TABLE = """
 CREATE TABLE IF NOT EXISTS decision_records (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     incident_id TEXT NOT NULL UNIQUE REFERENCES incidents(id) ON DELETE CASCADE,
     chosen_approach TEXT NOT NULL,
     rationale TEXT NOT NULL DEFAULT '',
-    confidence_json TEXT NOT NULL DEFAULT '{}',
-    provenance_json TEXT NOT NULL DEFAULT '{}',
-    planned_commands_json TEXT NOT NULL DEFAULT '[]',
-    decided_at TEXT NOT NULL
+    confidence_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    provenance_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    planned_commands_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+    decided_at TIMESTAMPTZ NOT NULL
 )
 """
 
-# Config file state tracking (v2)
 CONFIG_STATES_TABLE = """
 CREATE TABLE IF NOT EXISTS config_states (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     incident_id TEXT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
     snapshot_which TEXT NOT NULL CHECK (snapshot_which IN ('pre', 'post')),
     path TEXT NOT NULL,
     sha256_before TEXT,
     sha256_after TEXT,
     size_bytes INTEGER NOT NULL DEFAULT 0,
-    mtime TEXT,
+    mtime TIMESTAMPTZ,
     backup_path TEXT,
     UNIQUE(incident_id, snapshot_which, path)
 )
 """
 
-# Domain efficacy tracking (v3)
 DOMAIN_EFFICACY_TABLE = """
 CREATE TABLE IF NOT EXISTS domain_efficacy (
     domain TEXT PRIMARY KEY,
@@ -173,11 +176,10 @@ CREATE TABLE IF NOT EXISTS domain_efficacy (
     no_change_count INTEGER NOT NULL DEFAULT 0,
     worse_count INTEGER NOT NULL DEFAULT 0,
     success_rate REAL NOT NULL DEFAULT 0.5,
-    last_updated TEXT NOT NULL
+    last_updated TIMESTAMPTZ NOT NULL
 )
 """
 
-# Entity efficacy tracking (v3)
 ENTITY_EFFICACY_TABLE = """
 CREATE TABLE IF NOT EXISTS entity_efficacy (
     entity TEXT PRIMARY KEY,
@@ -187,17 +189,16 @@ CREATE TABLE IF NOT EXISTS entity_efficacy (
     no_change_count INTEGER NOT NULL DEFAULT 0,
     worse_count INTEGER NOT NULL DEFAULT 0,
     success_rate REAL NOT NULL DEFAULT 0.5,
-    last_updated TEXT NOT NULL
+    last_updated TIMESTAMPTZ NOT NULL
 )
 """
 
-# Solution approach efficacy tracking (v3)
 SOLUTION_APPROACH_EFFICACY_TABLE = """
 CREATE TABLE IF NOT EXISTS solution_approach_efficacy (
     approach_signature TEXT PRIMARY KEY,
     domain TEXT NOT NULL,
     precondition_summary TEXT NOT NULL DEFAULT '',
-    key_commands_json TEXT NOT NULL DEFAULT '[]',
+    key_commands_json JSONB NOT NULL DEFAULT '[]'::jsonb,
     total_uses INTEGER NOT NULL DEFAULT 0,
     improved_count INTEGER NOT NULL DEFAULT 0,
     partial_count INTEGER NOT NULL DEFAULT 0,
@@ -205,90 +206,79 @@ CREATE TABLE IF NOT EXISTS solution_approach_efficacy (
     worse_count INTEGER NOT NULL DEFAULT 0,
     success_rate REAL NOT NULL DEFAULT 0.5,
     avg_time_to_resolve_sec INTEGER,
-    last_used TEXT NOT NULL
+    last_used TIMESTAMPTZ NOT NULL
 )
 """
 
-# Telemetry snapshots (v4) - continuous evidence
 TELEMETRY_SNAPSHOTS_TABLE = """
 CREATE TABLE IF NOT EXISTS telemetry_snapshots (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     incident_id TEXT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
     which TEXT NOT NULL CHECK (which IN ('pre', 'post')),
-    snapshot_json TEXT NOT NULL,
-    collected_at TEXT NOT NULL,
+    snapshot_json JSONB NOT NULL,
+    collected_at TIMESTAMPTZ NOT NULL,
     UNIQUE(incident_id, which)
 )
 """
 
-# Control surface snapshots with hash index (v4) - discrete configuration
 CONTROL_SURFACE_SNAPSHOTS_TABLE = """
 CREATE TABLE IF NOT EXISTS control_surface_snapshots (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     incident_id TEXT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
     which TEXT NOT NULL CHECK (which IN ('pre', 'post')),
-    snapshot_json TEXT NOT NULL,
+    snapshot_json JSONB NOT NULL,
     surface_hashes TEXT NOT NULL,
-    collected_at TEXT NOT NULL,
+    collected_at TIMESTAMPTZ NOT NULL,
     UNIQUE(incident_id, which)
 )
 """
 
-# Meta table for tracking state
-META_TABLE = """
-CREATE TABLE IF NOT EXISTS meta (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
+CLOUD_SUBMISSION_QUEUE_TABLE = """
+CREATE TABLE IF NOT EXISTS cloud_submission_queue (
+    id SERIAL PRIMARY KEY,
+    incident_id TEXT NOT NULL,
+    payload_json JSONB NOT NULL,
+    original_hash TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'in_flight', 'succeeded', 'failed_permanent')),
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    max_retries INTEGER NOT NULL DEFAULT 20,
+    next_retry_at TIMESTAMPTZ NOT NULL,
+    last_error TEXT,
+    enqueued_at TIMESTAMPTZ NOT NULL,
+    last_attempted_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    cloud_id TEXT
 )
 """
 
-# FTS5 virtual table for lexical search
-# Using contentless FTS5 for simpler sync (no content= option)
-INCIDENTS_FTS = """
-CREATE VIRTUAL TABLE IF NOT EXISTS incidents_fts USING fts5(
-    title, summary, symptoms_text, root_cause, tags_text,
-    tokenize='porter unicode61'
-)
-"""
-
-# Triggers to keep FTS5 in sync
-# Use explicit rowid management since incidents use TEXT primary key
-TRIGGER_AI = """
-CREATE TRIGGER IF NOT EXISTS incidents_ai AFTER INSERT ON incidents BEGIN
-    INSERT INTO incidents_fts(rowid, title, summary, symptoms_text, root_cause, tags_text)
-    VALUES (
-        new.rowid,
-        new.title,
-        new.summary,
-        COALESCE(new.symptoms_json, ''),
-        COALESCE(new.root_cause, ''),
-        COALESCE(new.tags_json, '')
+# FTS trigger function (PL/pgSQL)
+# Maintains search_tsv by concatenating text fields + JSONB text casts
+SEARCH_TSV_TRIGGER_FN = """
+CREATE OR REPLACE FUNCTION incidents_search_tsv_update()
+RETURNS trigger AS $$
+BEGIN
+    NEW.search_tsv := to_tsvector('english',
+        coalesce(NEW.title, '') || ' ' ||
+        coalesce(NEW.summary, '') || ' ' ||
+        coalesce(NEW.root_cause, '') || ' ' ||
+        coalesce(NEW.symptoms_json::text, '') || ' ' ||
+        coalesce(NEW.tags_json::text, '')
     );
-END
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql
 """
 
-TRIGGER_AD = """
-CREATE TRIGGER IF NOT EXISTS incidents_ad AFTER DELETE ON incidents BEGIN
-    DELETE FROM incidents_fts WHERE rowid = old.rowid;
-END
+SEARCH_TSV_TRIGGER = """
+CREATE TRIGGER incidents_search_tsv_trg
+    BEFORE INSERT OR UPDATE ON incidents
+    FOR EACH ROW
+    EXECUTE FUNCTION incidents_search_tsv_update()
 """
 
-TRIGGER_AU = """
-CREATE TRIGGER IF NOT EXISTS incidents_au AFTER UPDATE ON incidents BEGIN
-    DELETE FROM incidents_fts WHERE rowid = old.rowid;
-    INSERT INTO incidents_fts(rowid, title, summary, symptoms_text, root_cause, tags_text)
-    VALUES (
-        new.rowid,
-        new.title,
-        new.summary,
-        COALESCE(new.symptoms_json, ''),
-        COALESCE(new.root_cause, ''),
-        COALESCE(new.tags_json, '')
-    );
-END
-"""
 
-# Indexes for common queries
+# Indexes
 INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_incidents_status ON incidents(status)",
     "CREATE INDEX IF NOT EXISTS idx_incidents_domain ON incidents(domain)",
@@ -296,348 +286,119 @@ INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_incidents_outcome ON incidents(outcome)",
     "CREATE INDEX IF NOT EXISTS idx_incidents_created ON incidents(created_at)",
     "CREATE INDEX IF NOT EXISTS idx_incidents_updated ON incidents(updated_at)",
+    "CREATE INDEX IF NOT EXISTS idx_incidents_search_tsv ON incidents USING GIN(search_tsv)",
     "CREATE INDEX IF NOT EXISTS idx_actions_incident ON incident_actions(incident_id)",
     "CREATE INDEX IF NOT EXISTS idx_snapshots_incident ON incident_snapshots(incident_id)",
     "CREATE INDEX IF NOT EXISTS idx_events_incident ON incident_events(incident_id)",
     "CREATE INDEX IF NOT EXISTS idx_events_event ON incident_events(event_id)",
-    # V2 indexes
+    # Decision & config
     "CREATE INDEX IF NOT EXISTS idx_decision_records_incident ON decision_records(incident_id)",
     "CREATE INDEX IF NOT EXISTS idx_config_states_incident ON config_states(incident_id)",
     "CREATE INDEX IF NOT EXISTS idx_config_states_path ON config_states(path)",
-    # V3 indexes
+    # Efficacy
     "CREATE INDEX IF NOT EXISTS idx_domain_efficacy_success ON domain_efficacy(success_rate DESC)",
     "CREATE INDEX IF NOT EXISTS idx_entity_efficacy_success ON entity_efficacy(success_rate DESC)",
     "CREATE INDEX IF NOT EXISTS idx_entity_efficacy_total ON entity_efficacy(total_incidents DESC)",
     "CREATE INDEX IF NOT EXISTS idx_approach_efficacy_domain ON solution_approach_efficacy(domain)",
     "CREATE INDEX IF NOT EXISTS idx_approach_efficacy_success ON solution_approach_efficacy(success_rate DESC)",
-    # V4 indexes
+    # Telemetry / control surface snapshots
     "CREATE INDEX IF NOT EXISTS idx_telemetry_snapshots_incident ON telemetry_snapshots(incident_id)",
     "CREATE INDEX IF NOT EXISTS idx_control_surface_snapshots_incident ON control_surface_snapshots(incident_id)",
     "CREATE INDEX IF NOT EXISTS idx_control_surface_hashes ON control_surface_snapshots(surface_hashes)",
-    # V5 indexes (forecast tracking)
+    # Forecast tracking
     "CREATE INDEX IF NOT EXISTS idx_incidents_forecast_metric ON incidents(forecast_metric)",
     "CREATE INDEX IF NOT EXISTS idx_incidents_forecast_urgency ON incidents(forecast_urgency)",
+    # Cloud queue
+    "CREATE INDEX IF NOT EXISTS idx_cloud_queue_status ON cloud_submission_queue(status)",
+    "CREATE INDEX IF NOT EXISTS idx_cloud_queue_next_retry ON cloud_submission_queue(next_retry_at)",
+    "CREATE INDEX IF NOT EXISTS idx_cloud_queue_incident ON cloud_submission_queue(incident_id)",
+    # Embedding HNSW index for semantic search
+    "CREATE INDEX IF NOT EXISTS idx_embeddings_hnsw ON incident_embeddings USING hnsw (embedding vector_cosine_ops)",
 ]
 
 
-def init_incident_schema(conn: sqlite3.Connection) -> None:
-    """Initialize the Incident Vault schema.
-
-    Creates all tables, triggers, and indexes if they don't exist.
-    Safe to call multiple times.
-
-    Args:
-        conn: SQLite connection.
-    """
-    cursor = conn.cursor()
-
-    # Enable foreign keys
-    cursor.execute("PRAGMA foreign_keys = ON")
-
-    # Create tables
-    cursor.execute(INCIDENTS_TABLE)
-    cursor.execute(ACTIONS_TABLE)
-    cursor.execute(SNAPSHOTS_TABLE)
-    cursor.execute(EVENTS_TABLE)
-    cursor.execute(EMBEDDINGS_TABLE)
-    cursor.execute(META_TABLE)
-
-    # V2 tables
-    cursor.execute(DECISION_RECORDS_TABLE)
-    cursor.execute(CONFIG_STATES_TABLE)
-
-    # V3 tables (efficacy tracking)
-    cursor.execute(DOMAIN_EFFICACY_TABLE)
-    cursor.execute(ENTITY_EFFICACY_TABLE)
-    cursor.execute(SOLUTION_APPROACH_EFFICACY_TABLE)
-
-    # V4 tables (telemetry/control surface separation)
-    cursor.execute(TELEMETRY_SNAPSHOTS_TABLE)
-    cursor.execute(CONTROL_SURFACE_SNAPSHOTS_TABLE)
-
-    # Create FTS table
-    cursor.execute(INCIDENTS_FTS)
-
-    # Create triggers
-    cursor.execute(TRIGGER_AI)
-    cursor.execute(TRIGGER_AD)
-    cursor.execute(TRIGGER_AU)
-
-    # Create indexes
-    for index_sql in INDEXES:
-        cursor.execute(index_sql)
-
-    # Set schema version
-    cursor.execute(
-        "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
-        ("schema_version", str(SCHEMA_VERSION)),
-    )
-
-    conn.commit()
+# ---------------------------------------------------------------------------
+# Migration: v0 -> v6 (single step for fresh installs)
+# ---------------------------------------------------------------------------
 
 
-def get_schema_version(conn: sqlite3.Connection) -> int | None:
-    """Get the current schema version.
+def _migrate_to_v6(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+    """Create the full incidents schema at v6."""
+    # Tables
+    conn.execute(INCIDENTS_TABLE)
+    conn.execute(ACTIONS_TABLE)
+    conn.execute(SNAPSHOTS_TABLE)
+    conn.execute(EVENTS_TABLE)
+    conn.execute(EMBEDDINGS_TABLE)
+    conn.execute(DECISION_RECORDS_TABLE)
+    conn.execute(CONFIG_STATES_TABLE)
+    conn.execute(DOMAIN_EFFICACY_TABLE)
+    conn.execute(ENTITY_EFFICACY_TABLE)
+    conn.execute(SOLUTION_APPROACH_EFFICACY_TABLE)
+    conn.execute(TELEMETRY_SNAPSHOTS_TABLE)
+    conn.execute(CONTROL_SURFACE_SNAPSHOTS_TABLE)
+    conn.execute(CLOUD_SUBMISSION_QUEUE_TABLE)
+
+    # FTS trigger
+    conn.execute(SEARCH_TSV_TRIGGER_FN)
+    # Drop trigger first to avoid "already exists" on re-run
+    conn.execute("DROP TRIGGER IF EXISTS incidents_search_tsv_trg ON incidents")
+    conn.execute(SEARCH_TSV_TRIGGER)
+
+    # Indexes
+    for idx in INDEXES:
+        conn.execute(idx)
+
+
+register_migration(PG_SCHEMA, 6, _migrate_to_v6)
+
+
+# ---------------------------------------------------------------------------
+# Convenience helpers
+# ---------------------------------------------------------------------------
+
+
+def ensure_schema(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+    """Ensure the incidents schema is up to date.
 
     Args:
-        conn: SQLite connection.
-
-    Returns:
-        Schema version, or None if not set.
+        conn: Active psycopg connection.
     """
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT value FROM meta WHERE key = 'schema_version'")
-        row = cursor.fetchone()
-        if row:
-            return int(row[0])
-    except sqlite3.OperationalError:
-        # Table doesn't exist yet
-        pass
-    return None
+    from elle.storage.migrate import run_migrations
+
+    run_migrations(conn, PG_SCHEMA)
 
 
-def needs_migration(conn: sqlite3.Connection) -> bool:
-    """Check if the schema needs migration.
-
-    Args:
-        conn: SQLite connection.
-
-    Returns:
-        True if migration is needed.
-    """
-    version = get_schema_version(conn)
-    if version is None:
-        return True
-    return version < SCHEMA_VERSION
-
-
-def migrate_schema(conn: sqlite3.Connection) -> None:
-    """Migrate the schema to the latest version.
-
-    Args:
-        conn: SQLite connection.
-    """
-    current = get_schema_version(conn) or 0
-
-    # V1 -> V2: Add decision_records and config_states tables
-    if current < 2:
-        _migrate_v1_to_v2(conn)
-
-    # V2 -> V3: Add efficacy tracking tables
-    if current < 3:
-        _migrate_v2_to_v3(conn)
-
-    # V3 -> V4: Add telemetry/control surface separation
-    if current < 4:
-        _migrate_v3_to_v4(conn)
-
-    # V4 -> V5: Add forecast incident tracking fields
-    if current < 5:
-        _migrate_v4_to_v5(conn)
-
-    # Update schema version
-    cursor = conn.cursor()
-    cursor.execute(
-        "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
-        ("schema_version", str(SCHEMA_VERSION)),
-    )
-    conn.commit()
-
-
-def _migrate_v1_to_v2(conn: sqlite3.Connection) -> None:
-    """Migrate from schema v1 to v2.
-
-    Adds decision_records and config_states tables for provenance tracking.
-
-    Args:
-        conn: SQLite connection.
-    """
-    cursor = conn.cursor()
-
-    # Create new tables
-    cursor.execute(DECISION_RECORDS_TABLE)
-    cursor.execute(CONFIG_STATES_TABLE)
-
-    # Create new indexes
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_decision_records_incident ON decision_records(incident_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_config_states_incident ON config_states(incident_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_config_states_path ON config_states(path)")
-
-    conn.commit()
-
-
-def _migrate_v2_to_v3(conn: sqlite3.Connection) -> None:
-    """Migrate from schema v2 to v3.
-
-    Adds efficacy tracking tables for machine-specific success learning.
-
-    Args:
-        conn: SQLite connection.
-    """
-    cursor = conn.cursor()
-
-    # Create efficacy tables
-    cursor.execute(DOMAIN_EFFICACY_TABLE)
-    cursor.execute(ENTITY_EFFICACY_TABLE)
-    cursor.execute(SOLUTION_APPROACH_EFFICACY_TABLE)
-
-    # Create indexes
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_domain_efficacy_success ON domain_efficacy(success_rate DESC)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_entity_efficacy_success ON entity_efficacy(success_rate DESC)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_entity_efficacy_total ON entity_efficacy(total_incidents DESC)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_approach_efficacy_domain ON solution_approach_efficacy(domain)")
-    cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_approach_efficacy_success ON solution_approach_efficacy(success_rate DESC)"
-    )
-
-    conn.commit()
-
-
-def _migrate_v3_to_v4(conn: sqlite3.Connection) -> None:
-    """Migrate from schema v3 to v4.
-
-    Adds telemetry and control surface snapshot tables for
-    separated evidence collection:
-    - telemetry_snapshots: Continuous evidence (what's happening)
-    - control_surface_snapshots: Discrete configuration (what's configured)
-
-    Args:
-        conn: SQLite connection.
-    """
-    cursor = conn.cursor()
-
-    # Create new tables
-    cursor.execute(TELEMETRY_SNAPSHOTS_TABLE)
-    cursor.execute(CONTROL_SURFACE_SNAPSHOTS_TABLE)
-
-    # Create indexes
-    cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_telemetry_snapshots_incident ON telemetry_snapshots(incident_id)"
-    )
-    cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_control_surface_snapshots_incident ON control_surface_snapshots(incident_id)"
-    )
-    cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_control_surface_hashes ON control_surface_snapshots(surface_hashes)"
-    )
-
-    conn.commit()
-
-
-def _migrate_v4_to_v5(conn: sqlite3.Connection) -> None:
-    """Migrate from schema v4 to v5.
-
-    Adds forecast incident tracking fields for predictive prevention:
-    - forecast_metric: The metric that triggered this forecast incident
-    - forecast_urgency: The urgency level ('prepare' or 'act_now')
-    - prepared_plan_json: JSON serialized remediation plan (for 'prepare' incidents)
-    - plan_executed_at: When the prepared plan was executed (if at all)
-
-    Args:
-        conn: SQLite connection.
-    """
-    cursor = conn.cursor()
-
-    # Add forecast tracking columns to incidents table
-    cursor.execute("ALTER TABLE incidents ADD COLUMN forecast_metric TEXT")
-    cursor.execute("ALTER TABLE incidents ADD COLUMN forecast_urgency TEXT")
-    cursor.execute("ALTER TABLE incidents ADD COLUMN prepared_plan_json TEXT")
-    cursor.execute("ALTER TABLE incidents ADD COLUMN plan_executed_at TEXT")
-
-    # Create index for forecast queries
-    cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_incidents_forecast_metric "
-        "ON incidents(forecast_metric)"
-    )
-    cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_incidents_forecast_urgency "
-        "ON incidents(forecast_urgency)"
-    )
-
-    conn.commit()
-
-
-def drop_all_tables(conn: sqlite3.Connection) -> None:
+def drop_all_tables(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
     """Drop all Incident Vault tables.
 
     WARNING: This destroys all data. Use only for testing.
 
     Args:
-        conn: SQLite connection.
+        conn: Active psycopg connection.
     """
-    cursor = conn.cursor()
-
-    # Drop triggers first
-    cursor.execute("DROP TRIGGER IF EXISTS incidents_ai")
-    cursor.execute("DROP TRIGGER IF EXISTS incidents_ad")
-    cursor.execute("DROP TRIGGER IF EXISTS incidents_au")
-
-    # Drop FTS table
-    cursor.execute("DROP TABLE IF EXISTS incidents_fts")
+    # Drop trigger and function
+    conn.execute("DROP TRIGGER IF EXISTS incidents_search_tsv_trg ON incidents")
+    conn.execute("DROP FUNCTION IF EXISTS incidents_search_tsv_update()")
 
     # Drop tables (order matters due to foreign keys)
-    cursor.execute("DROP TABLE IF EXISTS incident_embeddings")
-    cursor.execute("DROP TABLE IF EXISTS incident_events")
-    cursor.execute("DROP TABLE IF EXISTS incident_snapshots")
-    cursor.execute("DROP TABLE IF EXISTS incident_actions")
-    # V2 tables
-    cursor.execute("DROP TABLE IF EXISTS decision_records")
-    cursor.execute("DROP TABLE IF EXISTS config_states")
-    # V3 tables
-    cursor.execute("DROP TABLE IF EXISTS domain_efficacy")
-    cursor.execute("DROP TABLE IF EXISTS entity_efficacy")
-    cursor.execute("DROP TABLE IF EXISTS solution_approach_efficacy")
-    # V4 tables
-    cursor.execute("DROP TABLE IF EXISTS telemetry_snapshots")
-    cursor.execute("DROP TABLE IF EXISTS control_surface_snapshots")
-    cursor.execute("DROP TABLE IF EXISTS incidents")
-    cursor.execute("DROP TABLE IF EXISTS meta")
+    tables = [
+        "cloud_submission_queue",
+        "control_surface_snapshots",
+        "telemetry_snapshots",
+        "solution_approach_efficacy",
+        "entity_efficacy",
+        "domain_efficacy",
+        "config_states",
+        "decision_records",
+        "incident_embeddings",
+        "incident_events",
+        "incident_snapshots",
+        "incident_actions",
+        "incidents",
+        "_meta",
+    ]
+    for table in tables:
+        conn.execute(f"DROP TABLE IF EXISTS {table} CASCADE")
 
     conn.commit()
-
-
-def get_db_path() -> Path:
-    """Get the Incident Vault database path.
-
-    Uses a separate database file for incidents to keep it
-    isolated from other ELLE databases.
-
-    Returns:
-        Path to the Incident Vault database.
-    """
-    return DB_PATH
-
-
-def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
-    """Get a connection to the Incident Vault database.
-
-    Creates the database directory if it doesn't exist.
-
-    Args:
-        db_path: Override database path (for testing).
-
-    Returns:
-        SQLite connection with row factory set.
-    """
-    path = db_path or get_db_path()
-
-    # For non-system paths, ensure directory exists
-    if not str(path).startswith("/var/lib"):
-        path.parent.mkdir(parents=True, exist_ok=True)
-
-    conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-
-    return conn
-
-
-def ensure_schema(conn: sqlite3.Connection) -> None:
-    """Ensure the schema is initialized and up to date.
-
-    Args:
-        conn: SQLite connection.
-    """
-    if needs_migration(conn):
-        init_incident_schema(conn)

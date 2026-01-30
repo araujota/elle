@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from elle.capabilities.autogen.store import AutogenStore, get_store
+from elle.storage.engine import get_conn
 
 logger = logging.getLogger(__name__)
 
@@ -268,11 +269,11 @@ def get_stored_hash_for_module(store: AutogenStore, module_name: str) -> str | N
     Returns:
         Stored hash or None if not found.
     """
-    with store._get_connection() as conn:
+    with get_conn(schema="autogen") as conn:
         cursor = conn.execute(
             """
             SELECT man_page_hash FROM generated_capabilities
-            WHERE trust_level = 'core' AND source_command = ?
+            WHERE trust_level = 'core' AND source_command = %s
             LIMIT 1
             """,
             (module_name,),
@@ -457,10 +458,10 @@ class CoreCapabilityMigrator:
             spec_json = json.dumps(cap_data["spec_dict"])
             cap_id = str(uuid.uuid4())
 
-            with self.store._get_connection() as conn:
+            with get_conn(schema="autogen") as conn:
                 # Delete existing
                 conn.execute(
-                    "DELETE FROM generated_capabilities WHERE capability_name = ?",
+                    "DELETE FROM generated_capabilities WHERE capability_name = %s",
                     (cap_name,),
                 )
 
@@ -472,7 +473,7 @@ class CoreCapabilityMigrator:
                         output_model_code, capability_class_code, source_command,
                         man_page_hash, generated_at, trust_level, approved, enabled,
                         binary_path
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         cap_id,
@@ -485,9 +486,9 @@ class CoreCapabilityMigrator:
                         cap_data["source_hash"],
                         datetime.utcnow().isoformat(),
                         "core",
-                        1,  # Approved
-                        1,  # Enabled
-                        cap_data["source_path"],  # Store source path for reference
+                        True,
+                        True,
+                        cap_data["source_path"],
                     ),
                 )
                 conn.commit()
@@ -544,7 +545,7 @@ def verify_migration(store: AutogenStore | None = None) -> dict[str, Any]:
         "total_core": 0,
     }
 
-    with store._get_connection() as conn:
+    with get_conn(schema="autogen") as conn:
         cursor = conn.execute(
             "SELECT * FROM generated_capabilities WHERE trust_level = 'core'"
         )

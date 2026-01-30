@@ -1,32 +1,30 @@
-"""Dependency Preference Store - SQLite persistence for user preferences.
+"""Dependency Preference Store - PostgreSQL persistence for user preferences.
 
 Stores user preferences for handling dependencies and installation history.
+
+Storage backend: PostgreSQL via psycopg (schema ``deps``).
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 import uuid
 from datetime import datetime
-from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import cast
+
+import psycopg
 
 from elle.capabilities.dependencies.models import (
     DependencyPreference,
     InstallationResult,
     PreferenceChoice,
 )
-from elle.capabilities.dependencies.schema import (
-    ensure_schema,
-    get_connection,
-)
-
-if TYPE_CHECKING:
-    pass
+from elle.storage.engine import get_conn
 
 logger = logging.getLogger(__name__)
+
+PG_SCHEMA = "deps"
 
 
 # =============================================================================
@@ -62,7 +60,7 @@ def _json_loads(s: str | None) -> object:
 
 
 class DependencyPreferenceStore:
-    """SQLite store for dependency preferences and installation history.
+    """PostgreSQL store for dependency preferences and installation history.
 
     Persists user preferences for handling dependencies across sessions.
 
@@ -82,27 +80,11 @@ class DependencyPreferenceStore:
         store.record_installation(result)
     """
 
-    def __init__(self, db_path: Path | None = None) -> None:
-        """Initialize the store.
-
-        Args:
-            db_path: Override database path (for testing).
-        """
-        self._db_path = db_path
-        self._conn: sqlite3.Connection | None = None
-
-    def _get_conn(self) -> sqlite3.Connection:
-        """Get or create the database connection."""
-        if self._conn is None:
-            self._conn = get_connection(self._db_path)
-            ensure_schema(self._conn)
-        return self._conn
+    def __init__(self) -> None:
+        """Initialize the store."""
 
     def close(self) -> None:
-        """Close the database connection."""
-        if self._conn is not None:
-            self._conn.close()
-            self._conn = None
+        """Close the store (no-op for pooled connections)."""
 
     # -------------------------------------------------------------------------
     # Preferences
@@ -117,20 +99,19 @@ class DependencyPreferenceStore:
         Returns:
             The preference (defaults to 'ask' if not set).
         """
-        conn = self._get_conn()
-        cursor = conn.cursor()
+        with get_conn(schema=PG_SCHEMA) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT preference FROM dependency_preferences WHERE dependency = %s",
+                (dependency,),
+            )
 
-        cursor.execute(
-            "SELECT preference FROM dependency_preferences WHERE dependency = ?",
-            (dependency,),
-        )
-
-        row = cursor.fetchone()
-        if row:
-            pref = row["preference"]
-            if pref in ("always_install", "always_skip", "ask"):
-                return cast(PreferenceChoice, pref)
-        return "ask"
+            row = cursor.fetchone()
+            if row:
+                pref = row["preference"]
+                if pref in ("always_install", "always_skip", "ask"):
+                    return cast(PreferenceChoice, pref)
+            return "ask"
 
     def get_preference_full(self, dependency: str) -> DependencyPreference | None:
         """Get the full preference record for a dependency.
@@ -141,27 +122,32 @@ class DependencyPreferenceStore:
         Returns:
             DependencyPreference if found, None otherwise.
         """
-        conn = self._get_conn()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            SELECT dependency, preference, created_at, updated_at
-            FROM dependency_preferences
-            WHERE dependency = ?
-            """,
-            (dependency,),
-        )
-
-        row = cursor.fetchone()
-        if row:
-            return DependencyPreference(
-                dependency=row["dependency"],
-                preference=row["preference"],
-                created_at=_parse_datetime(row["created_at"]),
-                updated_at=_parse_datetime(row["updated_at"]),
+        with get_conn(schema=PG_SCHEMA) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT dependency, preference, created_at, updated_at
+                FROM dependency_preferences
+                WHERE dependency = %s
+                """,
+                (dependency,),
             )
-        return None
+
+            row = cursor.fetchone()
+            if row:
+                created_at = row["created_at"]
+                if isinstance(created_at, str):
+                    created_at = _parse_datetime(created_at)
+                updated_at = row["updated_at"]
+                if isinstance(updated_at, str):
+                    updated_at = _parse_datetime(updated_at)
+                return DependencyPreference(
+                    dependency=row["dependency"],
+                    preference=row["preference"],
+                    created_at=created_at,
+                    updated_at=updated_at,
+                )
+            return None
 
     def set_preference(self, dependency: str, preference: PreferenceChoice) -> DependencyPreference:
         """Set the user preference for a dependency.
@@ -173,41 +159,44 @@ class DependencyPreferenceStore:
         Returns:
             The created/updated DependencyPreference.
         """
-        conn = self._get_conn()
-        cursor = conn.cursor()
         now = datetime.utcnow()
 
-        # Check if exists
-        cursor.execute(
-            "SELECT created_at FROM dependency_preferences WHERE dependency = ?",
-            (dependency,),
-        )
-        row = cursor.fetchone()
+        with get_conn(schema=PG_SCHEMA) as conn:
+            cursor = conn.cursor()
 
-        if row:
-            # Update existing
+            # Check if exists
             cursor.execute(
-                """
-                UPDATE dependency_preferences
-                SET preference = ?, updated_at = ?
-                WHERE dependency = ?
-                """,
-                (preference, _serialize_datetime(now), dependency),
+                "SELECT created_at FROM dependency_preferences WHERE dependency = %s",
+                (dependency,),
             )
-            created_at = _parse_datetime(row["created_at"])
-        else:
-            # Insert new
-            cursor.execute(
-                """
-                INSERT INTO dependency_preferences
-                    (dependency, preference, created_at, updated_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                (dependency, preference, _serialize_datetime(now), _serialize_datetime(now)),
-            )
-            created_at = now
+            row = cursor.fetchone()
 
-        conn.commit()
+            if row:
+                # Update existing
+                cursor.execute(
+                    """
+                    UPDATE dependency_preferences
+                    SET preference = %s, updated_at = %s
+                    WHERE dependency = %s
+                    """,
+                    (preference, _serialize_datetime(now), dependency),
+                )
+                created_at_val = row["created_at"]
+                if isinstance(created_at_val, str):
+                    created_at = _parse_datetime(created_at_val)
+                else:
+                    created_at = created_at_val
+            else:
+                # Insert new
+                cursor.execute(
+                    """
+                    INSERT INTO dependency_preferences
+                        (dependency, preference, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (dependency, preference, _serialize_datetime(now), _serialize_datetime(now)),
+                )
+                created_at = now
 
         logger.info(f"Set preference for '{dependency}': {preference}")
 
@@ -227,16 +216,14 @@ class DependencyPreferenceStore:
         Returns:
             True if preference was deleted, False if not found.
         """
-        conn = self._get_conn()
-        cursor = conn.cursor()
+        with get_conn(schema=PG_SCHEMA) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM dependency_preferences WHERE dependency = %s",
+                (dependency,),
+            )
+            deleted = cursor.rowcount > 0
 
-        cursor.execute(
-            "DELETE FROM dependency_preferences WHERE dependency = ?",
-            (dependency,),
-        )
-        conn.commit()
-
-        deleted = cursor.rowcount > 0
         if deleted:
             logger.info(f"Deleted preference for '{dependency}'")
 
@@ -248,29 +235,34 @@ class DependencyPreferenceStore:
         Returns:
             List of DependencyPreference objects.
         """
-        conn = self._get_conn()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            SELECT dependency, preference, created_at, updated_at
-            FROM dependency_preferences
-            ORDER BY dependency
-            """
-        )
-
-        results: list[DependencyPreference] = []
-        for row in cursor.fetchall():
-            results.append(
-                DependencyPreference(
-                    dependency=row["dependency"],
-                    preference=row["preference"],
-                    created_at=_parse_datetime(row["created_at"]),
-                    updated_at=_parse_datetime(row["updated_at"]),
-                )
+        with get_conn(schema=PG_SCHEMA) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT dependency, preference, created_at, updated_at
+                FROM dependency_preferences
+                ORDER BY dependency
+                """
             )
 
-        return results
+            results: list[DependencyPreference] = []
+            for row in cursor.fetchall():
+                created_at = row["created_at"]
+                if isinstance(created_at, str):
+                    created_at = _parse_datetime(created_at)
+                updated_at = row["updated_at"]
+                if isinstance(updated_at, str):
+                    updated_at = _parse_datetime(updated_at)
+                results.append(
+                    DependencyPreference(
+                        dependency=row["dependency"],
+                        preference=row["preference"],
+                        created_at=created_at,
+                        updated_at=updated_at,
+                    )
+                )
+
+            return results
 
     # -------------------------------------------------------------------------
     # Installation History
@@ -285,28 +277,26 @@ class DependencyPreferenceStore:
         Returns:
             The generated record ID.
         """
-        conn = self._get_conn()
-        cursor = conn.cursor()
-
         record_id = str(uuid.uuid4())
 
-        cursor.execute(
-            """
-            INSERT INTO installation_history
-                (id, dependency, packages_json, success, error_message, installed_at, duration_sec)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                record_id,
-                result.dependency,
-                _json_dumps(list(result.installed_packages)),
-                1 if result.success else 0,
-                result.error_message,
-                _serialize_datetime(result.installed_at),
-                result.duration_sec,
-            ),
-        )
-        conn.commit()
+        with get_conn(schema=PG_SCHEMA) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO installation_history
+                    (id, dependency, packages_json, success, error_message, installed_at, duration_sec)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    record_id,
+                    result.dependency,
+                    _json_dumps(list(result.installed_packages)),
+                    result.success,
+                    result.error_message,
+                    _serialize_datetime(result.installed_at),
+                    result.duration_sec,
+                ),
+            )
 
         logger.info(f"Recorded installation for '{result.dependency}': {'success' if result.success else 'failed'}")
 
@@ -326,46 +316,49 @@ class DependencyPreferenceStore:
         Returns:
             List of InstallationResult objects, newest first.
         """
-        conn = self._get_conn()
-        cursor = conn.cursor()
+        with get_conn(schema=PG_SCHEMA) as conn:
+            cursor = conn.cursor()
 
-        if dependency:
-            cursor.execute(
-                """
-                SELECT id, dependency, packages_json, success, error_message, installed_at, duration_sec
-                FROM installation_history
-                WHERE dependency = ?
-                ORDER BY installed_at DESC
-                LIMIT ?
-                """,
-                (dependency, limit),
-            )
-        else:
-            cursor.execute(
-                """
-                SELECT id, dependency, packages_json, success, error_message, installed_at, duration_sec
-                FROM installation_history
-                ORDER BY installed_at DESC
-                LIMIT ?
-                """,
-                (limit,),
-            )
-
-        results: list[InstallationResult] = []
-        for row in cursor.fetchall():
-            packages = _json_loads(row["packages_json"])
-            results.append(
-                InstallationResult(
-                    success=bool(row["success"]),
-                    dependency=row["dependency"],
-                    installed_packages=tuple(packages) if isinstance(packages, list) else (),
-                    error_message=row["error_message"],
-                    duration_sec=row["duration_sec"] or 0.0,
-                    installed_at=_parse_datetime(row["installed_at"]),
+            if dependency:
+                cursor.execute(
+                    """
+                    SELECT id, dependency, packages_json, success, error_message, installed_at, duration_sec
+                    FROM installation_history
+                    WHERE dependency = %s
+                    ORDER BY installed_at DESC
+                    LIMIT %s
+                    """,
+                    (dependency, limit),
                 )
-            )
+            else:
+                cursor.execute(
+                    """
+                    SELECT id, dependency, packages_json, success, error_message, installed_at, duration_sec
+                    FROM installation_history
+                    ORDER BY installed_at DESC
+                    LIMIT %s
+                    """,
+                    (limit,),
+                )
 
-        return results
+            results: list[InstallationResult] = []
+            for row in cursor.fetchall():
+                packages = _json_loads(row["packages_json"])
+                installed_at = row["installed_at"]
+                if isinstance(installed_at, str):
+                    installed_at = _parse_datetime(installed_at)
+                results.append(
+                    InstallationResult(
+                        success=bool(row["success"]),
+                        dependency=row["dependency"],
+                        installed_packages=tuple(packages) if isinstance(packages, list) else (),
+                        error_message=row["error_message"],
+                        duration_sec=row["duration_sec"] or 0.0,
+                        installed_at=installed_at,
+                    )
+                )
+
+            return results
 
     def was_recently_installed(
         self,
@@ -381,27 +374,24 @@ class DependencyPreferenceStore:
         Returns:
             True if successfully installed within the time window.
         """
-        conn = self._get_conn()
-        cursor = conn.cursor()
-
-        cutoff = datetime.utcnow()
-        # Calculate cutoff time (simple approach, not handling DST)
         from datetime import timedelta
 
-        cutoff = cutoff - timedelta(hours=within_hours)
+        cutoff = datetime.utcnow() - timedelta(hours=within_hours)
 
-        cursor.execute(
-            """
-            SELECT 1 FROM installation_history
-            WHERE dependency = ?
-              AND success = 1
-              AND installed_at > ?
-            LIMIT 1
-            """,
-            (dependency, _serialize_datetime(cutoff)),
-        )
+        with get_conn(schema=PG_SCHEMA) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT 1 FROM installation_history
+                WHERE dependency = %s
+                  AND success = TRUE
+                  AND installed_at > %s
+                LIMIT 1
+                """,
+                (dependency, _serialize_datetime(cutoff)),
+            )
 
-        return cursor.fetchone() is not None
+            return cursor.fetchone() is not None
 
 
 # =============================================================================

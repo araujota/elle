@@ -1,8 +1,8 @@
 """Tests for event-to-incident correlation."""
 
-import tempfile
+from __future__ import annotations
+
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 
@@ -11,22 +11,7 @@ from elle.daemon.incidents.correlator import (
     get_correlator,
     reset_correlator,
 )
-from elle.daemon.incidents.schema import ensure_schema, get_connection
 from elle.daemon.incidents.store import get_incident
-
-
-@pytest.fixture
-def temp_db():
-    """Create a temporary database for testing."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = Path(f.name)
-
-    conn = get_connection(db_path)
-    ensure_schema(conn)
-    yield conn, db_path
-
-    conn.close()
-    db_path.unlink()
 
 
 @pytest.fixture
@@ -116,9 +101,9 @@ class TestEntityExtraction:
 class TestEventProcessing:
     """Tests for event processing."""
 
-    def test_process_critical_event(self, correlator, temp_db):
+    def test_process_critical_event(self, correlator, incidents_conn):
         """Test that critical events trigger immediate incident."""
-        conn, _ = temp_db
+        conn = incidents_conn
 
         event = {
             "id": "event-1",
@@ -135,9 +120,9 @@ class TestEventProcessing:
         assert incident is not None
         assert incident.domain == "oom"
 
-    def test_process_non_critical_event(self, correlator, temp_db):
+    def test_process_non_critical_event(self, correlator, incidents_conn):
         """Test that non-critical events may not trigger immediately."""
-        conn, _ = temp_db
+        conn = incidents_conn
 
         # Single warning shouldn't trigger with min_events=2
         correlator_strict = IncidentCorrelator(
@@ -157,9 +142,9 @@ class TestEventProcessing:
         # May or may not create depending on implementation
         # This test just ensures no crash
 
-    def test_process_accumulating_events(self, temp_db):
+    def test_process_accumulating_events(self, incidents_conn):
         """Test that accumulating events trigger incident."""
-        conn, _ = temp_db
+        conn = incidents_conn
 
         correlator = IncidentCorrelator(
             min_events_for_incident=2,
@@ -191,9 +176,9 @@ class TestEventProcessing:
 class TestCommandFailure:
     """Tests for command failure incidents."""
 
-    def test_create_from_command_failure(self, correlator, temp_db):
+    def test_create_from_command_failure(self, correlator, incidents_conn):
         """Test creating incident from failed command."""
-        conn, _ = temp_db
+        conn = incidents_conn
 
         incident_id = correlator.create_from_command_failure(
             command="apt update",
@@ -209,9 +194,9 @@ class TestCommandFailure:
         assert incident.trigger_source == "command_failure"
         assert incident.trigger_command == "apt update"
 
-    def test_command_failure_attaches_snapshot(self, correlator, temp_db):
+    def test_command_failure_attaches_snapshot(self, correlator, incidents_conn):
         """Test that command failure attaches pre-snapshot."""
-        conn, _ = temp_db
+        conn = incidents_conn
 
         from elle.daemon.incidents.store import get_snapshot
 
@@ -225,9 +210,9 @@ class TestCommandFailure:
         snapshot = get_snapshot(incident_id, "pre", conn=conn)
         assert snapshot is not None
 
-    def test_command_failure_domain_detection(self, correlator, temp_db):
+    def test_command_failure_domain_detection(self, correlator, incidents_conn):
         """Test that domain is detected from stderr."""
-        conn, _ = temp_db
+        conn = incidents_conn
 
         # Network error
         incident_id = correlator.create_from_command_failure(

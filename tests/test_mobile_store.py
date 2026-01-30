@@ -1,12 +1,9 @@
 """Tests for ELLE Mobile Gateway storage."""
 
-import tempfile
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import pytest
 
-from elle.mobile.config import MobileGatewayConfig
 from elle.mobile.models import (
     DeviceStatus,
     Elevation,
@@ -18,28 +15,9 @@ from elle.mobile.store import MobileStore
 
 
 @pytest.fixture
-def temp_db():
-    """Create a temporary database for testing."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = Path(tmpdir) / "mobile.db"
-        yield db_path
-
-
-@pytest.fixture
-def config(temp_db):
-    """Create test configuration."""
-    return MobileGatewayConfig(
-        enabled=True,
-        db_path=temp_db,
-        audit_db_path=temp_db.parent / "mobile_audit.db",
-        cert_dir=temp_db.parent / "certs",
-    )
-
-
-@pytest.fixture
-def store(config):
-    """Create test store."""
-    return MobileStore(config)
+def store(mobile_conn):
+    """Create test store using the conftest mobile connection."""
+    return MobileStore(conn=mobile_conn)
 
 
 class TestDeviceOperations:

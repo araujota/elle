@@ -1,8 +1,8 @@
 """Tests for efficacy tracking and machine-specific success learning."""
 
-import tempfile
+from __future__ import annotations
+
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import pytest
 
@@ -25,22 +25,7 @@ from elle.daemon.incidents.efficacy_tracker import (
     record_outcome,
 )
 from elle.daemon.incidents.models import Fingerprint
-from elle.daemon.incidents.schema import ensure_schema, get_connection
 from elle.daemon.incidents.store import create_incident_draft, update_incident
-
-
-@pytest.fixture
-def temp_db():
-    """Create a temporary database for testing."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = Path(f.name)
-
-    conn = get_connection(db_path)
-    ensure_schema(conn)
-    yield conn, db_path
-
-    conn.close()
-    db_path.unlink()
 
 
 class TestEfficacyModels:
@@ -221,9 +206,9 @@ class TestCommandNormalization:
 class TestEfficacyTracking:
     """Tests for efficacy tracking operations."""
 
-    def test_record_outcome_creates_domain_efficacy(self, temp_db):
+    def test_record_outcome_creates_domain_efficacy(self, incidents_conn):
         """Test that recording outcome creates domain efficacy record."""
-        conn, _ = temp_db
+        conn = incidents_conn
 
         # Create an incident
         incident = create_incident_draft(
@@ -249,9 +234,9 @@ class TestEfficacyTracking:
         assert domain_eff.total_incidents == 1
         assert domain_eff.improved_count == 1
 
-    def test_record_outcome_updates_entity_efficacy(self, temp_db):
+    def test_record_outcome_updates_entity_efficacy(self, incidents_conn):
         """Test that recording outcome updates entity efficacy."""
-        conn, _ = temp_db
+        conn = incidents_conn
 
         incident = create_incident_draft(title="Test", domain="service", conn=conn)
         incident = update_incident(
@@ -271,9 +256,9 @@ class TestEfficacyTracking:
         assert php_eff is not None
         assert php_eff.improved_count == 1
 
-    def test_multiple_outcomes_aggregate(self, temp_db):
+    def test_multiple_outcomes_aggregate(self, incidents_conn):
         """Test that multiple outcomes are aggregated correctly."""
-        conn, _ = temp_db
+        conn = incidents_conn
 
         # Create and record multiple incidents
         for outcome in ["improved", "improved", "partial", "no_change"]:
@@ -288,9 +273,9 @@ class TestEfficacyTracking:
         assert domain_eff.partial_count == 1
         assert domain_eff.no_change_count == 1
 
-    def test_get_efficacy_context(self, temp_db):
+    def test_get_efficacy_context(self, incidents_conn):
         """Test getting efficacy context for retrieval."""
-        conn, _ = temp_db
+        conn = incidents_conn
 
         # Create some incidents to build context
         for i in range(5):
@@ -314,9 +299,9 @@ class TestEfficacyTracking:
         assert ctx.domain_sample_size == 5
         assert "interface:eth0" in ctx.entity_success_rates
 
-    def test_get_efficacy_stats(self, temp_db):
+    def test_get_efficacy_stats(self, incidents_conn):
         """Test getting aggregated efficacy stats."""
-        conn, _ = temp_db
+        conn = incidents_conn
 
         # Create incidents across multiple domains
         for domain in ["net", "disk", "service"]:
@@ -330,9 +315,9 @@ class TestEfficacyTracking:
         assert stats.total_finalized_incidents == 9
         assert len(stats.domain_stats) == 3
 
-    def test_get_all_domain_efficacy(self, temp_db):
+    def test_get_all_domain_efficacy(self, incidents_conn):
         """Test getting all domain efficacy records."""
-        conn, _ = temp_db
+        conn = incidents_conn
 
         for domain in ["net", "disk"]:
             incident = create_incident_draft(title=f"Test {domain}", domain=domain, conn=conn)

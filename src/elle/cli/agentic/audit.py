@@ -18,10 +18,8 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -31,8 +29,8 @@ from elle.cli.agentic.unified_input import AgenticInput
 
 logger = logging.getLogger(__name__)
 
-# Default database path
-DEFAULT_AUDIT_DB = Path("/var/lib/elle/agentic_audit.db")
+# Default schema name for the audit tables
+DEFAULT_AUDIT_SCHEMA = "agentic_audit"
 
 
 # =============================================================================
@@ -271,13 +269,13 @@ class AuditRecorder:
     CREATE INDEX IF NOT EXISTS idx_audit_success ON agentic_audit(success);
     """
 
-    def __init__(self, db_path: Path | str | None = None) -> None:
+    def __init__(self, schema: str | None = None) -> None:
         """Initialize the recorder.
 
         Args:
-            db_path: Path to SQLite database file.
+            schema: PostgreSQL schema name for audit tables.
         """
-        self.db_path = Path(db_path) if db_path else DEFAULT_AUDIT_DB
+        self._schema = schema or DEFAULT_AUDIT_SCHEMA
         self._ensure_schema()
 
         # In-memory tracking for incomplete records
@@ -285,19 +283,16 @@ class AuditRecorder:
 
     def _ensure_schema(self) -> None:
         """Ensure database schema exists."""
+        from elle.storage.engine import get_conn
+
         try:
-            self.db_path.parent.mkdir(parents=True, exist_ok=True)
-            with sqlite3.connect(self.db_path) as conn:
-                conn.executescript(self.SCHEMA)
-                conn.commit()
+            with get_conn(schema=self._schema) as conn:
+                for statement in self.SCHEMA.split(";"):
+                    statement = statement.strip()
+                    if statement:
+                        conn.execute(statement)
         except Exception as e:
             logger.error(f"Failed to initialize audit database: {e}")
-
-    def _get_connection(self) -> sqlite3.Connection:
-        """Get database connection."""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
 
     def start(self, input: AgenticInput) -> AuditRecord:
         """Start a new audit record.
@@ -435,8 +430,10 @@ class AuditRecorder:
 
     def _persist(self, record: AuditRecord) -> None:
         """Persist an audit record to the database."""
+        from elle.storage.engine import get_conn
+
         try:
-            with self._get_connection() as conn:
+            with get_conn(schema=self._schema) as conn:
                 # Serialize complex objects
                 trigger_json = record.trigger.model_dump_json()
                 retrieval_json = json.dumps([
@@ -452,12 +449,25 @@ class AuditRecorder:
 
                 conn.execute(
                     """
-                    INSERT OR REPLACE INTO agentic_audit (
+                    INSERT INTO agentic_audit (
                         execution_id, started_at, completed_at, trigger_json,
                         linked_incident_id, retrieval_contexts_json, tool_calls_json,
                         verifications_json, final_response, success, error,
                         iterations, provenance_json
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (execution_id) DO UPDATE SET
+                        started_at = EXCLUDED.started_at,
+                        completed_at = EXCLUDED.completed_at,
+                        trigger_json = EXCLUDED.trigger_json,
+                        linked_incident_id = EXCLUDED.linked_incident_id,
+                        retrieval_contexts_json = EXCLUDED.retrieval_contexts_json,
+                        tool_calls_json = EXCLUDED.tool_calls_json,
+                        verifications_json = EXCLUDED.verifications_json,
+                        final_response = EXCLUDED.final_response,
+                        success = EXCLUDED.success,
+                        error = EXCLUDED.error,
+                        iterations = EXCLUDED.iterations,
+                        provenance_json = EXCLUDED.provenance_json
                     """,
                     (
                         record.execution_id,
@@ -475,7 +485,6 @@ class AuditRecorder:
                         provenance_json,
                     ),
                 )
-                conn.commit()
 
         except Exception as e:
             logger.error(f"Failed to persist audit record: {e}")
@@ -489,10 +498,12 @@ class AuditRecorder:
         Returns:
             AuditRecord or None.
         """
+        from elle.storage.engine import get_conn
+
         try:
-            with self._get_connection() as conn:
+            with get_conn(schema=self._schema) as conn:
                 cursor = conn.execute(
-                    "SELECT * FROM agentic_audit WHERE execution_id = ?",
+                    "SELECT * FROM agentic_audit WHERE execution_id = %s",
                     (execution_id,),
                 )
                 row = cursor.fetchone()
@@ -511,14 +522,16 @@ class AuditRecorder:
         Returns:
             List of AuditRecord.
         """
+        from elle.storage.engine import get_conn
+
         records: list[AuditRecord] = []
         try:
-            with self._get_connection() as conn:
+            with get_conn(schema=self._schema) as conn:
                 cursor = conn.execute(
                     """
                     SELECT * FROM agentic_audit
                     ORDER BY started_at DESC
-                    LIMIT ?
+                    LIMIT %s
                     """,
                     (limit,),
                 )
@@ -539,13 +552,15 @@ class AuditRecorder:
         Returns:
             List of AuditRecord.
         """
+        from elle.storage.engine import get_conn
+
         records: list[AuditRecord] = []
         try:
-            with self._get_connection() as conn:
+            with get_conn(schema=self._schema) as conn:
                 cursor = conn.execute(
                     """
                     SELECT * FROM agentic_audit
-                    WHERE linked_incident_id = ?
+                    WHERE linked_incident_id = %s
                     ORDER BY started_at DESC
                     """,
                     (incident_id,),
@@ -558,7 +573,7 @@ class AuditRecorder:
             logger.error(f"Failed to list audit records by incident: {e}")
         return records
 
-    def _row_to_record(self, row: sqlite3.Row) -> AuditRecord | None:
+    def _row_to_record(self, row: dict[str, Any]) -> AuditRecord | None:
         """Convert a database row to an AuditRecord."""
         try:
             trigger = AgenticInput.model_validate_json(row["trigger_json"])
@@ -598,18 +613,18 @@ class AuditRecorder:
 _recorder: AuditRecorder | None = None
 
 
-def get_audit_recorder(db_path: Path | str | None = None) -> AuditRecorder:
+def get_audit_recorder(schema: str | None = None) -> AuditRecorder:
     """Get the shared audit recorder instance.
 
     Args:
-        db_path: Optional database path override.
+        schema: Optional PostgreSQL schema name override.
 
     Returns:
         AuditRecorder instance.
     """
     global _recorder
-    if _recorder is None or (db_path and Path(db_path) != _recorder.db_path):
-        _recorder = AuditRecorder(db_path)
+    if _recorder is None or (schema and schema != _recorder._schema):
+        _recorder = AuditRecorder(schema)
     return _recorder
 
 

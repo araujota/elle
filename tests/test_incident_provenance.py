@@ -4,7 +4,8 @@ Tests the new provenance tracking, decision record storage,
 and config file state tracking.
 """
 
-import sqlite3
+from __future__ import annotations
+
 from datetime import datetime
 
 import pytest
@@ -34,14 +35,9 @@ from elle.daemon.incidents.store import (
 
 
 @pytest.fixture
-def test_db(tmp_path):
-    """Create a temporary test database."""
-    db_path = tmp_path / "test_incidents.db"
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    init_incident_schema(conn)
-    yield conn
-    conn.close()
+def test_db(incidents_conn):
+    """Provide an incidents-schema connection for testing."""
+    return incidents_conn
 
 
 class TestProvenanceModels:
@@ -428,25 +424,27 @@ class TestSchemaVersion:
 
     def test_new_tables_exist(self, test_db):
         """Test that v2 tables exist."""
-        cursor = test_db.cursor()
-
         # Check decision_records table
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='decision_records'")
-        assert cursor.fetchone() is not None
+        row = test_db.execute(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = 'decision_records'"
+        ).fetchone()
+        assert row is not None
 
         # Check config_states table
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='config_states'")
-        assert cursor.fetchone() is not None
+        row = test_db.execute(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = 'config_states'"
+        ).fetchone()
+        assert row is not None
 
-    def test_fresh_schema_has_all_tables(self):
+    def test_fresh_schema_has_all_tables(self, test_db):
         """Test that fresh schema has all v2 tables."""
-        conn = sqlite3.connect(":memory:")
-        conn.row_factory = sqlite3.Row
-        init_incident_schema(conn)
+        init_incident_schema(test_db)
 
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        tables = {row[0] for row in cursor.fetchall()}
+        rows = test_db.execute(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = 'incidents'"
+        ).fetchall()
+        tables = {row["table_name"] for row in rows}
 
         expected = {
             "incidents",
@@ -457,7 +455,5 @@ class TestSchemaVersion:
             "decision_records",
             "config_states",
             "meta",
-            "incidents_fts",
         }
         assert expected.issubset(tables)
-        conn.close()

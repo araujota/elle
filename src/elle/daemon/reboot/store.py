@@ -2,17 +2,18 @@
 
 Provides database operations for reboot intents and verification checks.
 All operations are designed for safe state machine transitions.
+
+Storage backend: PostgreSQL via psycopg (schema ``reboot``).
 """
 
 from __future__ import annotations
 
 import json
-import sqlite3
 import uuid
-from collections.abc import Iterator
-from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
+
+import psycopg
 
 from elle.common.pydantic_compat import safe_model_dump
 from elle.daemon.reboot.models import (
@@ -25,26 +26,9 @@ from elle.daemon.reboot.models import (
     RebootReason,
     RebootStatus,
 )
-from elle.daemon.reboot.schema import ensure_schema, get_connection
+from elle.storage.engine import get_conn
 
-
-@contextmanager
-def _ensure_connection(
-    conn: sqlite3.Connection | None = None,
-) -> Iterator[sqlite3.Connection]:
-    """Context manager that ensures a valid connection with schema."""
-    own_conn = conn is None
-    actual_conn: sqlite3.Connection
-    if own_conn:
-        actual_conn = get_connection()
-        ensure_schema(actual_conn)
-    else:
-        actual_conn = conn  # type: ignore[assignment]
-    try:
-        yield actual_conn
-    finally:
-        if own_conn:
-            actual_conn.close()
+PG_SCHEMA = "reboot"
 
 
 def _serialize_datetime(dt: datetime) -> str:
@@ -90,7 +74,7 @@ def create_intent(
     grub_default_saved: str | None = None,
     grub_state: GRUBState | None = None,
     verifications: list[PendingVerification] | None = None,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> RebootIntent:
     """Create a new reboot intent.
 
@@ -111,15 +95,15 @@ def create_intent(
         grub_default_saved: Original GRUB default.
         grub_state: Complete GRUB state.
         verifications: Verification checks to add.
-        conn: SQLite connection.
+        conn: psycopg connection (uses pool if None).
 
     Returns:
         The created RebootIntent.
     """
-    with _ensure_connection(conn) as c:
-        intent_id = str(uuid.uuid4())
-        now = datetime.utcnow()
+    intent_id = str(uuid.uuid4())
+    now = datetime.utcnow()
 
+    def _run(c: psycopg.Connection) -> RebootIntent:  # type: ignore[type-arg]
         cursor = c.cursor()
         cursor.execute(
             """
@@ -132,7 +116,7 @@ def create_intent(
                 grub_entry, grub_default_saved, grub_state_json,
                 post_snapshot_json, verification_attempts,
                 outcome, outcome_detail
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 intent_id,
@@ -157,12 +141,12 @@ def create_intent(
                 None,
             ),
         )
-        c.commit()
 
         # Add verifications if provided
         if verifications:
             for i, v in enumerate(verifications):
-                add_verification(
+                _add_verification_inner(
+                    c,
                     intent_id,
                     step_index=i,
                     check_type=v.check_type,
@@ -170,88 +154,110 @@ def create_intent(
                     expected_exit_code=v.expected_exit_code,
                     expected_output_contains=v.expected_output_contains,
                     required=v.required,
-                    conn=c,
                 )
 
-        return get_intent(intent_id, conn=c)  # type: ignore
+        return _get_intent_inner(c, intent_id)  # type: ignore
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
 
 
 def get_intent(
     intent_id: str,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> RebootIntent | None:
     """Get a reboot intent by ID.
 
     Args:
         intent_id: The intent UUID.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         RebootIntent if found, None otherwise.
     """
-    with _ensure_connection(conn) as c:
-        cursor = c.cursor()
-        cursor.execute("SELECT * FROM reboot_intents WHERE id = ?", (intent_id,))
-        row = cursor.fetchone()
+    if conn is not None:
+        return _get_intent_inner(conn, intent_id)
 
-        if not row:
-            return None
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _get_intent_inner(c, intent_id)
 
-        # Get verifications
-        verifications = get_verifications(intent_id, conn=c)
 
-        return _row_to_intent(row, verifications)
+def _get_intent_inner(
+    c: psycopg.Connection,  # type: ignore[type-arg]
+    intent_id: str,
+) -> RebootIntent | None:
+    """Internal helper to fetch an intent within an existing connection."""
+    cursor = c.cursor()
+    cursor.execute("SELECT * FROM reboot_intents WHERE id = %s", (intent_id,))
+    row = cursor.fetchone()
+
+    if not row:
+        return None
+
+    verifications = _get_verifications_inner(c, intent_id)
+    return _row_to_intent(row, verifications)
 
 
 def get_intents_by_status(
     status: RebootIntentStatus,
     limit: int = 100,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> list[RebootIntent]:
     """Get reboot intents by status.
 
     Args:
         status: Status to filter by.
         limit: Maximum number of results.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         List of RebootIntents with the specified status.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> list[RebootIntent]:  # type: ignore[type-arg]
         cursor = c.cursor()
         cursor.execute(
             """
             SELECT * FROM reboot_intents
-            WHERE status = ?
+            WHERE status = %s
             ORDER BY updated_at DESC
-            LIMIT ?
+            LIMIT %s
             """,
             (status, limit),
         )
 
         result = []
         for row in cursor.fetchall():
-            verifications = get_verifications(row["id"], conn=c)
+            verifications = _get_verifications_inner(c, row["id"])
             result.append(_row_to_intent(row, verifications))
 
         return result
 
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
+
 
 def get_active_intent(
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> RebootIntent | None:
     """Get the currently active reboot intent.
 
     Active means status is 'rebooting' or 'verifying'.
 
     Args:
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         Active RebootIntent if exists, None otherwise.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> RebootIntent | None:  # type: ignore[type-arg]
         cursor = c.cursor()
         cursor.execute(
             """
@@ -266,8 +272,14 @@ def get_active_intent(
         if not row:
             return None
 
-        verifications = get_verifications(row["id"], conn=c)
+        verifications = _get_verifications_inner(c, row["id"])
         return _row_to_intent(row, verifications)
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
 
 
 def list_intents(
@@ -275,7 +287,7 @@ def list_intents(
     outcome: RebootOutcome | None = None,
     limit: int = 100,
     offset: int = 0,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> list[RebootIntent]:
     """List reboot intents with optional filtering.
 
@@ -284,23 +296,24 @@ def list_intents(
         outcome: Filter by outcome.
         limit: Maximum number of results.
         offset: Offset for pagination.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         List of RebootIntents.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> list[RebootIntent]:  # type: ignore[type-arg]
         query = "SELECT * FROM reboot_intents WHERE 1=1"
         params: list[Any] = []
 
         if status:
-            query += " AND status = ?"
+            query += " AND status = %s"
             params.append(status)
         if outcome:
-            query += " AND outcome = ?"
+            query += " AND outcome = %s"
             params.append(outcome)
 
-        query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
+        query += " ORDER BY updated_at DESC LIMIT %s OFFSET %s"
         params.extend([limit, offset])
 
         cursor = c.cursor()
@@ -308,38 +321,45 @@ def list_intents(
 
         result = []
         for row in cursor.fetchall():
-            verifications = get_verifications(row["id"], conn=c)
+            verifications = _get_verifications_inner(c, row["id"])
             result.append(_row_to_intent(row, verifications))
 
         return result
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
 
 
 def list_recent_intents(
     days: int = 7,
     limit: int = 10,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> list[RebootIntentSummary]:
     """List recent reboot intent summaries.
 
     Args:
         days: Number of days to look back.
         limit: Maximum number of results.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         List of RebootIntentSummary objects.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> list[RebootIntentSummary]:  # type: ignore[type-arg]
         cursor = c.cursor()
         cursor.execute(
             """
             SELECT id, created_at, goal, reason, status, outcome, verification_attempts
             FROM reboot_intents
-            WHERE created_at >= datetime('now', ? || ' days')
+            WHERE created_at >= now() - make_interval(days => %s)
             ORDER BY created_at DESC
-            LIMIT ?
+            LIMIT %s
             """,
-            (f"-{days}", limit),
+            (days, limit),
         )
 
         result = []
@@ -347,7 +367,7 @@ def list_recent_intents(
             result.append(
                 RebootIntentSummary(
                     id=row["id"],
-                    created_at=_parse_datetime(row["created_at"]),  # type: ignore
+                    created_at=_parse_datetime(row["created_at"]) if isinstance(row["created_at"], str) else row["created_at"],
                     goal=row["goal"],
                     reason=row["reason"],
                     status=row["status"],
@@ -358,6 +378,12 @@ def list_recent_intents(
 
         return result
 
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
+
 
 def update_intent_status(
     intent_id: str,
@@ -367,7 +393,7 @@ def update_intent_status(
     new_boot_id: str | None = None,
     post_snapshot_json: dict[str, Any] | None = None,
     verification_attempts: int | None = None,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> RebootIntent | None:
     """Update a reboot intent's status.
 
@@ -382,57 +408,63 @@ def update_intent_status(
         new_boot_id: Boot ID after reboot (optional).
         post_snapshot_json: System snapshot after reboot (optional).
         verification_attempts: Update attempt count (optional).
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         Updated RebootIntent, or None if not found.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> RebootIntent | None:  # type: ignore[type-arg]
         now = datetime.utcnow()
 
-        updates = ["updated_at = ?", "status = ?"]
+        updates = ["updated_at = %s", "status = %s"]
         values: list[Any] = [_serialize_datetime(now), status]
 
         if outcome is not None:
-            updates.append("outcome = ?")
+            updates.append("outcome = %s")
             values.append(outcome)
         if outcome_detail is not None:
-            updates.append("outcome_detail = ?")
+            updates.append("outcome_detail = %s")
             values.append(outcome_detail)
         if new_boot_id is not None:
-            updates.append("new_boot_id = ?")
+            updates.append("new_boot_id = %s")
             values.append(new_boot_id)
         if post_snapshot_json is not None:
-            updates.append("post_snapshot_json = ?")
+            updates.append("post_snapshot_json = %s")
             values.append(_json_dumps(post_snapshot_json))
         if verification_attempts is not None:
-            updates.append("verification_attempts = ?")
+            updates.append("verification_attempts = %s")
             values.append(verification_attempts)
 
         # Update last_verification_at for verifying status
         if status == "verifying":
-            updates.append("last_verification_at = ?")
+            updates.append("last_verification_at = %s")
             values.append(_serialize_datetime(now))
 
         values.append(intent_id)
 
         cursor = c.cursor()
         cursor.execute(
-            f"UPDATE reboot_intents SET {', '.join(updates)} WHERE id = ?",
+            f"UPDATE reboot_intents SET {', '.join(updates)} WHERE id = %s",
             values,
         )
-        c.commit()
 
         if cursor.rowcount == 0:
             return None
 
-        return get_intent(intent_id, conn=c)
+        return _get_intent_inner(c, intent_id)
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
 
 
 def mark_rebooting(
     intent_id: str,
     boot_id: str,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> RebootIntent | None:
     """Mark an intent as rebooting.
 
@@ -441,34 +473,40 @@ def mark_rebooting(
     Args:
         intent_id: The intent UUID.
         boot_id: Current systemd boot ID.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         Updated RebootIntent.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> RebootIntent | None:  # type: ignore[type-arg]
         now = datetime.utcnow()
 
         cursor = c.cursor()
         cursor.execute(
             """
             UPDATE reboot_intents
-            SET updated_at = ?, status = ?, boot_id = ?
-            WHERE id = ?
+            SET updated_at = %s, status = %s, boot_id = %s
+            WHERE id = %s
             """,
             (_serialize_datetime(now), "rebooting", boot_id, intent_id),
         )
-        c.commit()
 
         if cursor.rowcount == 0:
             return None
 
-        return get_intent(intent_id, conn=c)
+        return _get_intent_inner(c, intent_id)
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
 
 
 def cancel_intent(
     intent_id: str,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> RebootIntent | None:
     """Cancel a pending reboot intent.
 
@@ -476,34 +514,40 @@ def cancel_intent(
 
     Args:
         intent_id: The intent UUID.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         Updated RebootIntent, or None if not found/not cancellable.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> RebootIntent | None:  # type: ignore[type-arg]
         now = datetime.utcnow()
 
         cursor = c.cursor()
         cursor.execute(
             """
             UPDATE reboot_intents
-            SET updated_at = ?, status = 'cancelled'
-            WHERE id = ? AND status = 'pending'
+            SET updated_at = %s, status = 'cancelled'
+            WHERE id = %s AND status = 'pending'
             """,
             (_serialize_datetime(now), intent_id),
         )
-        c.commit()
 
         if cursor.rowcount == 0:
             return None
 
-        return get_intent(intent_id, conn=c)
+        return _get_intent_inner(c, intent_id)
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
 
 
 def delete_intent(
     intent_id: str,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> bool:
     """Delete a reboot intent.
 
@@ -512,20 +556,26 @@ def delete_intent(
 
     Args:
         intent_id: The intent UUID.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         True if deleted, False if not found.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> bool:  # type: ignore[type-arg]
         cursor = c.cursor()
-        cursor.execute("DELETE FROM reboot_intents WHERE id = ?", (intent_id,))
-        c.commit()
+        cursor.execute("DELETE FROM reboot_intents WHERE id = %s", (intent_id,))
         return cursor.rowcount > 0
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
 
 
 def _row_to_intent(
-    row: sqlite3.Row,
+    row: dict,
     verifications: list[PendingVerification],
 ) -> RebootIntent:
     """Convert a database row to a RebootIntent."""
@@ -541,11 +591,23 @@ def _row_to_intent(
     if isinstance(session_history, list):
         session_history = tuple(session_history)
 
+    created_at = row["created_at"]
+    if isinstance(created_at, str):
+        created_at = _parse_datetime(created_at)
+
+    updated_at = row["updated_at"]
+    if isinstance(updated_at, str):
+        updated_at = _parse_datetime(updated_at)
+
+    last_verification_at = row["last_verification_at"]
+    if isinstance(last_verification_at, str):
+        last_verification_at = _parse_datetime(last_verification_at)
+
     return RebootIntent(
         id=row["id"],
         incident_id=row["incident_id"],
-        created_at=_parse_datetime(row["created_at"]),  # type: ignore
-        updated_at=_parse_datetime(row["updated_at"]),  # type: ignore
+        created_at=created_at,
+        updated_at=updated_at,
         goal=row["goal"],
         task_description=row["task_description"],
         reason=row["reason"],
@@ -561,7 +623,7 @@ def _row_to_intent(
         post_snapshot_json=_json_loads(row["post_snapshot_json"]) or {},
         new_boot_id=row["new_boot_id"],
         verification_attempts=row["verification_attempts"],
-        last_verification_at=_parse_datetime(row["last_verification_at"]),
+        last_verification_at=last_verification_at,
         outcome=row["outcome"],
         outcome_detail=row["outcome_detail"],
         verifications=tuple(verifications),
@@ -573,6 +635,53 @@ def _row_to_intent(
 # =============================================================================
 
 
+def _add_verification_inner(
+    c: psycopg.Connection,  # type: ignore[type-arg]
+    intent_id: str,
+    step_index: int,
+    check_type: str,
+    check_command: str,
+    expected_exit_code: int = 0,
+    expected_output_contains: str | None = None,
+    required: bool = True,
+) -> PendingVerification:
+    """Internal helper to add a verification within an existing connection."""
+    cursor = c.cursor()
+    cursor.execute(
+        """
+        INSERT INTO pending_verifications (
+            reboot_intent_id, step_index,
+            check_type, check_command,
+            expected_exit_code, expected_output_contains,
+            required
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+        RETURNING id
+        """,
+        (
+            intent_id,
+            step_index,
+            check_type,
+            check_command,
+            expected_exit_code,
+            expected_output_contains,
+            required,
+        ),
+    )
+    row = cursor.fetchone()
+    new_id = row["id"] if row else None
+
+    return PendingVerification(
+        id=new_id,
+        reboot_intent_id=intent_id,
+        step_index=step_index,
+        check_type=check_type,  # type: ignore
+        check_command=check_command,
+        expected_exit_code=expected_exit_code,
+        expected_output_contains=expected_output_contains,
+        required=required,
+    )
+
+
 def add_verification(
     intent_id: str,
     step_index: int,
@@ -581,7 +690,7 @@ def add_verification(
     expected_exit_code: int = 0,
     expected_output_contains: str | None = None,
     required: bool = True,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> PendingVerification:
     """Add a verification check to a reboot intent.
 
@@ -593,71 +702,60 @@ def add_verification(
         expected_exit_code: Expected exit code for command checks.
         expected_output_contains: Expected output substring.
         required: Whether failure triggers rollback.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         The created PendingVerification.
     """
-    with _ensure_connection(conn) as c:
-        cursor = c.cursor()
-        cursor.execute(
-            """
-            INSERT INTO pending_verifications (
-                reboot_intent_id, step_index,
-                check_type, check_command,
-                expected_exit_code, expected_output_contains,
-                required
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                intent_id,
-                step_index,
-                check_type,
-                check_command,
-                expected_exit_code,
-                expected_output_contains,
-                1 if required else 0,
-            ),
+    if conn is not None:
+        return _add_verification_inner(
+            conn, intent_id, step_index, check_type, check_command,
+            expected_exit_code, expected_output_contains, required,
         )
-        c.commit()
 
-        return PendingVerification(
-            id=cursor.lastrowid,
-            reboot_intent_id=intent_id,
-            step_index=step_index,
-            check_type=check_type,  # type: ignore
-            check_command=check_command,
-            expected_exit_code=expected_exit_code,
-            expected_output_contains=expected_output_contains,
-            required=required,
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _add_verification_inner(
+            c, intent_id, step_index, check_type, check_command,
+            expected_exit_code, expected_output_contains, required,
         )
+
+
+def _get_verifications_inner(
+    c: psycopg.Connection,  # type: ignore[type-arg]
+    intent_id: str,
+) -> list[PendingVerification]:
+    """Internal helper to get verifications within an existing connection."""
+    cursor = c.cursor()
+    cursor.execute(
+        """
+        SELECT * FROM pending_verifications
+        WHERE reboot_intent_id = %s
+        ORDER BY step_index
+        """,
+        (intent_id,),
+    )
+
+    return [_row_to_verification(row) for row in cursor.fetchall()]
 
 
 def get_verifications(
     intent_id: str,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> list[PendingVerification]:
     """Get all verification checks for an intent.
 
     Args:
         intent_id: The intent UUID.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         List of PendingVerifications in step order.
     """
-    with _ensure_connection(conn) as c:
-        cursor = c.cursor()
-        cursor.execute(
-            """
-            SELECT * FROM pending_verifications
-            WHERE reboot_intent_id = ?
-            ORDER BY step_index
-            """,
-            (intent_id,),
-        )
+    if conn is not None:
+        return _get_verifications_inner(conn, intent_id)
 
-        return [_row_to_verification(row) for row in cursor.fetchall()]
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _get_verifications_inner(c, intent_id)
 
 
 def update_verification_result(
@@ -666,7 +764,7 @@ def update_verification_result(
     stdout: str | None = None,
     stderr: str | None = None,
     passed: bool = False,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> PendingVerification | None:
     """Update a verification check with results.
 
@@ -676,37 +774,37 @@ def update_verification_result(
         stdout: Stdout from check.
         stderr: Stderr from check.
         passed: Whether the check passed.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         Updated PendingVerification, or None if not found.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> PendingVerification | None:  # type: ignore[type-arg]
         now = datetime.utcnow()
 
         cursor = c.cursor()
         cursor.execute(
             """
             UPDATE pending_verifications
-            SET executed_at = ?, exit_code = ?, stdout = ?, stderr = ?, passed = ?
-            WHERE id = ?
+            SET executed_at = %s, exit_code = %s, stdout = %s, stderr = %s, passed = %s
+            WHERE id = %s
             """,
             (
                 _serialize_datetime(now),
                 exit_code,
                 stdout[:4096] if stdout else None,  # Truncate
                 stderr[:4096] if stderr else None,  # Truncate
-                1 if passed else 0,
+                passed,
                 verification_id,
             ),
         )
-        c.commit()
 
         if cursor.rowcount == 0:
             return None
 
         cursor.execute(
-            "SELECT * FROM pending_verifications WHERE id = ?",
+            "SELECT * FROM pending_verifications WHERE id = %s",
             (verification_id,),
         )
         row = cursor.fetchone()
@@ -714,10 +812,16 @@ def update_verification_result(
             return _row_to_verification(row)
         return None
 
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
+
 
 def reset_verifications(
     intent_id: str,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> int:
     """Reset all verifications for an intent (clear results).
 
@@ -725,28 +829,38 @@ def reset_verifications(
 
     Args:
         intent_id: The intent UUID.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         Number of verifications reset.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> int:  # type: ignore[type-arg]
         cursor = c.cursor()
         cursor.execute(
             """
             UPDATE pending_verifications
             SET executed_at = NULL, exit_code = NULL, stdout = NULL,
                 stderr = NULL, passed = NULL
-            WHERE reboot_intent_id = ?
+            WHERE reboot_intent_id = %s
             """,
             (intent_id,),
         )
-        c.commit()
         return cursor.rowcount
 
+    if conn is not None:
+        return _run(conn)
 
-def _row_to_verification(row: sqlite3.Row) -> PendingVerification:
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
+
+
+def _row_to_verification(row: dict) -> PendingVerification:
     """Convert a database row to a PendingVerification."""
+    executed_at = row["executed_at"]
+    if isinstance(executed_at, str):
+        executed_at = _parse_datetime(executed_at)
+
     return PendingVerification(
         id=row["id"],
         reboot_intent_id=row["reboot_intent_id"],
@@ -756,7 +870,7 @@ def _row_to_verification(row: sqlite3.Row) -> PendingVerification:
         expected_exit_code=row["expected_exit_code"],
         expected_output_contains=row["expected_output_contains"],
         required=bool(row["required"]),
-        executed_at=_parse_datetime(row["executed_at"]),
+        executed_at=executed_at,
         exit_code=row["exit_code"],
         stdout=row["stdout"],
         stderr=row["stderr"],
@@ -770,85 +884,85 @@ def _row_to_verification(row: sqlite3.Row) -> PendingVerification:
 
 
 def get_reboot_status(
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> RebootStatus:
     """Get status report for the Reboot module.
 
     Args:
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         RebootStatus with counts and active operations.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> RebootStatus:  # type: ignore[type-arg]
         cursor = c.cursor()
 
         # Get counts by status
-        cursor.execute("SELECT COUNT(*) FROM reboot_intents")
+        cursor.execute("SELECT COUNT(*) AS cnt FROM reboot_intents")
         row = cursor.fetchone()
-        total = int(row[0]) if row else 0
+        total = int(row["cnt"]) if row else 0
 
-        cursor.execute("SELECT COUNT(*) FROM reboot_intents WHERE status = 'pending'")
+        cursor.execute("SELECT COUNT(*) AS cnt FROM reboot_intents WHERE status = 'pending'")
         row = cursor.fetchone()
-        pending = int(row[0]) if row else 0
+        pending = int(row["cnt"]) if row else 0
 
-        cursor.execute("SELECT COUNT(*) FROM reboot_intents WHERE status = 'rebooting'")
+        cursor.execute("SELECT COUNT(*) AS cnt FROM reboot_intents WHERE status = 'rebooting'")
         row = cursor.fetchone()
-        rebooting = int(row[0]) if row else 0
+        rebooting = int(row["cnt"]) if row else 0
 
-        cursor.execute("SELECT COUNT(*) FROM reboot_intents WHERE status = 'verifying'")
+        cursor.execute("SELECT COUNT(*) AS cnt FROM reboot_intents WHERE status = 'verifying'")
         row = cursor.fetchone()
-        verifying = int(row[0]) if row else 0
+        verifying = int(row["cnt"]) if row else 0
 
-        cursor.execute("SELECT COUNT(*) FROM reboot_intents WHERE status = 'completed'")
+        cursor.execute("SELECT COUNT(*) AS cnt FROM reboot_intents WHERE status = 'completed'")
         row = cursor.fetchone()
-        completed = int(row[0]) if row else 0
+        completed = int(row["cnt"]) if row else 0
 
-        cursor.execute("SELECT COUNT(*) FROM reboot_intents WHERE status = 'failed'")
+        cursor.execute("SELECT COUNT(*) AS cnt FROM reboot_intents WHERE status = 'failed'")
         row = cursor.fetchone()
-        failed = int(row[0]) if row else 0
+        failed = int(row["cnt"]) if row else 0
 
-        cursor.execute("SELECT COUNT(*) FROM reboot_intents WHERE status = 'rolled_back'")
+        cursor.execute("SELECT COUNT(*) AS cnt FROM reboot_intents WHERE status = 'rolled_back'")
         row = cursor.fetchone()
-        rolled_back = int(row[0]) if row else 0
+        rolled_back = int(row["cnt"]) if row else 0
 
         # Get counts by outcome
-        cursor.execute("SELECT outcome, COUNT(*) FROM reboot_intents GROUP BY outcome")
-        by_outcome = dict(cursor.fetchall())
+        cursor.execute("SELECT outcome, COUNT(*) AS cnt FROM reboot_intents GROUP BY outcome")
+        by_outcome = {row["outcome"]: row["cnt"] for row in cursor.fetchall()}
 
         # Get active intent
-        active_intent = get_active_intent(conn=c)
+        active_intent_obj = _get_active_intent_inner(c)
         active_summary = None
-        if active_intent:
+        if active_intent_obj:
             active_summary = RebootIntentSummary(
-                id=active_intent.id,
-                created_at=active_intent.created_at,
-                goal=active_intent.goal,
-                reason=active_intent.reason,
-                status=active_intent.status,
-                outcome=active_intent.outcome,
-                verification_attempts=active_intent.verification_attempts,
+                id=active_intent_obj.id,
+                created_at=active_intent_obj.created_at,
+                goal=active_intent_obj.goal,
+                reason=active_intent_obj.reason,
+                status=active_intent_obj.status,
+                outcome=active_intent_obj.outcome,
+                verification_attempts=active_intent_obj.verification_attempts,
             )
 
         # Get recent intents
-        recent = list_recent_intents(days=7, limit=5, conn=c)
+        recent = _list_recent_intents_inner(c, days=7, limit=5)
 
-        # Get database size - handle cases where db path may not be accessible
-        from elle.daemon.reboot.schema import get_db_path
-
+        # Database size not applicable for PostgreSQL; report 0
         db_size = 0
-        try:
-            db_path = get_db_path()
-            if db_path.exists():
-                db_size = db_path.stat().st_size
-        except (PermissionError, OSError):
-            pass
 
         # Get oldest/newest
-        cursor.execute("SELECT MIN(created_at), MAX(created_at) FROM reboot_intents")
+        cursor.execute("SELECT MIN(created_at) AS oldest, MAX(created_at) AS newest FROM reboot_intents")
         row = cursor.fetchone()
-        oldest = _parse_datetime(row[0]) if row and row[0] else None
-        newest = _parse_datetime(row[1]) if row and row[1] else None
+        oldest = None
+        newest = None
+        if row:
+            oldest_val = row["oldest"]
+            newest_val = row["newest"]
+            if oldest_val:
+                oldest = _parse_datetime(oldest_val) if isinstance(oldest_val, str) else oldest_val
+            if newest_val:
+                newest = _parse_datetime(newest_val) if isinstance(newest_val, str) else newest_val
 
         return RebootStatus(
             total_intents=total,
@@ -866,20 +980,93 @@ def get_reboot_status(
             newest_intent=newest,
         )
 
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)
+
+
+def _get_active_intent_inner(
+    c: psycopg.Connection,  # type: ignore[type-arg]
+) -> RebootIntent | None:
+    """Internal helper for get_active_intent within an existing connection."""
+    cursor = c.cursor()
+    cursor.execute(
+        """
+        SELECT * FROM reboot_intents
+        WHERE status IN ('rebooting', 'verifying')
+        ORDER BY updated_at DESC
+        LIMIT 1
+        """
+    )
+    row = cursor.fetchone()
+
+    if not row:
+        return None
+
+    verifications = _get_verifications_inner(c, row["id"])
+    return _row_to_intent(row, verifications)
+
+
+def _list_recent_intents_inner(
+    c: psycopg.Connection,  # type: ignore[type-arg]
+    days: int = 7,
+    limit: int = 10,
+) -> list[RebootIntentSummary]:
+    """Internal helper for list_recent_intents within an existing connection."""
+    cursor = c.cursor()
+    cursor.execute(
+        """
+        SELECT id, created_at, goal, reason, status, outcome, verification_attempts
+        FROM reboot_intents
+        WHERE created_at >= now() - make_interval(days => %s)
+        ORDER BY created_at DESC
+        LIMIT %s
+        """,
+        (days, limit),
+    )
+
+    result = []
+    for row in cursor.fetchall():
+        created_at = row["created_at"]
+        if isinstance(created_at, str):
+            created_at = _parse_datetime(created_at)
+        result.append(
+            RebootIntentSummary(
+                id=row["id"],
+                created_at=created_at,
+                goal=row["goal"],
+                reason=row["reason"],
+                status=row["status"],
+                outcome=row["outcome"],
+                verification_attempts=row["verification_attempts"],
+            )
+        )
+
+    return result
+
 
 def get_intent_count(
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> int:
     """Get total number of reboot intents.
 
     Args:
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         Total intent count.
     """
-    with _ensure_connection(conn) as c:
+
+    def _run(c: psycopg.Connection) -> int:  # type: ignore[type-arg]
         cursor = c.cursor()
-        cursor.execute("SELECT COUNT(*) FROM reboot_intents")
+        cursor.execute("SELECT COUNT(*) AS cnt FROM reboot_intents")
         row = cursor.fetchone()
-        return int(row[0]) if row else 0
+        return int(row["cnt"]) if row else 0
+
+    if conn is not None:
+        return _run(conn)
+
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _run(c)

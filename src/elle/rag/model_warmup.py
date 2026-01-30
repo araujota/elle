@@ -302,15 +302,38 @@ class ModelWarmupService:
     async def warm_llm(self) -> WarmupResult:
         """Warm the LLM for generation.
 
+        Skips warmup when the primary provider is remote (e.g. OpenAI-compatible),
+        since remote models don't need local GPU preloading. If fallback triggers
+        later, the first request will load the model on demand.
+
         Returns:
             WarmupResult with status.
         """
+        # Skip warmup for remote providers
+        if self._is_remote_provider():
+            logger.info("Skipping LLM warmup: primary provider is remote")
+            return WarmupResult(
+                success=True,
+                model=self.llm_model,
+                message="Warmup skipped: remote provider",
+            )
+
         logger.info(f"Warming LLM: {self.llm_model}")
         return await self._warm_model(
             model=self.llm_model,
             keep_alive=LLM_KEEP_ALIVE,
             num_ctx=LLM_NUM_CTX,
         )
+
+    def _is_remote_provider(self) -> bool:
+        """Check if the primary LLM provider is remote (non-Ollama)."""
+        try:
+            from elle.rag.llm_config import LLMProviderType, load_elle_llm_config
+
+            cfg = load_elle_llm_config()
+            return cfg.provider.type == LLMProviderType.OPENAI
+        except Exception:
+            return False
 
     # -------------------------------------------------------------------------
     # Periodic Warmup (Keep Model Warm)
@@ -323,11 +346,16 @@ class ModelWarmupService:
         """Start periodic warmup to keep the LLM loaded in memory.
 
         This runs a background task that periodically pings the model
-        to ensure it stays loaded for fast local inference.
+        to ensure it stays loaded for fast local inference. Skips
+        entirely when the primary provider is remote.
 
         Args:
             interval: Seconds between warmup pings (default: 5 minutes).
         """
+        if self._is_remote_provider():
+            logger.info("Skipping periodic warmup: primary provider is remote")
+            return
+
         if self._warmup_task is not None:
             logger.warning("Periodic warmup already running")
             return

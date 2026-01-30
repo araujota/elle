@@ -26,9 +26,10 @@ from typing import Any
 from elle.daemon.config import Config, get_config, load_config, set_config
 from elle.daemon.telemetry.models import DaemonStatus, TelemetryEvent
 from elle.daemon.telemetry.queue import TelemetryQueue, create_queues
-from elle.daemon.telemetry.schema import ensure_schema, get_connection
 from elle.daemon.telemetry.state_cache import StateCache
 from elle.daemon.telemetry.store import insert_events_batch
+from elle.storage.config import PostgresConfig
+from elle.storage.engine import close_pools, configure_pool
 from elle.daemon.telemetry.telemetryd_watcher import (
     TelemetrydWatcher,
     is_telemetryd_available,
@@ -74,6 +75,9 @@ class ElledDaemon:
 
         # Session token manager for API authentication
         self._session_token_manager: Any = None
+
+        # Cloud retry worker
+        self._cloud_retry_worker: Any = None
 
         # Tasks
         self._tasks: list[asyncio.Task[Any]] = []
@@ -215,6 +219,9 @@ class ElledDaemon:
             )
         )
 
+        # Start cloud retry worker
+        await self._start_cloud_retry_worker()
+
         # Start API
         if self.config.api.enabled:
             self._tasks.append(
@@ -263,11 +270,21 @@ class ElledDaemon:
             self._session_token_manager.cleanup()
             logger.info("Session token cleaned up")
 
+        # Stop cloud retry worker
+        if self._cloud_retry_worker:
+            try:
+                await self._cloud_retry_worker.stop()
+            except Exception as e:
+                logger.warning(f"Error stopping cloud retry worker: {e}")
+
         # Stop notification service
         await self._stop_notification_service()
 
         # Stop warmup service (periodic warmup)
         await self._stop_warmup_service()
+
+        # Close database connection pools
+        close_pools()
 
         logger.info(f"elled stopped (uptime: {self.uptime_sec}s, events: {self._events_total})")
 
@@ -281,21 +298,33 @@ class ElledDaemon:
         await self.stop()
 
     def _init_database(self) -> None:
-        """Initialize database schemas."""
+        """Initialize PostgreSQL connection pool and run all schema migrations."""
         try:
-            # Ensure directory exists
-            db_dir = self.config.db_path.parent
-            if not str(db_dir).startswith("/var/lib"):
-                db_dir.mkdir(parents=True, exist_ok=True)
+            # Build PostgresConfig from daemon DatabaseConfig
+            db_cfg = self.config.database
+            pg_config = PostgresConfig(
+                host=db_cfg.host,
+                port=db_cfg.port,
+                dbname=db_cfg.dbname,
+                user=db_cfg.user,
+                password=db_cfg.password,
+                socket_dir=db_cfg.socket_dir,
+                min_pool_size=db_cfg.min_pool_size,
+                max_pool_size=db_cfg.max_pool_size,
+                max_idle_sec=db_cfg.max_idle_sec,
+                sslmode=db_cfg.sslmode,
+                encryption_key_path=db_cfg.encryption_key_path,
+            )
 
-            # Initialize telemetry schema
-            conn = get_connection(self.config.db_path)
-            try:
-                ensure_schema(conn)
-            finally:
-                conn.close()
+            # Create connection pool
+            configure_pool(pg_config)
 
-            logger.debug(f"Database initialized at {self.config.db_path}")
+            # Run all schema migrations
+            from elle.common.db import init_all_schemas
+
+            init_all_schemas()
+
+            logger.debug("PostgreSQL database initialized (%s)", pg_config.conninfo)
 
         except Exception as e:
             logger.error(f"Failed to initialize database: {e}")
@@ -339,6 +368,38 @@ class ElledDaemon:
                 await self._warmup_service.close()
             except Exception as e:
                 logger.warning(f"Failed to stop warmup service: {e}")
+
+    async def _start_cloud_retry_worker(self) -> None:
+        """Start the cloud submission retry worker."""
+        if not self.config.cloud_sync.enabled:
+            logger.info("Cloud sync disabled, skipping retry worker")
+            return
+
+        try:
+            from elle.daemon.incidents.cloud_queue import configure_cloud_queue
+            from elle.daemon.incidents.cloud_retry_worker import CloudRetryWorker
+
+            cs = self.config.cloud_sync
+            configure_cloud_queue(
+                initial_delay_sec=cs.retry_initial_delay_sec,
+                max_delay_sec=cs.retry_max_delay_sec,
+                backoff_factor=cs.retry_backoff_factor,
+                max_retries=cs.max_retries,
+                max_size=cs.queue_max_size,
+            )
+
+            # Create and start the worker
+            self._cloud_retry_worker = CloudRetryWorker(
+                poll_interval_sec=cs.worker_poll_interval_sec,
+                batch_size=cs.batch_size,
+                health_check_interval_sec=cs.health_check_interval_sec,
+                stale_entry_hours=cs.stale_entry_hours,
+            )
+            await self._cloud_retry_worker.start()
+            logger.info("Cloud retry worker started")
+
+        except Exception as e:
+            logger.warning(f"Failed to start cloud retry worker: {e}")
 
     async def _start_notification_service(self) -> None:
         """Start the notification service."""
@@ -407,13 +468,6 @@ class ElledDaemon:
         """Process normalized events (storage + correlation)."""
         logger.debug("Processor loop started")
 
-        conn = None
-        try:
-            conn = get_connection(self.config.db_path)
-            ensure_schema(conn)
-        except Exception as e:
-            logger.error(f"Failed to connect to database: {e}")
-
         while not self.shutdown.is_set():
             try:
                 if not self.event_queue:
@@ -429,13 +483,12 @@ class ElledDaemon:
                 if not events:
                     continue
 
-                # Store events
-                if conn:
-                    try:
-                        inserted = insert_events_batch(events, conn)
-                        self._events_total += inserted
-                    except Exception as e:
-                        logger.error(f"Failed to store events: {e}")
+                # Store events (uses connection pool internally)
+                try:
+                    inserted = insert_events_batch(events)
+                    self._events_total += inserted
+                except Exception as e:
+                    logger.error(f"Failed to store events: {e}")
 
                 # Correlate events (integrate with incident vault)
                 try:
@@ -463,9 +516,6 @@ class ElledDaemon:
             except Exception as e:
                 logger.error(f"Processor error: {e}")
                 await asyncio.sleep(1)
-
-        if conn:
-            conn.close()
 
         logger.debug("Processor loop stopped")
 

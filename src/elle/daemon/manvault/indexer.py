@@ -1,7 +1,7 @@
-"""Man Vault indexer.
+"""Man Vault indexer (PostgreSQL).
 
 Indexes all installed system documentation from /usr/share/man/**
-into SQLite + FTS5 for fast retrieval.
+into PostgreSQL + tsvector for fast retrieval.
 
 Indexing pipeline:
 1. Discover man pages in /usr/share/man/
@@ -16,23 +16,28 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
-import sqlite3
 import subprocess
 from collections.abc import Callable, Iterator
 from datetime import datetime
 from pathlib import Path
 
+import psycopg
+
 from elle.daemon.manvault.models import ManChunk, ManDiscoveryItem, ManDoc
-from elle.daemon.manvault.schema import ensure_schema, get_connection
+from elle.daemon.manvault.schema import ensure_schema
 from elle.daemon.manvault.store import (
     delete_chunks_for_doc,
     get_all_hashes,
     get_doc,
+    set_meta,
     upsert_chunks_batch,
     upsert_doc,
 )
+from elle.storage.engine import get_conn
 
 logger = logging.getLogger(__name__)
+
+PG_SCHEMA = "manvault"
 
 # Default man page locations
 MAN_PATHS = [Path("/usr/share/man")]
@@ -534,7 +539,7 @@ def index_page(
     section: str,
     lang: str = "en",
     source_path: str | None = None,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
 ) -> bool:
     """Index a single man page.
 
@@ -543,75 +548,78 @@ def index_page(
         section: The man section (1-8).
         lang: Language code.
         source_path: Path to source file (for tracking).
-        conn: SQLite connection. Creates new if not provided.
+        conn: psycopg connection. Obtains from pool if not provided.
 
     Returns:
         True if successfully indexed.
     """
-    # Get or create connection
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
+    if conn is not None:
+        return _index_page_impl(conn, name, section, lang, source_path)
 
-    try:
-        # Render man page
-        text = render_manpage(name, section, lang)
-        if not text:
-            return False
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _index_page_impl(c, name, section, lang, source_path)
 
-        # Normalize and hash
-        text = normalize_text(text)
-        sha256 = compute_hash(text)
 
-        # Check if already indexed with same hash
-        existing = get_doc(conn, name, section, lang)
-        if existing and existing.sha256 == sha256:
-            logger.debug(f"Skipping unchanged: {name}({section})")
-            return True
+def _index_page_impl(
+    conn: psycopg.Connection,  # type: ignore[type-arg]
+    name: str,
+    section: str,
+    lang: str,
+    source_path: str | None,
+) -> bool:
+    # Render man page
+    text = render_manpage(name, section, lang)
+    if not text:
+        return False
 
-        # Create document
-        doc = ManDoc(
-            name=name,
-            section=section,
-            lang=lang,
-            source_path=source_path or f"/usr/share/man/man{section}/{name}.{section}.gz",
-            sha256=sha256,
-            text=text,
-            updated_at=datetime.now(),
-        )
+    # Normalize and hash
+    text = normalize_text(text)
+    sha256 = compute_hash(text)
 
-        # Upsert document
-        doc_id = upsert_doc(conn, doc)
-
-        # Delete existing chunks (if updating)
-        if existing:
-            delete_chunks_for_doc(conn, doc_id)
-
-        # Chunk and store
-        chunks_data = chunk_document(text)
-        chunks = [
-            ManChunk(
-                doc_id=doc_id,
-                chunk_index=i,
-                text=chunk_text,
-                heading=heading,
-            )
-            for i, (chunk_text, heading) in enumerate(chunks_data)
-        ]
-        upsert_chunks_batch(conn, chunks)
-
-        logger.debug(f"Indexed {name}({section}): {len(chunks)} chunks")
+    # Check if already indexed with same hash
+    existing = get_doc(conn, name, section, lang)
+    if existing and existing.sha256 == sha256:
+        logger.debug(f"Skipping unchanged: {name}({section})")
         return True
 
-    finally:
-        if own_conn and conn is not None:
-            conn.close()
+    # Create document
+    doc = ManDoc(
+        name=name,
+        section=section,
+        lang=lang,
+        source_path=source_path or f"/usr/share/man/man{section}/{name}.{section}.gz",
+        sha256=sha256,
+        text=text,
+        updated_at=datetime.now(),
+    )
+
+    # Upsert document
+    doc_id = upsert_doc(conn, doc)
+
+    # Delete existing chunks (if updating)
+    if existing:
+        delete_chunks_for_doc(conn, doc_id)
+
+    # Chunk and store
+    chunks_data = chunk_document(text)
+    chunks = [
+        ManChunk(
+            doc_id=doc_id,
+            chunk_index=i,
+            text=chunk_text,
+            heading=heading,
+        )
+        for i, (chunk_text, heading) in enumerate(chunks_data)
+    ]
+    upsert_chunks_batch(conn, chunks)
+
+    logger.debug(f"Indexed {name}({section}): {len(chunks)} chunks")
+    return True
 
 
 def index_all(
     paths: list[Path] | None = None,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
     progress_callback: Callable[[int, int], None] | None = None,
     lang_filter: str = "en",
 ) -> int:
@@ -619,63 +627,63 @@ def index_all(
 
     Args:
         paths: Paths to search. Defaults to MAN_PATHS.
-        conn: SQLite connection.
+        conn: psycopg connection. Obtains from pool if not provided.
         progress_callback: Called with (current, total) for progress reporting.
         lang_filter: Only index pages in this language.
 
     Returns:
         Number of documents indexed.
     """
-    # Get or create connection
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
+    if conn is not None:
+        return _index_all_impl(conn, paths, progress_callback, lang_filter)
 
-    try:
-        # Discover all pages
-        pages = list(discover_man_pages(paths))
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _index_all_impl(c, paths, progress_callback, lang_filter)
 
-        # Filter by language
-        if lang_filter:
-            pages = [p for p in pages if p.lang == lang_filter]
 
-        total = len(pages)
-        logger.info(f"Discovered {total} man pages to index")
+def _index_all_impl(
+    conn: psycopg.Connection,  # type: ignore[type-arg]
+    paths: list[Path] | None,
+    progress_callback: Callable[[int, int], None] | None,
+    lang_filter: str,
+) -> int:
+    # Discover all pages
+    pages = list(discover_man_pages(paths))
 
-        count = 0
-        for i, page in enumerate(pages):
-            try:
-                if index_page(
-                    page.name,
-                    page.section,
-                    page.lang,
-                    page.source_path,
-                    conn,
-                ):
-                    count += 1
-            except Exception as e:
-                logger.error(f"Error indexing {page.name}({page.section}): {e}")
+    # Filter by language
+    if lang_filter:
+        pages = [p for p in pages if p.lang == lang_filter]
 
-            if progress_callback and (i + 1) % 100 == 0:
-                progress_callback(i + 1, total)
+    total = len(pages)
+    logger.info(f"Discovered {total} man pages to index")
 
-        # Update indexed_at timestamp
-        from elle.daemon.manvault.store import set_meta
+    count = 0
+    for i, page in enumerate(pages):
+        try:
+            if _index_page_impl(
+                conn,
+                page.name,
+                page.section,
+                page.lang,
+                page.source_path,
+            ):
+                count += 1
+        except Exception as e:
+            logger.error(f"Error indexing {page.name}({page.section}): {e}")
 
-        set_meta(conn, "indexed_at", datetime.now().isoformat())
+        if progress_callback and (i + 1) % 100 == 0:
+            progress_callback(i + 1, total)
 
-        logger.info(f"Indexed {count}/{total} man pages")
-        return count
+    # Update indexed_at timestamp
+    set_meta(conn, "indexed_at", datetime.now().isoformat())
 
-    finally:
-        if own_conn and conn is not None:
-            conn.close()
+    logger.info(f"Indexed {count}/{total} man pages")
+    return count
 
 
 def index_incremental(
     paths: list[Path] | None = None,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
     lang_filter: str = "en",
 ) -> tuple[int, int]:
     """Incremental index: only changed/new pages.
@@ -685,72 +693,73 @@ def index_incremental(
 
     Args:
         paths: Paths to search.
-        conn: SQLite connection.
+        conn: psycopg connection. Obtains from pool if not provided.
         lang_filter: Only index pages in this language.
 
     Returns:
         Tuple of (added, updated) counts.
     """
-    # Get or create connection
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
+    if conn is not None:
+        return _index_incremental_impl(conn, paths, lang_filter)
 
-    try:
-        # Get existing hashes
-        existing_hashes = get_all_hashes(conn)
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _index_incremental_impl(c, paths, lang_filter)
 
-        # Discover pages
-        pages = list(discover_man_pages(paths))
-        if lang_filter:
-            pages = [p for p in pages if p.lang == lang_filter]
 
-        added = 0
-        updated = 0
+def _index_incremental_impl(
+    conn: psycopg.Connection,  # type: ignore[type-arg]
+    paths: list[Path] | None,
+    lang_filter: str,
+) -> tuple[int, int]:
+    # Get existing hashes
+    existing_hashes = get_all_hashes(conn)
 
-        for page in pages:
-            key = (page.name, page.section, page.lang)
+    # Discover pages
+    pages = list(discover_man_pages(paths))
+    if lang_filter:
+        pages = [p for p in pages if p.lang == lang_filter]
 
-            # Render to check hash
-            text = render_manpage(page.name, page.section, page.lang)
-            if not text:
-                continue
+    added = 0
+    updated = 0
 
-            text = normalize_text(text)
-            new_hash = compute_hash(text)
+    for page in pages:
+        key = (page.name, page.section, page.lang)
 
-            if key not in existing_hashes:
-                # New page
-                if index_page(
-                    page.name,
-                    page.section,
-                    page.lang,
-                    page.source_path,
-                    conn,
-                ):
-                    added += 1
-            elif existing_hashes[key] != new_hash:
-                # Changed page
-                if index_page(
-                    page.name,
-                    page.section,
-                    page.lang,
-                    page.source_path,
-                    conn,
-                ):
-                    updated += 1
+        # Render to check hash
+        text = render_manpage(page.name, page.section, page.lang)
+        if not text:
+            continue
 
-        logger.info(f"Incremental index: {added} added, {updated} updated")
-        return added, updated
+        text = normalize_text(text)
+        new_hash = compute_hash(text)
 
-    finally:
-        if own_conn and conn is not None:
-            conn.close()
+        if key not in existing_hashes:
+            # New page
+            if _index_page_impl(
+                conn,
+                page.name,
+                page.section,
+                page.lang,
+                page.source_path,
+            ):
+                added += 1
+        elif existing_hashes[key] != new_hash:
+            # Changed page
+            if _index_page_impl(
+                conn,
+                page.name,
+                page.section,
+                page.lang,
+                page.source_path,
+            ):
+                updated += 1
+
+    logger.info(f"Incremental index: {added} added, {updated} updated")
+    return added, updated
 
 
 def seed_core_commands(
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
     progress_callback: Callable[[int, int], None] | None = None,
 ) -> int:
     """Seed the Man Vault with essential core commands.
@@ -763,86 +772,85 @@ def seed_core_commands(
     grep, sed, tar, curl, and other bare essentials.
 
     Args:
-        conn: SQLite connection. Creates new if not provided.
+        conn: psycopg connection. Obtains from pool if not provided.
         progress_callback: Called with (current, total) for progress.
 
     Returns:
         Number of core commands successfully indexed.
     """
-    # Get or create connection
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
+    if conn is not None:
+        return _seed_core_commands_impl(conn, progress_callback)
 
-    try:
-        total = len(CORE_COMMANDS)
-        count = 0
-        skipped = 0
-
-        logger.info(f"Seeding {total} core commands...")
-
-        for i, (name, section) in enumerate(CORE_COMMANDS):
-            try:
-                # Check if already indexed
-                existing = get_doc(conn, name, section, "en")
-                if existing:
-                    skipped += 1
-                    if progress_callback:
-                        progress_callback(i + 1, total)
-                    continue
-
-                # Try to index the command
-                if index_page(name, section, "en", conn=conn):
-                    count += 1
-                    logger.debug(f"Seeded: {name}({section})")
-                else:
-                    logger.debug(f"Not available: {name}({section})")
-
-            except Exception as e:
-                logger.warning(f"Failed to seed {name}({section}): {e}")
-
-            if progress_callback:
-                progress_callback(i + 1, total)
-
-        logger.info(f"Core seeding complete: {count} new, {skipped} already indexed")
-        return count
-
-    finally:
-        if own_conn and conn is not None:
-            conn.close()
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _seed_core_commands_impl(c, progress_callback)
 
 
-def get_seeded_count(conn: sqlite3.Connection | None = None) -> int:
+def _seed_core_commands_impl(
+    conn: psycopg.Connection,  # type: ignore[type-arg]
+    progress_callback: Callable[[int, int], None] | None,
+) -> int:
+    total = len(CORE_COMMANDS)
+    count = 0
+    skipped = 0
+
+    logger.info(f"Seeding {total} core commands...")
+
+    for i, (name, section) in enumerate(CORE_COMMANDS):
+        try:
+            # Check if already indexed
+            existing = get_doc(conn, name, section, "en")
+            if existing:
+                skipped += 1
+                if progress_callback:
+                    progress_callback(i + 1, total)
+                continue
+
+            # Try to index the command
+            if _index_page_impl(conn, name, section, "en", None):
+                count += 1
+                logger.debug(f"Seeded: {name}({section})")
+            else:
+                logger.debug(f"Not available: {name}({section})")
+
+        except Exception as e:
+            logger.warning(f"Failed to seed {name}({section}): {e}")
+
+        if progress_callback:
+            progress_callback(i + 1, total)
+
+    logger.info(f"Core seeding complete: {count} new, {skipped} already indexed")
+    return count
+
+
+def get_seeded_count(conn: psycopg.Connection | None = None) -> int:  # type: ignore[type-arg]
     """Get the number of core commands currently indexed.
 
     Args:
-        conn: SQLite connection.
+        conn: psycopg connection. Obtains from pool if not provided.
 
     Returns:
         Number of core commands in the index.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
+    if conn is not None:
+        return _get_seeded_count_impl(conn)
 
-    try:
-        count = 0
-        for name, section in CORE_COMMANDS:
-            if get_doc(conn, name, section, "en"):
-                count += 1
-        return count
-    finally:
-        if own_conn and conn is not None:
-            conn.close()
+    with get_conn(schema=PG_SCHEMA) as c:
+        return _get_seeded_count_impl(c)
 
 
-def is_core_seeded(conn: sqlite3.Connection | None = None, threshold: float = 0.5) -> bool:
+def _get_seeded_count_impl(conn: psycopg.Connection) -> int:  # type: ignore[type-arg]
+    count = 0
+    for name, section in CORE_COMMANDS:
+        if get_doc(conn, name, section, "en"):
+            count += 1
+    return count
+
+
+def is_core_seeded(conn: psycopg.Connection | None = None, threshold: float = 0.5) -> bool:  # type: ignore[type-arg]
     """Check if core commands have been seeded.
 
     Args:
-        conn: SQLite connection.
+        conn: psycopg connection. Obtains from pool if not provided.
         threshold: Minimum fraction of core commands that must be indexed.
 
     Returns:

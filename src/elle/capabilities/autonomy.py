@@ -12,10 +12,8 @@ whether a capability requires user confirmation before execution.
 from __future__ import annotations
 
 import logging
-import sqlite3
 from datetime import datetime
 from enum import Enum
-from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -214,9 +212,9 @@ class AutonomyStatus(BaseModel):
 
 
 class AutonomyStore:
-    """SQLite storage for autonomy configuration.
+    """PostgreSQL storage for autonomy configuration.
 
-    Uses the autogen.db database to store:
+    Stores:
     - User autonomy preferences (single row)
     - Per-capability overrides
     - Execution statistics
@@ -257,36 +255,27 @@ class AutonomyStore:
     );
     """
 
-    def __init__(self, db_path: Path | str | None = None) -> None:
+    def __init__(self, schema: str = "autonomy") -> None:
         """Initialize the store.
 
         Args:
-            db_path: Path to SQLite database. Defaults to autogen.db.
+            schema: PostgreSQL schema name for autonomy tables.
         """
-        from elle.capabilities.autogen.store import DEFAULT_DB_PATH
-
-        self.db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
+        self._schema = schema
         self._ensure_schema()
 
     def _ensure_schema(self) -> None:
         """Ensure database schema exists."""
-        import sqlite3
+        from elle.storage.engine import get_conn
 
         try:
-            self.db_path.parent.mkdir(parents=True, exist_ok=True)
-            with sqlite3.connect(self.db_path) as conn:
-                conn.executescript(self.SCHEMA)
-                conn.commit()
+            with get_conn(schema=self._schema) as conn:
+                for statement in self.SCHEMA.split(";"):
+                    statement = statement.strip()
+                    if statement:
+                        conn.execute(statement)
         except Exception as e:
             logger.error(f"Failed to initialize autonomy store: {e}")
-
-    def _get_connection(self) -> sqlite3.Connection:
-        """Get database connection."""
-        import sqlite3
-
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
 
     # -------------------------------------------------------------------------
     # Preferences CRUD
@@ -294,7 +283,9 @@ class AutonomyStore:
 
     def get_preferences(self) -> AutonomyPreferences:
         """Get current autonomy preferences."""
-        with self._get_connection() as conn:
+        from elle.storage.engine import get_conn
+
+        with get_conn(schema=self._schema) as conn:
             cursor = conn.execute("SELECT * FROM autonomy_preferences WHERE id = 1")
             row = cursor.fetchone()
 
@@ -315,13 +306,22 @@ class AutonomyStore:
 
     def save_preferences(self, prefs: AutonomyPreferences) -> None:
         """Save autonomy preferences."""
-        with self._get_connection() as conn:
+        from elle.storage.engine import get_conn
+
+        with get_conn(schema=self._schema) as conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO autonomy_preferences
+                INSERT INTO autonomy_preferences
                 (id, base_level, earned_autonomy_enabled, min_executions,
                  min_success_rate, cooldown_after_failure, updated_at)
-                VALUES (1, ?, ?, ?, ?, ?, ?)
+                VALUES (1, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id) DO UPDATE SET
+                    base_level = EXCLUDED.base_level,
+                    earned_autonomy_enabled = EXCLUDED.earned_autonomy_enabled,
+                    min_executions = EXCLUDED.min_executions,
+                    min_success_rate = EXCLUDED.min_success_rate,
+                    cooldown_after_failure = EXCLUDED.cooldown_after_failure,
+                    updated_at = EXCLUDED.updated_at
                 """,
                 (
                     prefs.base_level.value,
@@ -332,7 +332,6 @@ class AutonomyStore:
                     datetime.utcnow().isoformat(),
                 ),
             )
-            conn.commit()
 
     def set_base_level(self, level: AutonomyLevel) -> None:
         """Set the base autonomy level."""
@@ -364,9 +363,11 @@ class AutonomyStore:
 
     def get_override(self, capability_name: str) -> AutonomyOverride | None:
         """Get autonomy override for a capability."""
-        with self._get_connection() as conn:
+        from elle.storage.engine import get_conn
+
+        with get_conn(schema=self._schema) as conn:
             cursor = conn.execute(
-                "SELECT * FROM capability_autonomy_overrides WHERE capability_name = ?",
+                "SELECT * FROM capability_autonomy_overrides WHERE capability_name = %s",
                 (capability_name,),
             )
             row = cursor.fetchone()
@@ -389,15 +390,22 @@ class AutonomyStore:
         reason: Literal["manual", "earned"] = "manual",
     ) -> None:
         """Set autonomy override for a capability."""
-        with self._get_connection() as conn:
+        from elle.storage.engine import get_conn
+
+        with get_conn(schema=self._schema) as conn:
             now = datetime.utcnow().isoformat()
             earned_at = now if reason == "earned" and autonomous else None
 
             conn.execute(
                 """
-                INSERT OR REPLACE INTO capability_autonomy_overrides
+                INSERT INTO capability_autonomy_overrides
                 (capability_name, autonomous, reason, earned_at, updated_at)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (capability_name) DO UPDATE SET
+                    autonomous = EXCLUDED.autonomous,
+                    reason = EXCLUDED.reason,
+                    earned_at = EXCLUDED.earned_at,
+                    updated_at = EXCLUDED.updated_at
                 """,
                 (
                     capability_name,
@@ -407,7 +415,6 @@ class AutonomyStore:
                     now,
                 ),
             )
-            conn.commit()
 
     def remove_override(self, capability_name: str) -> bool:
         """Remove autonomy override for a capability.
@@ -415,17 +422,20 @@ class AutonomyStore:
         Returns:
             True if an override was removed, False if none existed.
         """
-        with self._get_connection() as conn:
+        from elle.storage.engine import get_conn
+
+        with get_conn(schema=self._schema) as conn:
             cursor = conn.execute(
-                "DELETE FROM capability_autonomy_overrides WHERE capability_name = ?",
+                "DELETE FROM capability_autonomy_overrides WHERE capability_name = %s",
                 (capability_name,),
             )
-            conn.commit()
             return bool(cursor.rowcount > 0)
 
     def list_overrides(self) -> list[AutonomyOverride]:
         """List all autonomy overrides."""
-        with self._get_connection() as conn:
+        from elle.storage.engine import get_conn
+
+        with get_conn(schema=self._schema) as conn:
             cursor = conn.execute("SELECT * FROM capability_autonomy_overrides ORDER BY capability_name")
             return [
                 AutonomyOverride(
@@ -444,9 +454,11 @@ class AutonomyStore:
 
     def get_stats(self, capability_name: str) -> ExecutionStats:
         """Get execution statistics for a capability."""
-        with self._get_connection() as conn:
+        from elle.storage.engine import get_conn
+
+        with get_conn(schema=self._schema) as conn:
             cursor = conn.execute(
-                "SELECT * FROM capability_execution_stats WHERE capability_name = ?",
+                "SELECT * FROM capability_execution_stats WHERE capability_name = %s",
                 (capability_name,),
             )
             row = cursor.fetchone()
@@ -473,7 +485,9 @@ class AutonomyStore:
 
     def record_execution(self, capability_name: str, success: bool) -> ExecutionStats:
         """Record a capability execution and return updated stats."""
-        with self._get_connection() as conn:
+        from elle.storage.engine import get_conn
+
+        with get_conn(schema=self._schema) as conn:
             now = datetime.utcnow().isoformat()
 
             # Get current stats
@@ -488,10 +502,18 @@ class AutonomyStore:
             # Update database
             conn.execute(
                 """
-                INSERT OR REPLACE INTO capability_execution_stats
+                INSERT INTO capability_execution_stats
                 (capability_name, total_executions, successful_executions, failed_executions,
                  consecutive_successes, last_executed_at, last_success_at, last_failure_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (capability_name) DO UPDATE SET
+                    total_executions = EXCLUDED.total_executions,
+                    successful_executions = EXCLUDED.successful_executions,
+                    failed_executions = EXCLUDED.failed_executions,
+                    consecutive_successes = EXCLUDED.consecutive_successes,
+                    last_executed_at = EXCLUDED.last_executed_at,
+                    last_success_at = EXCLUDED.last_success_at,
+                    last_failure_at = EXCLUDED.last_failure_at
                 """,
                 (
                     capability_name,
@@ -504,7 +526,6 @@ class AutonomyStore:
                     now if not success else (stats.last_failure_at.isoformat() if stats.last_failure_at else None),
                 ),
             )
-            conn.commit()
 
             # Return updated stats
             return ExecutionStats(
@@ -520,7 +541,9 @@ class AutonomyStore:
 
     def get_all_stats(self) -> list[ExecutionStats]:
         """Get execution statistics for all capabilities."""
-        with self._get_connection() as conn:
+        from elle.storage.engine import get_conn
+
+        with get_conn(schema=self._schema) as conn:
             cursor = conn.execute("SELECT * FROM capability_execution_stats ORDER BY capability_name")
             return [
                 ExecutionStats(

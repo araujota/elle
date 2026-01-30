@@ -33,7 +33,6 @@ import time
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from enum import Enum
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -309,14 +308,14 @@ class DaemonChecker(DependencyChecker):
 
 
 class DatabaseChecker(DependencyChecker):
-    """Check SQLite database accessibility."""
+    """Check PostgreSQL database/schema accessibility."""
 
     def __init__(
         self,
-        db_path: str | Path,
+        schema: str,
         db_name: str,
     ) -> None:
-        self.db_path = Path(db_path)
+        self.schema = schema
         self.db_name = db_name
 
     @property
@@ -325,45 +324,25 @@ class DatabaseChecker(DependencyChecker):
 
     @property
     def fallback_message(self) -> str:
-        return f"Database '{self.db_name}' at {self.db_path} is not accessible."
+        return f"Database schema '{self.db_name}' is not accessible."
 
     async def check(self) -> DependencyCheckResult:
         start_time = time.time()
 
         try:
-            # Check if file exists
-            if not self.db_path.exists():
-                return DependencyCheckResult(
-                    name=self.name,
-                    status=DependencyStatus.UNAVAILABLE,
-                    available=False,
-                    message=f"Database file does not exist: {self.db_path}",
-                    fallback_message=self.fallback_message,
-                    latency_ms=(time.time() - start_time) * 1000,
-                )
+            from elle.storage.engine import get_conn
 
-            # Check if readable
-            if not self.db_path.is_file():
-                return DependencyCheckResult(
-                    name=self.name,
-                    status=DependencyStatus.UNAVAILABLE,
-                    available=False,
-                    message=f"Path is not a file: {self.db_path}",
-                    fallback_message=self.fallback_message,
-                    latency_ms=(time.time() - start_time) * 1000,
-                )
-
-            # Try to open and run a simple query
-            import sqlite3
-
-            conn = sqlite3.connect(str(self.db_path), timeout=2.0)
-            try:
+            with get_conn(schema=self.schema) as conn:
                 cursor = conn.execute("SELECT 1")
                 cursor.fetchone()
 
                 # Get table count for details
-                cursor = conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
-                table_count = cursor.fetchone()[0]
+                cursor = conn.execute(
+                    "SELECT COUNT(*) AS cnt FROM information_schema.tables WHERE table_schema = %s",
+                    (self.schema,),
+                )
+                row = cursor.fetchone()
+                table_count = row["cnt"] if row else 0
 
                 latency_ms = (time.time() - start_time) * 1000
 
@@ -374,20 +353,9 @@ class DatabaseChecker(DependencyChecker):
                     message=f"Database accessible with {table_count} tables",
                     fallback_message="",
                     latency_ms=latency_ms,
-                    details={"table_count": table_count, "path": str(self.db_path)},
+                    details={"table_count": table_count, "schema": self.schema},
                 )
-            finally:
-                conn.close()
 
-        except sqlite3.Error as e:
-            return DependencyCheckResult(
-                name=self.name,
-                status=DependencyStatus.UNAVAILABLE,
-                available=False,
-                message=f"SQLite error: {e}",
-                fallback_message=self.fallback_message,
-                latency_ms=(time.time() - start_time) * 1000,
-            )
         except Exception as e:
             logger.debug(f"Database check failed for {self.db_name}: {e}")
             return DependencyCheckResult(
@@ -650,13 +618,13 @@ def get_dependency_registry() -> DependencyRegistry:
         _registry.register(DaemonChecker())
         _registry.register(
             DatabaseChecker(
-                db_path="/var/lib/elle/incidents.db",
+                schema="incidents",
                 db_name="incidents",
             )
         )
         _registry.register(
             DatabaseChecker(
-                db_path="/var/lib/elle/manvault.db",
+                schema="manvault",
                 db_name="manvault",
             )
         )

@@ -1,8 +1,8 @@
 """Man Vault retriever.
 
 Provides search and retrieval over indexed documentation:
-- Lexical search via FTS5 with BM25 ranking
-- Semantic search via embeddings
+- Lexical search via PostgreSQL tsvector/tsquery with ts_rank_cd ranking
+- Semantic search via pgvector (cosine distance)
 - Hybrid search combining both approaches
 - Snippet extraction for LLM context
 - Flag verification for command validation
@@ -11,18 +11,18 @@ Provides search and retrieval over indexed documentation:
 from __future__ import annotations
 
 import re
-import sqlite3
 from functools import lru_cache
 from typing import Literal
 
-from elle.daemon.manvault.embedder import cosine_similarity, get_embedder
+import psycopg
+
+from elle.daemon.manvault.embedder import get_embedder
 from elle.daemon.manvault.models import ManSnippet
-from elle.daemon.manvault.schema import ensure_schema, get_connection
 from elle.daemon.manvault.store import (
-    get_all_embeddings,
     get_doc,
 )
 from elle.rag.ollama_client import OllamaError
+from elle.storage.engine import get_conn
 
 # Preferred sections for snippet extraction (in priority order)
 PREFERRED_SECTIONS = ["OPTIONS", "DESCRIPTION", "EXAMPLES", "SYNOPSIS"]
@@ -44,7 +44,7 @@ def search(
     name: str | None = None,
     section: str | None = None,
     search_type: Literal["lexical", "semantic", "hybrid"] = "hybrid",
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,
 ) -> list[ManSnippet]:
     """Search the Man Vault for relevant documentation.
 
@@ -54,33 +54,36 @@ def search(
         name: Filter by command name (optional).
         section: Filter by man section (optional).
         search_type: Type of search to perform.
-        conn: SQLite connection.
+        conn: PostgreSQL connection.
 
     Returns:
         List of matching documentation snippets.
     """
-    # Get or create connection
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
+    if conn is not None:
+        return _search_with_conn(query, k, name, section, search_type, conn)
 
-    # At this point conn is guaranteed to be non-None
-    assert conn is not None
+    with get_conn(schema="manvault") as c:
+        return _search_with_conn(query, k, name, section, search_type, c)
 
-    try:
-        if search_type == "lexical":
-            return _lexical_search(query, k, name, section, conn)
-        elif search_type == "semantic":
-            return _semantic_search(query, k, name, section, conn)
-        else:
-            # Hybrid: combine both, de-duplicate, re-rank
-            lexical = _lexical_search(query, k * 2, name, section, conn)
-            semantic = _semantic_search(query, k * 2, name, section, conn)
-            return _merge_results(lexical, semantic, k)
-    finally:
-        if own_conn:
-            conn.close()
+
+def _search_with_conn(
+    query: str,
+    k: int,
+    name: str | None,
+    section: str | None,
+    search_type: Literal["lexical", "semantic", "hybrid"],
+    conn: psycopg.Connection,
+) -> list[ManSnippet]:
+    """Execute search with an established connection."""
+    if search_type == "lexical":
+        return _lexical_search(query, k, name, section, conn)
+    elif search_type == "semantic":
+        return _semantic_search(query, k, name, section, conn)
+    else:
+        # Hybrid: combine both, de-duplicate, re-rank
+        lexical = _lexical_search(query, k * 2, name, section, conn)
+        semantic = _semantic_search(query, k * 2, name, section, conn)
+        return _merge_results(lexical, semantic, k)
 
 
 def _lexical_search(
@@ -88,51 +91,46 @@ def _lexical_search(
     k: int,
     name: str | None,
     section: str | None,
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,
 ) -> list[ManSnippet]:
-    """FTS5 search with BM25 ranking.
+    """PostgreSQL tsvector search with ts_rank_cd ranking.
 
     Args:
         query: Search query.
         k: Maximum results.
         name: Filter by name.
         section: Filter by section.
-        conn: SQLite connection.
+        conn: PostgreSQL connection.
 
     Returns:
         List of ManSnippet results.
     """
     cursor = conn.cursor()
 
-    # Build FTS5 MATCH query
-    # Escape special FTS5 characters
-    safe_query = _escape_fts5_query(query)
-
     # Build WHERE clause for filters
-    filters = []
-    params: list[str | int] = [safe_query]
+    filters = ["d.tsv @@ plainto_tsquery('english', %s)"]
+    params: list[str | int] = [query]
 
     if name:
-        filters.append("d.name = ?")
+        filters.append("d.name = %s")
         params.append(name)
     if section:
-        filters.append("d.section = ?")
+        filters.append("d.section = %s")
         params.append(section)
 
-    filter_clause = " AND " + " AND ".join(filters) if filters else ""
+    where_clause = " AND ".join(filters)
 
-    # Execute search with BM25 ranking
+    # Execute search with ts_rank_cd ranking
     cursor.execute(
         f"""
         SELECT d.id, d.name, d.section, d.text, d.priority,
-               bm25(docs_fts) as score
-        FROM docs_fts
-        JOIN docs d ON docs_fts.rowid = d.id
-        WHERE docs_fts MATCH ?{filter_clause}
-        ORDER BY score
-        LIMIT ?
+               ts_rank_cd(d.tsv, plainto_tsquery('english', %s)) AS score
+        FROM docs d
+        WHERE {where_clause}
+        ORDER BY score DESC
+        LIMIT %s
         """,
-        params + [k],
+        [query] + params + [k],
     )
 
     results = []
@@ -165,16 +163,16 @@ def _semantic_search(
     k: int,
     name: str | None,
     section: str | None,
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,
 ) -> list[ManSnippet]:
-    """Embedding-based semantic search.
+    """Embedding-based semantic search using pgvector cosine distance.
 
     Args:
         query: Search query.
         k: Maximum results.
         name: Filter by name.
         section: Filter by section.
-        conn: SQLite connection.
+        conn: PostgreSQL connection.
 
     Returns:
         List of ManSnippet results.
@@ -189,49 +187,42 @@ def _semantic_search(
     except OllamaError:
         return []
 
-    # Get all embeddings (for now - will optimize for large sets)
-    all_embeddings = get_all_embeddings(conn)
-    if not all_embeddings:
-        return []
+    # Build WHERE clause for filters
+    filters: list[str] = []
+    params: list[object] = [query_embedding]
 
-    # Compute similarities
-    similarities: list[tuple[int, float]] = []
-    for chunk_id, embedding in all_embeddings:
-        sim = cosine_similarity(query_embedding, embedding)
-        similarities.append((chunk_id, sim))
+    if name:
+        filters.append("d.name = %s")
+        params.append(name)
+    if section:
+        filters.append("d.section = %s")
+        params.append(section)
 
-    # Sort by similarity (highest first)
-    similarities.sort(key=lambda x: x[1], reverse=True)
+    filter_clause = (" AND " + " AND ".join(filters)) if filters else ""
 
-    # Get top chunks and their documents
+    # Use pgvector cosine distance operator (<=>)
+    # Lower distance = more similar; we negate for a similarity score
+    cursor = conn.cursor()
+    cursor.execute(
+        f"""
+        SELECT c.id AS chunk_id, c.doc_id, c.heading, c.text AS chunk_text,
+               d.name, d.section, d.text AS doc_text,
+               1 - (c.embedding <=> %s::vector) AS sim
+        FROM chunks c
+        JOIN docs d ON c.doc_id = d.id
+        WHERE c.embedding IS NOT NULL{filter_clause}
+        ORDER BY c.embedding <=> %s::vector
+        LIMIT %s
+        """,
+        params + [query_embedding, k * 2],
+    )
+
     results: list[ManSnippet] = []
     seen_docs: set[tuple[str, str]] = set()
 
-    cursor = conn.cursor()
-    for chunk_id, sim in similarities:
+    for row in cursor:
         if len(results) >= k:
             break
-
-        # Get chunk's document
-        cursor.execute(
-            """
-            SELECT c.doc_id, c.heading, c.text,
-                   d.name, d.section, d.text as doc_text
-            FROM chunks c
-            JOIN docs d ON c.doc_id = d.id
-            WHERE c.id = ?
-            """,
-            (chunk_id,),
-        )
-        row = cursor.fetchone()
-        if not row:
-            continue
-
-        # Apply filters
-        if name and row["name"] != name:
-            continue
-        if section and row["section"] != section:
-            continue
 
         # De-duplicate by document
         doc_key = (row["name"], row["section"])
@@ -240,14 +231,14 @@ def _semantic_search(
         seen_docs.add(doc_key)
 
         # Use chunk text as snippet basis, expand with context
-        snippet = _expand_chunk_snippet(row["chunk_text"] if "chunk_text" in row else row["text"], row["doc_text"])
+        snippet = _expand_chunk_snippet(row["chunk_text"], row["doc_text"])
 
         results.append(
             ManSnippet(
                 name=row["name"],
                 section=row["section"],
                 snippet=snippet,
-                score=sim,
+                score=row["sim"],
                 match_section=row["heading"],
                 search_type="semantic",
             )
@@ -512,34 +503,23 @@ def _expand_chunk_snippet(chunk_text: str, doc_text: str, max_length: int = DEFA
     return doc_text[start:end]
 
 
-def _escape_fts5_query(query: str) -> str:
-    """Escape special FTS5 characters in query.
+def _sanitize_query(query: str) -> str:
+    """Sanitize query string for use with plainto_tsquery.
+
+    plainto_tsquery already handles most special characters safely,
+    but we strip extraneous whitespace and null bytes.
 
     Args:
         query: Raw query string.
 
     Returns:
-        Escaped query safe for FTS5 MATCH.
+        Sanitized query string.
     """
-    # FTS5 special characters that need escaping
-    special_chars = '"*()-:'
-
-    # Simple approach: quote each word
-    words = query.split()
-    escaped_words = []
-
-    for word in words:
-        # Check if word contains special chars
-        if any(c in word for c in special_chars):
-            # Quote the word
-            word = f'"{word}"'
-        escaped_words.append(word)
-
-    return " ".join(escaped_words)
+    return query.replace("\x00", "").strip()
 
 
 @lru_cache(maxsize=256)
-def flag_exists(cmd: str, flag: str, conn: sqlite3.Connection | None = None) -> bool:
+def flag_exists(cmd: str, flag: str, conn: psycopg.Connection | None = None) -> bool:
     """Check if a flag appears in a command's man page.
 
     Uses caching for repeated lookups.
@@ -547,45 +527,42 @@ def flag_exists(cmd: str, flag: str, conn: sqlite3.Connection | None = None) -> 
     Args:
         cmd: Command name (e.g., "ls").
         flag: Flag to check (e.g., "-l" or "--long").
-        conn: SQLite connection.
+        conn: PostgreSQL connection.
 
     Returns:
         True if the flag appears in the OPTIONS section.
     """
-    # Get or create connection
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
+    if conn is not None:
+        return _flag_exists_with_conn(cmd, flag, conn)
 
-    try:
-        # Search common sections (1, 8)
-        for section in ["1", "8", "5"]:
-            doc = get_doc(conn, cmd, section)
-            if doc:
-                # Look for flag in OPTIONS section
-                text = doc.text.lower()
+    with get_conn(schema="manvault") as c:
+        return _flag_exists_with_conn(cmd, flag, c)
 
-                # Normalize flag for search
-                flag_lower = flag.lower()
 
-                # Check for flag at word boundary
-                pattern = rf"\b{re.escape(flag_lower)}\b"
-                if re.search(pattern, text):
-                    return True
+def _flag_exists_with_conn(cmd: str, flag: str, conn: psycopg.Connection) -> bool:
+    """Check flag existence with an established connection."""
+    for section in ["1", "8", "5"]:
+        doc = get_doc(conn, cmd, section)
+        if doc:
+            # Look for flag in OPTIONS section
+            text = doc.text.lower()
 
-        return False
+            # Normalize flag for search
+            flag_lower = flag.lower()
 
-    finally:
-        if own_conn and conn is not None:
-            conn.close()
+            # Check for flag at word boundary
+            pattern = rf"\b{re.escape(flag_lower)}\b"
+            if re.search(pattern, text):
+                return True
+
+    return False
 
 
 def get_document(
     name: str,
     section: str,
     lang: str = "en",
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,
 ) -> str | None:
     """Get full document text.
 
@@ -593,20 +570,15 @@ def get_document(
         name: Command/topic name.
         section: Man section.
         lang: Language code.
-        conn: SQLite connection.
+        conn: PostgreSQL connection.
 
     Returns:
         Full document text, or None if not found.
     """
-    # Get or create connection
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
-        ensure_schema(conn)
-
-    try:
+    if conn is not None:
         doc = get_doc(conn, name, section, lang)
         return doc.text if doc else None
-    finally:
-        if own_conn and conn is not None:
-            conn.close()
+
+    with get_conn(schema="manvault") as c:
+        doc = get_doc(c, name, section, lang)
+        return doc.text if doc else None

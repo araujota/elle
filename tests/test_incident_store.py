@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import sqlite3
-import tempfile
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 
@@ -18,7 +15,6 @@ from elle.daemon.incidents.models import (
     Provenance,
     SystemSnapshot,
 )
-from elle.daemon.incidents.schema import ensure_schema, get_connection
 from elle.daemon.incidents.store import (
     append_action,
     attach_control_surface_snapshot,
@@ -57,25 +53,16 @@ from elle.daemon.incidents.store import (
 
 
 @pytest.fixture
-def temp_db():
-    """Create a temporary database for testing."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = Path(f.name)
-
-    conn = get_connection(db_path)
-    ensure_schema(conn)
-    yield conn, db_path
-
-    conn.close()
-    db_path.unlink()
+def conn(incidents_conn):
+    """Provide an incidents-schema connection for testing."""
+    return incidents_conn
 
 
 class TestIncidentCRUD:
     """Tests for incident CRUD operations."""
 
-    def test_create_incident_draft(self, temp_db):
+    def test_create_incident_draft(self, conn):
         """Test creating an incident draft."""
-        conn, _ = temp_db
         incident = create_incident_draft(
             title="Test incident",
             domain="net",
@@ -90,9 +77,8 @@ class TestIncidentCRUD:
         assert incident.severity == "error"
         assert incident.status == "open"
 
-    def test_get_incident(self, temp_db):
+    def test_get_incident(self, conn):
         """Test getting an incident by ID."""
-        conn, _ = temp_db
         created = create_incident_draft(title="Get test", conn=conn)
 
         fetched = get_incident(created.incident_id, conn=conn)
@@ -100,15 +86,13 @@ class TestIncidentCRUD:
         assert fetched.incident_id == created.incident_id
         assert fetched.title == "Get test"
 
-    def test_get_nonexistent_incident(self, temp_db):
+    def test_get_nonexistent_incident(self, conn):
         """Test getting a nonexistent incident."""
-        conn, _ = temp_db
         fetched = get_incident("nonexistent-id", conn=conn)
         assert fetched is None
 
-    def test_update_incident(self, temp_db):
+    def test_update_incident(self, conn):
         """Test updating an incident."""
-        conn, _ = temp_db
         created = create_incident_draft(title="Update test", conn=conn)
 
         updated = update_incident(
@@ -125,9 +109,8 @@ class TestIncidentCRUD:
         assert updated.symptoms == ("Symptom 1", "Symptom 2")
         assert updated.updated_at > created.updated_at
 
-    def test_update_with_fingerprint(self, temp_db):
+    def test_update_with_fingerprint(self, conn):
         """Test updating incident with fingerprint."""
-        conn, _ = temp_db
         created = create_incident_draft(title="Fingerprint test", conn=conn)
 
         fp = Fingerprint(
@@ -145,9 +128,8 @@ class TestIncidentCRUD:
         assert updated.fingerprint.disk_pressure == 0.85
         assert "service:nginx" in updated.fingerprint.entities
 
-    def test_update_with_preconditions(self, temp_db):
+    def test_update_with_preconditions(self, conn):
         """Test updating incident with preconditions."""
-        conn, _ = temp_db
         created = create_incident_draft(title="Precond test", conn=conn)
 
         preconds = [
@@ -164,9 +146,8 @@ class TestIncidentCRUD:
         assert len(updated.preconditions) == 2
         assert updated.preconditions[0].expression == "disk./.used_pct > 90"
 
-    def test_delete_incident(self, temp_db):
+    def test_delete_incident(self, conn):
         """Test deleting an incident."""
-        conn, _ = temp_db
         created = create_incident_draft(title="Delete test", conn=conn)
 
         result = delete_incident(created.incident_id, conn=conn)
@@ -175,15 +156,13 @@ class TestIncidentCRUD:
         fetched = get_incident(created.incident_id, conn=conn)
         assert fetched is None
 
-    def test_delete_nonexistent(self, temp_db):
+    def test_delete_nonexistent(self, conn):
         """Test deleting a nonexistent incident."""
-        conn, _ = temp_db
         result = delete_incident("nonexistent-id", conn=conn)
         assert result is False
 
-    def test_list_incidents(self, temp_db):
+    def test_list_incidents(self, conn):
         """Test listing incidents."""
-        conn, _ = temp_db
         create_incident_draft(title="Incident 1", domain="net", conn=conn)
         create_incident_draft(title="Incident 2", domain="disk", conn=conn)
         create_incident_draft(title="Incident 3", domain="net", conn=conn)
@@ -194,9 +173,8 @@ class TestIncidentCRUD:
         net_incidents = list_incidents(domain="net", conn=conn)
         assert len(net_incidents) == 2
 
-    def test_list_with_pagination(self, temp_db):
+    def test_list_with_pagination(self, conn):
         """Test listing with pagination."""
-        conn, _ = temp_db
         for i in range(5):
             create_incident_draft(title=f"Incident {i}", conn=conn)
 
@@ -210,9 +188,8 @@ class TestIncidentCRUD:
 class TestActions:
     """Tests for action operations."""
 
-    def test_append_action(self, temp_db):
+    def test_append_action(self, conn):
         """Test appending an action."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Action test", conn=conn)
 
         action = append_action(
@@ -231,9 +208,8 @@ class TestActions:
         assert action.command == "apt update"
         assert action.success is True
 
-    def test_append_multiple_actions(self, temp_db):
+    def test_append_multiple_actions(self, conn):
         """Test appending multiple actions."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Multi action", conn=conn)
 
         action1 = append_action(incident.incident_id, kind="shell", command="cmd1", conn=conn)
@@ -244,9 +220,8 @@ class TestActions:
         assert action2.step_index == 1
         assert action3.step_index == 2
 
-    def test_get_actions(self, temp_db):
+    def test_get_actions(self, conn):
         """Test getting actions for an incident."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Get actions", conn=conn)
 
         append_action(incident.incident_id, kind="shell", command="cmd1", conn=conn)
@@ -257,9 +232,8 @@ class TestActions:
         assert actions[0].step_index == 0
         assert actions[1].step_index == 1
 
-    def test_action_with_payload(self, temp_db):
+    def test_action_with_payload(self, conn):
         """Test action with payload dict."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Payload test", conn=conn)
 
         append_action(
@@ -276,9 +250,8 @@ class TestActions:
 class TestSnapshots:
     """Tests for snapshot operations."""
 
-    def test_attach_snapshot(self, temp_db):
+    def test_attach_snapshot(self, conn):
         """Test attaching a snapshot."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Snapshot test", conn=conn)
 
         snapshot = SystemSnapshot(
@@ -302,9 +275,8 @@ class TestSnapshots:
         assert result.which == "pre"
         assert result.snapshot.os == "Ubuntu 24.04"
 
-    def test_get_snapshot(self, temp_db):
+    def test_get_snapshot(self, conn):
         """Test getting a specific snapshot."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Get snapshot", conn=conn)
 
         snapshot = SystemSnapshot(
@@ -323,9 +295,8 @@ class TestSnapshots:
         assert fetched is not None
         assert fetched.snapshot.uptime_sec == 1800
 
-    def test_get_all_snapshots(self, temp_db):
+    def test_get_all_snapshots(self, conn):
         """Test getting all snapshots for an incident."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="All snapshots", conn=conn)
 
         pre = SystemSnapshot(
@@ -360,9 +331,8 @@ class TestSnapshots:
 class TestEventLinks:
     """Tests for event linking."""
 
-    def test_link_events(self, temp_db):
+    def test_link_events(self, conn):
         """Test linking events to an incident."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Link test", conn=conn)
 
         count = link_events(
@@ -373,9 +343,8 @@ class TestEventLinks:
 
         assert count == 3
 
-    def test_link_events_idempotent(self, temp_db):
+    def test_link_events_idempotent(self, conn):
         """Test that linking is idempotent."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Idempotent", conn=conn)
 
         link_events(incident.incident_id, ["event-1"], conn=conn)
@@ -384,9 +353,8 @@ class TestEventLinks:
         # Only event-2 should be new
         assert count == 1
 
-    def test_get_linked_events(self, temp_db):
+    def test_get_linked_events(self, conn):
         """Test getting linked events."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Get links", conn=conn)
 
         link_events(incident.incident_id, ["event-1", "event-2"], conn=conn)
@@ -400,9 +368,8 @@ class TestEventLinks:
 class TestEmbeddings:
     """Tests for embedding operations."""
 
-    def test_upsert_embedding(self, temp_db):
+    def test_upsert_embedding(self, conn):
         """Test storing an embedding."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Embed test", conn=conn)
 
         embedding = [0.1, 0.2, 0.3, 0.4, 0.5]
@@ -413,9 +380,8 @@ class TestEmbeddings:
         assert len(fetched) == 5
         assert abs(fetched[0] - 0.1) < 0.0001
 
-    def test_update_embedding(self, temp_db):
+    def test_update_embedding(self, conn):
         """Test updating an embedding."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Update embed", conn=conn)
 
         upsert_embedding(incident.incident_id, [1.0, 2.0], "model1", conn=conn)
@@ -428,9 +394,8 @@ class TestEmbeddings:
 class TestOutcome:
     """Tests for outcome finalization."""
 
-    def test_finalize_improved(self, temp_db):
+    def test_finalize_improved(self, conn):
         """Test finalizing with improved outcome."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Outcome test", conn=conn)
 
         result = finalize_outcome(
@@ -447,9 +412,8 @@ class TestOutcome:
         assert result.root_cause == "Configuration error"
         assert result.time_to_resolve_sec is not None
 
-    def test_finalize_partial(self, temp_db):
+    def test_finalize_partial(self, conn):
         """Test finalizing with partial outcome."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Partial test", conn=conn)
 
         result = finalize_outcome(
@@ -462,9 +426,8 @@ class TestOutcome:
         assert result.status == "mitigated"
         assert result.time_to_mitigate_sec is not None
 
-    def test_finalize_no_change(self, temp_db):
+    def test_finalize_no_change(self, conn):
         """Test finalizing with no_change outcome keeps open status."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="No change test", conn=conn)
 
         result = finalize_outcome(
@@ -478,9 +441,8 @@ class TestOutcome:
         assert result.status == "open"
         assert result.time_to_resolve_sec is None
 
-    def test_finalize_worse(self, temp_db):
+    def test_finalize_worse(self, conn):
         """Test finalizing with worse outcome keeps open status."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Worse test", conn=conn)
 
         result = finalize_outcome(
@@ -493,9 +455,8 @@ class TestOutcome:
         assert result.outcome == "worse"
         assert result.status == "open"
 
-    def test_finalize_nonexistent_incident(self, temp_db):
+    def test_finalize_nonexistent_incident(self, conn):
         """Test finalizing a nonexistent incident returns None."""
-        conn, _ = temp_db
         result = finalize_outcome("nonexistent-id", outcome="improved", conn=conn)
         assert result is None
 
@@ -503,9 +464,8 @@ class TestOutcome:
 class TestDecisionRecords:
     """Tests for decision record operations."""
 
-    def test_store_and_retrieve_decision_record(self, temp_db):
+    def test_store_and_retrieve_decision_record(self, conn):
         """Test storing and retrieving a decision record."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Decision test", conn=conn)
 
         confidence = ConfidenceBreakdown(
@@ -535,9 +495,8 @@ class TestDecisionRecords:
         assert len(fetched.planned_commands) == 2
         assert "systemctl restart nginx" in fetched.planned_commands
 
-    def test_decision_record_replaces_on_upsert(self, temp_db):
+    def test_decision_record_replaces_on_upsert(self, conn):
         """Test that storing a second decision record replaces the first."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Replace decision", conn=conn)
 
         confidence = ConfidenceBreakdown(overall=0.5)
@@ -561,15 +520,13 @@ class TestDecisionRecords:
         assert fetched.chosen_approach == "Better approach"
         assert fetched.confidence.overall == 0.9
 
-    def test_get_decision_record_not_found(self, temp_db):
+    def test_get_decision_record_not_found(self, conn):
         """Test that getting a nonexistent decision record returns None."""
-        conn, _ = temp_db
         result = get_decision_record("nonexistent-id", conn=conn)
         assert result is None
 
-    def test_decision_record_with_provenance(self, temp_db):
+    def test_decision_record_with_provenance(self, conn):
         """Test decision record with full provenance details."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Provenance test", conn=conn)
 
         from elle.daemon.incidents.models import ManPageCitation, IncidentCitation
@@ -615,9 +572,8 @@ class TestDecisionRecords:
 class TestConfigState:
     """Tests for config state CRUD operations."""
 
-    def test_store_and_retrieve_config_state(self, temp_db):
+    def test_store_and_retrieve_config_state(self, conn):
         """Test storing and retrieving config file state."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Config test", conn=conn)
 
         config_state = ConfigFileState(
@@ -638,9 +594,8 @@ class TestConfigState:
         assert states[0].size_bytes == 2048
         assert states[0].backup_path == "/var/lib/elle/backups/nginx.conf.bak"
 
-    def test_config_state_with_mtime(self, temp_db):
+    def test_config_state_with_mtime(self, conn):
         """Test config state preserves modification time."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Mtime test", conn=conn)
 
         now = datetime.utcnow()
@@ -657,9 +612,8 @@ class TestConfigState:
         assert len(states) == 1
         assert states[0].mtime is not None
 
-    def test_config_state_filter_by_which(self, temp_db):
+    def test_config_state_filter_by_which(self, conn):
         """Test filtering config states by pre/post."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Filter test", conn=conn)
 
         pre_state = ConfigFileState(path="/etc/ssh/sshd_config", size_bytes=100)
@@ -679,9 +633,8 @@ class TestConfigState:
         all_states = get_config_states(incident.incident_id, conn=conn)
         assert len(all_states) == 2
 
-    def test_config_state_by_path_across_incidents(self, temp_db):
+    def test_config_state_by_path_across_incidents(self, conn):
         """Test tracking config file changes across incidents."""
-        conn, _ = temp_db
 
         inc1 = create_incident_draft(title="Inc 1", conn=conn)
         inc2 = create_incident_draft(title="Inc 2", conn=conn)
@@ -726,9 +679,8 @@ class TestTelemetrySnapshots:
             uptime_sec=3600,
         )
 
-    def test_attach_and_get_telemetry_snapshot(self, temp_db):
+    def test_attach_and_get_telemetry_snapshot(self, conn):
         """Test attaching and retrieving a telemetry snapshot."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Telemetry test", conn=conn)
 
         snapshot = self._make_telemetry_snapshot()
@@ -740,17 +692,15 @@ class TestTelemetrySnapshots:
         assert fetched.memory.total_mb == 16384
         assert fetched.hostname == "testhost"
 
-    def test_get_telemetry_snapshot_not_found(self, temp_db):
+    def test_get_telemetry_snapshot_not_found(self, conn):
         """Test getting a nonexistent telemetry snapshot returns None."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="No telem", conn=conn)
 
         fetched = get_telemetry_snapshot(incident.incident_id, "pre", conn=conn)
         assert fetched is None
 
-    def test_get_all_telemetry_snapshots(self, temp_db):
+    def test_get_all_telemetry_snapshots(self, conn):
         """Test getting all telemetry snapshots for an incident."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="All telem", conn=conn)
 
         pre_snap = self._make_telemetry_snapshot()
@@ -763,9 +713,8 @@ class TestTelemetrySnapshots:
         assert "pre" in snapshots
         assert "post" in snapshots
 
-    def test_telemetry_snapshot_replace_on_same_which(self, temp_db):
+    def test_telemetry_snapshot_replace_on_same_which(self, conn):
         """Test that re-attaching a telemetry snapshot replaces the previous one."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Replace telem", conn=conn)
 
         snap1 = self._make_telemetry_snapshot()
@@ -827,9 +776,8 @@ class TestControlSurfaceSnapshots:
             hardware=HardwareIdentitySurface(cpu_cores=4, total_memory_mb=16384),
         )
 
-    def test_attach_and_get_control_surface(self, temp_db):
+    def test_attach_and_get_control_surface(self, conn):
         """Test attaching and retrieving a control surface snapshot."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Control surface test", conn=conn)
 
         snapshot = self._make_control_surface_snapshot()
@@ -840,17 +788,15 @@ class TestControlSurfaceSnapshots:
         assert fetched.network_control.network_manager == "NetworkManager"
         assert fetched.kernel_policy.kernel_version == "6.8.0"
 
-    def test_get_control_surface_not_found(self, temp_db):
+    def test_get_control_surface_not_found(self, conn):
         """Test getting a nonexistent control surface returns None."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="No surface", conn=conn)
 
         fetched = get_control_surface_snapshot(incident.incident_id, "pre", conn=conn)
         assert fetched is None
 
-    def test_get_all_control_surface_snapshots(self, temp_db):
+    def test_get_all_control_surface_snapshots(self, conn):
         """Test getting all control surface snapshots for an incident."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="All surfaces", conn=conn)
 
         snap = self._make_control_surface_snapshot()
@@ -861,9 +807,8 @@ class TestControlSurfaceSnapshots:
         assert "pre" in snapshots
         assert "post" in snapshots
 
-    def test_get_surface_hashes(self, temp_db):
+    def test_get_surface_hashes(self, conn):
         """Test retrieving surface hashes without loading full snapshot."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Hash test", conn=conn)
 
         snapshot = self._make_control_surface_snapshot()
@@ -878,9 +823,8 @@ class TestControlSurfaceSnapshots:
         assert "privilege" in hashes
         assert "network_control" in hashes
 
-    def test_get_surface_hashes_not_found(self, temp_db):
+    def test_get_surface_hashes_not_found(self, conn):
         """Test getting surface hashes for nonexistent snapshot returns None."""
-        conn, _ = temp_db
         result = get_surface_hashes("nonexistent-id", "pre", conn=conn)
         assert result is None
 
@@ -888,9 +832,8 @@ class TestControlSurfaceSnapshots:
 class TestListIncidentsFilters:
     """Tests for list_incidents with various filters."""
 
-    def test_list_by_status(self, temp_db):
+    def test_list_by_status(self, conn):
         """Test listing incidents filtered by status."""
-        conn, _ = temp_db
         inc1 = create_incident_draft(title="Open inc", conn=conn)
         inc2 = create_incident_draft(title="Resolved inc", conn=conn)
         finalize_outcome(inc2.incident_id, "improved", conn=conn)
@@ -903,9 +846,8 @@ class TestListIncidentsFilters:
         assert len(resolved_incidents) == 1
         assert resolved_incidents[0].title == "Resolved inc"
 
-    def test_list_combined_filters(self, temp_db):
+    def test_list_combined_filters(self, conn):
         """Test listing with both status and domain filters."""
-        conn, _ = temp_db
         create_incident_draft(title="Open net", domain="net", conn=conn)
         inc2 = create_incident_draft(title="Resolved net", domain="net", conn=conn)
         finalize_outcome(inc2.incident_id, "improved", conn=conn)
@@ -915,17 +857,15 @@ class TestListIncidentsFilters:
         assert len(results) == 1
         assert results[0].title == "Open net"
 
-    def test_list_empty_result(self, temp_db):
+    def test_list_empty_result(self, conn):
         """Test listing with filters that match nothing."""
-        conn, _ = temp_db
         create_incident_draft(title="Test", domain="net", conn=conn)
 
         results = list_incidents(domain="nonexistent-domain", conn=conn)
         assert len(results) == 0
 
-    def test_list_ordering_by_updated_at(self, temp_db):
+    def test_list_ordering_by_updated_at(self, conn):
         """Test that list_incidents returns incidents ordered by updated_at descending."""
-        conn, _ = temp_db
         inc1 = create_incident_draft(title="First", conn=conn)
         inc2 = create_incident_draft(title="Second", conn=conn)
         # Update the first incident so its updated_at becomes most recent
@@ -940,9 +880,8 @@ class TestListIncidentsFilters:
 class TestFingerprintOperations:
     """Tests for fingerprint storage and retrieval."""
 
-    def test_fingerprint_round_trip(self, temp_db):
+    def test_fingerprint_round_trip(self, conn):
         """Test that fingerprints survive store-retrieve cycle."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="FP round trip", conn=conn)
 
         fp = Fingerprint(
@@ -975,9 +914,8 @@ class TestFingerprintOperations:
         assert len(fetched.fingerprint.entities) == 3
         assert "service:nginx" in fetched.fingerprint.entities
 
-    def test_default_fingerprint(self, temp_db):
+    def test_default_fingerprint(self, conn):
         """Test that incidents without explicit fingerprint get defaults."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Default FP", conn=conn)
         fetched = get_incident(incident.incident_id, conn=conn)
 
@@ -990,9 +928,8 @@ class TestFingerprintOperations:
 class TestUpdateWithV5Fields:
     """Tests for V5 schema fields (forecast tracking)."""
 
-    def test_create_with_trigger_source(self, temp_db):
+    def test_create_with_trigger_source(self, conn):
         """Test creating incident with trigger source."""
-        conn, _ = temp_db
         incident = create_incident_draft(
             title="Telemetry triggered incident",
             trigger_source="telemetry",
@@ -1005,17 +942,15 @@ class TestUpdateWithV5Fields:
         assert fetched.trigger_source == "telemetry"
         assert fetched.trigger_command == "disk_usage_trend"
 
-    def test_get_prepared_plan_empty(self, temp_db):
+    def test_get_prepared_plan_empty(self, conn):
         """Test getting a prepared plan when none exists."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="No plan", conn=conn)
 
         plan = get_prepared_plan(incident.incident_id, conn=conn)
         assert plan is None
 
-    def test_update_multiple_fields_at_once(self, temp_db):
+    def test_update_multiple_fields_at_once(self, conn):
         """Test updating multiple fields simultaneously."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Multi update", conn=conn)
 
         updated = update_incident(
@@ -1043,9 +978,8 @@ class TestUpdateWithV5Fields:
 class TestStatistics:
     """Tests for statistical counting operations."""
 
-    def test_incident_count(self, temp_db):
+    def test_incident_count(self, conn):
         """Test getting total incident count."""
-        conn, _ = temp_db
         assert get_incident_count(conn=conn) == 0
 
         create_incident_draft(title="Inc 1", conn=conn)
@@ -1053,9 +987,8 @@ class TestStatistics:
 
         assert get_incident_count(conn=conn) == 2
 
-    def test_action_count(self, temp_db):
+    def test_action_count(self, conn):
         """Test getting total action count."""
-        conn, _ = temp_db
         assert get_action_count(conn=conn) == 0
 
         incident = create_incident_draft(title="Action count", conn=conn)
@@ -1064,9 +997,8 @@ class TestStatistics:
 
         assert get_action_count(conn=conn) == 2
 
-    def test_snapshot_count(self, temp_db):
+    def test_snapshot_count(self, conn):
         """Test getting total snapshot count."""
-        conn, _ = temp_db
         assert get_snapshot_count(conn=conn) == 0
 
         incident = create_incident_draft(title="Snap count", conn=conn)
@@ -1087,9 +1019,8 @@ class TestStatistics:
 class TestEmbeddingsExtended:
     """Extended tests for embedding operations."""
 
-    def test_get_all_embeddings(self, temp_db):
+    def test_get_all_embeddings(self, conn):
         """Test getting all embeddings."""
-        conn, _ = temp_db
         inc1 = create_incident_draft(title="Embed 1", conn=conn)
         inc2 = create_incident_draft(title="Embed 2", conn=conn)
 
@@ -1101,9 +1032,8 @@ class TestEmbeddingsExtended:
         assert inc1.incident_id in all_embeds
         assert inc2.incident_id in all_embeds
 
-    def test_get_incidents_without_embeddings(self, temp_db):
+    def test_get_incidents_without_embeddings(self, conn):
         """Test finding incidents that lack embeddings."""
-        conn, _ = temp_db
         inc1 = create_incident_draft(title="With embed", conn=conn)
         inc2 = create_incident_draft(title="Without embed", conn=conn)
 
@@ -1113,9 +1043,8 @@ class TestEmbeddingsExtended:
         assert inc2.incident_id in missing
         assert inc1.incident_id not in missing
 
-    def test_get_embedding_not_found(self, temp_db):
+    def test_get_embedding_not_found(self, conn):
         """Test getting an embedding for an incident that has none."""
-        conn, _ = temp_db
         result = get_embedding("nonexistent-id", conn=conn)
         assert result is None
 
@@ -1123,9 +1052,8 @@ class TestEmbeddingsExtended:
 class TestSnapshotReplacement:
     """Tests for snapshot replacement behavior."""
 
-    def test_snapshot_replace_on_same_which(self, temp_db):
+    def test_snapshot_replace_on_same_which(self, conn):
         """Test that re-attaching a snapshot replaces the previous one."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Replace snap", conn=conn)
 
         snap1 = SystemSnapshot(
@@ -1147,17 +1075,15 @@ class TestSnapshotReplacement:
         assert fetched.snapshot.kernel == "6.8"
         assert fetched.snapshot.uptime_sec == 500
 
-    def test_get_snapshot_not_found(self, temp_db):
+    def test_get_snapshot_not_found(self, conn):
         """Test getting a snapshot that does not exist."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="No snap", conn=conn)
 
         result = get_snapshot(incident.incident_id, "pre", conn=conn)
         assert result is None
 
-    def test_get_snapshots_empty(self, temp_db):
+    def test_get_snapshots_empty(self, conn):
         """Test getting snapshots when none are attached."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Empty snaps", conn=conn)
 
         result = get_snapshots(incident.incident_id, conn=conn)
@@ -1167,9 +1093,8 @@ class TestSnapshotReplacement:
 class TestDeleteCascade:
     """Tests for cascade deletion behavior."""
 
-    def test_delete_cascade_removes_actions(self, temp_db):
+    def test_delete_cascade_removes_actions(self, conn):
         """Test that deleting an incident also removes its actions."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Cascade test", conn=conn)
         append_action(incident.incident_id, kind="shell", command="test", conn=conn)
 
@@ -1179,9 +1104,8 @@ class TestDeleteCascade:
 
         assert len(get_actions(incident.incident_id, conn=conn)) == 0
 
-    def test_delete_cascade_removes_events(self, temp_db):
+    def test_delete_cascade_removes_events(self, conn):
         """Test that deleting an incident also removes linked events."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Cascade events", conn=conn)
         link_events(incident.incident_id, ["ev-1", "ev-2"], conn=conn)
 
@@ -1191,9 +1115,8 @@ class TestDeleteCascade:
 
         assert len(get_linked_events(incident.incident_id, conn=conn)) == 0
 
-    def test_delete_cascade_removes_snapshots(self, temp_db):
+    def test_delete_cascade_removes_snapshots(self, conn):
         """Test that deleting an incident also removes attached snapshots."""
-        conn, _ = temp_db
         incident = create_incident_draft(title="Cascade snap", conn=conn)
 
         snap = SystemSnapshot(

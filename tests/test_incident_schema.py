@@ -1,7 +1,6 @@
 """Tests for Incident Vault schema."""
 
-import tempfile
-from pathlib import Path
+from __future__ import annotations
 
 import pytest
 
@@ -9,7 +8,6 @@ from elle.daemon.incidents.schema import (
     SCHEMA_VERSION,
     drop_all_tables,
     ensure_schema,
-    get_connection,
     get_schema_version,
     init_incident_schema,
     needs_migration,
@@ -17,110 +15,99 @@ from elle.daemon.incidents.schema import (
 
 
 @pytest.fixture
-def temp_db():
-    """Create a temporary database for testing."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = Path(f.name)
-
-    conn = get_connection(db_path)
-    yield conn, db_path
-
-    conn.close()
-    db_path.unlink()
+def conn(incidents_conn):
+    """Provide an incidents-schema connection for testing."""
+    return incidents_conn
 
 
 class TestSchemaCreation:
     """Tests for schema creation."""
 
-    def test_init_creates_incidents_table(self, temp_db):
+    def test_init_creates_incidents_table(self, conn):
         """Test that init creates the incidents table."""
-        conn, _ = temp_db
         init_incident_schema(conn)
 
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='incidents'")
-        assert cursor.fetchone() is not None
+        row = conn.execute(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = 'incidents'"
+        ).fetchone()
+        assert row is not None
 
-    def test_init_creates_actions_table(self, temp_db):
+    def test_init_creates_actions_table(self, conn):
         """Test that init creates the incident_actions table."""
-        conn, _ = temp_db
         init_incident_schema(conn)
 
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='incident_actions'")
-        assert cursor.fetchone() is not None
+        row = conn.execute(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = 'incident_actions'"
+        ).fetchone()
+        assert row is not None
 
-    def test_init_creates_snapshots_table(self, temp_db):
+    def test_init_creates_snapshots_table(self, conn):
         """Test that init creates the incident_snapshots table."""
-        conn, _ = temp_db
         init_incident_schema(conn)
 
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='incident_snapshots'")
-        assert cursor.fetchone() is not None
+        row = conn.execute(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = 'incident_snapshots'"
+        ).fetchone()
+        assert row is not None
 
-    def test_init_creates_events_table(self, temp_db):
+    def test_init_creates_events_table(self, conn):
         """Test that init creates the incident_events table."""
-        conn, _ = temp_db
         init_incident_schema(conn)
 
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='incident_events'")
-        assert cursor.fetchone() is not None
+        row = conn.execute(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = 'incident_events'"
+        ).fetchone()
+        assert row is not None
 
-    def test_init_creates_embeddings_table(self, temp_db):
+    def test_init_creates_embeddings_table(self, conn):
         """Test that init creates the incident_embeddings table."""
-        conn, _ = temp_db
         init_incident_schema(conn)
 
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='incident_embeddings'")
-        assert cursor.fetchone() is not None
+        row = conn.execute(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = 'incident_embeddings'"
+        ).fetchone()
+        assert row is not None
 
-    def test_init_creates_fts_table(self, temp_db):
-        """Test that init creates the FTS5 table."""
-        conn, _ = temp_db
+    def test_init_creates_fts_index(self, conn):
+        """Test that init creates the full-text search index."""
         init_incident_schema(conn)
 
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='incidents_fts'")
-        assert cursor.fetchone() is not None
+        row = conn.execute(
+            "SELECT 1 FROM pg_indexes WHERE indexname = 'incidents_fts_idx'"
+        ).fetchone()
+        assert row is not None
 
-    def test_init_creates_meta_table(self, temp_db):
+    def test_init_creates_meta_table(self, conn):
         """Test that init creates the meta table."""
-        conn, _ = temp_db
         init_incident_schema(conn)
 
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='meta'")
-        assert cursor.fetchone() is not None
+        row = conn.execute(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = 'meta'"
+        ).fetchone()
+        assert row is not None
 
 
 class TestSchemaVersion:
     """Tests for schema versioning."""
 
-    def test_schema_version_set(self, temp_db):
+    def test_schema_version_set(self, conn):
         """Test that schema version is set after init."""
-        conn, _ = temp_db
         init_incident_schema(conn)
 
         version = get_schema_version(conn)
         assert version == SCHEMA_VERSION
 
-    def test_schema_version_none_before_init(self, temp_db):
+    def test_schema_version_none_before_init(self, conn):
         """Test that schema version is None before init."""
-        conn, _ = temp_db
         version = get_schema_version(conn)
         assert version is None
 
-    def test_needs_migration_before_init(self, temp_db):
+    def test_needs_migration_before_init(self, conn):
         """Test that migration is needed before init."""
-        conn, _ = temp_db
         assert needs_migration(conn) is True
 
-    def test_no_migration_after_init(self, temp_db):
+    def test_no_migration_after_init(self, conn):
         """Test that migration is not needed after init."""
-        conn, _ = temp_db
         init_incident_schema(conn)
         assert needs_migration(conn) is False
 
@@ -128,19 +115,18 @@ class TestSchemaVersion:
 class TestEnsureSchema:
     """Tests for ensure_schema function."""
 
-    def test_ensure_creates_schema(self, temp_db):
+    def test_ensure_creates_schema(self, conn):
         """Test that ensure_schema creates the schema."""
-        conn, _ = temp_db
         ensure_schema(conn)
 
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
-        count = cursor.fetchone()[0]
-        assert count > 0
+        row = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM information_schema.tables "
+            "WHERE table_schema = 'incidents'"
+        ).fetchone()
+        assert row["cnt"] > 0
 
-    def test_ensure_idempotent(self, temp_db):
+    def test_ensure_idempotent(self, conn):
         """Test that ensure_schema is idempotent."""
-        conn, _ = temp_db
         ensure_schema(conn)
         ensure_schema(conn)  # Should not raise
 
@@ -151,41 +137,37 @@ class TestEnsureSchema:
 class TestDropTables:
     """Tests for dropping tables."""
 
-    def test_drop_all_tables(self, temp_db):
+    def test_drop_all_tables(self, conn):
         """Test that drop_all_tables removes all tables."""
-        conn, _ = temp_db
         init_incident_schema(conn)
         drop_all_tables(conn)
 
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='incidents'")
-        assert cursor.fetchone() is None
+        row = conn.execute(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = 'incidents'"
+        ).fetchone()
+        assert row is None
 
 
 class TestIndexes:
     """Tests for indexes."""
 
-    def test_indexes_created(self, temp_db):
+    def test_indexes_created(self, conn):
         """Test that indexes are created."""
-        conn, _ = temp_db
         init_incident_schema(conn)
 
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='index'")
-        indexes = [row[0] for row in cursor.fetchall()]
+        rows = conn.execute("SELECT indexname FROM pg_indexes WHERE schemaname = 'incidents'").fetchall()
+        indexes = [row["indexname"] for row in rows]
 
         assert "idx_incidents_status" in indexes
         assert "idx_incidents_domain" in indexes
         assert "idx_actions_incident" in indexes
 
-    def test_v4_indexes_created(self, temp_db):
+    def test_v4_indexes_created(self, conn):
         """Test that V4 indexes are created."""
-        conn, _ = temp_db
         init_incident_schema(conn)
 
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='index'")
-        indexes = [row[0] for row in cursor.fetchall()]
+        rows = conn.execute("SELECT indexname FROM pg_indexes WHERE schemaname = 'incidents'").fetchall()
+        indexes = [row["indexname"] for row in rows]
 
         assert "idx_telemetry_snapshots_incident" in indexes
         assert "idx_control_surface_snapshots_incident" in indexes
@@ -195,36 +177,33 @@ class TestIndexes:
 class TestV4Tables:
     """Tests for V4 schema tables (telemetry/control surface)."""
 
-    def test_telemetry_snapshots_table_created(self, temp_db):
+    def test_telemetry_snapshots_table_created(self, conn):
         """Test that telemetry_snapshots table is created."""
-        conn, _ = temp_db
         init_incident_schema(conn)
 
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='telemetry_snapshots'"
-        )
-        assert cursor.fetchone() is not None
+        row = conn.execute(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = 'telemetry_snapshots'"
+        ).fetchone()
+        assert row is not None
 
-    def test_control_surface_snapshots_table_created(self, temp_db):
+    def test_control_surface_snapshots_table_created(self, conn):
         """Test that control_surface_snapshots table is created."""
-        conn, _ = temp_db
         init_incident_schema(conn)
 
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='control_surface_snapshots'"
-        )
-        assert cursor.fetchone() is not None
+        row = conn.execute(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = 'control_surface_snapshots'"
+        ).fetchone()
+        assert row is not None
 
-    def test_telemetry_snapshots_columns(self, temp_db):
+    def test_telemetry_snapshots_columns(self, conn):
         """Test that telemetry_snapshots has expected columns."""
-        conn, _ = temp_db
         init_incident_schema(conn)
 
-        cursor = conn.cursor()
-        cursor.execute("PRAGMA table_info(telemetry_snapshots)")
-        columns = {row[1] for row in cursor.fetchall()}
+        rows = conn.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name = 'telemetry_snapshots'"
+        ).fetchall()
+        columns = {row["column_name"] for row in rows}
 
         assert "id" in columns
         assert "incident_id" in columns
@@ -232,14 +211,15 @@ class TestV4Tables:
         assert "snapshot_json" in columns
         assert "collected_at" in columns
 
-    def test_control_surface_snapshots_columns(self, temp_db):
+    def test_control_surface_snapshots_columns(self, conn):
         """Test that control_surface_snapshots has expected columns."""
-        conn, _ = temp_db
         init_incident_schema(conn)
 
-        cursor = conn.cursor()
-        cursor.execute("PRAGMA table_info(control_surface_snapshots)")
-        columns = {row[1] for row in cursor.fetchall()}
+        rows = conn.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name = 'control_surface_snapshots'"
+        ).fetchall()
+        columns = {row["column_name"] for row in rows}
 
         assert "id" in columns
         assert "incident_id" in columns
@@ -248,14 +228,12 @@ class TestV4Tables:
         assert "surface_hashes" in columns
         assert "collected_at" in columns
 
-    def test_telemetry_which_constraint(self, temp_db):
+    def test_telemetry_which_constraint(self, conn):
         """Test that telemetry_snapshots enforces which constraint."""
-        conn, _ = temp_db
         init_incident_schema(conn)
 
         # First create an incident
-        cursor = conn.cursor()
-        cursor.execute(
+        conn.execute(
             """
             INSERT INTO incidents (id, created_at, updated_at, title)
             VALUES ('test-id', '2024-01-01', '2024-01-01', 'Test')
@@ -263,32 +241,29 @@ class TestV4Tables:
         )
 
         # Valid insert
-        cursor.execute(
+        conn.execute(
             """
             INSERT INTO telemetry_snapshots (incident_id, which, snapshot_json, collected_at)
             VALUES ('test-id', 'pre', '{}', '2024-01-01')
             """
         )
-        conn.commit()
 
         # Invalid 'which' value should fail
-        import sqlite3
-        with pytest.raises(sqlite3.IntegrityError):
-            cursor.execute(
+        import psycopg.errors
+        with pytest.raises(psycopg.errors.CheckViolation):
+            conn.execute(
                 """
                 INSERT INTO telemetry_snapshots (incident_id, which, snapshot_json, collected_at)
                 VALUES ('test-id', 'invalid', '{}', '2024-01-01')
                 """
             )
 
-    def test_control_surface_which_constraint(self, temp_db):
+    def test_control_surface_which_constraint(self, conn):
         """Test that control_surface_snapshots enforces which constraint."""
-        conn, _ = temp_db
         init_incident_schema(conn)
 
         # First create an incident
-        cursor = conn.cursor()
-        cursor.execute(
+        conn.execute(
             """
             INSERT INTO incidents (id, created_at, updated_at, title)
             VALUES ('test-id', '2024-01-01', '2024-01-01', 'Test')
@@ -296,19 +271,18 @@ class TestV4Tables:
         )
 
         # Valid insert
-        cursor.execute(
+        conn.execute(
             """
             INSERT INTO control_surface_snapshots
             (incident_id, which, snapshot_json, surface_hashes, collected_at)
             VALUES ('test-id', 'post', '{}', '{}', '2024-01-01')
             """
         )
-        conn.commit()
 
         # Invalid 'which' value should fail
-        import sqlite3
-        with pytest.raises(sqlite3.IntegrityError):
-            cursor.execute(
+        import psycopg.errors
+        with pytest.raises(psycopg.errors.CheckViolation):
+            conn.execute(
                 """
                 INSERT INTO control_surface_snapshots
                 (incident_id, which, snapshot_json, surface_hashes, collected_at)
@@ -318,15 +292,13 @@ class TestV4Tables:
 
 
 class TestTriggers:
-    """Tests for FTS triggers."""
+    """Tests for full-text search triggers."""
 
-    def test_fts_trigger_on_insert(self, temp_db):
-        """Test that FTS is updated on insert."""
-        conn, _ = temp_db
+    def test_fts_trigger_on_insert(self, conn):
+        """Test that FTS tsvector is updated on insert."""
         init_incident_schema(conn)
 
-        cursor = conn.cursor()
-        cursor.execute(
+        conn.execute(
             """
             INSERT INTO incidents (
                 id, created_at, updated_at, title, summary
@@ -335,20 +307,18 @@ class TestTriggers:
             )
             """
         )
-        conn.commit()
 
-        # Check FTS
-        cursor.execute("SELECT * FROM incidents_fts WHERE incidents_fts MATCH 'Test'")
-        result = cursor.fetchone()
+        # Check tsvector full-text search
+        result = conn.execute(
+            "SELECT id FROM incidents WHERE fts @@ plainto_tsquery('english', 'Test')"
+        ).fetchone()
         assert result is not None
 
-    def test_fts_trigger_on_delete(self, temp_db):
-        """Test that FTS is updated on delete."""
-        conn, _ = temp_db
+    def test_fts_trigger_on_delete(self, conn):
+        """Test that row removal clears FTS matches."""
         init_incident_schema(conn)
 
-        cursor = conn.cursor()
-        cursor.execute(
+        conn.execute(
             """
             INSERT INTO incidents (
                 id, created_at, updated_at, title, summary
@@ -357,12 +327,11 @@ class TestTriggers:
             )
             """
         )
-        conn.commit()
 
-        cursor.execute("DELETE FROM incidents WHERE id = 'test-id'")
-        conn.commit()
+        conn.execute("DELETE FROM incidents WHERE id = 'test-id'")
 
         # Check FTS - should not find
-        cursor.execute("SELECT * FROM incidents_fts WHERE incidents_fts MATCH 'UniqueTitle'")
-        result = cursor.fetchone()
+        result = conn.execute(
+            "SELECT id FROM incidents WHERE fts @@ plainto_tsquery('english', 'UniqueTitle')"
+        ).fetchone()
         assert result is None

@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import asyncio
 import re
-import sqlite3
 from collections.abc import Callable, Coroutine
 from datetime import datetime, timedelta
 from typing import Any
@@ -117,13 +116,11 @@ class IncidentCorrelator:
     def process_event(
         self,
         event: dict[str, Any],
-        conn: sqlite3.Connection | None = None,
     ) -> str | None:
         """Process a telemetry event and potentially create/update an incident.
 
         Args:
             event: Telemetry event dict with ts, severity, category, message, etc.
-            conn: SQLite connection.
 
         Returns:
             Incident ID if an incident was created/updated, None otherwise.
@@ -136,10 +133,10 @@ class IncidentCorrelator:
 
         # Check for immediate trigger (critical severity)
         if self.critical_triggers_immediate and event.get("severity") == "critical":
-            return self._create_incident_from_event(event, conn)
+            return self._create_incident_from_event(event)
 
         # Check for pattern-based incident
-        incident_id = self._check_for_incident_pattern(event, conn)
+        incident_id = self._check_for_incident_pattern(event)
 
         return incident_id
 
@@ -148,7 +145,6 @@ class IncidentCorrelator:
         command: str,
         stderr: str,
         exit_code: int,
-        conn: sqlite3.Connection | None = None,
     ) -> str:
         """Create an incident from a failed command.
 
@@ -156,7 +152,6 @@ class IncidentCorrelator:
             command: The command that failed.
             stderr: Stderr output.
             exit_code: Exit code.
-            conn: SQLite connection.
 
         Returns:
             Incident ID.
@@ -185,7 +180,6 @@ class IncidentCorrelator:
             severity="error",
             trigger_source="command_failure",
             trigger_command=command,
-            conn=conn,
         )
 
         # Attach snapshot
@@ -193,7 +187,6 @@ class IncidentCorrelator:
             incident.incident_id,
             "pre",
             snapshot,
-            conn=conn,
         )
 
         # Update with details
@@ -206,7 +199,6 @@ class IncidentCorrelator:
             ],
             log_snippets=[stderr[:500]] if stderr else [],
             fingerprint=fingerprint,
-            conn=conn,
         )
 
         # Notify agentic handler if configured
@@ -256,7 +248,6 @@ class IncidentCorrelator:
     def _check_for_incident_pattern(
         self,
         event: dict[str, Any],
-        conn: sqlite3.Connection | None,
     ) -> str | None:
         """Check if events form a pattern warranting an incident."""
         key = self._get_correlation_key(event)
@@ -275,11 +266,11 @@ class IncidentCorrelator:
                 # Link new events
                 event_ids = [str(e.get("id", "")) for e in related if e.get("id")]
                 if event_ids:
-                    link_events(incident_id, event_ids, conn)
+                    link_events(incident_id, event_ids)
                 return incident_id
 
             # Create new incident
-            incident_id = self._create_incident_from_events(related, conn)
+            incident_id = self._create_incident_from_events(related)
             if incident_id:
                 self._active_incidents[key] = incident_id
             return incident_id
@@ -289,15 +280,13 @@ class IncidentCorrelator:
     def _create_incident_from_event(
         self,
         event: dict[str, Any],
-        conn: sqlite3.Connection | None,
     ) -> str:
         """Create an incident from a single event."""
-        return self._create_incident_from_events([event], conn)
+        return self._create_incident_from_events([event])
 
     def _create_incident_from_events(
         self,
         events: list[dict[str, Any]],
-        conn: sqlite3.Connection | None,
     ) -> str:
         """Create an incident from a group of events."""
         if not events:
@@ -334,7 +323,6 @@ class IncidentCorrelator:
             domain=domain,
             severity=max_severity,
             trigger_source="telemetry",
-            conn=conn,
         )
 
         # Attach snapshot
@@ -342,7 +330,6 @@ class IncidentCorrelator:
             incident.incident_id,
             "pre",
             snapshot,
-            conn=conn,
         )
 
         # Update with details
@@ -354,13 +341,12 @@ class IncidentCorrelator:
             symptoms=symptoms,
             log_snippets=log_snippets,
             fingerprint=fingerprint,
-            conn=conn,
         )
 
         # Link events
         event_ids = [str(e.get("id", "")) for e in events if e.get("id")]
         if event_ids:
-            link_events(incident.incident_id, event_ids, conn)
+            link_events(incident.incident_id, event_ids)
 
         # Notify agentic handler if configured
         self._notify_incident_created(incident.incident_id)

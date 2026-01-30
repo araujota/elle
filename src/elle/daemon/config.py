@@ -126,13 +126,65 @@ class MobileConfig:
 
 
 @dataclass(frozen=True)
+class DaemonLLMConfig:
+    """LLM provider configuration for the daemon."""
+
+    provider_type: str = "ollama"
+    host: str = "http://localhost:11434"
+    model: str = "qwen2.5:7b-instruct-q8_0"
+    api_key: str = field(default="", repr=False)
+    timeout: float = 120.0
+    max_tokens: int = 4096
+    temperature: float = 0.7
+    fallback_enabled: bool = True
+    fallback_host: str = "http://localhost:11434"
+    fallback_model: str = "qwen2.5:7b-instruct-q8_0"
+    fallback_retry_interval: float = 60.0
+
+
+@dataclass(frozen=True)
+class CloudSyncConfig:
+    """Configuration for cloud incident sync retry queue."""
+
+    enabled: bool = True
+    retry_initial_delay_sec: float = 30.0
+    retry_max_delay_sec: float = 3600.0
+    retry_backoff_factor: float = 2.0
+    max_retries: int = 20
+    queue_max_size: int = 1000
+    batch_size: int = 10
+    health_check_interval_sec: float = 60.0
+    stale_entry_hours: int = 168  # 7 days
+    worker_poll_interval_sec: float = 30.0
+
+
+@dataclass(frozen=True)
+class DatabaseConfig:
+    """PostgreSQL connection configuration for the daemon.
+
+    Parsed from the ``[database]`` TOML section.
+    Defaults to Unix socket with peer authentication.
+    """
+
+    host: str = ""
+    port: int = 5432
+    dbname: str = "elle"
+    user: str = "elle"
+    password: str = ""
+    socket_dir: str = "/var/run/postgresql"
+    min_pool_size: int = 2
+    max_pool_size: int = 10
+    max_idle_sec: float = 300.0
+    sslmode: str = "prefer"
+    encryption_key_path: str = "/etc/elle/db.key"
+
+
+@dataclass(frozen=True)
 class Config:
     """Complete daemon configuration."""
 
-    # Database paths
-    db_path: Path = field(default_factory=lambda: Path("/var/lib/elle/elle.db"))
-    incidents_db_path: Path = field(default_factory=lambda: Path("/var/lib/elle/incidents.db"))
-    manvault_db_path: Path = field(default_factory=lambda: Path("/var/lib/elle/manvault.db"))
+    # PostgreSQL configuration
+    database: DatabaseConfig = field(default_factory=DatabaseConfig)
 
     # Log level
     log_level: str = "INFO"
@@ -146,6 +198,8 @@ class Config:
     queues: QueueConfig = field(default_factory=QueueConfig)
     ebpf: EBPFConfig = field(default_factory=EBPFConfig)
     mobile: MobileConfig = field(default_factory=MobileConfig)
+    llm: DaemonLLMConfig = field(default_factory=DaemonLLMConfig)
+    cloud_sync: CloudSyncConfig = field(default_factory=CloudSyncConfig)
 
     # Feature flags
     journal_enabled: bool = True
@@ -256,13 +310,22 @@ def load_config(config_path: Path | None = None) -> Config:
     # Build config object
     daemon_section = data.get("daemon", {})
 
-    # Database paths
-    db_path = Path(daemon_section.get("db_path", "/var/lib/elle/elle.db"))
-    incidents_db_path = Path(daemon_section.get("incidents_db_path", "/var/lib/elle/incidents.db"))
-    manvault_db_path = Path(daemon_section.get("manvault_db_path", "/var/lib/elle/manvault.db"))
+    # Database configuration (PostgreSQL)
+    db_section = data.get("database", {})
+    database = DatabaseConfig(
+        host=_get_env("DB_HOST", db_section.get("host", "")),
+        port=_get_env("DB_PORT", db_section.get("port", 5432)),
+        dbname=_get_env("DB_NAME", db_section.get("dbname", "elle")),
+        user=_get_env("DB_USER", db_section.get("user", "elle")),
+        password=os.environ.get("ELLE_DB_PASSWORD", db_section.get("password", "")),
+        socket_dir=db_section.get("socket_dir", "/var/run/postgresql"),
+        min_pool_size=db_section.get("min_pool_size", 2),
+        max_pool_size=db_section.get("max_pool_size", 10),
+        max_idle_sec=db_section.get("max_idle_sec", 300.0),
+        sslmode=db_section.get("sslmode", "prefer"),
+        encryption_key_path=db_section.get("encryption_key_path", "/etc/elle/db.key"),
+    )
 
-    # Override with environment
-    db_path = Path(_get_env("DB_PATH", str(db_path)))
     log_level = _get_env("LOG_LEVEL", daemon_section.get("log_level", "INFO"))
 
     # Probe config
@@ -433,10 +496,63 @@ def load_config(config_path: Path | None = None) -> Config:
         default_role=mobile_section.get("default_role", "mobile_readonly"),
     )
 
+    # LLM config
+    llm_section = data.get("llm", {})
+    llm_provider_section = llm_section.get("provider", {})
+    llm_fallback_section = llm_section.get("fallback", {})
+
+    # API key from env var takes priority
+    llm_api_key = os.environ.get(
+        "ELLE_LLM_API_KEY",
+        llm_provider_section.get("api_key", ""),
+    )
+
+    llm_config = DaemonLLMConfig(
+        provider_type=os.environ.get(
+            "ELLE_LLM_PROVIDER_TYPE",
+            llm_provider_section.get("type", "ollama"),
+        ),
+        host=os.environ.get(
+            "ELLE_LLM_PROVIDER_HOST",
+            llm_provider_section.get("host", "http://localhost:11434"),
+        ),
+        model=os.environ.get(
+            "ELLE_LLM_PROVIDER_MODEL",
+            llm_provider_section.get("model", "qwen2.5:7b-instruct-q8_0"),
+        ),
+        api_key=llm_api_key,
+        timeout=llm_provider_section.get("timeout", 120.0),
+        max_tokens=llm_provider_section.get("max_tokens", 4096),
+        temperature=llm_provider_section.get("temperature", 0.7),
+        fallback_enabled=_get_env(
+            "ELLE_LLM_FALLBACK_ENABLED",
+            llm_fallback_section.get("enabled", True),
+        ),
+        fallback_host=llm_fallback_section.get("host", "http://localhost:11434"),
+        fallback_model=llm_fallback_section.get("model", "qwen2.5:7b-instruct-q8_0"),
+        fallback_retry_interval=llm_fallback_section.get("retry_interval", 60.0),
+    )
+
+    # Cloud sync config
+    cloud_sync_section = _deep_get(data, "daemon", "cloud_sync", default={})
+    cloud_sync = CloudSyncConfig(
+        enabled=_get_env(
+            "ELLE_CLOUD_SYNC_ENABLED",
+            cloud_sync_section.get("enabled", True),
+        ),
+        retry_initial_delay_sec=cloud_sync_section.get("retry_initial_delay_sec", 30.0),
+        retry_max_delay_sec=cloud_sync_section.get("retry_max_delay_sec", 3600.0),
+        retry_backoff_factor=cloud_sync_section.get("retry_backoff_factor", 2.0),
+        max_retries=cloud_sync_section.get("max_retries", 20),
+        queue_max_size=cloud_sync_section.get("queue_max_size", 1000),
+        batch_size=cloud_sync_section.get("batch_size", 10),
+        health_check_interval_sec=cloud_sync_section.get("health_check_interval_sec", 60.0),
+        stale_entry_hours=cloud_sync_section.get("stale_entry_hours", 168),
+        worker_poll_interval_sec=cloud_sync_section.get("worker_poll_interval_sec", 30.0),
+    )
+
     return Config(
-        db_path=db_path,
-        incidents_db_path=incidents_db_path,
-        manvault_db_path=manvault_db_path,
+        database=database,
         log_level=log_level,
         probes=probes,
         thresholds=thresholds,
@@ -450,6 +566,8 @@ def load_config(config_path: Path | None = None) -> Config:
         ebpf=ebpf,
         ebpf_enabled=ebpf_enabled,
         mobile=mobile,
+        llm=llm_config,
+        cloud_sync=cloud_sync,
         docker_enabled=docker_enabled,
         inotify_enabled=inotify_enabled,
         wireguard_enabled=wireguard_enabled,

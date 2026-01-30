@@ -6,13 +6,13 @@ and generate forecasts from telemetry data.
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from typing import Literal
 
-from elle.daemon.telemetry.schema import ensure_schema, get_connection
+import psycopg
+
 from elle.daemon.telemetry.trends import (
     CRITICAL_THRESHOLDS,
     METRIC_THRESHOLDS,
@@ -25,24 +25,23 @@ from elle.daemon.telemetry.trends import (
     TrendContext,
     TrendWindow,
 )
+from elle.storage.engine import get_conn
 
 
 @contextmanager
 def _ensure_connection(
-    conn: sqlite3.Connection | None = None,
-) -> Iterator[sqlite3.Connection]:
-    """Context manager that ensures a valid connection."""
-    own_conn = conn is None
-    if own_conn:
-        actual_conn = get_connection()
+    conn: psycopg.Connection | None = None,
+) -> Iterator[psycopg.Connection]:
+    """Context manager that ensures a valid connection.
+
+    If *conn* is provided, yields it directly (caller owns lifecycle).
+    Otherwise, obtains a pooled connection via ``get_conn``.
+    """
+    if conn is not None:
+        yield conn
     else:
-        # conn is not None here due to the if check above
-        actual_conn = conn  # type: ignore[assignment]
-    try:
-        yield actual_conn
-    finally:
-        if own_conn:
-            actual_conn.close()
+        with get_conn(schema="telemetry") as pooled:
+            yield pooled
 
 
 # =============================================================================
@@ -52,11 +51,11 @@ def _ensure_connection(
 
 METRIC_SAMPLES_TABLE = """
 CREATE TABLE IF NOT EXISTS metric_samples (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     metric TEXT NOT NULL,
     value REAL NOT NULL,
     ts TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (NOW()::TEXT)
 )
 """
 
@@ -89,7 +88,7 @@ AGGREGATION_INDEXES = [
 ]
 
 
-def ensure_aggregation_schema(conn: sqlite3.Connection) -> None:
+def ensure_aggregation_schema(conn: psycopg.Connection) -> None:
     """Ensure aggregation tables exist."""
     cursor = conn.cursor()
     cursor.execute(METRIC_SAMPLES_TABLE)
@@ -291,7 +290,7 @@ def record_metric(
     metric: str,
     value: float,
     ts: datetime | None = None,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,
 ) -> None:
     """Record a metric sample.
 
@@ -299,11 +298,10 @@ def record_metric(
         metric: Metric name.
         value: Metric value.
         ts: Timestamp (defaults to now).
-        conn: SQLite connection.
+        conn: PostgreSQL connection.
     """
     with _ensure_connection(conn) as c:
         if conn is None:
-            ensure_schema(c)
             ensure_aggregation_schema(c)
 
         if ts is None:
@@ -313,7 +311,7 @@ def record_metric(
         cursor.execute(
             """
             INSERT INTO metric_samples (metric, value, ts)
-            VALUES (?, ?, ?)
+            VALUES (%s, %s, %s)
             """,
             (metric, value, _serialize_datetime(ts)),
         )
@@ -323,18 +321,17 @@ def record_metric(
 def record_metrics_batch(
     metrics: dict[str, float],
     ts: datetime | None = None,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,
 ) -> None:
     """Record multiple metrics at once.
 
     Args:
         metrics: Dict of metric name to value.
         ts: Timestamp for all metrics.
-        conn: SQLite connection.
+        conn: PostgreSQL connection.
     """
     with _ensure_connection(conn) as c:
         if conn is None:
-            ensure_schema(c)
             ensure_aggregation_schema(c)
 
         if ts is None:
@@ -347,7 +344,7 @@ def record_metrics_batch(
             cursor.execute(
                 """
                 INSERT INTO metric_samples (metric, value, ts)
-                VALUES (?, ?, ?)
+                VALUES (%s, %s, %s)
                 """,
                 (metric, value, ts_str),
             )
@@ -381,7 +378,7 @@ class TrendAggregator:
 
     def run_aggregation_cycle(
         self,
-        conn: sqlite3.Connection | None = None,
+        conn: psycopg.Connection | None = None,
     ) -> TrendContext:
         """Run a complete aggregation cycle.
 
@@ -389,14 +386,13 @@ class TrendAggregator:
         and generates forecasts.
 
         Args:
-            conn: SQLite connection.
+            conn: PostgreSQL connection.
 
         Returns:
             TrendContext with current trends.
         """
         with _ensure_connection(conn) as c:
             if conn is None:
-                ensure_schema(c)
                 ensure_aggregation_schema(c)
 
             now = datetime.utcnow()
@@ -483,7 +479,7 @@ class TrendAggregator:
         metric: str,
         current_value: float,
         now: datetime,
-        conn: sqlite3.Connection,
+        conn: psycopg.Connection,
     ) -> TrendWindow:
         """Compute trend window for a metric."""
         cursor = conn.cursor()
@@ -503,7 +499,7 @@ class TrendAggregator:
             cursor.execute(
                 """
                 SELECT AVG(value), COUNT(*) FROM metric_samples
-                WHERE metric = ? AND ts >= ?
+                WHERE metric = %s AND ts >= %s
                 """,
                 (metric, _serialize_datetime(cutoff)),
             )
@@ -550,7 +546,7 @@ class TrendAggregator:
         self,
         metric: str,
         trend: TrendWindow,
-        conn: sqlite3.Connection,
+        conn: psycopg.Connection,
     ) -> Forecast:
         """Compute forecast for a metric using best available method."""
         current = trend.current
@@ -569,7 +565,7 @@ class TrendAggregator:
             # Get raw samples for advanced forecasting
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT value FROM metric_samples WHERE metric = ? ORDER BY ts ASC",
+                "SELECT value FROM metric_samples WHERE metric = %s ORDER BY ts ASC",
                 (metric,),
             )
             values = [row[0] for row in cursor.fetchall()]
@@ -634,7 +630,7 @@ class TrendAggregator:
         metric: str,
         current_value: float,
         now: datetime,
-        conn: sqlite3.Connection,
+        conn: psycopg.Connection,
     ) -> AnomalyResult | None:
         """Check if current value is anomalous."""
         baseline = self._get_baseline(metric, conn)
@@ -670,12 +666,12 @@ class TrendAggregator:
     def _get_baseline(
         self,
         metric: str,
-        conn: sqlite3.Connection,
+        conn: psycopg.Connection,
     ) -> MetricBaseline | None:
         """Get baseline for a metric."""
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT * FROM metric_baselines WHERE metric = ?",
+            "SELECT * FROM metric_baselines WHERE metric = %s",
             (metric,),
         )
         row = cursor.fetchone()
@@ -694,7 +690,7 @@ class TrendAggregator:
         self,
         metric: str,
         current_value: float,
-        conn: sqlite3.Connection,
+        conn: psycopg.Connection,
     ) -> None:
         """Update baseline using exponential moving average."""
         cursor = conn.cursor()
@@ -716,8 +712,8 @@ class TrendAggregator:
             cursor.execute(
                 """
                 UPDATE metric_baselines
-                SET baseline_mean = ?, baseline_stddev = ?, samples = ?, updated_at = ?
-                WHERE metric = ?
+                SET baseline_mean = %s, baseline_stddev = %s, samples = %s, updated_at = %s
+                WHERE metric = %s
                 """,
                 (new_mean, new_stddev, new_samples, _serialize_datetime(datetime.utcnow()), metric),
             )
@@ -726,7 +722,7 @@ class TrendAggregator:
             cursor.execute(
                 """
                 INSERT INTO metric_baselines (metric, baseline_mean, baseline_stddev, samples, updated_at)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
                 """,
                 (metric, current_value, 0.0, 1, _serialize_datetime(datetime.utcnow())),
             )
@@ -736,7 +732,7 @@ class TrendAggregator:
     def _run_correlations(
         self,
         metrics: dict[str, float],
-        conn: sqlite3.Connection,
+        conn: psycopg.Connection,
     ) -> list[CorrelationAlert]:
         """Run multi-variate correlation detection."""
         try:
@@ -764,7 +760,7 @@ class TrendAggregator:
 
     def _store_aggregations(
         self,
-        conn: sqlite3.Connection,
+        conn: psycopg.Connection,
     ) -> None:
         """Store computed aggregations in database."""
         cursor = conn.cursor()
@@ -782,7 +778,7 @@ class TrendAggregator:
                     """
                     SELECT AVG(value), MIN(value), MAX(value), COUNT(*)
                     FROM metric_samples
-                    WHERE metric = ? AND ts >= ?
+                    WHERE metric = %s AND ts >= %s
                     """,
                     (metric, _serialize_datetime(cutoff)),
                 )
@@ -790,9 +786,15 @@ class TrendAggregator:
                 if row and row[0] is not None:
                     cursor.execute(
                         """
-                        INSERT OR REPLACE INTO metric_aggregations
+                        INSERT INTO metric_aggregations
                         (metric, window, avg_value, min_value, max_value, sample_count, computed_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (metric, window)
+                        DO UPDATE SET avg_value = EXCLUDED.avg_value,
+                                      min_value = EXCLUDED.min_value,
+                                      max_value = EXCLUDED.max_value,
+                                      sample_count = EXCLUDED.sample_count,
+                                      computed_at = EXCLUDED.computed_at
                         """,
                         (metric, window, row[0], row[1], row[2], row[3], _serialize_datetime(now)),
                     )
@@ -806,14 +808,14 @@ class TrendAggregator:
 
 
 def get_trend_context(
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,
 ) -> TrendContext:
     """Get current trend context.
 
     Runs aggregation if needed and returns current trends.
 
     Args:
-        conn: SQLite connection.
+        conn: PostgreSQL connection.
 
     Returns:
         TrendContext with current trends.
@@ -824,20 +826,19 @@ def get_trend_context(
 
 def get_metric_trend(
     metric: str,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,
 ) -> TrendWindow | None:
     """Get trend for a specific metric.
 
     Args:
         metric: Metric name.
-        conn: SQLite connection.
+        conn: PostgreSQL connection.
 
     Returns:
         TrendWindow if metric exists, None otherwise.
     """
     with _ensure_connection(conn) as c:
         if conn is None:
-            ensure_schema(c)
             ensure_aggregation_schema(c)
 
         cursor = c.cursor()
@@ -846,7 +847,7 @@ def get_metric_trend(
         cursor.execute(
             """
             SELECT value FROM metric_samples
-            WHERE metric = ?
+            WHERE metric = %s
             ORDER BY ts DESC LIMIT 1
             """,
             (metric,),
@@ -861,7 +862,7 @@ def get_metric_trend(
         cursor.execute(
             """
             SELECT window, avg_value FROM metric_aggregations
-            WHERE metric = ?
+            WHERE metric = %s
             """,
             (metric,),
         )
@@ -879,26 +880,25 @@ def get_metric_trend(
 
 def cleanup_old_samples(
     retention_hours: int = 168,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,
 ) -> int:
     """Clean up old metric samples.
 
     Args:
         retention_hours: Hours of samples to retain.
-        conn: SQLite connection.
+        conn: PostgreSQL connection.
 
     Returns:
         Number of rows deleted.
     """
     with _ensure_connection(conn) as c:
         if conn is None:
-            ensure_schema(c)
             ensure_aggregation_schema(c)
 
         cutoff = datetime.utcnow() - timedelta(hours=retention_hours)
         cursor = c.cursor()
         cursor.execute(
-            "DELETE FROM metric_samples WHERE ts < ?",
+            "DELETE FROM metric_samples WHERE ts < %s",
             (_serialize_datetime(cutoff),),
         )
         deleted: int = cursor.rowcount

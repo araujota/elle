@@ -1,12 +1,8 @@
 """Tests for reboot module CRUD operations."""
 
-import tempfile
-from pathlib import Path
-
 import pytest
 
 from elle.daemon.reboot.models import GRUBState, PendingVerification
-from elle.daemon.reboot.schema import get_connection, init_reboot_schema
 from elle.daemon.reboot.store import (
     add_verification,
     cancel_intent,
@@ -28,22 +24,9 @@ from elle.daemon.reboot.store import (
 
 
 @pytest.fixture
-def temp_db():
-    """Create a temporary database file."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = Path(f.name)
-    yield db_path
-    if db_path.exists():
-        db_path.unlink()
-
-
-@pytest.fixture
-def conn(temp_db):
-    """Create a connection to temporary database with schema."""
-    connection = get_connection(temp_db)
-    init_reboot_schema(connection)
-    yield connection
-    connection.close()
+def conn(reboot_conn):
+    """Use the reboot_conn fixture from conftest (SAVEPOINT-isolated)."""
+    return reboot_conn
 
 
 class TestCreateIntent:

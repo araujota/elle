@@ -1,32 +1,25 @@
-"""Tests for Man Vault query and retrieval."""
+"""Tests for Man Vault query and retrieval (PostgreSQL)."""
 
-import tempfile
+from __future__ import annotations
+
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 
 from elle.daemon.manvault.models import ManChunk, ManDoc
 from elle.daemon.manvault.retriever import (
-    _escape_fts5_query,
     _parse_sections,
+    _sanitize_query,
     extract_snippet,
     get_document,
     search,
 )
-from elle.daemon.manvault.schema import get_connection, init_manvault_schema
 from elle.daemon.manvault.store import upsert_chunks_batch, upsert_doc
 
 
 @pytest.fixture
-def temp_db():
-    """Create a temporary database with sample data."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = Path(f.name)
-
-    conn = get_connection(db_path)
-    init_manvault_schema(conn)
-
+def conn(manvault_conn):
+    """Populate the manvault schema with sample data for query tests."""
     # Insert sample documents
     docs = [
         ManDoc(
@@ -94,37 +87,32 @@ OPTIONS
     ]
 
     for doc in docs:
-        doc_id = upsert_doc(conn, doc)
+        doc_id = upsert_doc(manvault_conn, doc)
 
         # Add some chunks
         chunks = [
             ManChunk(doc_id=doc_id, chunk_index=0, text=doc.text[:200], heading="NAME"),
             ManChunk(doc_id=doc_id, chunk_index=1, text=doc.text[200:], heading="OPTIONS"),
         ]
-        upsert_chunks_batch(conn, chunks)
+        upsert_chunks_batch(manvault_conn, chunks)
 
-    yield conn
-
-    conn.close()
-    db_path.unlink(missing_ok=True)
+    return manvault_conn
 
 
-class TestFTS5Escaping:
-    """Tests for FTS5 query escaping."""
+class TestQuerySanitization:
+    """Tests for tsquery sanitization."""
 
     def test_simple_query(self):
         """Test that simple queries pass through."""
-        assert _escape_fts5_query("list files") == "list files"
+        assert _sanitize_query("list files") == "list files"
 
-    def test_escape_special_chars(self):
-        """Test escaping special characters."""
-        result = _escape_fts5_query("ls -l")
-        assert result == 'ls "-l"'
+    def test_strips_whitespace(self):
+        """Test that leading/trailing whitespace is stripped."""
+        assert _sanitize_query("  list files  ") == "list files"
 
-    def test_escape_quotes(self):
-        """Test escaping quotes."""
-        result = _escape_fts5_query('search "term"')
-        assert '"\\"term\\""' in result or '"term"' in result
+    def test_strips_null_bytes(self):
+        """Test that null bytes are removed."""
+        assert _sanitize_query("list\x00files") == "listfiles"
 
 
 class TestSectionParsing:
@@ -195,35 +183,35 @@ OPTIONS
 
 
 class TestLexicalSearch:
-    """Tests for lexical (FTS5) search."""
+    """Tests for lexical (tsvector) search."""
 
-    def test_search_by_name(self, temp_db):
+    def test_search_by_name(self, conn):
         """Test searching by command name."""
-        results = search("ls", k=5, search_type="lexical", conn=temp_db)
+        results = search("ls", k=5, search_type="lexical", conn=conn)
 
         assert len(results) >= 1
         assert any(r.name == "ls" for r in results)
 
-    def test_search_by_content(self, temp_db):
+    def test_search_by_content(self, conn):
         """Test searching by content."""
-        results = search("directory contents", k=5, search_type="lexical", conn=temp_db)
+        results = search("directory contents", k=5, search_type="lexical", conn=conn)
 
         assert len(results) >= 1
         # ls man page mentions "directory contents"
         names = [r.name for r in results]
         assert "ls" in names
 
-    def test_search_filter_by_section(self, temp_db):
+    def test_search_filter_by_section(self, conn):
         """Test filtering search by section."""
-        results = search("filesystem", k=5, section="5", search_type="lexical", conn=temp_db)
+        results = search("filesystem", k=5, section="5", search_type="lexical", conn=conn)
 
         # Should only return section 5 results
         for r in results:
             assert r.section == "5"
 
-    def test_search_no_results(self, temp_db):
+    def test_search_no_results(self, conn):
         """Test search with no results."""
-        results = search("xyznonexistent123", k=5, search_type="lexical", conn=temp_db)
+        results = search("xyznonexistent123", k=5, search_type="lexical", conn=conn)
 
         assert results == []
 
@@ -231,17 +219,17 @@ class TestLexicalSearch:
 class TestHybridSearch:
     """Tests for hybrid search."""
 
-    def test_hybrid_search_combines_results(self, temp_db):
+    def test_hybrid_search_combines_results(self, conn):
         """Test that hybrid search returns results."""
         # Note: Without embeddings, hybrid falls back to lexical only
-        results = search("list files", k=5, search_type="hybrid", conn=temp_db)
+        results = search("list files", k=5, search_type="hybrid", conn=conn)
 
         # Should get some results from lexical
         assert len(results) >= 0  # May be empty without embeddings
 
-    def test_hybrid_deduplicates(self, temp_db):
+    def test_hybrid_deduplicates(self, conn):
         """Test that hybrid search deduplicates results."""
-        results = search("ls directory", k=10, search_type="hybrid", conn=temp_db)
+        results = search("ls directory", k=10, search_type="hybrid", conn=conn)
 
         # Each (name, section) should appear only once
         seen = set()
@@ -254,22 +242,22 @@ class TestHybridSearch:
 class TestGetDocument:
     """Tests for document retrieval."""
 
-    def test_get_existing_document(self, temp_db):
+    def test_get_existing_document(self, conn):
         """Test getting an existing document."""
-        text = get_document("ls", "1", conn=temp_db)
+        text = get_document("ls", "1", conn=conn)
 
         assert text is not None
         assert "list directory contents" in text
 
-    def test_get_nonexistent_document(self, temp_db):
+    def test_get_nonexistent_document(self, conn):
         """Test getting a non-existent document."""
-        text = get_document("nonexistent", "1", conn=temp_db)
+        text = get_document("nonexistent", "1", conn=conn)
 
         assert text is None
 
-    def test_get_document_wrong_section(self, temp_db):
+    def test_get_document_wrong_section(self, conn):
         """Test getting document with wrong section."""
-        text = get_document("ls", "5", conn=temp_db)
+        text = get_document("ls", "5", conn=conn)
 
         # ls is in section 1, not 5
         assert text is None
@@ -278,9 +266,9 @@ class TestGetDocument:
 class TestSearchResults:
     """Tests for search result properties."""
 
-    def test_results_have_required_fields(self, temp_db):
+    def test_results_have_required_fields(self, conn):
         """Test that search results have all required fields."""
-        results = search("ls", k=1, search_type="lexical", conn=temp_db)
+        results = search("ls", k=1, search_type="lexical", conn=conn)
 
         if results:
             r = results[0]
@@ -290,9 +278,9 @@ class TestSearchResults:
             assert r.score >= 0
             assert r.search_type in ("lexical", "semantic", "hybrid")
 
-    def test_results_ordered_by_score(self, temp_db):
+    def test_results_ordered_by_score(self, conn):
         """Test that results are ordered by score (descending)."""
-        results = search("directory", k=5, search_type="lexical", conn=temp_db)
+        results = search("directory", k=5, search_type="lexical", conn=conn)
 
         if len(results) > 1:
             scores = [r.score for r in results]

@@ -17,14 +17,14 @@ from elle.daemon.telemetry.models import DaemonStatus, QueueStats
 
 
 @pytest.fixture
-def mock_daemon(tmp_path):
+def mock_daemon(api_conn):
     """Create a mock daemon for testing."""
     daemon = MagicMock(spec=ElledDaemon)
     daemon.config = Config(
         api=ApiConfig(enabled=True),
         api_auth=ApiAuthConfig(
             allow_anonymous=True,
-            api_keys_db_path=tmp_path / "api_keys.db",
+            api_conn=api_conn,
         ),
     )
     daemon.get_status.return_value = DaemonStatus(

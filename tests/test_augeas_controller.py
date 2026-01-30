@@ -1,303 +1,544 @@
-"""Tests for the edit controller."""
-
 from __future__ import annotations
+
+import os
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from elle.ops.augeas.controller import (
-    EditController,
-    get_controller,
-)
 from elle.ops.augeas.models import (
+    AugeasChange,
     AugeasEditRequest,
     AugeasEditResult,
     AugeasError,
     AugeasOp,
+    AugeasPermissionError,
+    BatchEditRequest,
+    BatchEditResult,
     EditPreview,
 )
 
 
+# ---------------------------------------------------------------------------
+# EditController
+# ---------------------------------------------------------------------------
+
 class TestEditController:
-    """Tests for EditController."""
+    def _make_controller(self):
+        from elle.ops.augeas.controller import EditController
+        mock_backup = MagicMock()
+        mock_diff = MagicMock()
+        return EditController(backup_manager=mock_backup, diff_generator=mock_diff)
 
-    def test_get_controller_singleton(self) -> None:
-        """get_controller should return consistent instance."""
-        c1 = get_controller()
-        c2 = get_controller()
+    # -- preview --
 
-        # Should be same instance (singleton pattern)
-        assert c1 is c2
-
-    def test_controller_initialization(self) -> None:
-        """Controller should initialize properly."""
-        controller = EditController()
-
-        assert controller._backup_manager is not None
-        assert controller._diff_generator is not None
-
-
-class TestPreviewEdit:
-    """Tests for preview functionality."""
-
-    def test_preview_nonexistent_file_raises(self, tmp_path) -> None:
-        """Previewing nonexistent file should raise."""
-        controller = EditController()
-
-        request = AugeasEditRequest(
+    def test_preview_file_not_found(self, tmp_path):
+        ctrl = self._make_controller()
+        req = AugeasEditRequest(
             file_path=str(tmp_path / "nonexistent.conf"),
+            description="test",
             operations=(),
-            description="Test",
         )
+        with pytest.raises(AugeasError, match="does not exist"):
+            ctrl.preview(req)
 
-        with pytest.raises(AugeasError):
-            controller.preview(request)
+    def test_preview_augeas(self, tmp_path):
+        ctrl = self._make_controller()
+        f = tmp_path / "test.conf"
+        f.write_text("key = value\n")
 
-    def test_preview_returns_edit_preview(self, tmp_path) -> None:
-        """Preview should return EditPreview."""
-        # Create a test file
-        test_file = tmp_path / "test.txt"
-        test_file.write_text("original content\n")
+        mock_changes = [AugeasChange(path="/p", old_value="old", new_value="new", operation="set")]
 
-        controller = EditController()
-
-        request = AugeasEditRequest(
-            file_path=str(test_file),
-            operations=(),  # Empty ops for simple test
-            description="Test preview",
-            skip_validation=True,
-        )
-
-        # This will fail because no lens, but we're testing the method exists
-        # For a full test, we'd need python-augeas installed
-        try:
-            preview = controller.preview(request)
+        with patch("elle.ops.augeas.controller.is_yaml_file", return_value=False), \
+             patch.object(ctrl, "_preview_augeas", return_value=("key = newval\n", mock_changes)), \
+             patch("elle.ops.augeas.controller.generate_diff") as mock_diff, \
+             patch("elle.ops.augeas.validators.get_validation_command", return_value=None):
+            mock_diff.return_value = MagicMock(unified="--- a\n+++ b\n", colored="colored diff")
+            req = AugeasEditRequest(
+                file_path=str(f),
+                description="test",
+                operations=(AugeasOp(kind="set", path="/p", value="new"),),
+            )
+            preview = ctrl.preview(req)
             assert isinstance(preview, EditPreview)
-        except Exception:
-            # Expected if augeas not available or file type not supported
-            pass
+            assert preview.diff == "--- a\n+++ b\n"
 
-    def test_preview_shows_no_changes_for_empty_ops(self, tmp_path) -> None:
-        """Empty operations should show no changes."""
-        test_file = tmp_path / "test.yaml"
-        test_file.write_text("key: value\n")
+    def test_preview_yaml(self, tmp_path):
+        ctrl = self._make_controller()
+        f = tmp_path / "test.yaml"
+        f.write_text("key: value\n")
 
-        controller = EditController()
+        mock_changes = [AugeasChange(path="key", old_value="value", new_value="new", operation="set")]
+        with patch("elle.ops.augeas.controller.is_yaml_file", return_value=True), \
+             patch.object(ctrl, "_preview_yaml", return_value=("key: new\n", mock_changes)), \
+             patch("elle.ops.augeas.controller.generate_diff") as mock_diff, \
+             patch("elle.ops.augeas.validators.get_validation_command", return_value=None):
+            mock_diff.return_value = MagicMock(unified="diff", colored="colored")
+            req = AugeasEditRequest(
+                file_path=str(f),
+                description="test yaml",
+                operations=(),
+            )
+            preview = ctrl.preview(req)
+            assert preview.diff == "diff"
 
-        request = AugeasEditRequest(
-            file_path=str(test_file),
-            operations=(),
-            description="No changes",
+    # -- execute --
+
+    @pytest.mark.asyncio
+    async def test_execute_file_not_found(self, tmp_path):
+        ctrl = self._make_controller()
+        req = AugeasEditRequest(
+            file_path=str(tmp_path / "missing.conf"),
+            description="test",
         )
-
-        try:
-            preview = controller.preview(request)
-            # With no ops, should have no changes
-            assert not preview.changes or len(preview.changes) == 0
-        except Exception:
-            # May fail without proper setup
-            pass
-
-
-class TestEditRequest:
-    """Tests for AugeasEditRequest model."""
-
-    def test_request_with_operations(self) -> None:
-        """Request should accept operations."""
-        request = AugeasEditRequest(
-            file_path="/etc/hosts",
-            operations=(AugeasOp(kind="set", path="/files/etc/hosts/1/ipaddr", value="10.0.0.1"),),
-            description="Update IP",
-        )
-
-        assert request.file_path == "/etc/hosts"
-        assert len(request.operations) == 1
-
-    def test_request_dry_run_default(self) -> None:
-        """dry_run should default to False."""
-        request = AugeasEditRequest(
-            file_path="/test",
-            operations=(),
-            description="Test",
-        )
-
-        assert request.dry_run is False
-
-    def test_request_with_incident_id(self) -> None:
-        """Request should accept incident_id."""
-        request = AugeasEditRequest(
-            file_path="/test",
-            operations=(),
-            description="Test",
-            incident_id="abc-123",
-        )
-
-        assert request.incident_id == "abc-123"
-
-    def test_request_frozen(self) -> None:
-        """Request should be immutable."""
-        request = AugeasEditRequest(
-            file_path="/test",
-            operations=(),
-            description="Test",
-        )
-
-        with pytest.raises(Exception):
-            request.file_path = "/other"  # type: ignore[misc]
-
-
-class TestEditResult:
-    """Tests for AugeasEditResult model."""
-
-    def test_success_result(self) -> None:
-        """Successful result should have success=True."""
-        result = AugeasEditResult(
-            success=True,
-            file_path="/etc/hosts",
-            diff="- old\n+ new",
-        )
-
-        assert result.success is True
-        assert result.error is None
-
-    def test_failure_result(self) -> None:
-        """Failed result should have error message."""
-        result = AugeasEditResult(
-            success=False,
-            file_path="/etc/hosts",
-            error="Validation failed",
-        )
-
+        result = await ctrl.execute(req)
         assert result.success is False
-        assert result.error == "Validation failed"
+        assert "does not exist" in result.error
 
-    def test_rollback_result(self) -> None:
-        """Rollback result should indicate rollback."""
-        result = AugeasEditResult(
-            success=False,
-            file_path="/etc/hosts",
-            error="Validation failed",
-            rollback_applied=True,
+    @pytest.mark.asyncio
+    async def test_execute_dry_run(self, tmp_path):
+        ctrl = self._make_controller()
+        f = tmp_path / "test.conf"
+        f.write_text("content\n")
+
+        mock_backup_rec = MagicMock()
+        mock_backup_rec.backup_path = str(tmp_path / "backup")
+        ctrl._backup_manager.backup.return_value = mock_backup_rec
+
+        mock_preview = EditPreview(
+            file_path=str(f),
+            original_content="content\n",
+            proposed_content="new content\n",
+            diff="diff text",
+            diff_colored="colored",
         )
+        with patch.object(ctrl, "preview", return_value=mock_preview):
+            req = AugeasEditRequest(
+                file_path=str(f),
+                description="dry run test",
+                dry_run=True,
+            )
+            result = await ctrl.execute(req)
+            assert result.success is True
+            assert result.diff == "diff text"
 
-        assert result.rollback_applied is True
+    @pytest.mark.asyncio
+    async def test_execute_backup_failure(self, tmp_path):
+        ctrl = self._make_controller()
+        f = tmp_path / "test.conf"
+        f.write_text("content\n")
+        ctrl._backup_manager.backup.side_effect = RuntimeError("backup fail")
 
-    def test_result_with_backup(self) -> None:
-        """Result should include backup path."""
-        result = AugeasEditResult(
-            success=True,
-            file_path="/etc/hosts",
-            backup_path="/var/lib/elle/backups/fstab/20240101_120000/hosts",
+        req = AugeasEditRequest(
+            file_path=str(f),
+            description="test",
         )
+        result = await ctrl.execute(req)
+        assert result.success is False
+        assert "Backup failed" in result.error
 
-        assert result.backup_path is not None
-        assert "backups" in result.backup_path
+    @pytest.mark.asyncio
+    async def test_execute_skip_backup(self, tmp_path):
+        ctrl = self._make_controller()
+        f = tmp_path / "test.conf"
+        f.write_text("content\n")
 
-    def test_result_with_validation(self) -> None:
-        """Result should include validation output."""
-        result = AugeasEditResult(
-            success=True,
-            file_path="/etc/hosts",
-            validation_output="Syntax OK",
-            validation_passed=True,
-        )
+        mock_changes = [AugeasChange(path="/p", new_value="v", operation="set")]
+        with patch("elle.ops.augeas.controller.is_yaml_file", return_value=False), \
+             patch.object(ctrl, "_apply_augeas", new_callable=AsyncMock, return_value=mock_changes), \
+             patch("elle.ops.augeas.controller.generate_diff") as mock_diff, \
+             patch("elle.ops.augeas.controller.validate_config", new_callable=AsyncMock) as mock_val:
+            mock_diff.return_value = MagicMock(unified="diff", colored="colored")
+            mock_val.return_value = MagicMock(valid=True, output="ok", error=None)
 
-        assert result.validation_passed is True
-        assert "OK" in result.validation_output
+            req = AugeasEditRequest(
+                file_path=str(f),
+                description="test",
+                skip_backup=True,
+                skip_validation=True,
+            )
+            result = await ctrl.execute(req)
+            assert result.success is True
 
-    def test_result_frozen(self) -> None:
-        """Result should be immutable."""
-        result = AugeasEditResult(
-            success=True,
-            file_path="/test",
-        )
+    @pytest.mark.asyncio
+    async def test_execute_validation_fails_with_rollback(self, tmp_path):
+        ctrl = self._make_controller()
+        f = tmp_path / "test.conf"
+        f.write_text("content\n")
 
-        with pytest.raises(Exception):
-            result.success = False  # type: ignore[misc]
+        mock_backup_rec = MagicMock()
+        mock_backup_rec.backup_path = str(tmp_path / "backup")
+        ctrl._backup_manager.backup.return_value = mock_backup_rec
+        ctrl._backup_manager.restore.return_value = True
+
+        mock_changes = [AugeasChange(path="/p", new_value="v", operation="set")]
+        with patch("elle.ops.augeas.controller.is_yaml_file", return_value=False), \
+             patch.object(ctrl, "_apply_augeas", new_callable=AsyncMock, return_value=mock_changes), \
+             patch("elle.ops.augeas.controller.generate_diff") as mock_diff, \
+             patch("elle.ops.augeas.controller.validate_config", new_callable=AsyncMock) as mock_val:
+            mock_diff.return_value = MagicMock(unified="diff", colored="colored")
+            mock_val.return_value = MagicMock(valid=False, output="syntax error", error=None)
+
+            req = AugeasEditRequest(
+                file_path=str(f),
+                description="test",
+            )
+            result = await ctrl.execute(req)
+            assert result.success is False
+            assert result.rollback_applied is True
+
+    @pytest.mark.asyncio
+    async def test_execute_validation_fails_rollback_fails(self, tmp_path):
+        ctrl = self._make_controller()
+        f = tmp_path / "test.conf"
+        f.write_text("content\n")
+
+        mock_backup_rec = MagicMock()
+        mock_backup_rec.backup_path = str(tmp_path / "backup")
+        ctrl._backup_manager.backup.return_value = mock_backup_rec
+        ctrl._backup_manager.restore.side_effect = RuntimeError("restore fail")
+
+        mock_changes = [AugeasChange(path="/p", new_value="v", operation="set")]
+        with patch("elle.ops.augeas.controller.is_yaml_file", return_value=False), \
+             patch.object(ctrl, "_apply_augeas", new_callable=AsyncMock, return_value=mock_changes), \
+             patch("elle.ops.augeas.controller.generate_diff") as mock_diff, \
+             patch("elle.ops.augeas.controller.validate_config", new_callable=AsyncMock) as mock_val:
+            mock_diff.return_value = MagicMock(unified="diff", colored="colored")
+            mock_val.return_value = MagicMock(valid=False, output="syntax error", error=None)
+
+            req = AugeasEditRequest(
+                file_path=str(f),
+                description="test",
+            )
+            result = await ctrl.execute(req)
+            assert result.success is False
+            assert result.rollback_applied is False
+
+    @pytest.mark.asyncio
+    async def test_execute_exception_with_rollback(self, tmp_path):
+        ctrl = self._make_controller()
+        f = tmp_path / "test.conf"
+        f.write_text("content\n")
+
+        mock_backup_rec = MagicMock()
+        mock_backup_rec.backup_path = str(tmp_path / "backup")
+        ctrl._backup_manager.backup.return_value = mock_backup_rec
+        ctrl._backup_manager.restore.return_value = True
+
+        with patch("elle.ops.augeas.controller.is_yaml_file", return_value=False), \
+             patch.object(ctrl, "_apply_augeas", new_callable=AsyncMock, side_effect=RuntimeError("boom")):
+            req = AugeasEditRequest(
+                file_path=str(f),
+                description="test",
+            )
+            result = await ctrl.execute(req)
+            assert result.success is False
+            assert result.rollback_applied is True
+
+    @pytest.mark.asyncio
+    async def test_execute_permission_error_re_raised(self, tmp_path):
+        ctrl = self._make_controller()
+        f = tmp_path / "test.conf"
+        f.write_text("content\n")
+
+        mock_backup_rec = MagicMock()
+        mock_backup_rec.backup_path = str(tmp_path / "backup")
+        ctrl._backup_manager.backup.return_value = mock_backup_rec
+
+        with patch("elle.ops.augeas.controller.is_yaml_file", return_value=False), \
+             patch.object(ctrl, "_apply_augeas", new_callable=AsyncMock, side_effect=AugeasPermissionError("/etc/test")):
+            req = AugeasEditRequest(
+                file_path=str(f),
+                description="test",
+            )
+            with pytest.raises(AugeasPermissionError):
+                await ctrl.execute(req)
+
+    @pytest.mark.asyncio
+    async def test_execute_yaml(self, tmp_path):
+        ctrl = self._make_controller()
+        f = tmp_path / "test.yaml"
+        f.write_text("key: value\n")
+
+        mock_backup_rec = MagicMock()
+        mock_backup_rec.backup_path = str(tmp_path / "backup")
+        ctrl._backup_manager.backup.return_value = mock_backup_rec
+
+        mock_changes = [AugeasChange(path="key", new_value="new", operation="set")]
+        with patch("elle.ops.augeas.controller.is_yaml_file", return_value=True), \
+             patch.object(ctrl, "_apply_yaml", new_callable=AsyncMock, return_value=mock_changes), \
+             patch("elle.ops.augeas.controller.generate_diff") as mock_diff, \
+             patch("elle.ops.augeas.controller.validate_config", new_callable=AsyncMock) as mock_val:
+            mock_diff.return_value = MagicMock(unified="diff", colored="colored")
+            mock_val.return_value = MagicMock(valid=True, output="ok", error=None)
+
+            req = AugeasEditRequest(
+                file_path=str(f),
+                description="test",
+            )
+            result = await ctrl.execute(req)
+            assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_execute_with_incident_recording(self, tmp_path):
+        ctrl = self._make_controller()
+        f = tmp_path / "test.conf"
+        f.write_text("content\n")
+
+        mock_backup_rec = MagicMock()
+        mock_backup_rec.backup_path = str(tmp_path / "backup")
+        ctrl._backup_manager.backup.return_value = mock_backup_rec
+
+        mock_changes = [AugeasChange(path="/p", new_value="v", operation="set")]
+        with patch("elle.ops.augeas.controller.is_yaml_file", return_value=False), \
+             patch.object(ctrl, "_apply_augeas", new_callable=AsyncMock, return_value=mock_changes), \
+             patch("elle.ops.augeas.controller.generate_diff") as mock_diff, \
+             patch("elle.ops.augeas.controller.validate_config", new_callable=AsyncMock) as mock_val:
+            mock_diff.return_value = MagicMock(unified="diff", colored="colored")
+            mock_val.return_value = MagicMock(valid=True, output="ok", error=None)
+
+            req = AugeasEditRequest(
+                file_path=str(f),
+                description="test",
+                incident_id="INC-001",
+                skip_validation=True,
+            )
+            # The incident recording code does import-time checks,
+            # we just make sure it doesn't crash
+            result = await ctrl.execute(req)
+            assert result.success is True
+
+    # -- rollback --
+
+    def test_rollback_with_path(self, tmp_path):
+        ctrl = self._make_controller()
+        ctrl._backup_manager.restore.return_value = True
+        assert ctrl.rollback("/etc/test", "/backup/path") is True
+
+    def test_rollback_latest(self, tmp_path):
+        ctrl = self._make_controller()
+        ctrl._backup_manager.get_latest_backup.return_value = "/backup/latest"
+        ctrl._backup_manager.restore.return_value = True
+        assert ctrl.rollback("/etc/test") is True
+
+    def test_rollback_no_backup(self, tmp_path):
+        ctrl = self._make_controller()
+        ctrl._backup_manager.get_latest_backup.return_value = None
+        assert ctrl.rollback("/etc/test") is False
+
+    # -- requires_privilege --
+
+    def test_requires_privilege_writable(self, tmp_path):
+        ctrl = self._make_controller()
+        f = tmp_path / "test.conf"
+        f.write_text("x")
+        assert ctrl._requires_privilege(f) is False
+
+    def test_requires_privilege_nonexistent(self, tmp_path):
+        ctrl = self._make_controller()
+        f = tmp_path / "nonexistent.conf"
+        # tmp_path is writable
+        assert ctrl._requires_privilege(f) is False
+
+    def test_requires_privilege_no_parent(self):
+        ctrl = self._make_controller()
+        f = Path("/nonexistent_dir_abc/nonexistent.conf")
+        assert ctrl._requires_privilege(f) is True
+
+    # -- batch --
+
+    @pytest.mark.asyncio
+    async def test_execute_batch_success(self, tmp_path):
+        ctrl = self._make_controller()
+        f1 = tmp_path / "a.conf"
+        f1.write_text("a\n")
+        f2 = tmp_path / "b.conf"
+        f2.write_text("b\n")
+
+        async def fake_execute(req):
+            return AugeasEditResult(
+                success=True,
+                file_path=req.file_path,
+                backup_path=str(tmp_path / "backup"),
+            )
+
+        with patch.object(ctrl, "execute", side_effect=fake_execute):
+            batch = BatchEditRequest(
+                edits=(
+                    AugeasEditRequest(file_path=str(f1), description="a"),
+                    AugeasEditRequest(file_path=str(f2), description="b"),
+                ),
+                description="batch test",
+            )
+            result = await ctrl.execute_batch(batch)
+            assert result.success is True
+            assert len(result.results) == 2
+
+    @pytest.mark.asyncio
+    async def test_execute_batch_with_incident_id(self, tmp_path):
+        ctrl = self._make_controller()
+        f = tmp_path / "a.conf"
+        f.write_text("a\n")
+
+        async def fake_execute(req):
+            return AugeasEditResult(success=True, file_path=req.file_path)
+
+        with patch.object(ctrl, "execute", side_effect=fake_execute):
+            batch = BatchEditRequest(
+                edits=(
+                    AugeasEditRequest(file_path=str(f), description="a"),
+                ),
+                description="batch",
+                incident_id="INC-001",
+            )
+            result = await ctrl.execute_batch(batch)
+            assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_execute_batch_failure_rollback(self, tmp_path):
+        ctrl = self._make_controller()
+        f1 = tmp_path / "a.conf"
+        f1.write_text("a\n")
+        f2 = tmp_path / "b.conf"
+        f2.write_text("b\n")
+
+        call_count = [0]
+        async def fake_execute(req):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return AugeasEditResult(
+                    success=True,
+                    file_path=req.file_path,
+                    backup_path=str(tmp_path / "backup1"),
+                )
+            else:
+                return AugeasEditResult(
+                    success=False,
+                    file_path=req.file_path,
+                    error="failed",
+                    backup_path=str(tmp_path / "backup2"),
+                )
+
+        with patch.object(ctrl, "execute", side_effect=fake_execute):
+            batch = BatchEditRequest(
+                edits=(
+                    AugeasEditRequest(file_path=str(f1), description="a"),
+                    AugeasEditRequest(file_path=str(f2), description="b"),
+                ),
+                description="batch",
+            )
+            result = await ctrl.execute_batch(batch)
+            assert result.success is False
+            assert result.rollback_applied is True
+
+    @pytest.mark.asyncio
+    async def test_execute_batch_dry_run_failure_no_rollback(self, tmp_path):
+        ctrl = self._make_controller()
+        f1 = tmp_path / "a.conf"
+        f1.write_text("a\n")
+
+        async def fake_execute(req):
+            return AugeasEditResult(
+                success=False,
+                file_path=req.file_path,
+                error="failed",
+            )
+
+        with patch.object(ctrl, "execute", side_effect=fake_execute):
+            batch = BatchEditRequest(
+                edits=(
+                    AugeasEditRequest(file_path=str(f1), description="a"),
+                ),
+                description="batch",
+                dry_run=True,
+            )
+            result = await ctrl.execute_batch(batch)
+            # When dry_run=True, individual failures do NOT trigger batch rollback
+            # so the batch itself succeeds with individual failed results
+            assert result.success is True
+            assert result.rollback_applied is False
+
+    @pytest.mark.asyncio
+    async def test_execute_batch_exception(self, tmp_path):
+        ctrl = self._make_controller()
+
+        with patch.object(ctrl, "execute", side_effect=RuntimeError("boom")):
+            batch = BatchEditRequest(
+                edits=(
+                    AugeasEditRequest(file_path="/etc/test", description="a"),
+                ),
+                description="batch",
+            )
+            result = await ctrl.execute_batch(batch)
+            assert result.success is False
+            assert result.rollback_applied is True
 
 
-class TestEditPreview:
-    """Tests for EditPreview model."""
+# ---------------------------------------------------------------------------
+# Module-level functions
+# ---------------------------------------------------------------------------
 
-    def test_preview_content(self) -> None:
-        """Preview should contain content."""
-        preview = EditPreview(
-            file_path="/etc/hosts",
-            original_content="127.0.0.1 localhost\n",
-            proposed_content="10.0.0.1 localhost\n",
-            diff="- 127.0.0.1\n+ 10.0.0.1",
-            diff_colored="\033[31m- 127\033[0m",
-        )
+class TestModuleFunctions:
+    def test_get_controller_singleton(self):
+        import elle.ops.augeas.controller as mod
+        old = mod._controller
+        mod._controller = None
+        try:
+            c1 = mod.get_controller()
+            c2 = mod.get_controller()
+            assert c1 is c2
+        finally:
+            mod._controller = old
 
-        assert preview.original_content != preview.proposed_content
-        assert len(preview.diff) > 0
+    def test_preview_edit_func(self, tmp_path):
+        from elle.ops.augeas.controller import preview_edit
+        f = tmp_path / "test.conf"
+        f.write_text("content")
 
-    def test_preview_requires_privilege(self) -> None:
-        """Preview should indicate privilege requirement."""
-        preview = EditPreview(
-            file_path="/etc/fstab",
-            original_content="",
-            proposed_content="",
+        mock_preview = EditPreview(
+            file_path=str(f),
+            original_content="content",
+            proposed_content="content",
             diff="",
             diff_colored="",
-            requires_privilege=True,
         )
+        with patch("elle.ops.augeas.controller.get_controller") as mock_ctrl:
+            mock_ctrl.return_value.preview.return_value = mock_preview
+            result = preview_edit(AugeasEditRequest(
+                file_path=str(f),
+                description="test",
+            ))
+            assert isinstance(result, EditPreview)
 
-        assert preview.requires_privilege is True
+    @pytest.mark.asyncio
+    async def test_execute_edit_func(self, tmp_path):
+        from elle.ops.augeas.controller import execute_edit
+        with patch("elle.ops.augeas.controller.get_controller") as mock_ctrl:
+            mock_ctrl.return_value.execute = AsyncMock(return_value=AugeasEditResult(
+                success=True,
+                file_path="/etc/test",
+            ))
+            result = await execute_edit(AugeasEditRequest(
+                file_path="/etc/test",
+                description="test",
+            ))
+            assert result.success is True
 
-    def test_preview_validation_command(self) -> None:
-        """Preview should include validation command."""
-        preview = EditPreview(
-            file_path="/etc/fstab",
-            original_content="",
-            proposed_content="",
-            diff="",
-            diff_colored="",
-            validation_command="mount -a -f --fake",
-        )
+    @pytest.mark.asyncio
+    async def test_execute_batch_edit_func(self):
+        from elle.ops.augeas.controller import execute_batch_edit
+        with patch("elle.ops.augeas.controller.get_controller") as mock_ctrl:
+            mock_ctrl.return_value.execute_batch = AsyncMock(return_value=BatchEditResult(
+                success=True,
+            ))
+            result = await execute_batch_edit(BatchEditRequest(
+                edits=(),
+                description="test",
+            ))
+            assert result.success is True
 
-        assert preview.validation_command is not None
-        assert "mount" in preview.validation_command
-
-    def test_preview_frozen(self) -> None:
-        """Preview should be immutable."""
-        preview = EditPreview(
-            file_path="/test",
-            original_content="",
-            proposed_content="",
-            diff="",
-            diff_colored="",
-        )
-
-        with pytest.raises(Exception):
-            preview.file_path = "/other"  # type: ignore[misc]
-
-
-class TestRequiresPrivilege:
-    """Tests for privilege detection."""
-
-    def test_writable_file_no_privilege(self, tmp_path) -> None:
-        """Writable file should not require privilege."""
-        controller = EditController()
-
-        test_file = tmp_path / "test.conf"
-        test_file.write_text("content\n")
-
-        requires = controller._requires_privilege(test_file)
-
-        # User-owned temp file should be writable
-        assert requires is False
-
-    def test_system_file_requires_privilege(self) -> None:
-        """System file should require privilege."""
-        controller = EditController()
-
-        from pathlib import Path
-
-        requires = controller._requires_privilege(Path("/etc/fstab"))
-
-        # /etc/fstab typically requires root
-        # (unless running as root)
-        import os
-
-        if os.geteuid() != 0:
-            assert requires is True
+    def test_rollback_edit_func(self):
+        from elle.ops.augeas.controller import rollback_edit
+        with patch("elle.ops.augeas.controller.get_controller") as mock_ctrl:
+            mock_ctrl.return_value.rollback.return_value = True
+            assert rollback_edit("/etc/test") is True

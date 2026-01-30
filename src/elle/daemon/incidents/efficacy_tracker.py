@@ -7,11 +7,10 @@ what actually works on THIS machine.
 from __future__ import annotations
 
 import hashlib
-import sqlite3
-from collections.abc import Iterator
-from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
+
+import psycopg
 
 from elle.daemon.incidents.efficacy import (
     DECAY_HALF_LIFE_DAYS,
@@ -26,26 +25,9 @@ from elle.daemon.incidents.efficacy import (
 from elle.daemon.incidents.models import (
     IncidentReport,
 )
-from elle.daemon.incidents.schema import ensure_schema, get_connection
+from elle.daemon.incidents.schema import PG_SCHEMA
+from elle.storage.engine import get_conn
 
-
-@contextmanager
-def _ensure_connection(
-    conn: sqlite3.Connection | None = None,
-) -> Iterator[sqlite3.Connection]:
-    """Context manager that ensures a valid connection with schema."""
-    own_conn = conn is None
-    if own_conn:
-        actual_conn = get_connection()
-        ensure_schema(actual_conn)
-    else:
-        # conn is guaranteed non-None here due to the if check above
-        actual_conn = conn  # type: ignore[assignment]
-    try:
-        yield actual_conn
-    finally:
-        if own_conn:
-            actual_conn.close()
 
 
 def _serialize_datetime(dt: datetime) -> str:
@@ -82,7 +64,6 @@ def _json_loads(s: str | None) -> Any:
 def record_outcome(
     incident: IncidentReport,
     outcome: str,
-    conn: sqlite3.Connection | None = None,
 ) -> None:
     """Record an incident outcome for efficacy tracking.
 
@@ -92,17 +73,16 @@ def record_outcome(
     Args:
         incident: The incident being finalized.
         outcome: The outcome (improved, partial, no_change, worse).
-        conn: SQLite connection.
     """
-    with _ensure_connection(conn) as c:
+    with get_conn(schema=PG_SCHEMA) as conn:
         now = datetime.utcnow()
 
         # Update domain efficacy
-        _update_domain_efficacy(incident.domain, outcome, now, c)
+        _update_domain_efficacy(incident.domain, outcome, now, conn)
 
         # Update entity efficacy for each involved entity
         for entity in incident.fingerprint.entities:
-            _update_entity_efficacy(entity, outcome, now, c)
+            _update_entity_efficacy(entity, outcome, now, conn)
 
         # Update solution approach efficacy
         approach_signature = _compute_approach_signature(incident)
@@ -115,26 +95,22 @@ def record_outcome(
                 outcome=outcome,
                 time_to_resolve=incident.time_to_resolve_sec,
                 now=now,
-                conn=c,
+                conn=conn,
             )
-
-        # Commit if we created our own connection
-        if conn is None:
-            c.commit()
 
 
 def _update_domain_efficacy(
     domain: str,
     outcome: str,
     now: datetime,
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,  # type: ignore[type-arg]
 ) -> None:
     """Update domain efficacy statistics."""
     cursor = conn.cursor()
 
     # Get existing record
     cursor.execute(
-        "SELECT * FROM domain_efficacy WHERE domain = ?",
+        "SELECT * FROM domain_efficacy WHERE domain = %s",
         (domain,),
     )
     row = cursor.fetchone()
@@ -161,10 +137,18 @@ def _update_domain_efficacy(
 
     cursor.execute(
         """
-        INSERT OR REPLACE INTO domain_efficacy (
+        INSERT INTO domain_efficacy (
             domain, total_incidents, improved_count, partial_count,
             no_change_count, worse_count, success_rate, last_updated
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (domain) DO UPDATE SET
+            total_incidents = EXCLUDED.total_incidents,
+            improved_count = EXCLUDED.improved_count,
+            partial_count = EXCLUDED.partial_count,
+            no_change_count = EXCLUDED.no_change_count,
+            worse_count = EXCLUDED.worse_count,
+            success_rate = EXCLUDED.success_rate,
+            last_updated = EXCLUDED.last_updated
         """,
         (
             domain,
@@ -183,13 +167,13 @@ def _update_entity_efficacy(
     entity: str,
     outcome: str,
     now: datetime,
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,  # type: ignore[type-arg]
 ) -> None:
     """Update entity efficacy statistics."""
     cursor = conn.cursor()
 
     cursor.execute(
-        "SELECT * FROM entity_efficacy WHERE entity = ?",
+        "SELECT * FROM entity_efficacy WHERE entity = %s",
         (entity,),
     )
     row = cursor.fetchone()
@@ -213,10 +197,18 @@ def _update_entity_efficacy(
 
     cursor.execute(
         """
-        INSERT OR REPLACE INTO entity_efficacy (
+        INSERT INTO entity_efficacy (
             entity, total_incidents, improved_count, partial_count,
             no_change_count, worse_count, success_rate, last_updated
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (entity) DO UPDATE SET
+            total_incidents = EXCLUDED.total_incidents,
+            improved_count = EXCLUDED.improved_count,
+            partial_count = EXCLUDED.partial_count,
+            no_change_count = EXCLUDED.no_change_count,
+            worse_count = EXCLUDED.worse_count,
+            success_rate = EXCLUDED.success_rate,
+            last_updated = EXCLUDED.last_updated
         """,
         (
             entity,
@@ -239,13 +231,13 @@ def _update_approach_efficacy(
     outcome: str,
     time_to_resolve: int | None,
     now: datetime,
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,  # type: ignore[type-arg]
 ) -> None:
     """Update solution approach efficacy statistics."""
     cursor = conn.cursor()
 
     cursor.execute(
-        "SELECT * FROM solution_approach_efficacy WHERE approach_signature = ?",
+        "SELECT * FROM solution_approach_efficacy WHERE approach_signature = %s",
         (approach_signature,),
     )
     row = cursor.fetchone()
@@ -282,11 +274,23 @@ def _update_approach_efficacy(
 
     cursor.execute(
         """
-        INSERT OR REPLACE INTO solution_approach_efficacy (
+        INSERT INTO solution_approach_efficacy (
             approach_signature, domain, precondition_summary, key_commands_json,
             total_uses, improved_count, partial_count, no_change_count, worse_count,
             success_rate, avg_time_to_resolve_sec, last_used
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (approach_signature) DO UPDATE SET
+            domain = EXCLUDED.domain,
+            precondition_summary = EXCLUDED.precondition_summary,
+            key_commands_json = EXCLUDED.key_commands_json,
+            total_uses = EXCLUDED.total_uses,
+            improved_count = EXCLUDED.improved_count,
+            partial_count = EXCLUDED.partial_count,
+            no_change_count = EXCLUDED.no_change_count,
+            worse_count = EXCLUDED.worse_count,
+            success_rate = EXCLUDED.success_rate,
+            avg_time_to_resolve_sec = EXCLUDED.avg_time_to_resolve_sec,
+            last_used = EXCLUDED.last_used
         """,
         (
             approach_signature,
@@ -463,21 +467,19 @@ def _normalize_command(cmd: str) -> str | None:
 
 def get_domain_efficacy(
     domain: str,
-    conn: sqlite3.Connection | None = None,
 ) -> DomainEfficacy | None:
     """Get efficacy statistics for a domain.
 
     Args:
         domain: The incident domain.
-        conn: SQLite connection.
 
     Returns:
         DomainEfficacy if found, None otherwise.
     """
-    with _ensure_connection(conn) as c:
-        cursor = c.cursor()
+    with get_conn(schema=PG_SCHEMA) as conn:
+        cursor = conn.cursor()
         cursor.execute(
-            "SELECT * FROM domain_efficacy WHERE domain = ?",
+            "SELECT * FROM domain_efficacy WHERE domain = %s",
             (domain,),
         )
         row = cursor.fetchone()
@@ -499,21 +501,19 @@ def get_domain_efficacy(
 
 def get_entity_efficacy(
     entity: str,
-    conn: sqlite3.Connection | None = None,
 ) -> EntityEfficacy | None:
     """Get efficacy statistics for an entity.
 
     Args:
         entity: The entity identifier.
-        conn: SQLite connection.
 
     Returns:
         EntityEfficacy if found, None otherwise.
     """
-    with _ensure_connection(conn) as c:
-        cursor = c.cursor()
+    with get_conn(schema=PG_SCHEMA) as conn:
+        cursor = conn.cursor()
         cursor.execute(
-            "SELECT * FROM entity_efficacy WHERE entity = ?",
+            "SELECT * FROM entity_efficacy WHERE entity = %s",
             (entity,),
         )
         row = cursor.fetchone()
@@ -535,21 +535,19 @@ def get_entity_efficacy(
 
 def get_approach_efficacy(
     approach_signature: str,
-    conn: sqlite3.Connection | None = None,
 ) -> SolutionApproachEfficacy | None:
     """Get efficacy statistics for a solution approach.
 
     Args:
         approach_signature: The approach signature hash.
-        conn: SQLite connection.
 
     Returns:
         SolutionApproachEfficacy if found, None otherwise.
     """
-    with _ensure_connection(conn) as c:
-        cursor = c.cursor()
+    with get_conn(schema=PG_SCHEMA) as conn:
+        cursor = conn.cursor()
         cursor.execute(
-            "SELECT * FROM solution_approach_efficacy WHERE approach_signature = ?",
+            "SELECT * FROM solution_approach_efficacy WHERE approach_signature = %s",
             (approach_signature,),
         )
         row = cursor.fetchone()
@@ -577,7 +575,6 @@ def get_efficacy_context(
     domain: str,
     entities: tuple[str, ...] | None = None,
     incident: IncidentReport | None = None,
-    conn: sqlite3.Connection | None = None,
 ) -> EfficacyContext:
     """Get efficacy context for dynamic weight computation.
 
@@ -588,58 +585,51 @@ def get_efficacy_context(
         domain: The incident domain.
         entities: Involved entity identifiers.
         incident: The candidate incident (for approach matching).
-        conn: SQLite connection.
 
     Returns:
         EfficacyContext with available efficacy data.
     """
-    with _ensure_connection(conn) as c:
-        # Domain efficacy
-        domain_eff = get_domain_efficacy(domain, c)
-        domain_success_rate = domain_eff.success_rate if domain_eff else None
-        domain_sample_size = domain_eff.total_incidents if domain_eff else 0
+    # Domain efficacy
+    domain_eff = get_domain_efficacy(domain)
+    domain_success_rate = domain_eff.success_rate if domain_eff else None
+    domain_sample_size = domain_eff.total_incidents if domain_eff else 0
 
-        # Entity efficacy
-        entity_success_rates = {}
-        if entities:
-            for entity in entities:
-                ent_eff = get_entity_efficacy(entity, c)
-                if ent_eff:
-                    entity_success_rates[entity] = ent_eff.success_rate
+    # Entity efficacy
+    entity_success_rates = {}
+    if entities:
+        for entity in entities:
+            ent_eff = get_entity_efficacy(entity)
+            if ent_eff:
+                entity_success_rates[entity] = ent_eff.success_rate
 
-        # Approach efficacy
-        approach_success_rate = None
-        approach_sample_size = 0
-        if incident:
-            sig = _compute_approach_signature(incident)
-            if sig:
-                app_eff = get_approach_efficacy(sig, c)
-                if app_eff:
-                    approach_success_rate = app_eff.success_rate
-                    approach_sample_size = app_eff.total_uses
+    # Approach efficacy
+    approach_success_rate = None
+    approach_sample_size = 0
+    if incident:
+        sig = _compute_approach_signature(incident)
+        if sig:
+            app_eff = get_approach_efficacy(sig)
+            if app_eff:
+                approach_success_rate = app_eff.success_rate
+                approach_sample_size = app_eff.total_uses
 
-        return EfficacyContext(
-            domain_success_rate=domain_success_rate,
-            domain_sample_size=domain_sample_size,
-            entity_success_rates=entity_success_rates,
-            approach_success_rate=approach_success_rate,
-            approach_sample_size=approach_sample_size,
-        )
+    return EfficacyContext(
+        domain_success_rate=domain_success_rate,
+        domain_sample_size=domain_sample_size,
+        entity_success_rates=entity_success_rates,
+        approach_success_rate=approach_success_rate,
+        approach_sample_size=approach_sample_size,
+    )
 
 
-def get_all_domain_efficacy(
-    conn: sqlite3.Connection | None = None,
-) -> list[DomainEfficacy]:
+def get_all_domain_efficacy() -> list[DomainEfficacy]:
     """Get efficacy statistics for all domains.
-
-    Args:
-        conn: SQLite connection.
 
     Returns:
         List of DomainEfficacy records.
     """
-    with _ensure_connection(conn) as c:
-        cursor = c.cursor()
+    with get_conn(schema=PG_SCHEMA) as conn:
+        cursor = conn.cursor()
         cursor.execute("SELECT * FROM domain_efficacy ORDER BY total_incidents DESC")
 
         results = []
@@ -660,19 +650,14 @@ def get_all_domain_efficacy(
         return results
 
 
-def get_efficacy_stats(
-    conn: sqlite3.Connection | None = None,
-) -> EfficacyStats:
+def get_efficacy_stats() -> EfficacyStats:
     """Get aggregated efficacy statistics.
-
-    Args:
-        conn: SQLite connection.
 
     Returns:
         EfficacyStats summary.
     """
-    with _ensure_connection(conn) as c:
-        cursor = c.cursor()
+    with get_conn(schema=PG_SCHEMA) as conn:
+        cursor = conn.cursor()
 
         # Overall stats
         cursor.execute("SELECT SUM(total_incidents) as total FROM domain_efficacy")
@@ -690,8 +675,11 @@ def get_efficacy_stats(
         row = cursor.fetchone()
         overall_rate: float = row["avg"] if row and row["avg"] else 0.5
 
-        # Domain stats
-        domain_stats = tuple(get_all_domain_efficacy(c))
+    # Domain stats (uses its own connection)
+    domain_stats = tuple(get_all_domain_efficacy())
+
+    with get_conn(schema=PG_SCHEMA) as conn:
+        cursor = conn.cursor()
 
         # Top entities
         cursor.execute(
@@ -758,35 +746,25 @@ def get_efficacy_stats(
 # =============================================================================
 
 
-def bootstrap_from_historical(
-    conn: sqlite3.Connection | None = None,
-) -> int:
+def bootstrap_from_historical() -> int:
     """Bootstrap efficacy data from historical incidents.
 
     Processes all finalized incidents to populate efficacy tables.
     Safe to run multiple times (idempotent).
-
-    Args:
-        conn: SQLite connection.
 
     Returns:
         Number of incidents processed.
     """
     from elle.daemon.incidents.store import list_incidents
 
-    with _ensure_connection(conn) as c:
-        # Get all resolved/mitigated incidents
-        incidents = list_incidents(status="resolved", limit=10000, conn=c)
-        incidents.extend(list_incidents(status="mitigated", limit=10000, conn=c))
+    # Get all resolved/mitigated incidents (each call gets its own connection)
+    incidents = list_incidents(status="resolved", limit=10000)
+    incidents.extend(list_incidents(status="mitigated", limit=10000))
 
-        processed = 0
-        for incident in incidents:
-            if incident.outcome in ("improved", "partial", "no_change", "worse"):
-                record_outcome(incident, incident.outcome, conn=c)
-                processed += 1
+    processed = 0
+    for incident in incidents:
+        if incident.outcome in ("improved", "partial", "no_change", "worse"):
+            record_outcome(incident, incident.outcome)
+            processed += 1
 
-        # Commit if we created our own connection
-        if conn is None:
-            c.commit()
-
-        return processed
+    return processed

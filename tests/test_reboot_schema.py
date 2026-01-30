@@ -1,16 +1,12 @@
-"""Tests for reboot module SQLite schema."""
+"""Tests for reboot module schema."""
 
-import sqlite3
-import tempfile
-from pathlib import Path
-
+import psycopg.errors
 import pytest
 
 from elle.daemon.reboot.schema import (
     SCHEMA_VERSION,
     drop_all_tables,
     ensure_schema,
-    get_connection,
     get_schema_version,
     init_reboot_schema,
     needs_migration,
@@ -18,22 +14,9 @@ from elle.daemon.reboot.schema import (
 
 
 @pytest.fixture
-def temp_db():
-    """Create a temporary database file."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = Path(f.name)
-    yield db_path
-    # Cleanup
-    if db_path.exists():
-        db_path.unlink()
-
-
-@pytest.fixture
-def conn(temp_db):
-    """Create a connection to temporary database."""
-    connection = get_connection(temp_db)
-    yield connection
-    connection.close()
+def conn(reboot_conn):
+    """Use the conftest reboot_conn fixture."""
+    return reboot_conn
 
 
 class TestSchemaInitialization:
@@ -46,15 +29,15 @@ class TestSchemaInitialization:
         cursor = conn.cursor()
 
         # Check reboot_intents table exists
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='reboot_intents'")
+        cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_name='reboot_intents'")
         assert cursor.fetchone() is not None
 
         # Check pending_verifications table exists
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pending_verifications'")
+        cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_name='pending_verifications'")
         assert cursor.fetchone() is not None
 
         # Check meta table exists
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='meta'")
+        cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_name='meta'")
         assert cursor.fetchone() is not None
 
     def test_init_schema_creates_indexes(self, conn):
@@ -62,8 +45,8 @@ class TestSchemaInitialization:
         init_reboot_schema(conn)
 
         cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='index'")
-        indexes = [row[0] for row in cursor.fetchall()]
+        cursor.execute("SELECT indexname FROM pg_indexes WHERE tablename IN ('reboot_intents', 'pending_verifications', 'meta')")
+        indexes = [row["indexname"] for row in cursor.fetchall()]
 
         # Check key indexes exist
         assert "idx_intents_status" in indexes
@@ -140,17 +123,17 @@ class TestDropAllTables:
 
         # Verify tables exist
         cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='reboot_intents'")
+        cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_name='reboot_intents'")
         assert cursor.fetchone() is not None
 
         # Drop all
         drop_all_tables(conn)
 
         # Verify tables are gone
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='reboot_intents'")
+        cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_name='reboot_intents'")
         assert cursor.fetchone() is None
 
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pending_verifications'")
+        cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_name='pending_verifications'")
         assert cursor.fetchone() is None
 
     def test_drop_tables_idempotent(self, conn):
@@ -167,8 +150,8 @@ class TestTableStructure:
         init_reboot_schema(conn)
 
         cursor = conn.cursor()
-        cursor.execute("PRAGMA table_info(reboot_intents)")
-        columns = {row[1] for row in cursor.fetchall()}
+        cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name='reboot_intents'")
+        columns = {row["column_name"] for row in cursor.fetchall()}
 
         expected = {
             "id",
@@ -201,8 +184,8 @@ class TestTableStructure:
         init_reboot_schema(conn)
 
         cursor = conn.cursor()
-        cursor.execute("PRAGMA table_info(pending_verifications)")
-        columns = {row[1] for row in cursor.fetchall()}
+        cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name='pending_verifications'")
+        columns = {row["column_name"] for row in cursor.fetchall()}
 
         expected = {
             "id",
@@ -228,7 +211,7 @@ class TestTableStructure:
         cursor = conn.cursor()
 
         # Try to insert verification with non-existent intent
-        with pytest.raises(sqlite3.IntegrityError):
+        with pytest.raises(psycopg.errors.ForeignKeyViolation):
             cursor.execute(
                 """
                 INSERT INTO pending_verifications
@@ -253,7 +236,7 @@ class TestStatusConstraints:
             cursor.execute(
                 """
                 INSERT INTO reboot_intents (id, created_at, updated_at, goal, task_description, reason, status)
-                VALUES (?, datetime('now'), datetime('now'), 'Test', 'Test', 'user_requested', ?)
+                VALUES (%s, NOW(), NOW(), 'Test', 'Test', 'user_requested', %s)
                 """,
                 (f"test-{i}", status),
             )
@@ -265,11 +248,11 @@ class TestStatusConstraints:
 
         cursor = conn.cursor()
 
-        with pytest.raises(sqlite3.IntegrityError):
+        with pytest.raises(psycopg.errors.CheckViolation):
             cursor.execute(
                 """
                 INSERT INTO reboot_intents (id, created_at, updated_at, goal, task_description, reason, status)
-                VALUES ('test', datetime('now'), datetime('now'), 'Test', 'Test', 'user_requested', 'invalid_status')
+                VALUES ('test', NOW(), NOW(), 'Test', 'Test', 'user_requested', 'invalid_status')
                 """
             )
             conn.commit()
@@ -285,7 +268,7 @@ class TestStatusConstraints:
             cursor.execute(
                 """
                 INSERT INTO reboot_intents (id, created_at, updated_at, goal, task_description, reason, outcome)
-                VALUES (?, datetime('now'), datetime('now'), 'Test', 'Test', 'user_requested', ?)
+                VALUES (%s, NOW(), NOW(), 'Test', 'Test', 'user_requested', %s)
                 """,
                 (f"test-{i}", outcome),
             )
@@ -301,7 +284,7 @@ class TestStatusConstraints:
         cursor.execute(
             """
             INSERT INTO reboot_intents (id, created_at, updated_at, goal, task_description, reason)
-            VALUES ('test-intent', datetime('now'), datetime('now'), 'Test', 'Test', 'user_requested')
+            VALUES ('test-intent', NOW(), NOW(), 'Test', 'Test', 'user_requested')
             """
         )
 
@@ -312,7 +295,7 @@ class TestStatusConstraints:
                 """
                 INSERT INTO pending_verifications
                 (reboot_intent_id, step_index, check_type, check_command)
-                VALUES ('test-intent', ?, ?, 'test')
+                VALUES ('test-intent', %s, %s, 'test')
                 """,
                 (i, check_type),
             )
@@ -332,7 +315,7 @@ class TestCascadeDelete:
         cursor.execute(
             """
             INSERT INTO reboot_intents (id, created_at, updated_at, goal, task_description, reason)
-            VALUES ('test-intent', datetime('now'), datetime('now'), 'Test', 'Test', 'user_requested')
+            VALUES ('test-intent', NOW(), NOW(), 'Test', 'Test', 'user_requested')
             """
         )
 
@@ -348,7 +331,7 @@ class TestCascadeDelete:
 
         # Verify verification exists
         cursor.execute("SELECT COUNT(*) FROM pending_verifications")
-        assert cursor.fetchone()[0] == 1
+        assert cursor.fetchone()["count"] == 1
 
         # Delete intent
         cursor.execute("DELETE FROM reboot_intents WHERE id = 'test-intent'")
@@ -356,4 +339,4 @@ class TestCascadeDelete:
 
         # Verify verification is also deleted
         cursor.execute("SELECT COUNT(*) FROM pending_verifications")
-        assert cursor.fetchone()[0] == 0
+        assert cursor.fetchone()["count"] == 0

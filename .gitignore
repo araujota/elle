@@ -53,6 +53,7 @@ htmlcov/
 # Local development
 .env
 .env.local
+.claude/
 
 # Jekyll (docs)
 docs/_site/

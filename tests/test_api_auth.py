@@ -142,10 +142,9 @@ class TestApiKeyStore:
     """Tests for API key storage."""
 
     @pytest.fixture
-    def store(self, tmp_path):
-        """Create a temporary key store."""
-        db_path = tmp_path / "api_keys.db"
-        return ApiKeyStore(db_path)
+    def store(self, api_conn):
+        """Create a key store using conftest api connection."""
+        return ApiKeyStore(conn=api_conn)
 
     def test_create_key(self, store):
         """Should create and store a key."""
@@ -245,11 +244,11 @@ class TestAuthMiddleware:
     """Tests for authentication middleware."""
 
     @pytest.fixture
-    def config(self, tmp_path):
+    def config(self, api_conn):
         """Create auth config."""
         return ApiAuthConfig(
             allow_anonymous=True,
-            api_keys_db_path=tmp_path / "keys.db",
+            api_conn=api_conn,
             elle_uid=1000,
         )
 
@@ -295,13 +294,13 @@ class TestAuthMiddleware:
         assert auth is None
 
     @pytest.mark.asyncio
-    async def test_middleware_anonymous_allowed(self, config, tmp_path):
+    async def test_middleware_anonymous_allowed(self, config, api_conn):
         """Should allow anonymous when configured."""
         pytest.importorskip("fastapi")
 
         config_anon = ApiAuthConfig(
             allow_anonymous=True,
-            api_keys_db_path=tmp_path / "keys.db",
+            api_conn=api_conn,
         )
         middleware = AuthMiddleware(config_anon)
 
@@ -315,14 +314,14 @@ class TestAuthMiddleware:
         assert auth.allowed_modes == (ExecutionMode.READONLY,)
 
     @pytest.mark.asyncio
-    async def test_middleware_anonymous_denied(self, tmp_path):
+    async def test_middleware_anonymous_denied(self, api_conn):
         """Should reject when anonymous not allowed."""
         fastapi = pytest.importorskip("fastapi")
         HTTPException = fastapi.HTTPException
 
         config = ApiAuthConfig(
             allow_anonymous=False,
-            api_keys_db_path=tmp_path / "keys.db",
+            api_conn=api_conn,
         )
         middleware = AuthMiddleware(config)
 

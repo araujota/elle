@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
+from contextlib import contextmanager
+from unittest.mock import patch
 
 import pytest
 
@@ -20,17 +20,15 @@ from elle.capabilities.autogen.versioner import (
 
 
 @pytest.fixture
-def temp_db():
-    """Create a temporary database."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        yield Path(f.name)
-    Path(f.name).unlink(missing_ok=True)
+def store(autogen_conn):
+    """Create a store backed by the test PostgreSQL database."""
 
+    @contextmanager
+    def _fake_get_conn(schema: str = "public"):
+        yield autogen_conn
 
-@pytest.fixture
-def store(temp_db):
-    """Create a store with temporary database."""
-    return AutogenStore(temp_db)
+    with patch("elle.capabilities.autogen.store.get_conn", _fake_get_conn):
+        yield AutogenStore()
 
 
 @pytest.fixture
@@ -228,11 +226,10 @@ class TestCapabilityVersioner:
 class TestGetVersioner:
     """Tests for get_versioner function."""
 
-    def test_get_versioner_singleton(self, temp_db):
+    def test_get_versioner_singleton(self, store):
         """Test versioner singleton behavior."""
         reset_versioner()
 
-        store = AutogenStore(temp_db)
         v1 = get_versioner(store)
         v2 = get_versioner(store)
 
@@ -240,11 +237,10 @@ class TestGetVersioner:
 
         reset_versioner()
 
-    def test_reset_versioner(self, temp_db):
+    def test_reset_versioner(self, store):
         """Test versioner reset."""
         reset_versioner()
 
-        store = AutogenStore(temp_db)
         v1 = get_versioner(store)
         reset_versioner()
         v2 = get_versioner(store)

@@ -274,18 +274,14 @@ def test_audit_record_provenance():
 
 def test_audit_recorder_flow():
     """Test audit recorder start/complete flow."""
+    from unittest.mock import patch
+
     from elle.cli.agentic.audit import AuditRecorder, ToolCallRecord
     from elle.cli.agentic.unified_input import AgenticInput
 
-    # Use in-memory database
-    import tempfile
-    from pathlib import Path
-
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = Path(f.name)
-
-    try:
-        recorder = AuditRecorder(db_path)
+    # Patch _ensure_schema to skip DB init (no live PG needed for this unit test)
+    with patch.object(AuditRecorder, "_ensure_schema"):
+        recorder = AuditRecorder()
         input = AgenticInput.from_user_message("test query")
 
         # Start recording
@@ -315,9 +311,6 @@ def test_audit_recorder_flow():
         assert final_record.success is True
         assert final_record.final_response == "This is the final response"
         assert len(final_record.tool_calls) == 1
-
-    finally:
-        db_path.unlink(missing_ok=True)
 
 
 # =============================================================================

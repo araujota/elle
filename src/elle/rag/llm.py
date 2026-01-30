@@ -1,12 +1,13 @@
 """General-purpose LLM interface for ELLE.
 
-Provides a high-level wrapper around Ollama for general LLM interactions:
+Provides a high-level wrapper around LLM providers for general LLM interactions:
 - Text generation with configurable parameters
 - JSON generation with automatic retry on parse errors
 - Chat-style interactions with message history
 - Model availability checking with fallbacks
 - Keep-alive control for model warmth
 - Context window management with compaction
+- Pluggable provider backends (Ollama, OpenAI-compatible, fallback)
 
 Default model: Qwen2.5-7B-Instruct-Q8_0 (quantized for efficiency)
 
@@ -36,7 +37,7 @@ import json
 import logging
 import time
 from collections.abc import Callable
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 import httpx
 from pydantic import BaseModel, ConfigDict
@@ -91,6 +92,12 @@ class LLMConfig(BaseModel):
         num_ctx: Context window size in tokens.
         json_retry_temperature: Temperature for JSON retry attempts.
         json_max_retries: Maximum retries for JSON parsing.
+        provider: Provider type ('ollama' or 'openai').
+        api_key: API key for remote providers.
+        fallback_enabled: Whether to fall back to local Ollama.
+        fallback_host: Fallback Ollama host URL.
+        fallback_model: Fallback model name.
+        fallback_retry_interval: Seconds before retrying primary after failure.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -106,6 +113,14 @@ class LLMConfig(BaseModel):
     # JSON mode settings
     json_retry_temperature: float = JSON_RETRY_TEMPERATURE
     json_max_retries: int = JSON_MAX_RETRIES
+
+    # Provider settings
+    provider: str = "ollama"
+    api_key: str = ""
+    fallback_enabled: bool = True
+    fallback_host: str = "http://localhost:11434"
+    fallback_model: str = DEFAULT_MODEL
+    fallback_retry_interval: float = 60.0
 
 
 # =============================================================================
@@ -403,6 +418,51 @@ class LLMJSONError(LLMError):
 
 
 # =============================================================================
+# Provider Factory
+# =============================================================================
+
+
+def _create_provider(config: LLMConfig) -> Any:
+    """Create the appropriate LLM provider based on config.
+
+    Returns:
+        An LLMProvider instance.
+    """
+    from elle.rag.providers.fallback_provider import FallbackProvider
+    from elle.rag.providers.ollama_provider import OllamaProvider
+    from elle.rag.providers.openai_provider import OpenAIProvider
+
+    provider_type = config.provider
+
+    if provider_type == "openai":
+        primary = OpenAIProvider(
+            host=config.host,
+            api_key=config.api_key,
+            timeout=config.timeout,
+            default_model=config.model,
+        )
+
+        if config.fallback_enabled:
+            secondary = OllamaProvider(
+                host=config.fallback_host,
+                timeout=config.timeout,
+            )
+            return FallbackProvider(
+                primary=primary,
+                secondary=secondary,
+                retry_interval=config.fallback_retry_interval,
+            )
+
+        return primary
+
+    # Default: Ollama
+    return OllamaProvider(
+        host=config.host,
+        timeout=config.timeout,
+    )
+
+
+# =============================================================================
 # LLM Interface
 # =============================================================================
 
@@ -415,6 +475,7 @@ class LLM:
     - Automatic model detection with fallbacks
     - JSON mode with retry on parse errors
     - Chat-style interactions with message history
+    - Pluggable provider backends via LLMProvider
 
     Usage:
         llm = LLM()
@@ -430,6 +491,9 @@ class LLM:
             config: LLM configuration. Uses defaults if not provided.
         """
         self.config = config or LLMConfig()
+        self._provider = _create_provider(self.config)
+
+        # Legacy client for backward compatibility with LLMSession
         self._client = httpx.Client(
             base_url=self.config.host,
             timeout=httpx.Timeout(self.config.timeout),
@@ -438,8 +502,10 @@ class LLM:
         self._detected_model: str | None = None
 
     def close(self) -> None:
-        """Close the HTTP client."""
+        """Close the HTTP client and provider."""
         self._client.close()
+        if self._provider is not None:
+            self._provider.close()
 
     def __enter__(self) -> LLM:
         return self
@@ -452,23 +518,18 @@ class LLM:
     # -------------------------------------------------------------------------
 
     def is_available(self, force_check: bool = False) -> bool:
-        """Check if Ollama is running and available.
+        """Check if the LLM provider is running and available.
 
         Args:
             force_check: Force a new check even if cached.
 
         Returns:
-            True if Ollama is available.
+            True if provider is available.
         """
         if self._available is not None and not force_check:
             return self._available
 
-        try:
-            response = self._client.get("/api/tags", timeout=5.0)
-            self._available = response.status_code == 200
-        except httpx.RequestError:
-            self._available = False
-
+        self._available = self._provider.is_available()
         return self._available
 
     def list_models(self) -> list[str]:
@@ -478,15 +539,12 @@ class LLM:
             List of model names.
 
         Raises:
-            LLMUnavailableError: If Ollama is not available.
+            LLMUnavailableError: If provider is not available.
         """
         try:
-            response = self._client.get("/api/tags")
-            response.raise_for_status()
-            data = response.json()
-            return [model["name"] for model in data.get("models", [])]
+            return self._provider.list_models()
         except httpx.RequestError as e:
-            raise LLMUnavailableError(f"Cannot connect to Ollama: {e}") from e
+            raise LLMUnavailableError(f"Cannot connect to LLM provider: {e}") from e
 
     @property
     def model(self) -> str:
@@ -508,12 +566,13 @@ class LLM:
                 logger.info(f"Using configured model: {self.config.model}")
                 return self._detected_model
 
-            # Try fallbacks
-            for candidate in FALLBACK_MODELS:
-                if any(candidate in m for m in available):
-                    self._detected_model = candidate
-                    logger.info(f"Using fallback model: {candidate}")
-                    return self._detected_model
+            # Try fallbacks (only for Ollama)
+            if self.config.provider == "ollama":
+                for candidate in FALLBACK_MODELS:
+                    if any(candidate in m for m in available):
+                        self._detected_model = candidate
+                        logger.info(f"Using fallback model: {candidate}")
+                        return self._detected_model
 
         # Return configured model (will fail if not available)
         self._detected_model = self.config.model
@@ -565,7 +624,7 @@ class LLM:
             LLMResponse with the generated content.
 
         Raises:
-            LLMUnavailableError: If Ollama is not available.
+            LLMUnavailableError: If provider is not available.
             LLMTimeoutError: If the request times out.
             LLMError: If the API returns an error.
         """
@@ -594,72 +653,39 @@ class LLM:
         num_ctx: int,
         json_mode: bool,
     ) -> LLMResponse:
-        """Internal generation method.
-
-        Args:
-            prompt: The prompt.
-            system: System prompt.
-            model: Model name.
-            max_tokens: Max tokens.
-            temperature: Temperature.
-            timeout: Timeout.
-            keep_alive: Keep-alive duration.
-            num_ctx: Context window size.
-            json_mode: Whether to request JSON output.
-
-        Returns:
-            LLMResponse with generated content.
-        """
-        payload: dict[str, Any] = {
-            "model": model,
-            "prompt": prompt,
-            "stream": False,
-            "keep_alive": keep_alive,
-            "options": {
-                "num_predict": max_tokens,
-                "temperature": temperature,
-                "num_ctx": num_ctx,
-            },
-        }
-
-        if system:
-            payload["system"] = system
-
-        if json_mode:
-            payload["format"] = "json"
-
-        start_time = time.time()
-
+        """Internal generation method delegating to provider."""
         try:
-            response = self._client.post(
-                "/api/generate",
-                json=payload,
+            result = self._provider.generate(
+                prompt,
+                system=system,
+                model=model,
+                max_tokens=max_tokens,
+                temperature=temperature,
                 timeout=timeout,
+                json_mode=json_mode,
+                keep_alive=keep_alive,
+                num_ctx=num_ctx,
             )
-            response.raise_for_status()
-            data = response.json()
-
-            duration_ms = (time.time() - start_time) * 1000
 
             return LLMResponse(
-                content=data.get("response", ""),
-                model=data.get("model", model),
-                done=data.get("done", True),
-                duration_ms=duration_ms,
-                prompt_tokens=data.get("prompt_eval_count"),
-                completion_tokens=data.get("eval_count"),
+                content=result.content,
+                model=result.model,
+                done=result.done,
+                duration_ms=result.duration_ms,
+                prompt_tokens=result.prompt_tokens,
+                completion_tokens=result.completion_tokens,
             )
 
         except httpx.ConnectError as e:
             self._available = False
-            raise LLMUnavailableError("Cannot connect to Ollama. Is it running? Start with: ollama serve") from e
+            raise LLMUnavailableError("Cannot connect to LLM provider. Is it running?") from e
         except httpx.TimeoutException as e:
             raise LLMTimeoutError(
                 f"Request timed out after {timeout}s. Try increasing timeout or reducing max_tokens."
             ) from e
         except httpx.HTTPStatusError as e:
             raise LLMError(
-                f"Ollama API error: {e.response.text}",
+                f"LLM API error: {e.response.text}",
                 status_code=e.response.status_code,
             ) from e
 
@@ -703,7 +729,7 @@ class LLM:
 
         Raises:
             LLMJSONError: If JSON parsing fails after retries.
-            LLMUnavailableError: If Ollama is not available.
+            LLMUnavailableError: If provider is not available.
             LLMTimeoutError: If the request times out.
         """
         # Build prompt with schema hint if provided
@@ -872,80 +898,46 @@ class LLM:
             LLMResponse with the assistant's reply.
 
         Raises:
-            LLMUnavailableError: If Ollama is not available.
+            LLMUnavailableError: If provider is not available.
             LLMTimeoutError: If the request times out.
             LLMError: If the API returns an error.
         """
-        # Convert dict messages to Message objects
-        normalized: list[Message] = []
+        # Normalize messages to dicts
+        msg_list: list[dict[str, Any]] = []
         for msg in messages:
-            if isinstance(msg, dict):
-                normalized.append(
-                    Message(
-                        role=cast(Literal["system", "user", "assistant"], msg["role"]),
-                        content=msg["content"],
-                    )
-                )
-            else:
-                normalized.append(msg)
-
-        # Extract system message if present
-        system_content = None
-        chat_messages = []
-        for msg in normalized:
-            if msg.role == "system":
-                system_content = msg.content
-            else:
-                chat_messages.append({"role": msg.role, "content": msg.content})
-
-        # Use Ollama's chat endpoint
-        payload: dict[str, Any] = {
-            "model": model or self.model,
-            "messages": chat_messages,
-            "stream": False,
-            "keep_alive": keep_alive or self.config.keep_alive,
-            "options": {
-                "num_predict": max_tokens or self.config.max_tokens,
-                "temperature": temperature if temperature is not None else self.config.temperature,
-                "num_ctx": num_ctx or self.config.num_ctx,
-            },
-        }
-
-        if system_content:
-            # Prepend system message
-            payload["messages"] = [{"role": "system", "content": system_content}] + chat_messages
-
-        start_time = time.time()
+            if isinstance(msg, Message):
+                msg_list.append({"role": msg.role, "content": msg.content})
+            elif isinstance(msg, dict):
+                msg_list.append(msg)
 
         try:
-            response = self._client.post(
-                "/api/chat",
-                json=payload,
+            result = self._provider.chat(
+                msg_list,
+                model=model or self.model,
+                max_tokens=max_tokens or self.config.max_tokens,
+                temperature=temperature if temperature is not None else self.config.temperature,
                 timeout=timeout or self.config.timeout,
+                keep_alive=keep_alive or self.config.keep_alive,
+                num_ctx=num_ctx or self.config.num_ctx,
             )
-            response.raise_for_status()
-            data = response.json()
-
-            duration_ms = (time.time() - start_time) * 1000
-            message = data.get("message", {})
 
             return LLMResponse(
-                content=message.get("content", ""),
-                model=data.get("model", model or self.model),
-                done=data.get("done", True),
-                duration_ms=duration_ms,
-                prompt_tokens=data.get("prompt_eval_count"),
-                completion_tokens=data.get("eval_count"),
+                content=result.content,
+                model=result.model,
+                done=result.done,
+                duration_ms=result.duration_ms,
+                prompt_tokens=result.prompt_tokens,
+                completion_tokens=result.completion_tokens,
             )
 
         except httpx.ConnectError as e:
             self._available = False
-            raise LLMUnavailableError("Cannot connect to Ollama. Is it running? Start with: ollama serve") from e
+            raise LLMUnavailableError("Cannot connect to LLM provider. Is it running?") from e
         except httpx.TimeoutException as e:
             raise LLMTimeoutError(f"Chat request timed out after {timeout or self.config.timeout}s") from e
         except httpx.HTTPStatusError as e:
             raise LLMError(
-                f"Ollama chat API error: {e.response.text}",
+                f"LLM chat API error: {e.response.text}",
                 status_code=e.response.status_code,
             ) from e
 
@@ -1247,82 +1239,72 @@ class LLMSession:
         if content:
             self.add_user_message(content)
 
-        # Build request payload
-        payload: dict[str, Any] = {
-            "model": self.llm.model,
-            "messages": self._messages,
-            "stream": stream_callback is not None,
-            "keep_alive": self.keep_alive,
-            "options": {
-                "num_predict": max_tokens or self.llm.config.max_tokens,
-                "temperature": temperature if temperature is not None else self.llm.config.temperature,
-                "num_ctx": self.llm.config.num_ctx,
-            },
-        }
-
-        if self.tools:
-            payload["tools"] = self.tools
+        effective_timeout = timeout or self.llm.config.timeout
+        effective_max_tokens = max_tokens or self.llm.config.max_tokens
+        effective_temperature = temperature if temperature is not None else self.llm.config.temperature
 
         try:
             if stream_callback:
                 return await self._stream_chat(
-                    payload, stream_callback, timeout or self.llm.config.timeout
+                    effective_max_tokens,
+                    effective_temperature,
+                    stream_callback,
+                    effective_timeout,
                 )
             else:
-                return await self._sync_chat(payload, timeout or self.llm.config.timeout)
+                return await self._sync_chat(
+                    effective_max_tokens,
+                    effective_temperature,
+                    effective_timeout,
+                )
 
         except httpx.ConnectError as e:
             self.llm._available = False
             raise LLMUnavailableError(
-                "Cannot connect to Ollama. Is it running? Start with: ollama serve"
+                "Cannot connect to LLM provider. Is it running?"
             ) from e
         except httpx.TimeoutException as e:
             raise LLMTimeoutError(
-                f"Session chat timed out after {timeout or self.llm.config.timeout}s"
+                f"Session chat timed out after {effective_timeout}s"
             ) from e
         except httpx.HTTPStatusError as e:
             raise LLMError(
-                f"Ollama chat API error: {e.response.text}",
+                f"LLM chat API error: {e.response.text}",
                 status_code=e.response.status_code,
             ) from e
 
     async def _sync_chat(
         self,
-        payload: dict[str, Any],
+        max_tokens: int,
+        temperature: float,
         timeout: float,
     ) -> ToolCallResponse:
-        """Non-streaming chat request."""
+        """Non-streaming chat request via provider."""
         start_time = time.time()
 
-        response = self.llm._client.post(
-            "/api/chat",
-            json=payload,
+        result = self.llm._provider.chat(
+            self._messages,
+            model=self.llm.model,
+            max_tokens=max_tokens,
+            temperature=temperature,
             timeout=timeout,
+            tools=self.tools,
+            keep_alive=self.keep_alive,
+            num_ctx=self.llm.config.num_ctx,
         )
-        response.raise_for_status()
-        data = response.json()
 
         duration_ms = (time.time() - start_time) * 1000
-        message = data.get("message", {})
 
-        # Parse tool calls if present
+        # Parse tool calls from provider response
         tool_calls: list[ToolCall] = []
-        if "tool_calls" in message:
-            for tc in message["tool_calls"]:
-                func = tc.get("function", {})
-                args_str = func.get("arguments", "{}")
-                try:
-                    args = json.loads(args_str) if isinstance(args_str, str) else args_str
-                except json.JSONDecodeError:
-                    args = {}
+        for tc in result.tool_calls:
+            tool_calls.append(ToolCall(
+                id=tc.get("id", ""),
+                name=tc.get("name", ""),
+                arguments=tc.get("arguments", {}),
+            ))
 
-                tool_calls.append(ToolCall(
-                    id=tc.get("id", ""),
-                    name=func.get("name", ""),
-                    arguments=args,
-                ))
-
-        content = message.get("content", "")
+        content = result.content
 
         # Add assistant message to history
         self.add_assistant_message(content, tool_calls if tool_calls else None)
@@ -1330,20 +1312,21 @@ class LLMSession:
         return ToolCallResponse(
             content=content,
             tool_calls=tuple(tool_calls),
-            done=data.get("done", True),
-            model=data.get("model", self.llm.model),
+            done=result.done,
+            model=result.model,
             duration_ms=duration_ms,
-            prompt_tokens=data.get("prompt_eval_count"),
-            completion_tokens=data.get("eval_count"),
+            prompt_tokens=result.prompt_tokens,
+            completion_tokens=result.completion_tokens,
         )
 
     async def _stream_chat(
         self,
-        payload: dict[str, Any],
+        max_tokens: int,
+        temperature: float,
         stream_callback: Callable[[str], None],
         timeout: float,
     ) -> ToolCallResponse:
-        """Streaming chat request with completion verification."""
+        """Streaming chat request via provider."""
         start_time = time.time()
         collected_content = ""
         tool_calls: list[ToolCall] = []
@@ -1352,75 +1335,55 @@ class LLMSession:
         completion_tokens = None
         stream_done = False
         last_chunk_time = time.time()
-        chunk_timeout = 30.0  # Max time between chunks
+        chunk_timeout = 30.0
 
-        # Use httpx streaming
-        with self.llm._client.stream(
-            "POST",
-            "/api/chat",
-            json=payload,
+        for chunk in self.llm._provider.stream_chat(
+            self._messages,
+            model=self.llm.model,
+            max_tokens=max_tokens,
+            temperature=temperature,
             timeout=timeout,
-        ) as response:
-            response.raise_for_status()
+            tools=self.tools,
+            keep_alive=self.keep_alive,
+            num_ctx=self.llm.config.num_ctx,
+        ):
+            # Check for stalled stream
+            current_time = time.time()
+            if current_time - last_chunk_time > chunk_timeout:
+                logger.warning(
+                    f"Stream stalled for {chunk_timeout}s, possible truncation"
+                )
+                break
+            last_chunk_time = current_time
 
-            for line in response.iter_lines():
-                if not line:
-                    continue
+            if chunk.content:
+                collected_content += chunk.content
+                stream_callback(chunk.content)
 
-                # Check for stalled stream
-                current_time = time.time()
-                if current_time - last_chunk_time > chunk_timeout:
-                    logger.warning(
-                        f"Stream stalled for {chunk_timeout}s, possible truncation"
-                    )
-                    break
-                last_chunk_time = current_time
+            # Collect tool calls
+            for tc in chunk.tool_calls:
+                tc_name = tc.get("name", "")
+                tc_args = tc.get("arguments", {})
+                if tc_name:
+                    tool_calls.append(ToolCall(
+                        id=tc.get("id", ""),
+                        name=tc_name,
+                        arguments=tc_args if isinstance(tc_args, dict) else {},
+                    ))
 
-                try:
-                    chunk = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-
-                # Extract content from message
-                message = chunk.get("message", {})
-                content = message.get("content", "")
-
-                if content:
-                    collected_content += content
-                    stream_callback(content)
-
-                # Check for tool calls
-                if "tool_calls" in message:
-                    for tc in message["tool_calls"]:
-                        func = tc.get("function", {})
-                        args_str = func.get("arguments", "{}")
-                        try:
-                            args = json.loads(args_str) if isinstance(args_str, str) else args_str
-                        except json.JSONDecodeError:
-                            args = {}
-
-                        tool_calls.append(ToolCall(
-                            id=tc.get("id", ""),
-                            name=func.get("name", ""),
-                            arguments=args,
-                        ))
-
-                # Get model and token counts from final chunk
-                if chunk.get("done"):
-                    stream_done = True
-                    model = chunk.get("model", model)
-                    prompt_tokens = chunk.get("prompt_eval_count")
-                    completion_tokens = chunk.get("eval_count")
+            if chunk.done:
+                stream_done = True
+                model = chunk.model
+                prompt_tokens = chunk.prompt_tokens
+                completion_tokens = chunk.completion_tokens
 
         duration_ms = (time.time() - start_time) * 1000
 
-        # Verify stream completion
         if not stream_done:
             logger.warning(
                 "Stream ended without completion signal - response may be truncated"
             )
 
-        # Check for truncation indicators
         min_response_length = 10
         if len(collected_content.strip()) < min_response_length and not tool_calls:
             logger.warning(
@@ -1478,8 +1441,40 @@ class LLMSession:
 _llm: LLM | None = None
 
 
+def _load_llm_config_from_toml() -> LLMConfig:
+    """Load LLMConfig from elle.toml if available.
+
+    Reads the [llm] section and maps it to LLMConfig fields.
+    Falls back to defaults if no config file exists.
+    """
+    try:
+        from elle.rag.llm_config import load_elle_llm_config
+
+        cfg = load_elle_llm_config()
+
+        return LLMConfig(
+            host=cfg.provider.host,
+            model=cfg.provider.model,
+            timeout=cfg.provider.timeout,
+            max_tokens=cfg.provider.max_tokens,
+            temperature=cfg.provider.temperature,
+            provider=cfg.provider.type.value,
+            api_key=cfg.provider.api_key,
+            fallback_enabled=cfg.fallback.enabled,
+            fallback_host=cfg.fallback.host,
+            fallback_model=cfg.fallback.model,
+            fallback_retry_interval=cfg.fallback.retry_interval,
+        )
+    except Exception:
+        return LLMConfig()
+
+
 def get_llm(config: LLMConfig | None = None) -> LLM:
     """Get the shared LLM instance.
+
+    When no explicit config is passed, loads configuration from
+    elle.toml (with env var overrides). This preserves backward
+    compatibility: if no [llm] section exists, defaults to Ollama.
 
     Args:
         config: Optional config (only used on first call).
@@ -1489,6 +1484,8 @@ def get_llm(config: LLMConfig | None = None) -> LLM:
     """
     global _llm
     if _llm is None:
+        if config is None:
+            config = _load_llm_config_from_toml()
         _llm = LLM(config)
     return _llm
 

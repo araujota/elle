@@ -10,6 +10,8 @@ on daemon startup and written to a file readable only by the daemon's user.
 This ensures only the elle CLI running as the same user can access the API.
 
 Authentication determines which execution modes a client is allowed to use.
+
+Storage backend: PostgreSQL via psycopg (schema ``api``).
 """
 
 from __future__ import annotations
@@ -17,11 +19,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import secrets
-import sqlite3
-from collections.abc import Generator
-from contextlib import contextmanager
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
 
 # Request must be imported at runtime for FastAPI dependency injection
@@ -29,12 +27,41 @@ from typing import TYPE_CHECKING, Literal, cast
 from fastapi import Request
 from pydantic import BaseModel, ConfigDict, Field
 
+import psycopg
+
 from elle.daemon.api.openai_models import ExecutionMode
+from elle.storage.engine import get_conn
+from elle.storage.migrate import register_migration
 
 if TYPE_CHECKING:
     from elle.daemon.config import ApiAuthConfig
 
 logger = logging.getLogger(__name__)
+
+PG_SCHEMA = "api"
+
+
+# =============================================================================
+# Migration registration
+# =============================================================================
+
+
+def _migrate_v1(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+    """Create initial API auth tables."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS api_keys (
+            key_id TEXT PRIMARY KEY,
+            key_hash TEXT NOT NULL,
+            name TEXT NOT NULL,
+            allowed_modes TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL,
+            last_used_at TIMESTAMPTZ,
+            revoked BOOLEAN DEFAULT FALSE
+        )
+    """)
+
+
+register_migration(PG_SCHEMA, 1, _migrate_v1)
 
 
 class AuthContext(BaseModel):
@@ -118,43 +145,10 @@ def generate_api_key() -> tuple[str, str]:
 
 
 class ApiKeyStore:
-    """SQLite-backed storage for API keys."""
+    """PostgreSQL-backed storage for API keys."""
 
-    def __init__(self, db_path: Path) -> None:
-        """Initialize the API key store.
-
-        Args:
-            db_path: Path to the SQLite database file.
-        """
-        self._db_path = db_path
-        self._init_db()
-
-    def _init_db(self) -> None:
-        """Initialize the database schema."""
-        self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS api_keys (
-                    key_id TEXT PRIMARY KEY,
-                    key_hash TEXT NOT NULL,
-                    name TEXT NOT NULL,
-                    allowed_modes TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    last_used_at TEXT,
-                    revoked INTEGER DEFAULT 0
-                )
-            """)
-            conn.commit()
-
-    @contextmanager
-    def _connect(self) -> Generator[sqlite3.Connection, None, None]:
-        """Context manager for database connections."""
-        conn = sqlite3.connect(str(self._db_path))
-        conn.row_factory = sqlite3.Row
-        try:
-            yield conn
-        finally:
-            conn.close()
+    def __init__(self) -> None:
+        """Initialize the API key store."""
 
     def create_key(
         self,
@@ -178,15 +172,14 @@ class ApiKeyStore:
         key_hash = _hash_key(full_key)
         modes_str = ",".join(m.value for m in allowed_modes)
 
-        with self._connect() as conn:
+        with get_conn(schema=PG_SCHEMA) as conn:
             conn.execute(
                 """
                 INSERT INTO api_keys (key_id, key_hash, name, allowed_modes, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
                 """,
                 (key_id, key_hash, name, modes_str, datetime.now(timezone.utc).isoformat()),
             )
-            conn.commit()
 
         return key_id, full_key
 
@@ -201,13 +194,13 @@ class ApiKeyStore:
         """
         key_hash = _hash_key(key)
 
-        with self._connect() as conn:
+        with get_conn(schema=PG_SCHEMA) as conn:
             row = conn.execute(
                 """
                 SELECT key_id, key_hash, name, allowed_modes, created_at,
                        last_used_at, revoked
                 FROM api_keys
-                WHERE key_hash = ? AND revoked = 0
+                WHERE key_hash = %s AND revoked = FALSE
                 """,
                 (key_hash,),
             ).fetchone()
@@ -217,22 +210,29 @@ class ApiKeyStore:
 
             # Update last_used_at
             conn.execute(
-                "UPDATE api_keys SET last_used_at = ? WHERE key_id = ?",
+                "UPDATE api_keys SET last_used_at = %s WHERE key_id = %s",
                 (datetime.now(timezone.utc).isoformat(), row["key_id"]),
             )
-            conn.commit()
 
             # Parse allowed modes
             modes_str = row["allowed_modes"]
             allowed_modes = tuple(ExecutionMode(m) for m in modes_str.split(",") if m)
+
+            created_at = row["created_at"]
+            if isinstance(created_at, str):
+                created_at = datetime.fromisoformat(created_at)
+
+            last_used_at = row["last_used_at"]
+            if isinstance(last_used_at, str):
+                last_used_at = datetime.fromisoformat(last_used_at)
 
             return ApiKey(
                 key_id=row["key_id"],
                 key_hash=row["key_hash"],
                 name=row["name"],
                 allowed_modes=allowed_modes,
-                created_at=datetime.fromisoformat(row["created_at"]),
-                last_used_at=(datetime.fromisoformat(row["last_used_at"]) if row["last_used_at"] else None),
+                created_at=created_at,
+                last_used_at=last_used_at,
                 revoked=bool(row["revoked"]),
             )
 
@@ -245,12 +245,11 @@ class ApiKeyStore:
         Returns:
             True if the key was revoked, False if not found.
         """
-        with self._connect() as conn:
+        with get_conn(schema=PG_SCHEMA) as conn:
             cursor = conn.execute(
-                "UPDATE api_keys SET revoked = 1 WHERE key_id = ?",
+                "UPDATE api_keys SET revoked = TRUE WHERE key_id = %s",
                 (key_id,),
             )
-            conn.commit()
             return bool(cursor.rowcount > 0)
 
     def list_keys(self, include_revoked: bool = False) -> list[ApiKey]:
@@ -264,23 +263,33 @@ class ApiKeyStore:
         """
         query = "SELECT * FROM api_keys"
         if not include_revoked:
-            query += " WHERE revoked = 0"
+            query += " WHERE revoked = FALSE"
         query += " ORDER BY created_at DESC"
 
-        with self._connect() as conn:
+        with get_conn(schema=PG_SCHEMA) as conn:
             rows = conn.execute(query).fetchall()
-            return [
-                ApiKey(
-                    key_id=row["key_id"],
-                    key_hash=row["key_hash"],
-                    name=row["name"],
-                    allowed_modes=tuple(ExecutionMode(m) for m in row["allowed_modes"].split(",") if m),
-                    created_at=datetime.fromisoformat(row["created_at"]),
-                    last_used_at=(datetime.fromisoformat(row["last_used_at"]) if row["last_used_at"] else None),
-                    revoked=bool(row["revoked"]),
+            result: list[ApiKey] = []
+            for row in rows:
+                created_at = row["created_at"]
+                if isinstance(created_at, str):
+                    created_at = datetime.fromisoformat(created_at)
+
+                last_used_at = row["last_used_at"]
+                if isinstance(last_used_at, str):
+                    last_used_at = datetime.fromisoformat(last_used_at)
+
+                result.append(
+                    ApiKey(
+                        key_id=row["key_id"],
+                        key_hash=row["key_hash"],
+                        name=row["name"],
+                        allowed_modes=tuple(ExecutionMode(m) for m in row["allowed_modes"].split(",") if m),
+                        created_at=created_at,
+                        last_used_at=last_used_at,
+                        revoked=bool(row["revoked"]),
+                    )
                 )
-                for row in rows
-            ]
+            return result
 
 
 def _get_peer_credentials(request: Request) -> tuple[int, int] | None:
@@ -382,7 +391,7 @@ class AuthMiddleware:
     def key_store(self) -> ApiKeyStore | None:
         """Get the API key store (lazy initialization)."""
         if self._key_store is None and self._config.api_keys_db_path:
-            self._key_store = ApiKeyStore(self._config.api_keys_db_path)
+            self._key_store = ApiKeyStore()
         return self._key_store
 
     async def __call__(self, request: Request) -> AuthContext:

@@ -1,18 +1,21 @@
-"""Man Vault embedder.
+"""Man Vault embedder (PostgreSQL + pgvector).
 
 Generates and stores embeddings for man page chunks using Ollama.
 Supports multiple embedding models with automatic fallback.
+
+pgvector handles vector storage natively -- no struct.pack/unpack needed.
+Cosine similarity is computed via the ``<=>`` operator in SQL queries
+(see service.py search functions), so cosine_similarity() is removed.
 """
 
 from __future__ import annotations
 
 import logging
-import math
-import sqlite3
 from collections.abc import Callable
 
+import psycopg
+
 from elle.daemon.manvault.models import ManChunk
-from elle.daemon.manvault.schema import ensure_schema, get_connection
 from elle.daemon.manvault.store import (
     get_chunks_for_doc,
     get_chunks_without_embeddings,
@@ -25,8 +28,11 @@ from elle.rag.ollama_client import (
     OllamaError,
     get_client,
 )
+from elle.storage.engine import get_conn
 
 logger = logging.getLogger(__name__)
+
+PG_SCHEMA = "manvault"
 
 # Default embedding model (768 dims, fast, good quality)
 DEFAULT_EMBEDDING_MODEL = "nomic-embed-text"
@@ -133,7 +139,7 @@ class ManVaultEmbedder:
         Returns:
             List of embedding vectors.
         """
-        embeddings = []
+        embeddings: list[list[float]] = []
         total = len(texts)
 
         for i, text in enumerate(texts):
@@ -148,13 +154,13 @@ class ManVaultEmbedder:
     def embed_chunk(
         self,
         chunk: ManChunk,
-        conn: sqlite3.Connection | None = None,
+        conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
     ) -> bool:
         """Embed a single chunk and store the result.
 
         Args:
             chunk: Chunk to embed.
-            conn: SQLite connection.
+            conn: psycopg connection (optional, will obtain from pool if None).
 
         Returns:
             True if successful.
@@ -163,15 +169,20 @@ class ManVaultEmbedder:
             logger.error("Cannot embed chunk without ID")
             return False
 
-        # Get or create connection
-        own_conn = conn is None
-        if own_conn:
-            conn = get_connection()
-            ensure_schema(conn)
+        if conn is not None:
+            return self._embed_chunk_impl(conn, chunk)
 
+        with get_conn(schema=PG_SCHEMA) as c:
+            return self._embed_chunk_impl(c, chunk)
+
+    def _embed_chunk_impl(
+        self,
+        conn: psycopg.Connection,  # type: ignore[type-arg]
+        chunk: ManChunk,
+    ) -> bool:
         try:
             # Check if already embedded
-            existing = get_embedding(conn, chunk.id)
+            existing = get_embedding(conn, chunk.id)  # type: ignore[arg-type]
             if existing:
                 return True
 
@@ -179,75 +190,72 @@ class ManVaultEmbedder:
             embedding = self.embed_text(chunk.text)
 
             # Store embedding
-            upsert_embedding(conn, chunk.id, embedding, self.model)
+            upsert_embedding(conn, chunk.id, embedding, self.model)  # type: ignore[arg-type]
             return True
 
         except OllamaError as e:
             logger.error(f"Failed to embed chunk {chunk.id}: {e}")
             return False
-        finally:
-            if own_conn and conn is not None:
-                conn.close()
 
     def embed_document(
         self,
         doc_id: int,
-        conn: sqlite3.Connection | None = None,
+        conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
     ) -> int:
         """Embed all chunks for a document.
 
         Args:
             doc_id: Document ID.
-            conn: SQLite connection.
+            conn: psycopg connection (optional, will obtain from pool if None).
 
         Returns:
             Number of chunks embedded.
         """
-        # Get or create connection
-        own_conn = conn is None
-        if own_conn:
-            conn = get_connection()
-            ensure_schema(conn)
+        if conn is not None:
+            return self._embed_document_impl(conn, doc_id)
 
-        try:
-            # Get chunks for document
-            chunks = get_chunks_for_doc(conn, doc_id)
-            if not chunks:
-                return 0
+        with get_conn(schema=PG_SCHEMA) as c:
+            return self._embed_document_impl(c, doc_id)
 
-            count = 0
-            embeddings_to_store: list[tuple[int, list[float]]] = []
+    def _embed_document_impl(
+        self,
+        conn: psycopg.Connection,  # type: ignore[type-arg]
+        doc_id: int,
+    ) -> int:
+        # Get chunks for document
+        chunks = get_chunks_for_doc(conn, doc_id)
+        if not chunks:
+            return 0
 
-            for chunk in chunks:
-                if chunk.id is None:
-                    continue
+        count = 0
+        embeddings_to_store: list[tuple[int, list[float]]] = []
 
-                # Check if already embedded
-                existing = get_embedding(conn, chunk.id)
-                if existing:
-                    count += 1
-                    continue
+        for chunk in chunks:
+            if chunk.id is None:
+                continue
 
-                try:
-                    embedding = self.embed_text(chunk.text)
-                    embeddings_to_store.append((chunk.id, embedding))
-                    count += 1
-                except OllamaError as e:
-                    logger.error(f"Failed to embed chunk {chunk.id}: {e}")
+            # Check if already embedded
+            existing = get_embedding(conn, chunk.id)
+            if existing:
+                count += 1
+                continue
 
-            # Batch store embeddings
-            if embeddings_to_store:
-                upsert_embeddings_batch(conn, embeddings_to_store, self.model)
+            try:
+                embedding = self.embed_text(chunk.text)
+                embeddings_to_store.append((chunk.id, embedding))
+                count += 1
+            except OllamaError as e:
+                logger.error(f"Failed to embed chunk {chunk.id}: {e}")
 
-            return count
+        # Batch store embeddings
+        if embeddings_to_store:
+            upsert_embeddings_batch(conn, embeddings_to_store, self.model)
 
-        finally:
-            if own_conn and conn is not None:
-                conn.close()
+        return count
 
     def embed_all_pending(
         self,
-        conn: sqlite3.Connection | None = None,
+        conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
         batch_size: int = DEFAULT_BATCH_SIZE,
         limit: int = 0,
         progress_callback: Callable[[int, int], None] | None = None,
@@ -255,7 +263,7 @@ class ManVaultEmbedder:
         """Embed all chunks that don't have embeddings yet.
 
         Args:
-            conn: SQLite connection.
+            conn: psycopg connection (optional, will obtain from pool if None).
             batch_size: Number of chunks to process at a time.
             limit: Maximum chunks to embed (0 = no limit).
             progress_callback: Called with (current, total) for progress.
@@ -263,95 +271,58 @@ class ManVaultEmbedder:
         Returns:
             Number of chunks embedded.
         """
-        # Get or create connection
-        own_conn = conn is None
-        if own_conn:
-            conn = get_connection()
-            ensure_schema(conn)
+        if conn is not None:
+            return self._embed_all_pending_impl(conn, batch_size, limit, progress_callback)
 
-        try:
-            count = 0
+        with get_conn(schema=PG_SCHEMA) as c:
+            return self._embed_all_pending_impl(c, batch_size, limit, progress_callback)
 
-            while True:
-                # Get next batch of chunks without embeddings
-                fetch_limit = min(batch_size, limit - count) if limit else batch_size
-                chunks = get_chunks_without_embeddings(conn, fetch_limit)
+    def _embed_all_pending_impl(
+        self,
+        conn: psycopg.Connection,  # type: ignore[type-arg]
+        batch_size: int,
+        limit: int,
+        progress_callback: Callable[[int, int], None] | None,
+    ) -> int:
+        count = 0
 
-                if not chunks:
-                    break
+        while True:
+            # Get next batch of chunks without embeddings
+            fetch_limit = min(batch_size, limit - count) if limit else batch_size
+            chunks = get_chunks_without_embeddings(conn, fetch_limit)
 
-                embeddings_to_store: list[tuple[int, list[float]]] = []
+            if not chunks:
+                break
 
-                for chunk in chunks:
-                    if chunk.id is None:
-                        continue
+            embeddings_to_store: list[tuple[int, list[float]]] = []
 
-                    try:
-                        embedding = self.embed_text(chunk.text)
-                        embeddings_to_store.append((chunk.id, embedding))
-                        count += 1
+            for chunk in chunks:
+                if chunk.id is None:
+                    continue
 
-                        if progress_callback:
-                            progress_callback(count, limit or -1)
+                try:
+                    embedding = self.embed_text(chunk.text)
+                    embeddings_to_store.append((chunk.id, embedding))
+                    count += 1
 
-                    except OllamaError as e:
-                        logger.error(f"Failed to embed chunk {chunk.id}: {e}")
-                        continue
+                    if progress_callback:
+                        progress_callback(count, limit or -1)
 
-                    if limit and count >= limit:
-                        break
-
-                # Batch store embeddings
-                if embeddings_to_store:
-                    upsert_embeddings_batch(conn, embeddings_to_store, self.model)
+                except OllamaError as e:
+                    logger.error(f"Failed to embed chunk {chunk.id}: {e}")
+                    continue
 
                 if limit and count >= limit:
                     break
 
-            return count
+            # Batch store embeddings
+            if embeddings_to_store:
+                upsert_embeddings_batch(conn, embeddings_to_store, self.model)
 
-        finally:
-            if own_conn and conn is not None:
-                conn.close()
+            if limit and count >= limit:
+                break
 
-
-def cosine_similarity(a: list[float], b: list[float]) -> float:
-    """Compute cosine similarity between two vectors.
-
-    Args:
-        a: First vector.
-        b: Second vector.
-
-    Returns:
-        Cosine similarity score between -1 and 1.
-    """
-    if len(a) != len(b):
-        raise ValueError("Vectors must have same dimension")
-
-    dot_product = sum(x * y for x, y in zip(a, b, strict=False))
-    norm_a = math.sqrt(sum(x * x for x in a))
-    norm_b = math.sqrt(sum(x * x for x in b))
-
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-
-    return dot_product / (norm_a * norm_b)
-
-
-def euclidean_distance(a: list[float], b: list[float]) -> float:
-    """Compute Euclidean distance between two vectors.
-
-    Args:
-        a: First vector.
-        b: Second vector.
-
-    Returns:
-        Euclidean distance (lower = more similar).
-    """
-    if len(a) != len(b):
-        raise ValueError("Vectors must have same dimension")
-
-    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b, strict=False)))
+        return count
 
 
 # Module-level embedder instance

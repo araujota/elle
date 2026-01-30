@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
-
 import pytest
 
 from elle.capabilities.autogen.models import (
@@ -16,18 +13,9 @@ from elle.capabilities.autogen.store import AutogenStore, get_store, reset_store
 
 
 @pytest.fixture
-def temp_db():
-    """Create a temporary database."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        yield Path(f.name)
-    # Cleanup after test
-    Path(f.name).unlink(missing_ok=True)
-
-
-@pytest.fixture
-def store(temp_db):
-    """Create a store with temporary database."""
-    return AutogenStore(temp_db)
+def store(autogen_conn):
+    """Create a store with the conftest autogen connection."""
+    return AutogenStore(conn=autogen_conn)
 
 
 @pytest.fixture
@@ -50,9 +38,9 @@ def sample_spec():
 class TestAutogenStore:
     """Tests for AutogenStore."""
 
-    def test_init(self, store, temp_db):
+    def test_init(self, store):
         """Test store initialization."""
-        assert store.db_path == temp_db
+        assert store is not None
 
     def test_save_and_get(self, store, sample_spec):
         """Test saving and retrieving capability."""
@@ -268,22 +256,22 @@ class TestAutogenStore:
 class TestGetStore:
     """Tests for get_store function."""
 
-    def test_get_store_singleton(self, temp_db):
+    def test_get_store_singleton(self, tmp_path):
         """Test store singleton behavior."""
         reset_store()
 
-        store1 = get_store(temp_db)
-        store2 = get_store(temp_db)
+        store1 = get_store(tmp_path / "autogen.db")
+        store2 = get_store(tmp_path / "autogen.db")
 
         assert store1 is store2
 
         reset_store()
 
-    def test_reset_store(self, temp_db):
+    def test_reset_store(self, tmp_path):
         """Test store reset."""
         reset_store()
-        store1 = get_store(temp_db)
+        store1 = get_store(tmp_path / "autogen.db")
         reset_store()
-        store2 = get_store(temp_db)
+        store2 = get_store(tmp_path / "autogen.db")
 
         assert store1 is not store2

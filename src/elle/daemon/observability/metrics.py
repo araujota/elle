@@ -131,6 +131,28 @@ class ObservabilityMetrics(BaseModel):
         description="Reactive function executions in the last hour",
     )
 
+    # Cloud submission queue
+    cloud_queue_pending: int = Field(
+        default=0,
+        description="Pending cloud submissions awaiting retry",
+    )
+    cloud_retries_total: int = Field(
+        default=0,
+        description="Total retry attempts for cloud submissions",
+    )
+    cloud_success_total: int = Field(
+        default=0,
+        description="Successful cloud submission retries",
+    )
+    cloud_failed_permanent: int = Field(
+        default=0,
+        description="Permanently failed cloud submissions",
+    )
+    cloud_healthy: bool = Field(
+        default=True,
+        description="Whether the cloud endpoint is reachable",
+    )
+
     # Collection metadata
     collected_at: datetime = Field(
         default_factory=datetime.utcnow,
@@ -206,6 +228,13 @@ async def collect_observability_metrics() -> ObservabilityMetrics:
     except Exception as e:
         logger.warning(f"Failed to collect health stats: {e}")
 
+    # Collect cloud queue stats
+    try:
+        cloud_stats = _get_cloud_queue_stats()
+        metrics_data.update(cloud_stats)
+    except Exception as e:
+        logger.warning(f"Failed to collect cloud queue stats: {e}")
+
     return ObservabilityMetrics(**metrics_data)
 
 
@@ -221,51 +250,49 @@ async def _get_incident_statistics() -> dict[str, Any]:
     }
 
     try:
-        from elle.daemon.incidents.schema import get_connection
+        from elle.storage.engine import get_conn
 
-        conn = get_connection()
-        cursor = conn.cursor()
+        with get_conn(schema="incidents") as conn:
+            cursor = conn.cursor()
 
-        # Total incidents
-        cursor.execute("SELECT COUNT(*) FROM incidents")
-        stats["total_incidents"] = cursor.fetchone()[0] or 0
+            # Total incidents
+            cursor.execute("SELECT COUNT(*) AS cnt FROM incidents")
+            stats["total_incidents"] = cursor.fetchone()["cnt"] or 0
 
-        # Open incidents
-        cursor.execute("SELECT COUNT(*) FROM incidents WHERE status = 'open'")
-        stats["open_incidents"] = cursor.fetchone()[0] or 0
+            # Open incidents
+            cursor.execute("SELECT COUNT(*) AS cnt FROM incidents WHERE status = 'open'")
+            stats["open_incidents"] = cursor.fetchone()["cnt"] or 0
 
-        # By domain
-        cursor.execute(
-            "SELECT domain, COUNT(*) FROM incidents GROUP BY domain"
-        )
-        stats["incidents_by_domain"] = {row[0]: row[1] for row in cursor.fetchall()}
+            # By domain
+            cursor.execute(
+                "SELECT domain, COUNT(*) AS cnt FROM incidents GROUP BY domain"
+            )
+            stats["incidents_by_domain"] = {row["domain"]: row["cnt"] for row in cursor.fetchall()}
 
-        # By outcome
-        cursor.execute(
-            "SELECT outcome, COUNT(*) FROM incidents GROUP BY outcome"
-        )
-        stats["incidents_by_outcome"] = {row[0]: row[1] for row in cursor.fetchall()}
+            # By outcome
+            cursor.execute(
+                "SELECT outcome, COUNT(*) AS cnt FROM incidents GROUP BY outcome"
+            )
+            stats["incidents_by_outcome"] = {row["outcome"]: row["cnt"] for row in cursor.fetchall()}
 
-        # MTTR overall (for resolved incidents with time_to_resolve_sec)
-        cursor.execute(
-            "SELECT AVG(time_to_resolve_sec) FROM incidents "
-            "WHERE status = 'resolved' AND time_to_resolve_sec IS NOT NULL"
-        )
-        row = cursor.fetchone()
-        if row and row[0]:
-            stats["mttr_overall_sec"] = float(row[0])
+            # MTTR overall (for resolved incidents with time_to_resolve_sec)
+            cursor.execute(
+                "SELECT AVG(time_to_resolve_sec) AS avg_ttr FROM incidents "
+                "WHERE status = 'resolved' AND time_to_resolve_sec IS NOT NULL"
+            )
+            row = cursor.fetchone()
+            if row and row["avg_ttr"]:
+                stats["mttr_overall_sec"] = float(row["avg_ttr"])
 
-        # MTTR by domain
-        cursor.execute(
-            "SELECT domain, AVG(time_to_resolve_sec) FROM incidents "
-            "WHERE status = 'resolved' AND time_to_resolve_sec IS NOT NULL "
-            "GROUP BY domain"
-        )
-        stats["mttr_by_domain"] = {
-            row[0]: float(row[1]) for row in cursor.fetchall() if row[1]
-        }
-
-        conn.close()
+            # MTTR by domain
+            cursor.execute(
+                "SELECT domain, AVG(time_to_resolve_sec) AS avg_ttr FROM incidents "
+                "WHERE status = 'resolved' AND time_to_resolve_sec IS NOT NULL "
+                "GROUP BY domain"
+            )
+            stats["mttr_by_domain"] = {
+                row["domain"]: float(row["avg_ttr"]) for row in cursor.fetchall() if row["avg_ttr"]
+            }
 
     except Exception as e:
         logger.debug(f"Incident stats error: {e}")
@@ -283,48 +310,46 @@ async def _get_event_statistics() -> dict[str, Any]:
     }
 
     try:
-        from elle.daemon.telemetry.schema import get_connection
+        from elle.storage.engine import get_conn
 
-        conn = get_connection()
-        cursor = conn.cursor()
+        with get_conn(schema="telemetry") as conn:
+            cursor = conn.cursor()
 
-        now = datetime.utcnow()
-        hour_ago = (now - timedelta(hours=1)).isoformat()
-        day_ago = (now - timedelta(hours=24)).isoformat()
+            now = datetime.utcnow()
+            hour_ago = (now - timedelta(hours=1)).isoformat()
+            day_ago = (now - timedelta(hours=24)).isoformat()
 
-        # Events in last hour
-        cursor.execute(
-            "SELECT COUNT(*) FROM events WHERE ts >= ?",
-            (hour_ago,),
-        )
-        row = cursor.fetchone()
-        stats["total_events_1h"] = row[0] if row else 0
+            # Events in last hour
+            cursor.execute(
+                "SELECT COUNT(*) AS cnt FROM events WHERE ts >= %s",
+                (hour_ago,),
+            )
+            row = cursor.fetchone()
+            stats["total_events_1h"] = row["cnt"] if row else 0
 
-        # Events in last 24h
-        cursor.execute(
-            "SELECT COUNT(*) FROM events WHERE ts >= ?",
-            (day_ago,),
-        )
-        row = cursor.fetchone()
-        stats["total_events_24h"] = row[0] if row else 0
+            # Events in last 24h
+            cursor.execute(
+                "SELECT COUNT(*) AS cnt FROM events WHERE ts >= %s",
+                (day_ago,),
+            )
+            row = cursor.fetchone()
+            stats["total_events_24h"] = row["cnt"] if row else 0
 
-        # By severity (last 24h)
-        cursor.execute(
-            "SELECT severity, COUNT(*) FROM events "
-            "WHERE ts >= ? GROUP BY severity",
-            (day_ago,),
-        )
-        stats["events_by_severity"] = {row[0]: row[1] for row in cursor.fetchall()}
+            # By severity (last 24h)
+            cursor.execute(
+                "SELECT severity, COUNT(*) AS cnt FROM events "
+                "WHERE ts >= %s GROUP BY severity",
+                (day_ago,),
+            )
+            stats["events_by_severity"] = {row["severity"]: row["cnt"] for row in cursor.fetchall()}
 
-        # By source (last 24h)
-        cursor.execute(
-            "SELECT source, COUNT(*) FROM events "
-            "WHERE ts >= ? GROUP BY source",
-            (day_ago,),
-        )
-        stats["events_by_source"] = {row[0]: row[1] for row in cursor.fetchall()}
-
-        conn.close()
+            # By source (last 24h)
+            cursor.execute(
+                "SELECT source, COUNT(*) AS cnt FROM events "
+                "WHERE ts >= %s GROUP BY source",
+                (day_ago,),
+            )
+            stats["events_by_source"] = {row["source"]: row["cnt"] for row in cursor.fetchall()}
 
     except Exception as e:
         logger.debug(f"Event stats error: {e}")
@@ -340,31 +365,29 @@ async def _get_efficacy_statistics() -> dict[str, Any]:
     }
 
     try:
-        from elle.daemon.incidents.schema import get_connection
+        from elle.storage.engine import get_conn
 
-        conn = get_connection()
-        cursor = conn.cursor()
+        with get_conn(schema="incidents") as conn:
+            cursor = conn.cursor()
 
-        # Success rates from solution_approach_efficacy
-        cursor.execute(
-            "SELECT approach_signature, success_rate FROM solution_approach_efficacy "
-            "WHERE total_uses > 0"
-        )
-        stats["capability_success_rates"] = {
-            row[0]: float(row[1]) for row in cursor.fetchall()
-        }
+            # Success rates from solution_approach_efficacy
+            cursor.execute(
+                "SELECT approach_signature, success_rate FROM solution_approach_efficacy "
+                "WHERE total_uses > 0"
+            )
+            stats["capability_success_rates"] = {
+                row["approach_signature"]: float(row["success_rate"]) for row in cursor.fetchall()
+            }
 
-        # Recent executions (from incident_actions in last hour)
-        hour_ago = (datetime.utcnow() - timedelta(hours=1)).isoformat()
-        cursor.execute(
-            "SELECT COUNT(*) FROM incident_actions "
-            "WHERE created_at >= ? AND kind = 'capability'",
-            (hour_ago,),
-        )
-        row = cursor.fetchone()
-        stats["capability_executions_1h"] = row[0] if row else 0
-
-        conn.close()
+            # Recent executions (from incident_actions in last hour)
+            hour_ago = (datetime.utcnow() - timedelta(hours=1)).isoformat()
+            cursor.execute(
+                "SELECT COUNT(*) AS cnt FROM incident_actions "
+                "WHERE created_at >= %s AND kind = 'capability'",
+                (hour_ago,),
+            )
+            row = cursor.fetchone()
+            stats["capability_executions_1h"] = row["cnt"] if row else 0
 
     except Exception as e:
         logger.debug(f"Efficacy stats error: {e}")
@@ -381,27 +404,25 @@ async def _get_forecast_statistics() -> dict[str, Any]:
     }
 
     try:
-        from elle.daemon.incidents.schema import get_connection
+        from elle.storage.engine import get_conn
 
-        conn = get_connection()
-        cursor = conn.cursor()
+        with get_conn(schema="incidents") as conn:
+            cursor = conn.cursor()
 
-        # Count forecast incidents by urgency (open only)
-        cursor.execute(
-            "SELECT COUNT(*) FROM incidents "
-            "WHERE forecast_urgency = 'prepare' AND status = 'open'"
-        )
-        row = cursor.fetchone()
-        stats["active_warnings"] = row[0] if row else 0
+            # Count forecast incidents by urgency (open only)
+            cursor.execute(
+                "SELECT COUNT(*) AS cnt FROM incidents "
+                "WHERE forecast_urgency = 'prepare' AND status = 'open'"
+            )
+            row = cursor.fetchone()
+            stats["active_warnings"] = row["cnt"] if row else 0
 
-        cursor.execute(
-            "SELECT COUNT(*) FROM incidents "
-            "WHERE forecast_urgency = 'act_now' AND status = 'open'"
-        )
-        row = cursor.fetchone()
-        stats["active_criticals"] = row[0] if row else 0
-
-        conn.close()
+            cursor.execute(
+                "SELECT COUNT(*) AS cnt FROM incidents "
+                "WHERE forecast_urgency = 'act_now' AND status = 'open'"
+            )
+            row = cursor.fetchone()
+            stats["active_criticals"] = row["cnt"] if row else 0
 
     except Exception as e:
         logger.debug(f"Forecast stats error: {e}")
@@ -426,6 +447,44 @@ async def _get_reactive_statistics() -> dict[str, Any]:
 
     except Exception as e:
         logger.debug(f"Reactive stats error: {e}")
+
+    return stats
+
+
+def _get_cloud_queue_stats() -> dict[str, Any]:
+    """Get cloud submission queue statistics."""
+    stats: dict[str, Any] = {
+        "cloud_queue_pending": 0,
+        "cloud_retries_total": 0,
+        "cloud_success_total": 0,
+        "cloud_failed_permanent": 0,
+        "cloud_healthy": True,
+    }
+
+    try:
+        from elle.daemon.incidents.cloud_queue import get_cloud_queue
+
+        queue = get_cloud_queue()
+        metrics = queue.get_metrics()
+        stats["cloud_queue_pending"] = metrics.pending_count
+        stats["cloud_retries_total"] = metrics.total_retries
+        stats["cloud_success_total"] = metrics.succeeded_count
+        stats["cloud_failed_permanent"] = metrics.failed_permanent_count
+
+    except RuntimeError:
+        # Queue not configured
+        pass
+    except Exception as e:
+        logger.debug(f"Cloud queue stats error: {e}")
+
+    try:
+        from elle.daemon.incidents.cloud_retry_worker import get_cloud_retry_worker
+
+        worker = get_cloud_retry_worker()
+        stats["cloud_healthy"] = worker.stats.cloud_healthy
+
+    except Exception as e:
+        logger.debug(f"Cloud worker stats error: {e}")
 
     return stats
 
@@ -611,6 +670,38 @@ def format_prometheus(metrics: ObservabilityMetrics) -> str:
         "reactive_executions_1h",
         metrics.reactive_executions_1h,
         "Reactive function executions in the last hour",
+        "gauge",
+    )
+
+    # Cloud submission queue metrics
+    add_metric(
+        "cloud_queue_pending",
+        metrics.cloud_queue_pending,
+        "Pending cloud submissions awaiting retry",
+        "gauge",
+    )
+    add_metric(
+        "cloud_retries_total",
+        metrics.cloud_retries_total,
+        "Total retry attempts for cloud submissions",
+        "counter",
+    )
+    add_metric(
+        "cloud_success_total",
+        metrics.cloud_success_total,
+        "Successful cloud submission retries",
+        "counter",
+    )
+    add_metric(
+        "cloud_failed_permanent",
+        metrics.cloud_failed_permanent,
+        "Permanently failed cloud submissions",
+        "counter",
+    )
+    add_metric(
+        "cloud_healthy",
+        1 if metrics.cloud_healthy else 0,
+        "Whether the cloud endpoint is reachable",
         "gauge",
     )
 

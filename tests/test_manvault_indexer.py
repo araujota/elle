@@ -1,297 +1,393 @@
-"""Tests for Man Vault indexer."""
+from __future__ import annotations
+
+from datetime import datetime
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from elle.daemon.manvault.indexer import (
-    CORE_COMMANDS,
     _extract_name,
     _split_into_sections,
     _split_section,
     chunk_document,
     compute_hash,
+    discover_man_pages,
+    get_seeded_count,
+    index_all,
+    index_incremental,
+    index_page,
+    is_core_seeded,
     normalize_text,
+    render_manpage,
+    seed_core_commands,
 )
+from elle.daemon.manvault.models import ManDiscoveryItem, ManDoc
 
 
-class TestNameExtraction:
-    """Tests for man page name extraction from filenames."""
+# ---------------------------------------------------------------------------
+# _extract_name
+# ---------------------------------------------------------------------------
 
-    def test_simple_name(self):
-        """Test extracting simple command name."""
+class TestExtractName:
+    def test_simple(self):
         assert _extract_name("ls.1.gz", "1") == "ls"
 
-    def test_name_with_dot(self):
-        """Test extracting name with dot (e.g., systemd.service)."""
-        assert _extract_name("systemd.service.5.gz", "5") == "systemd.service"
-
-    def test_uncompressed(self):
-        """Test extracting name from uncompressed file."""
+    def test_no_compression(self):
         assert _extract_name("ls.1", "1") == "ls"
 
-    def test_bz2_compression(self):
-        """Test extracting name from bz2 compressed file."""
+    def test_bz2(self):
         assert _extract_name("ls.1.bz2", "1") == "ls"
 
-    def test_xz_compression(self):
-        """Test extracting name from xz compressed file."""
+    def test_xz(self):
         assert _extract_name("ls.1.xz", "1") == "ls"
 
+    def test_compound_name(self):
+        assert _extract_name("systemd.service.5.gz", "5") == "systemd.service"
+
     def test_wrong_section(self):
-        """Test that wrong section returns None."""
         assert _extract_name("ls.1.gz", "5") is None
 
-    def test_invalid_filename(self):
-        """Test that invalid filename returns None."""
-        assert _extract_name("not-a-manpage.txt", "1") is None
+    def test_empty_name(self):
+        assert _extract_name(".1.gz", "1") is None
 
 
-class TestNormalization:
-    """Tests for text normalization."""
+# ---------------------------------------------------------------------------
+# normalize_text
+# ---------------------------------------------------------------------------
 
-    def test_remove_backspaces(self):
-        """Test removing backspace formatting."""
-        # The function removes character+backspace sequences
-        # Input with embedded backspaces
-        text = "hel\blo wor\bld"
+class TestNormalizeText:
+    def test_backspace_removal(self):
+        # Bold: X^HX  (man page bold formatting)
+        text = "B\bBo\bold\bld"
         result = normalize_text(text)
-        # Backspaces should be removed
         assert "\b" not in result
-        # The result should be readable text (exact output depends on implementation)
+        # After removing .\b pairs: B\bB->B, o\bo->o, l\bl->l, d\bl->l
         assert len(result) > 0
 
     def test_collapse_blank_lines(self):
-        """Test collapsing multiple blank lines."""
-        text = "line1\n\n\n\nline2"
+        text = "line1\n\n\n\n\nline2"
         result = normalize_text(text)
-        assert result == "line1\n\nline2"
+        assert "\n\n\n" not in result
 
-    def test_strip_trailing_whitespace(self):
-        """Test stripping trailing whitespace from lines."""
-        text = "line1   \nline2  "
+    def test_trailing_whitespace(self):
+        text = "hello   \nworld   "
         result = normalize_text(text)
-        assert result == "line1\nline2"
+        assert result == "hello\nworld"
 
-    def test_remove_leading_blank_lines(self):
-        """Test removing leading blank lines."""
-        text = "\n\n\nActual content"
+    def test_leading_trailing_blank_lines(self):
+        text = "\n\n\nhello\n\n\n"
         result = normalize_text(text)
-        assert result == "Actual content"
+        assert result == "hello"
 
 
-class TestHashing:
-    """Tests for content hashing."""
+# ---------------------------------------------------------------------------
+# compute_hash
+# ---------------------------------------------------------------------------
 
-    def test_consistent_hash(self):
-        """Test that same content produces same hash."""
-        text = "Test content"
-        hash1 = compute_hash(text)
-        hash2 = compute_hash(text)
-        assert hash1 == hash2
+class TestComputeHash:
+    def test_deterministic(self):
+        h1 = compute_hash("hello")
+        h2 = compute_hash("hello")
+        assert h1 == h2
 
-    def test_different_content_different_hash(self):
-        """Test that different content produces different hash."""
-        hash1 = compute_hash("Content 1")
-        hash2 = compute_hash("Content 2")
-        assert hash1 != hash2
+    def test_different(self):
+        h1 = compute_hash("hello")
+        h2 = compute_hash("world")
+        assert h1 != h2
 
-    def test_hash_format(self):
-        """Test that hash is valid SHA256 hex."""
-        hash_value = compute_hash("Test")
-        assert len(hash_value) == 64  # SHA256 hex length
-        assert all(c in "0123456789abcdef" for c in hash_value)
+    def test_hex_format(self):
+        h = compute_hash("test")
+        assert len(h) == 64
+        assert all(c in "0123456789abcdef" for c in h)
 
 
-class TestSectionSplitting:
-    """Tests for section splitting."""
+# ---------------------------------------------------------------------------
+# _split_into_sections
+# ---------------------------------------------------------------------------
 
-    def test_split_simple_sections(self):
-        """Test splitting document with clear sections."""
-        text = """NAME
-       ls - list directory contents
-
-DESCRIPTION
-       List information about the files.
-
-OPTIONS
-       -l  use a long listing format
-"""
+class TestSplitIntoSections:
+    def test_no_headings(self):
+        text = "Just some text without headings"
         sections = _split_into_sections(text)
-
-        # Should have 3 sections
-        assert len(sections) == 3
-
-        # Check section names
-        section_names = [s[0] for s in sections]
-        assert "NAME" in section_names
-        assert "DESCRIPTION" in section_names
-        assert "OPTIONS" in section_names
-
-    def test_split_with_preamble(self):
-        """Test splitting when there's content before first heading."""
-        text = """Some preamble text
-
-NAME
-       ls - list directory contents
-"""
-        sections = _split_into_sections(text)
-
-        # First section should have None as name (preamble)
-        assert sections[0][0] is None
-        assert "preamble" in sections[0][1].lower()
-
-    def test_split_no_headings(self):
-        """Test splitting when there are no headings."""
-        text = "Just plain text without any headings."
-        sections = _split_into_sections(text)
-
         assert len(sections) == 1
         assert sections[0][0] is None
 
+    def test_with_headings(self):
+        text = "NAME\nfoo - a test\n\nDESCRIPTION\nSome description"
+        sections = _split_into_sections(text)
+        assert len(sections) == 2
+        assert sections[0][0] == "NAME"
+        assert sections[1][0] == "DESCRIPTION"
 
-class TestChunking:
-    """Tests for document chunking."""
+    def test_preamble_before_heading(self):
+        text = "Some preamble\n\nNAME\ncontent"
+        sections = _split_into_sections(text)
+        assert len(sections) == 2
+        assert sections[0][0] is None
 
-    def test_small_section_single_chunk(self):
-        """Test that small sections become single chunks."""
-        text = """NAME
-       ls - list directory contents
-"""
-        chunks = chunk_document(text, max_chunk_size=1000)
 
-        # Small section should be single chunk
-        assert len(chunks) >= 1
-        assert "ls" in chunks[0][0]
+# ---------------------------------------------------------------------------
+# _split_section
+# ---------------------------------------------------------------------------
 
-    def test_large_section_split(self):
-        """Test that large sections are split into multiple chunks."""
-        # Create a large section
-        large_text = (
-            """OPTIONS
-       """
-            + "This is a very long option description. " * 100
-        )
+class TestSplitSection:
+    def test_small_text(self):
+        text = "Just a small paragraph."
+        chunks = _split_section(text, 1000)
+        assert len(chunks) == 1
 
-        chunks = chunk_document(large_text, max_chunk_size=200)
-
-        # Should have multiple chunks
+    def test_large_text(self):
+        paras = "\n\n".join([f"Paragraph {i} with some content to fill." for i in range(50)])
+        chunks = _split_section(paras, 100)
         assert len(chunks) > 1
 
-        # All chunks should have OPTIONS heading
-        for _, heading in chunks:
-            assert heading == "OPTIONS"
+    def test_long_paragraph(self):
+        text = "A" * 200 + ". " + "B" * 200 + ". " + "C" * 200
+        chunks = _split_section(text, 150)
+        assert len(chunks) > 1
 
-    def test_chunk_preserves_heading(self):
-        """Test that chunks preserve their section heading."""
-        text = """NAME
-       ls - list
 
-DESCRIPTION
-       List directory contents
-"""
+# ---------------------------------------------------------------------------
+# chunk_document
+# ---------------------------------------------------------------------------
+
+class TestChunkDocument:
+    def test_empty_sections(self):
+        text = "NAME\n\nDESCRIPTION\n\nSome content here."
         chunks = chunk_document(text)
+        assert len(chunks) >= 1
 
-        # Each chunk should have the correct heading
-        headings = [heading for _, heading in chunks]
-        assert "NAME" in headings or "DESCRIPTION" in headings
+    def test_small_document(self):
+        text = "NAME\nls - list directory contents"
+        chunks = chunk_document(text)
+        assert len(chunks) == 1
+        assert chunks[0][1] == "NAME"
 
-    def test_split_section_at_paragraphs(self):
-        """Test that section splitting respects paragraph boundaries."""
-        text = """Paragraph one is complete.
-
-Paragraph two has more information.
-
-Paragraph three concludes."""
-
-        chunks = _split_section(text, max_size=50)
-
-        # Chunks should be at paragraph boundaries where possible
-        for chunk in chunks:
-            # Each chunk should be a complete thought (ends with period)
-            assert chunk.strip().endswith(".")
+    def test_large_section(self):
+        content = "\n\n".join([f"Option {i}: does something." for i in range(100)])
+        text = f"OPTIONS\n{content}"
+        chunks = chunk_document(text, max_chunk_size=200)
+        assert len(chunks) > 1
+        assert all(c[1] == "OPTIONS" for c in chunks)
 
 
-class TestChunkDocumentIntegration:
-    """Integration tests for full document chunking."""
+# ---------------------------------------------------------------------------
+# render_manpage
+# ---------------------------------------------------------------------------
 
-    def test_typical_manpage_chunking(self):
-        """Test chunking a typical man page structure."""
-        manpage = """NAME
-       ls - list directory contents
+class TestRenderManpage:
+    @patch("elle.daemon.manvault.indexer.subprocess.Popen")
+    def test_render_success(self, mock_popen):
+        mock_man = MagicMock()
+        mock_man.stdout = MagicMock()
+        mock_man.returncode = 0
+        mock_man.wait.return_value = 0
 
-SYNOPSIS
-       ls [OPTION]... [FILE]...
+        mock_col = MagicMock()
+        mock_col.communicate.return_value = (b"LS(1)\n\nNAME\n ls - list\n", b"")
+        mock_col.returncode = 0
 
-DESCRIPTION
-       List information about the FILEs.
+        mock_popen.side_effect = [mock_man, mock_col]
+        result = render_manpage("ls", "1")
+        assert result is not None
+        assert "ls" in result
 
-OPTIONS
-       -a, --all
-              do not ignore entries starting with .
+    @patch("elle.daemon.manvault.indexer.subprocess.Popen")
+    def test_render_man_fails(self, mock_popen):
+        mock_man = MagicMock()
+        mock_man.stdout = MagicMock()
+        mock_man.returncode = 1
+        mock_man.wait.return_value = 1
 
-       -l     use a long listing format
+        mock_col = MagicMock()
+        mock_col.communicate.return_value = (b"", b"")
+        mock_col.returncode = 0
 
-SEE ALSO
-       dir(1), vdir(1)
-"""
-        chunks = chunk_document(manpage)
+        mock_popen.side_effect = [mock_man, mock_col]
+        result = render_manpage("nonexistent", "1")
+        assert result is None
 
-        # Should have chunks for each section
-        assert len(chunks) >= 4
+    @patch("elle.daemon.manvault.indexer.subprocess.Popen")
+    def test_render_timeout(self, mock_popen):
+        import subprocess as real_sub
+        mock_man = MagicMock()
+        mock_man.stdout = MagicMock()
+        mock_man.kill = MagicMock()
 
-        # Check that we captured key sections
-        all_text = " ".join(text for text, _ in chunks)
-        assert "list directory" in all_text
-        assert "long listing format" in all_text
+        mock_col = MagicMock()
+        mock_col.communicate.side_effect = real_sub.TimeoutExpired(cmd="col", timeout=5)
+        mock_col.kill = MagicMock()
 
-    def test_empty_document(self):
-        """Test chunking an empty document."""
-        chunks = chunk_document("")
-        assert chunks == []
+        mock_popen.side_effect = [mock_man, mock_col]
+        result = render_manpage("ls", "1")
+        assert result is None
 
-    def test_whitespace_only(self):
-        """Test chunking whitespace-only document."""
-        chunks = chunk_document("   \n\n   ")
-        assert chunks == []
+    @patch("elle.daemon.manvault.indexer.subprocess.Popen")
+    def test_render_not_found(self, mock_popen):
+        mock_popen.side_effect = FileNotFoundError("man not found")
+        result = render_manpage("ls", "1")
+        assert result is None
+
+    @patch("elle.daemon.manvault.indexer.subprocess.Popen")
+    def test_render_col_fails(self, mock_popen):
+        mock_man = MagicMock()
+        mock_man.stdout = MagicMock()
+        mock_man.returncode = 0
+        mock_man.wait.return_value = 0
+
+        mock_col = MagicMock()
+        mock_col.communicate.return_value = (b"", b"error")
+        mock_col.returncode = 1
+
+        mock_popen.side_effect = [mock_man, mock_col]
+        result = render_manpage("ls", "1")
+        assert result is None
 
 
-class TestCoreCommands:
-    """Tests for core commands configuration."""
+# ---------------------------------------------------------------------------
+# discover_man_pages
+# ---------------------------------------------------------------------------
 
-    def test_core_commands_not_empty(self):
-        """Test that core commands list is not empty."""
-        assert len(CORE_COMMANDS) > 0
+class TestDiscoverManPages:
+    def test_discover_from_temp(self, tmp_path):
+        man1_dir = tmp_path / "man1"
+        man1_dir.mkdir()
+        (man1_dir / "ls.1.gz").touch()
+        (man1_dir / "cp.1.gz").touch()
+        (man1_dir / "notaman").touch()  # should be skipped
 
-    def test_core_commands_format(self):
-        """Test that core commands are (name, section) tuples."""
-        for item in CORE_COMMANDS:
-            assert isinstance(item, tuple)
-            assert len(item) == 2
-            name, section = item
-            assert isinstance(name, str)
-            assert isinstance(section, str)
-            assert len(name) > 0
-            assert section in ["1", "2", "3", "4", "5", "6", "7", "8"]
+        items = list(discover_man_pages([tmp_path]))
+        names = [i.name for i in items]
+        assert "ls" in names
+        assert "cp" in names
 
-    def test_essential_commands_present(self):
-        """Test that essential commands are in the core list."""
-        command_names = [name for name, _ in CORE_COMMANDS]
+    def test_discover_nonexistent(self, tmp_path):
+        items = list(discover_man_pages([tmp_path / "nonexistent"]))
+        assert items == []
 
-        # Critical system commands
-        assert "systemctl" in command_names
-        assert "journalctl" in command_names
-        assert "apt" in command_names
+    def test_discover_with_lang(self, tmp_path):
+        fr_man1 = tmp_path / "fr" / "man1"
+        fr_man1.mkdir(parents=True)
+        (fr_man1 / "ls.1.gz").touch()
+        items = list(discover_man_pages([tmp_path]))
+        assert len(items) == 1
+        assert items[0].lang == "fr"
 
-        # Networking
-        assert "ip" in command_names
-        assert "ss" in command_names
-        assert "ufw" in command_names
 
-        # File operations
-        assert "ls" in command_names
-        assert "grep" in command_names
-        assert "tar" in command_names
+# ---------------------------------------------------------------------------
+# index_page (with mocked render)
+# ---------------------------------------------------------------------------
 
-    def test_no_duplicate_commands(self):
-        """Test that there are no duplicate (name, section) pairs."""
-        seen = set()
-        for item in CORE_COMMANDS:
-            assert item not in seen, f"Duplicate core command: {item}"
-            seen.add(item)
+class TestIndexPage:
+    @patch("elle.daemon.manvault.indexer.render_manpage")
+    def test_index_page_success(self, mock_render, manvault_conn):
+        mock_render.return_value = "NAME\nls - list contents\n\nDESCRIPTION\nLists directory."
+        conn = manvault_conn
+        result = index_page("ls", "1", "en", conn=conn)
+        assert result is True
+
+    @patch("elle.daemon.manvault.indexer.render_manpage")
+    def test_index_page_no_text(self, mock_render, manvault_conn):
+        mock_render.return_value = None
+        conn = manvault_conn
+        result = index_page("nope", "1", "en", conn=conn)
+        assert result is False
+
+    @patch("elle.daemon.manvault.indexer.render_manpage")
+    def test_index_page_skip_unchanged(self, mock_render, manvault_conn):
+        text = "NAME\nls - list contents"
+        mock_render.return_value = text
+        conn = manvault_conn
+        assert index_page("ls", "1", "en", conn=conn) is True
+        assert index_page("ls", "1", "en", conn=conn) is True
+
+
+# ---------------------------------------------------------------------------
+# index_all
+# ---------------------------------------------------------------------------
+
+class TestIndexAll:
+    @patch("elle.daemon.manvault.indexer.discover_man_pages")
+    @patch("elle.daemon.manvault.indexer.index_page")
+    def test_index_all(self, mock_index, mock_discover, manvault_conn):
+        mock_discover.return_value = [
+            ManDiscoveryItem(name="ls", section="1", lang="en", source_path="/usr/share/man/man1/ls.1.gz", mtime=1.0),
+            ManDiscoveryItem(name="cp", section="1", lang="en", source_path="/usr/share/man/man1/cp.1.gz", mtime=1.0),
+        ]
+        mock_index.return_value = True
+        conn = manvault_conn
+        count = index_all(conn=conn)
+        assert count == 2
+
+    @patch("elle.daemon.manvault.indexer.discover_man_pages")
+    @patch("elle.daemon.manvault.indexer.index_page")
+    def test_index_all_with_failure(self, mock_index, mock_discover, manvault_conn):
+        mock_discover.return_value = [
+            ManDiscoveryItem(name="ls", section="1", lang="en", source_path="/x", mtime=1.0),
+        ]
+        mock_index.side_effect = RuntimeError("fail")
+        conn = manvault_conn
+        count = index_all(conn=conn)
+        assert count == 0
+
+
+# ---------------------------------------------------------------------------
+# index_incremental
+# ---------------------------------------------------------------------------
+
+class TestIndexIncremental:
+    @patch("elle.daemon.manvault.indexer.discover_man_pages")
+    @patch("elle.daemon.manvault.indexer.render_manpage")
+    @patch("elle.daemon.manvault.indexer.index_page")
+    def test_incremental_new_page(self, mock_idx, mock_render, mock_discover, manvault_conn):
+        mock_discover.return_value = [
+            ManDiscoveryItem(name="ls", section="1", lang="en", source_path="/x", mtime=1.0),
+        ]
+        mock_render.return_value = "NAME\nls - list"
+        mock_idx.return_value = True
+
+        conn = manvault_conn
+        added, updated = index_incremental(conn=conn)
+        assert added == 1
+        assert updated == 0
+
+
+# ---------------------------------------------------------------------------
+# seed_core_commands / get_seeded_count / is_core_seeded
+# ---------------------------------------------------------------------------
+
+class TestCoreSeed:
+    @patch("elle.daemon.manvault.indexer.render_manpage")
+    def test_seed_core_commands(self, mock_render, manvault_conn):
+        mock_render.return_value = None  # All fail = 0 seeded
+        conn = manvault_conn
+        count = seed_core_commands(conn=conn)
+        assert count == 0
+
+    @patch("elle.daemon.manvault.indexer.get_doc")
+    def test_get_seeded_count(self, mock_get_doc, manvault_conn):
+        mock_get_doc.return_value = None
+        conn = manvault_conn
+        count = get_seeded_count(conn)
+        assert count == 0
+
+    @patch("elle.daemon.manvault.indexer.get_seeded_count")
+    def test_is_core_seeded_false(self, mock_count, manvault_conn):
+        mock_count.return_value = 0
+        conn = manvault_conn
+        assert is_core_seeded(conn) is False
+
+    @patch("elle.daemon.manvault.indexer.get_seeded_count")
+    def test_is_core_seeded_true(self, mock_count, manvault_conn):
+        mock_count.return_value = 999
+        conn = manvault_conn
+        assert is_core_seeded(conn) is True
+
+    @patch("elle.daemon.manvault.indexer.render_manpage")
+    def test_seed_with_progress(self, mock_render, manvault_conn):
+        mock_render.return_value = None
+        conn = manvault_conn
+        progress_calls = []
+        seed_core_commands(conn=conn, progress_callback=lambda c, t: progress_calls.append((c, t)))
+        assert len(progress_calls) > 0

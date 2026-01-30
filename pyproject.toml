@@ -29,7 +29,11 @@ dependencies = [
     "ruamel.yaml>=0.18.0",
     "rich>=13.0",
     "prompt_toolkit>=3.0",
+    "textual>=1.0.0",
     "toml>=0.10",
+    "psycopg[binary]>=3.1",
+    "psycopg_pool>=3.1",
+    "pgvector>=0.3",
 ]
 
 [project.optional-dependencies]
@@ -108,6 +112,7 @@ module = [
     "augeas.*",
     "prompt_toolkit.*",
     "rich.*",
+    "textual.*",
     "croniter.*",
     "yaml.*",
     "ruamel.*",
@@ -116,6 +121,9 @@ module = [
     "tomli.*",
     "tomllib",
     "toml",
+    "psycopg.*",
+    "psycopg_pool.*",
+    "pgvector.*",
 ]
 ignore_missing_imports = true
 

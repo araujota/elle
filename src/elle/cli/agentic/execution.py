@@ -6,9 +6,7 @@ and debugging. Each execution captures the full reasoning trace.
 
 from __future__ import annotations
 
-import sqlite3
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -164,21 +162,22 @@ class LoopExecution(BaseModel):
 
 
 class ExecutionStore:
-    """SQLite storage for loop executions."""
+    """PostgreSQL storage for loop executions."""
 
-    def __init__(self, db_path: Path | None = None):
+    def __init__(self, schema: str = "executions") -> None:
         """Initialize the store.
 
         Args:
-            db_path: Path to database file. Defaults to ~/.local/state/elle/executions.db
+            schema: PostgreSQL schema name for execution tables.
         """
-        self.db_path = db_path or Path.home() / ".local" / "state" / "elle" / "executions.db"
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._schema = schema
         self._init_schema()
 
     def _init_schema(self) -> None:
         """Initialize database schema."""
-        with sqlite3.connect(self.db_path) as conn:
+        from elle.storage.engine import get_conn
+
+        with get_conn(schema=self._schema) as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS executions (
                     execution_id TEXT PRIMARY KEY,
@@ -205,7 +204,6 @@ class ExecutionStore:
                 CREATE INDEX IF NOT EXISTS idx_executions_incident
                 ON executions(incident_id)
             """)
-            conn.commit()
 
     def store(self, execution: LoopExecution) -> None:
         """Store an execution record.
@@ -215,15 +213,31 @@ class ExecutionStore:
         """
         import json
 
-        with sqlite3.connect(self.db_path) as conn:
+        from elle.storage.engine import get_conn
+
+        with get_conn(schema=self._schema) as conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO executions (
+                INSERT INTO executions (
                     execution_id, started_at, completed_at, user_input,
                     classified_intent, success, response, error, incident_id,
                     iterations, total_duration_ms, total_tool_calls,
                     capabilities_executed, data_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (execution_id) DO UPDATE SET
+                    started_at = EXCLUDED.started_at,
+                    completed_at = EXCLUDED.completed_at,
+                    user_input = EXCLUDED.user_input,
+                    classified_intent = EXCLUDED.classified_intent,
+                    success = EXCLUDED.success,
+                    response = EXCLUDED.response,
+                    error = EXCLUDED.error,
+                    incident_id = EXCLUDED.incident_id,
+                    iterations = EXCLUDED.iterations,
+                    total_duration_ms = EXCLUDED.total_duration_ms,
+                    total_tool_calls = EXCLUDED.total_tool_calls,
+                    capabilities_executed = EXCLUDED.capabilities_executed,
+                    data_json = EXCLUDED.data_json
                 """,
                 (
                     execution.execution_id,
@@ -242,7 +256,6 @@ class ExecutionStore:
                     json.dumps(execution.model_dump(mode="json")),
                 ),
             )
-            conn.commit()
 
     def get(self, execution_id: str) -> LoopExecution | None:
         """Get an execution by ID.
@@ -255,14 +268,16 @@ class ExecutionStore:
         """
         import json
 
-        with sqlite3.connect(self.db_path) as conn:
+        from elle.storage.engine import get_conn
+
+        with get_conn(schema=self._schema) as conn:
             cursor = conn.execute(
-                "SELECT data_json FROM executions WHERE execution_id = ?",
+                "SELECT data_json FROM executions WHERE execution_id = %s",
                 (execution_id,),
             )
             row = cursor.fetchone()
-            if row and row[0]:
-                data = json.loads(row[0])
+            if row and row["data_json"]:
+                data = json.loads(row["data_json"])
                 return LoopExecution.model_validate(data)
         return None
 
@@ -277,15 +292,17 @@ class ExecutionStore:
         """
         import json
 
-        with sqlite3.connect(self.db_path) as conn:
+        from elle.storage.engine import get_conn
+
+        with get_conn(schema=self._schema) as conn:
             cursor = conn.execute(
-                "SELECT data_json FROM executions ORDER BY started_at DESC LIMIT ?",
+                "SELECT data_json FROM executions ORDER BY started_at DESC LIMIT %s",
                 (limit,),
             )
             results = []
             for row in cursor.fetchall():
-                if row[0]:
-                    data = json.loads(row[0])
+                if row["data_json"]:
+                    data = json.loads(row["data_json"])
                     results.append(LoopExecution.model_validate(data))
             return results
 
@@ -300,15 +317,17 @@ class ExecutionStore:
         """
         import json
 
-        with sqlite3.connect(self.db_path) as conn:
+        from elle.storage.engine import get_conn
+
+        with get_conn(schema=self._schema) as conn:
             cursor = conn.execute(
-                "SELECT data_json FROM executions WHERE incident_id = ? ORDER BY started_at DESC",
+                "SELECT data_json FROM executions WHERE incident_id = %s ORDER BY started_at DESC",
                 (incident_id,),
             )
             results = []
             for row in cursor.fetchall():
-                if row[0]:
-                    data = json.loads(row[0])
+                if row["data_json"]:
+                    data = json.loads(row["data_json"])
                     results.append(LoopExecution.model_validate(data))
             return results
 
@@ -321,7 +340,9 @@ class ExecutionStore:
         Returns:
             List of summary dicts.
         """
-        with sqlite3.connect(self.db_path) as conn:
+        from elle.storage.engine import get_conn
+
+        with get_conn(schema=self._schema) as conn:
             cursor = conn.execute(
                 """
                 SELECT execution_id, started_at, user_input, classified_intent,
@@ -329,23 +350,23 @@ class ExecutionStore:
                        capabilities_executed, total_duration_ms
                 FROM executions
                 ORDER BY started_at DESC
-                LIMIT ?
+                LIMIT %s
                 """,
                 (limit,),
             )
             results = []
             for row in cursor.fetchall():
                 results.append({
-                    "execution_id": row[0],
-                    "started_at": row[1],
-                    "user_input": row[2],
-                    "classified_intent": row[3],
-                    "success": bool(row[4]),
-                    "incident_id": row[5],
-                    "iterations": row[6],
-                    "total_tool_calls": row[7],
-                    "capabilities_executed": row[8].split(",") if row[8] else [],
-                    "total_duration_ms": row[9],
+                    "execution_id": row["execution_id"],
+                    "started_at": row["started_at"],
+                    "user_input": row["user_input"],
+                    "classified_intent": row["classified_intent"],
+                    "success": bool(row["success"]),
+                    "incident_id": row["incident_id"],
+                    "iterations": row["iterations"],
+                    "total_tool_calls": row["total_tool_calls"],
+                    "capabilities_executed": row["capabilities_executed"].split(",") if row["capabilities_executed"] else [],
+                    "total_duration_ms": row["total_duration_ms"],
                 })
             return results
 

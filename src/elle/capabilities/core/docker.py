@@ -1463,29 +1463,27 @@ class DockerConfigureEnvCapability(BaseCapability[DockerConfigureEnvInput, Docke
 
         try:
             from elle.cli.docker.env_profiles import extract_image_family
-            from elle.cli.docker.env_store import (
-                get_connection,
-                init_schema,
-            )
+            from elle.storage.engine import get_conn
 
             image_family = extract_image_family(input.image)
 
             if input.persist:
-                conn = get_connection()
-                init_schema(conn)
-
-                cursor = conn.cursor()
-                for var in input.env_vars:
-                    cursor.execute(
-                        """
-                        INSERT OR REPLACE INTO docker_env_values
-                        (image_family, var_name, var_value, is_sensitive, updated_at)
-                        VALUES (?, ?, ?, ?, datetime('now'))
-                        """,
-                        (image_family, var.name, var.value, 1 if var.is_sensitive else 0),
-                    )
-                conn.commit()
-                conn.close()
+                with get_conn(schema="docker") as conn:
+                    cursor = conn.cursor()
+                    for var in input.env_vars:
+                        cursor.execute(
+                            """
+                            INSERT INTO docker_env_values
+                            (image_family, var_name, var_value, is_sensitive, updated_at)
+                            VALUES (%s, %s, %s, %s, NOW())
+                            ON CONFLICT (image_family, var_name)
+                            DO UPDATE SET var_value = EXCLUDED.var_value,
+                                          is_sensitive = EXCLUDED.is_sensitive,
+                                          updated_at = EXCLUDED.updated_at
+                            """,
+                            (image_family, var.name, var.value, var.is_sensitive),
+                        )
+                    conn.commit()
 
             return CapabilityResult(
                 success=True,

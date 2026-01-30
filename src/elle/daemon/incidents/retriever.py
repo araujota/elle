@@ -2,11 +2,11 @@
 
 Provides multi-tier search for finding similar past incidents:
 - Tier A: Fast fingerprint matching (local)
-- Tier B: Lexical search via FTS5 (local)
-- Tier C: Semantic similarity via embeddings (local)
+- Tier B: Lexical search via tsvector/GIN (local)
+- Tier C: Semantic similarity via pgvector (local)
 - Tier D: Cloud vault query (parallel, if configured)
 
-Results are ranked by similarity × success for optimal reuse.
+Results are ranked by similarity x success for optimal reuse.
 
 Cloud Retrieval:
 When ELLE Cloud is configured, queries run in parallel against both
@@ -18,11 +18,11 @@ continues with local-only results.
 
 from __future__ import annotations
 
-import sqlite3
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime
 from typing import Any
 
+import psycopg
 import structlog
 
 from elle.common.pydantic_compat import safe_model_dump
@@ -33,14 +33,18 @@ from elle.daemon.incidents.models import (
     SystemSnapshot,
 )
 from elle.daemon.incidents.preconditions import evaluate_preconditions
-from elle.daemon.incidents.schema import ensure_schema, get_connection
+from elle.daemon.incidents.schema import ensure_schema
 from elle.daemon.incidents.store import (
     _parse_datetime,
     _row_to_incident,
     get_all_embeddings,
 )
+from elle.storage.engine import get_conn
 
 logger = structlog.get_logger()
+
+# PostgreSQL schema name
+PG_SCHEMA = "incidents"
 
 # Static outcome quality weights (fallback when no efficacy data available)
 STATIC_OUTCOME_WEIGHTS = {
@@ -70,16 +74,16 @@ def search(
     search_type: str = "hybrid",
     min_precondition_match: float = 0.5,
     include_cloud: bool = True,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,
 ) -> list[IncidentSearchResult]:
     """Search for similar incidents.
 
     Uses a multi-tier approach with parallel local+cloud retrieval:
     1. Fingerprint matching (fast filter, local)
-    2. Lexical search (FTS5, local)
-    3. Semantic search (embeddings, local)
+    2. Lexical search (tsvector, local)
+    3. Semantic search (pgvector, local)
     4. Cloud vault query (parallel, if configured)
-    5. Merge and rank by similarity × outcome quality
+    5. Merge and rank by similarity x outcome quality
 
     When cloud is configured, both local and cloud queries run in parallel.
     Local results are prioritized as they may have machine-specific efficacy data.
@@ -93,15 +97,18 @@ def search(
         search_type: "lexical", "semantic", "fingerprint", or "hybrid".
         min_precondition_match: Minimum precondition match ratio.
         include_cloud: Whether to query cloud vault (if configured).
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         List of IncidentSearchResult sorted by relevance.
     """
     own_conn = conn is None
     if own_conn:
-        conn = get_connection()
+        cm = get_conn(schema=PG_SCHEMA)
+        conn = cm.__enter__()
         ensure_schema(conn)
+    else:
+        cm = None
 
     # At this point conn is guaranteed to be non-None
     assert conn is not None
@@ -173,8 +180,8 @@ def search(
         return ranked[:k]
 
     finally:
-        if own_conn and conn is not None:
-            conn.close()
+        if own_conn and cm is not None:
+            cm.__exit__(None, None, None)
 
 
 def _local_search(
@@ -183,7 +190,7 @@ def _local_search(
     fingerprint: Fingerprint | None,
     k: int,
     search_type: str,
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,
 ) -> list[tuple[IncidentReport, float, str]]:
     """Run local search tiers (A, B, C).
 
@@ -335,7 +342,7 @@ def find_similar(
     incident: IncidentReport,
     k: int = 5,
     exclude_self: bool = True,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,
 ) -> list[IncidentSearchResult]:
     """Find incidents similar to a given incident.
 
@@ -345,7 +352,7 @@ def find_similar(
         incident: The incident to find similar ones for.
         k: Number of results to return.
         exclude_self: Exclude the incident itself from results.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         List of similar incidents.
@@ -378,7 +385,7 @@ def get_prior_art(
     k: int = 3,
     include_actions: bool = True,
     include_cloud: bool = True,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,
 ) -> list[dict[str, Any]]:
     """Get prior art for inclusion in LLM prompts.
 
@@ -398,7 +405,7 @@ def get_prior_art(
         k: Number of prior incidents to include.
         include_actions: Whether to fetch and include actions.
         include_cloud: Whether to include cloud vault results.
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         List of dicts with prior art summaries including:
@@ -413,8 +420,11 @@ def get_prior_art(
 
     own_conn = conn is None
     if own_conn:
-        conn = get_connection()
+        cm = get_conn(schema=PG_SCHEMA)
+        conn = cm.__enter__()
         ensure_schema(conn)
+    else:
+        cm = None
 
     try:
         results = search(
@@ -483,8 +493,8 @@ def get_prior_art(
         return prior_art
 
     finally:
-        if own_conn and conn is not None:
-            conn.close()
+        if own_conn and cm is not None:
+            cm.__exit__(None, None, None)
 
 
 # =============================================================================
@@ -496,7 +506,7 @@ def _fingerprint_search(
     fingerprint: Fingerprint,
     domain: str | None,
     limit: int,
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,
 ) -> list[tuple[IncidentReport, float, str]]:
     """Fast fingerprint-based filtering.
 
@@ -512,14 +522,14 @@ def _fingerprint_search(
     params: list[Any] = []
 
     if domain:
-        query += " AND domain = ?"
+        query += " AND domain = %s"
         params.append(domain)
 
     # Only search resolved/mitigated incidents with known outcomes
     query += " AND status IN ('resolved', 'mitigated')"
     query += " AND outcome IN ('improved', 'partial')"
 
-    query += " ORDER BY updated_at DESC LIMIT ?"
+    query += " ORDER BY updated_at DESC LIMIT %s"
     params.append(limit * 2)
 
     cursor.execute(query, params)
@@ -590,7 +600,7 @@ def _compute_fingerprint_similarity(
 
 
 # =============================================================================
-# Tier B: Lexical search (FTS5)
+# Tier B: Lexical search (tsvector + GIN)
 # =============================================================================
 
 
@@ -598,69 +608,50 @@ def _lexical_search(
     query: str,
     domain: str | None,
     limit: int,
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,
 ) -> list[tuple[IncidentReport, float, str]]:
-    """FTS5 lexical search over incident text."""
+    """Full-text lexical search using PostgreSQL tsvector."""
     cursor = conn.cursor()
 
-    # Build FTS query
-    # Clean query for FTS5
-    fts_query = _clean_fts_query(query)
-    if not fts_query:
+    # plainto_tsquery handles query cleaning automatically
+    if not query.strip():
         return []
 
     sql = """
-        SELECT i.*, bm25(incidents_fts) as score
+        SELECT i.*, ts_rank_cd(i.search_tsv, plainto_tsquery('english', %s)) AS score
         FROM incidents i
-        JOIN incidents_fts ON i.rowid = incidents_fts.rowid
-        WHERE incidents_fts MATCH ?
+        WHERE i.search_tsv @@ plainto_tsquery('english', %s)
     """
-    params: list[Any] = [fts_query]
+    params: list[Any] = [query, query]
 
     if domain:
-        sql += " AND i.domain = ?"
+        sql += " AND i.domain = %s"
         params.append(domain)
 
-    sql += " ORDER BY score LIMIT ?"
+    sql += " ORDER BY score DESC LIMIT %s"
     params.append(limit)
 
     try:
         cursor.execute(sql, params)
         rows = cursor.fetchall()
-    except sqlite3.OperationalError:
+    except psycopg.errors.Error:
         # FTS query error, return empty
         return []
 
     results = []
     for row in rows:
         incident = _row_to_incident(row)
-        # BM25 scores are negative (lower is better), normalize
+        # ts_rank_cd returns positive scores (higher is better)
         raw_score = row["score"]
-        score = 1.0 / (1.0 + abs(raw_score))
+        # Normalize to 0..1 range
+        score = float(raw_score) / (1.0 + float(raw_score))
         results.append((incident, score, "lexical"))
 
     return results
 
 
-def _clean_fts_query(query: str) -> str:
-    """Clean a query string for FTS5."""
-    # Remove special FTS operators
-    query = query.replace('"', " ")
-    query = query.replace("*", " ")
-    query = query.replace("-", " ")
-    query = query.replace("OR", " ")
-    query = query.replace("AND", " ")
-    query = query.replace("NOT", " ")
-
-    # Split into words and filter
-    words = [w.strip() for w in query.split() if len(w.strip()) >= 2]
-
-    # Rejoin with OR for broader matching
-    return " OR ".join(words)
-
-
 # =============================================================================
-# Tier C: Semantic search
+# Tier C: Semantic search (pgvector)
 # =============================================================================
 
 
@@ -668,9 +659,9 @@ def _semantic_search(
     query: str,
     domain: str | None,
     limit: int,
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,
 ) -> list[tuple[IncidentReport, float, str]]:
-    """Semantic search using embeddings."""
+    """Semantic search using pgvector cosine distance."""
     try:
         from elle.rag import get_client
     except ImportError:
@@ -689,55 +680,45 @@ def _semantic_search(
     except Exception:
         return []
 
-    # Get all incident embeddings
-    embeddings = get_all_embeddings(conn)
-    if not embeddings:
+    # Use pgvector <=> operator for cosine distance ordering
+    # Build the query with an optional domain filter
+    if domain:
+        sql = """
+            SELECT i.*, (e.embedding <=> %s::vector) AS distance
+            FROM incidents i
+            JOIN incident_embeddings e ON i.id = e.incident_id
+            WHERE i.domain = %s
+            ORDER BY e.embedding <=> %s::vector
+            LIMIT %s
+        """
+        params: list[Any] = [query_embedding, domain, query_embedding, limit]
+    else:
+        sql = """
+            SELECT i.*, (e.embedding <=> %s::vector) AS distance
+            FROM incidents i
+            JOIN incident_embeddings e ON i.id = e.incident_id
+            ORDER BY e.embedding <=> %s::vector
+            LIMIT %s
+        """
+        params = [query_embedding, query_embedding, limit]
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+    except Exception:
         return []
 
-    # Compute similarities
-    similarities = []
-    for incident_id, embedding in embeddings.items():
-        sim = _cosine_similarity(query_embedding, embedding)
-        similarities.append((incident_id, sim))
-
-    # Sort by similarity
-    similarities.sort(key=lambda x: x[1], reverse=True)
-
-    # Fetch top incidents
     results = []
-    cursor = conn.cursor()
-    for incident_id, sim in similarities[:limit]:
-        if domain:
-            cursor.execute(
-                "SELECT * FROM incidents WHERE id = ? AND domain = ?",
-                (incident_id, domain),
-            )
-        else:
-            cursor.execute(
-                "SELECT * FROM incidents WHERE id = ?",
-                (incident_id,),
-            )
-        row = cursor.fetchone()
-        if row:
-            incident = _row_to_incident(row)
-            results.append((incident, sim, "semantic"))
+    for row in rows:
+        incident = _row_to_incident(row)
+        # <=> returns cosine distance (0 = identical, 2 = opposite)
+        # Convert to similarity: 1 - distance
+        distance = float(row["distance"])
+        similarity = max(0.0, 1.0 - distance)
+        results.append((incident, similarity, "semantic"))
 
     return results
-
-
-def _cosine_similarity(a: list[float], b: list[float]) -> float:
-    """Compute cosine similarity between two vectors."""
-    if len(a) != len(b):
-        return 0.0
-
-    dot = sum(x * y for x, y in zip(a, b, strict=False))
-    norm_a = sum(x * x for x in a) ** 0.5
-    norm_b = sum(x * x for x in b) ** 0.5
-
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-
-    return float(dot / (norm_a * norm_b))
 
 
 # =============================================================================
@@ -748,7 +729,7 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
 def compute_dynamic_outcome_weight(
     incident: IncidentReport,
     current_fingerprint: Fingerprint | None = None,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,
 ) -> float:
     """Compute outcome weight using learned efficacy data.
 
@@ -763,7 +744,7 @@ def compute_dynamic_outcome_weight(
     Args:
         incident: The candidate incident from search.
         current_fingerprint: Current system fingerprint (for entity matching).
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         Dynamic outcome weight between 0.0 and 1.0.
@@ -872,7 +853,7 @@ def _merge_and_rank(
     snapshot: SystemSnapshot | None = None,
     fingerprint: Fingerprint | None = None,
     min_precondition_match: float = 0.5,
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,
     use_dynamic_weights: bool = True,
 ) -> list[IncidentSearchResult]:
     """Merge results from multiple search tiers and rank.
@@ -883,7 +864,7 @@ def _merge_and_rank(
     When use_dynamic_weights is True (default), outcome weights are computed
     using learned efficacy data from this machine's history.
 
-    Final score = RRF_score × outcome_weight × precondition_ratio × recency_weight
+    Final score = RRF_score x outcome_weight x precondition_ratio x recency_weight
     """
     # Deduplicate and combine scores using RRF
     incident_scores: dict[str, dict[str, Any]] = {}
@@ -940,7 +921,7 @@ def _merge_and_rank(
         # Recency weight
         recency_weight = _compute_recency_weight(incident.updated_at)
 
-        # Final score: RRF × outcome × precondition × recency
+        # Final score: RRF x outcome x precondition x recency
         final_score = data["rrf_score"] * outcome_weight * precond_ratio * recency_weight
 
         # Determine match type
@@ -997,12 +978,12 @@ def generate_case_text(incident: IncidentReport) -> str:
 
 
 def get_status(
-    conn: sqlite3.Connection | None = None,
+    conn: psycopg.Connection | None = None,
 ) -> dict[str, Any]:
     """Get Incident Vault status summary.
 
     Args:
-        conn: SQLite connection.
+        conn: psycopg connection.
 
     Returns:
         Status dict with counts and statistics.
@@ -1016,11 +997,15 @@ def get_status(
 
     own_conn = conn is None
     if own_conn:
-        conn = get_connection()
+        cm = get_conn(schema=PG_SCHEMA)
+        conn = cm.__enter__()
         ensure_schema(conn)
+    else:
+        cm = None
 
     if conn is None:
-        conn = get_connection()
+        cm = get_conn(schema=PG_SCHEMA)
+        conn = cm.__enter__()
         own_conn = True
 
     try:
@@ -1032,42 +1017,42 @@ def get_status(
         snapshots = get_snapshot_count(conn)
 
         # Embedded count
-        cursor.execute("SELECT COUNT(*) FROM incident_embeddings")
-        embedded = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) AS cnt FROM incident_embeddings")
+        row = cursor.fetchone()
+        embedded = row["cnt"] if row else 0
 
         # By status
         cursor.execute("""
-            SELECT status, COUNT(*) FROM incidents GROUP BY status
+            SELECT status, COUNT(*) AS cnt FROM incidents GROUP BY status
         """)
-        by_status = {row[0]: row[1] for row in cursor.fetchall()}
+        by_status = {r["status"]: r["cnt"] for r in cursor.fetchall()}
 
         # By domain
         cursor.execute("""
-            SELECT domain, COUNT(*) FROM incidents GROUP BY domain
+            SELECT domain, COUNT(*) AS cnt FROM incidents GROUP BY domain
         """)
-        by_domain = {row[0]: row[1] for row in cursor.fetchall()}
+        by_domain = {r["domain"]: r["cnt"] for r in cursor.fetchall()}
 
         # By outcome
         cursor.execute("""
-            SELECT outcome, COUNT(*) FROM incidents GROUP BY outcome
+            SELECT outcome, COUNT(*) AS cnt FROM incidents GROUP BY outcome
         """)
-        by_outcome = {row[0]: row[1] for row in cursor.fetchall()}
+        by_outcome = {r["outcome"]: r["cnt"] for r in cursor.fetchall()}
 
         # Date range
-        cursor.execute("SELECT MIN(created_at), MAX(created_at) FROM incidents")
+        cursor.execute("SELECT MIN(created_at) AS oldest, MAX(created_at) AS newest FROM incidents")
         row = cursor.fetchone()
-        oldest = _parse_datetime(row[0]) if row[0] else None
-        newest = _parse_datetime(row[1]) if row[1] else None
+        oldest = row["oldest"] if row else None
+        newest = row["newest"] if row else None
 
-        # DB size - handle cases where db path may not be accessible (tests, etc.)
-        from elle.daemon.incidents.schema import get_db_path
-
+        # DB size via PostgreSQL pg_database_size()
         db_size = 0
         try:
-            db_path = get_db_path()
-            if db_path.exists():
-                db_size = db_path.stat().st_size
-        except (PermissionError, OSError):
+            cursor.execute("SELECT pg_database_size(current_database()) AS sz")
+            size_row = cursor.fetchone()
+            if size_row:
+                db_size = int(size_row["sz"])
+        except (psycopg.errors.Error, PermissionError, OSError):
             pass
 
         return safe_model_dump(
@@ -1088,5 +1073,5 @@ def get_status(
         )
 
     finally:
-        if own_conn and conn is not None:
-            conn.close()
+        if own_conn and cm is not None:
+            cm.__exit__(None, None, None)

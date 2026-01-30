@@ -1,168 +1,58 @@
 """Docker Environment Variable Store.
 
-SQLite-based persistence for remembering environment variable values
+PostgreSQL-based persistence for remembering environment variable values
 per image family across sessions.
+
+Storage backend: PostgreSQL via psycopg (schema ``docker``).
 """
 
 from __future__ import annotations
 
-import sqlite3
-from collections.abc import Iterator
-from contextlib import contextmanager
 from datetime import datetime
-from pathlib import Path
-from typing import TYPE_CHECKING
+
+import psycopg
 
 from elle.cli.docker.env_models import EnvVarValue, SavedEnvVar
 from elle.cli.docker.env_profiles import extract_image_family
+from elle.storage.engine import get_conn
+from elle.storage.migrate import register_migration
 
-if TYPE_CHECKING:
-    pass
-
-
-# Schema version for migrations
-SCHEMA_VERSION = 1
-
-# Default database path
-DEFAULT_DB_PATH = Path("/var/lib/elle/docker_env.db")
+PG_SCHEMA = "docker"
 
 
 # =============================================================================
-# Schema
-# =============================================================================
-
-ENV_VALUES_TABLE = """
-CREATE TABLE IF NOT EXISTS docker_env_values (
-    image_family TEXT NOT NULL,
-    var_name TEXT NOT NULL,
-    var_value TEXT NOT NULL,
-    is_sensitive INTEGER DEFAULT 0,
-    updated_at TEXT NOT NULL,
-    PRIMARY KEY (image_family, var_name)
-)
-"""
-
-META_TABLE = """
-CREATE TABLE IF NOT EXISTS meta (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-)
-"""
-
-INDEXES = [
-    "CREATE INDEX IF NOT EXISTS idx_env_values_family ON docker_env_values(image_family)",
-    "CREATE INDEX IF NOT EXISTS idx_env_values_updated ON docker_env_values(updated_at)",
-]
-
-
-# =============================================================================
-# Database Connection
+# Migration registration
 # =============================================================================
 
 
-def get_db_path() -> Path:
-    """Get the Docker environment store database path.
-
-    Returns:
-        Path to the database file.
-    """
-    return DEFAULT_DB_PATH
-
-
-def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
-    """Get a connection to the environment store database.
-
-    Creates the database directory if it doesn't exist.
-
-    Args:
-        db_path: Override database path (for testing).
-
-    Returns:
-        SQLite connection with row factory set.
-    """
-    path = db_path or get_db_path()
-
-    # For non-system paths, ensure directory exists
-    if not str(path).startswith("/var/lib"):
-        path.parent.mkdir(parents=True, exist_ok=True)
-
-    conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
-
-    return conn
-
-
-def init_schema(conn: sqlite3.Connection) -> None:
-    """Initialize the database schema.
-
-    Creates all tables and indexes if they don't exist.
-    Safe to call multiple times.
-
-    Args:
-        conn: SQLite connection.
-    """
-    cursor = conn.cursor()
-
-    # Create tables
-    cursor.execute(ENV_VALUES_TABLE)
-    cursor.execute(META_TABLE)
-
-    # Create indexes
-    for index_sql in INDEXES:
-        cursor.execute(index_sql)
-
-    # Set schema version
-    cursor.execute(
-        "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
-        ("schema_version", str(SCHEMA_VERSION)),
+def _migrate_v1(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+    """Create initial docker env tables."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS docker_env_values (
+            image_family TEXT NOT NULL,
+            var_name TEXT NOT NULL,
+            var_value TEXT NOT NULL,
+            is_sensitive BOOLEAN DEFAULT FALSE,
+            updated_at TIMESTAMPTZ NOT NULL,
+            PRIMARY KEY (image_family, var_name)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_env_values_family ON docker_env_values(image_family)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_env_values_updated ON docker_env_values(updated_at)"
     )
 
-    conn.commit()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS meta (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+    """)
 
 
-def ensure_schema(conn: sqlite3.Connection) -> None:
-    """Ensure the schema is initialized.
-
-    Args:
-        conn: SQLite connection.
-    """
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT value FROM meta WHERE key = 'schema_version'")
-        row = cursor.fetchone()
-        if not row:
-            init_schema(conn)
-    except sqlite3.OperationalError:
-        # Table doesn't exist yet
-        init_schema(conn)
-
-
-@contextmanager
-def _ensure_connection(
-    conn: sqlite3.Connection | None = None,
-    db_path: Path | None = None,
-) -> Iterator[sqlite3.Connection]:
-    """Context manager that ensures a valid connection with schema.
-
-    Args:
-        conn: Optional existing connection to use.
-        db_path: Override database path (for testing).
-
-    Yields:
-        A valid SQLite connection with schema initialized.
-    """
-    own_conn = conn is None
-    if own_conn:
-        actual_conn = get_connection(db_path)
-        ensure_schema(actual_conn)
-    else:
-        assert conn is not None  # for mypy
-        actual_conn = conn
-    try:
-        yield actual_conn
-    finally:
-        if own_conn:
-            actual_conn.close()
+register_migration(PG_SCHEMA, 1, _migrate_v1)
 
 
 # =============================================================================
@@ -171,7 +61,7 @@ def _ensure_connection(
 
 
 class DockerEnvStore:
-    """SQLite store for Docker environment variable values.
+    """PostgreSQL store for Docker environment variable values.
 
     Persists environment variable values per image family for reuse
     across sessions. Sensitive values are stored but flagged.
@@ -189,27 +79,11 @@ class DockerEnvStore:
         saved = store.get_saved_values("postgres")
     """
 
-    def __init__(self, db_path: Path | None = None) -> None:
-        """Initialize the store.
-
-        Args:
-            db_path: Override database path (for testing).
-        """
-        self._db_path = db_path
-        self._conn: sqlite3.Connection | None = None
-
-    def _get_conn(self) -> sqlite3.Connection:
-        """Get or create the database connection."""
-        if self._conn is None:
-            self._conn = get_connection(self._db_path)
-            ensure_schema(self._conn)
-        return self._conn
+    def __init__(self) -> None:
+        """Initialize the store."""
 
     def close(self) -> None:
-        """Close the database connection."""
-        if self._conn is not None:
-            self._conn.close()
-            self._conn = None
+        """Close the store (no-op for pooled connections)."""
 
     def save_values(
         self,
@@ -223,21 +97,23 @@ class DockerEnvStore:
             values: List of EnvVarValue to save.
         """
         family = extract_image_family(image)
-        conn = self._get_conn()
-        cursor = conn.cursor()
         now = datetime.utcnow().isoformat()
 
-        for value in values:
-            cursor.execute(
-                """
-                INSERT OR REPLACE INTO docker_env_values
-                    (image_family, var_name, var_value, is_sensitive, updated_at)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (family, value.name, value.value, 1 if value.sensitive else 0, now),
-            )
-
-        conn.commit()
+        with get_conn(schema=PG_SCHEMA) as conn:
+            cursor = conn.cursor()
+            for value in values:
+                cursor.execute(
+                    """
+                    INSERT INTO docker_env_values
+                        (image_family, var_name, var_value, is_sensitive, updated_at)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (image_family, var_name) DO UPDATE
+                    SET var_value = EXCLUDED.var_value,
+                        is_sensitive = EXCLUDED.is_sensitive,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    (family, value.name, value.value, value.sensitive, now),
+                )
 
     def get_saved_values(self, image: str) -> tuple[SavedEnvVar, ...]:
         """Get saved environment variable values for an image family.
@@ -249,32 +125,35 @@ class DockerEnvStore:
             Tuple of SavedEnvVar with previously stored values.
         """
         family = extract_image_family(image)
-        conn = self._get_conn()
-        cursor = conn.cursor()
 
-        cursor.execute(
-            """
-            SELECT image_family, var_name, var_value, is_sensitive, updated_at
-            FROM docker_env_values
-            WHERE image_family = ?
-            ORDER BY var_name
-            """,
-            (family,),
-        )
-
-        results: list[SavedEnvVar] = []
-        for row in cursor.fetchall():
-            results.append(
-                SavedEnvVar(
-                    image_family=row["image_family"],
-                    name=row["var_name"],
-                    value=row["var_value"],
-                    sensitive=bool(row["is_sensitive"]),
-                    updated_at=datetime.fromisoformat(row["updated_at"]),
-                )
+        with get_conn(schema=PG_SCHEMA) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT image_family, var_name, var_value, is_sensitive, updated_at
+                FROM docker_env_values
+                WHERE image_family = %s
+                ORDER BY var_name
+                """,
+                (family,),
             )
 
-        return tuple(results)
+            results: list[SavedEnvVar] = []
+            for row in cursor.fetchall():
+                updated_at = row["updated_at"]
+                if isinstance(updated_at, str):
+                    updated_at = datetime.fromisoformat(updated_at)
+                results.append(
+                    SavedEnvVar(
+                        image_family=row["image_family"],
+                        name=row["var_name"],
+                        value=row["var_value"],
+                        sensitive=bool(row["is_sensitive"]),
+                        updated_at=updated_at,
+                    )
+                )
+
+            return tuple(results)
 
     def get_saved_value(self, image: str, var_name: str) -> SavedEnvVar | None:
         """Get a single saved environment variable value.
@@ -287,28 +166,31 @@ class DockerEnvStore:
             SavedEnvVar if found, None otherwise.
         """
         family = extract_image_family(image)
-        conn = self._get_conn()
-        cursor = conn.cursor()
 
-        cursor.execute(
-            """
-            SELECT image_family, var_name, var_value, is_sensitive, updated_at
-            FROM docker_env_values
-            WHERE image_family = ? AND var_name = ?
-            """,
-            (family, var_name),
-        )
-
-        row = cursor.fetchone()
-        if row:
-            return SavedEnvVar(
-                image_family=row["image_family"],
-                name=row["var_name"],
-                value=row["var_value"],
-                sensitive=bool(row["is_sensitive"]),
-                updated_at=datetime.fromisoformat(row["updated_at"]),
+        with get_conn(schema=PG_SCHEMA) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT image_family, var_name, var_value, is_sensitive, updated_at
+                FROM docker_env_values
+                WHERE image_family = %s AND var_name = %s
+                """,
+                (family, var_name),
             )
-        return None
+
+            row = cursor.fetchone()
+            if row:
+                updated_at = row["updated_at"]
+                if isinstance(updated_at, str):
+                    updated_at = datetime.fromisoformat(updated_at)
+                return SavedEnvVar(
+                    image_family=row["image_family"],
+                    name=row["var_name"],
+                    value=row["var_value"],
+                    sensitive=bool(row["is_sensitive"]),
+                    updated_at=updated_at,
+                )
+            return None
 
     def clear_values(self, image: str) -> int:
         """Clear all saved values for an image family.
@@ -320,16 +202,14 @@ class DockerEnvStore:
             Number of values deleted.
         """
         family = extract_image_family(image)
-        conn = self._get_conn()
-        cursor = conn.cursor()
 
-        cursor.execute(
-            "DELETE FROM docker_env_values WHERE image_family = ?",
-            (family,),
-        )
-        conn.commit()
-
-        return cursor.rowcount
+        with get_conn(schema=PG_SCHEMA) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM docker_env_values WHERE image_family = %s",
+                (family,),
+            )
+            return cursor.rowcount
 
     def clear_value(self, image: str, var_name: str) -> bool:
         """Clear a specific saved value.
@@ -342,16 +222,14 @@ class DockerEnvStore:
             True if a value was deleted, False otherwise.
         """
         family = extract_image_family(image)
-        conn = self._get_conn()
-        cursor = conn.cursor()
 
-        cursor.execute(
-            "DELETE FROM docker_env_values WHERE image_family = ? AND var_name = ?",
-            (family, var_name),
-        )
-        conn.commit()
-
-        return cursor.rowcount > 0
+        with get_conn(schema=PG_SCHEMA) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM docker_env_values WHERE image_family = %s AND var_name = %s",
+                (family, var_name),
+            )
+            return cursor.rowcount > 0
 
     def list_families(self) -> tuple[str, ...]:
         """List all image families with saved values.
@@ -359,12 +237,10 @@ class DockerEnvStore:
         Returns:
             Tuple of image family names.
         """
-        conn = self._get_conn()
-        cursor = conn.cursor()
-
-        cursor.execute("SELECT DISTINCT image_family FROM docker_env_values ORDER BY image_family")
-
-        return tuple(row["image_family"] for row in cursor.fetchall())
+        with get_conn(schema=PG_SCHEMA) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT DISTINCT image_family FROM docker_env_values ORDER BY image_family")
+            return tuple(row["image_family"] for row in cursor.fetchall())
 
     def clear_all(self) -> int:
         """Clear all saved values.
@@ -372,13 +248,10 @@ class DockerEnvStore:
         Returns:
             Number of values deleted.
         """
-        conn = self._get_conn()
-        cursor = conn.cursor()
-
-        cursor.execute("DELETE FROM docker_env_values")
-        conn.commit()
-
-        return cursor.rowcount
+        with get_conn(schema=PG_SCHEMA) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM docker_env_values")
+            return cursor.rowcount
 
     def has_saved_values(self, image: str) -> bool:
         """Check if there are any saved values for an image family.
@@ -390,15 +263,14 @@ class DockerEnvStore:
             True if saved values exist.
         """
         family = extract_image_family(image)
-        conn = self._get_conn()
-        cursor = conn.cursor()
 
-        cursor.execute(
-            "SELECT 1 FROM docker_env_values WHERE image_family = ? LIMIT 1",
-            (family,),
-        )
-
-        return cursor.fetchone() is not None
+        with get_conn(schema=PG_SCHEMA) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT 1 FROM docker_env_values WHERE image_family = %s LIMIT 1",
+                (family,),
+            )
+            return cursor.fetchone() is not None
 
 
 # =============================================================================
