@@ -9,12 +9,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-try:
-    from typing import Self
-except ImportError:
-    from typing_extensions import Self
-
 from pydantic import BaseModel, ConfigDict, Field
+from typing_extensions import Self
 
 from elle.ops.files.handler import read_file, write_file
 from elle.ops.files.models import ReadResult, WriteResult

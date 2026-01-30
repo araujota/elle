@@ -94,6 +94,42 @@ PROBE_RESULTS_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_probe_results_name_ts ON probe_results(probe_name, ts)",
 ]
 
+# Forecast model cache (monitoring sprint)
+FORECAST_MODEL_CACHE_TABLE = """
+CREATE TABLE IF NOT EXISTS forecast_model_cache (
+    metric TEXT PRIMARY KEY,
+    method TEXT NOT NULL,
+    parameters TEXT,
+    mape REAL,
+    cached_at TEXT NOT NULL
+)
+"""
+
+# Correlation alerts (monitoring sprint)
+CORRELATION_ALERTS_TABLE = """
+CREATE TABLE IF NOT EXISTS correlation_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    signature TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    description TEXT NOT NULL,
+    contributing_metrics TEXT,
+    detected_at TEXT NOT NULL
+)
+"""
+
+# Hardware profiles (monitoring sprint)
+HARDWARE_PROFILES_TABLE = """
+CREATE TABLE IF NOT EXISTS hardware_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_hash TEXT NOT NULL,
+    cpu_count INTEGER NOT NULL,
+    ram_total_mb INTEGER NOT NULL,
+    disk_info TEXT,
+    gpu_count INTEGER DEFAULT 0,
+    detected_at TEXT NOT NULL
+)
+"""
+
 # Schema version table
 VERSION_TABLE = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -162,6 +198,11 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         cursor.execute(PROBE_RESULTS_TABLE)
         for index in PROBE_RESULTS_INDEXES:
             cursor.execute(index)
+
+        # Monitoring sprint tables
+        cursor.execute(FORECAST_MODEL_CACHE_TABLE)
+        cursor.execute(CORRELATION_ALERTS_TABLE)
+        cursor.execute(HARDWARE_PROFILES_TABLE)
 
         # Record version
         cursor.execute(

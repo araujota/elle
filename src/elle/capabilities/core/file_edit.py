@@ -244,7 +244,7 @@ class FileEditCapability(BaseCapability[FileEditInput, FileEditOutput]):
     def dry_run(self, input: FileEditInput) -> DryRunResult:
         """Preview file edit with tier selection."""
         try:
-            from elle.ops.editing import EditOperation, TierSelector
+            from elle.ops.editing import TierSelector
             from elle.ops.editing.tiers import get_tier_instance
 
             # Convert input to EditOperation
@@ -314,7 +314,6 @@ class FileEditCapability(BaseCapability[FileEditInput, FileEditOutput]):
 
         try:
             from elle.ops.editing import (
-                EditOperation,
                 Tier5RequiresJustificationError,
                 TierSelector,
             )

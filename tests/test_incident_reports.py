@@ -1,7 +1,10 @@
 """Tests for incident and efficacy report generation."""
 
+from __future__ import annotations
+
+import json
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -22,6 +25,7 @@ from elle.daemon.incidents.schema import ensure_schema, get_connection
 from elle.daemon.incidents.store import (
     append_action,
     create_incident_draft,
+    finalize_outcome,
     update_incident,
 )
 
@@ -361,3 +365,300 @@ class TestReportContent:
         assert report.total_incidents == 5
         assert report.by_domain.get("net") == 3
         assert report.by_domain.get("disk") == 2
+
+
+class TestReportFormatting:
+    """Tests for report output formatting details."""
+
+    def test_markdown_incident_report_has_header(self, temp_db):
+        """Test that Markdown reports start with a proper header."""
+        conn, _ = temp_db
+
+        incident = create_incident_draft(title="Header Test", conn=conn)
+        conn.commit()
+
+        with ReportGenerator(conn) as gen:
+            report = gen.generate_incident_report(incident.incident_id, format="markdown")
+
+        assert report.report_text.startswith("# Incident Report: Header Test")
+
+    def test_markdown_report_includes_id(self, temp_db):
+        """Test that Markdown reports include the incident ID."""
+        conn, _ = temp_db
+
+        incident = create_incident_draft(title="ID Test", conn=conn)
+        conn.commit()
+
+        with ReportGenerator(conn) as gen:
+            report = gen.generate_incident_report(incident.incident_id, format="markdown")
+
+        assert f"`{incident.incident_id}`" in report.report_text
+
+    def test_markdown_report_includes_domain_and_severity(self, temp_db):
+        """Test that Markdown reports include classification info."""
+        conn, _ = temp_db
+
+        incident = create_incident_draft(
+            title="Classification Test",
+            domain="disk",
+            severity="critical",
+            conn=conn,
+        )
+        conn.commit()
+
+        with ReportGenerator(conn) as gen:
+            report = gen.generate_incident_report(incident.incident_id, format="markdown")
+
+        assert "disk" in report.report_text
+        assert "critical" in report.report_text
+
+    def test_text_report_has_separator_lines(self, temp_db):
+        """Test that text reports use proper formatting separators."""
+        conn, _ = temp_db
+
+        incident = create_incident_draft(title="Separator Test", conn=conn)
+        conn.commit()
+
+        with ReportGenerator(conn) as gen:
+            report = gen.generate_incident_report(incident.incident_id, format="text")
+
+        assert "=" * 60 in report.report_text
+        assert "INCIDENT REPORT:" in report.report_text
+
+    def test_json_report_is_valid_json(self, temp_db):
+        """Test that JSON reports produce valid JSON."""
+        conn, _ = temp_db
+
+        incident = create_incident_draft(title="JSON Valid Test", conn=conn)
+        update_incident(
+            incident.incident_id,
+            summary="Testing JSON output",
+            symptoms=("Sym 1",),
+            conn=conn,
+        )
+        conn.commit()
+
+        with ReportGenerator(conn) as gen:
+            report = gen.generate_incident_report(incident.incident_id, format="json")
+
+        # Should parse without error
+        parsed = json.loads(report.report_text)
+        assert "incident" in parsed
+        assert parsed["incident"]["title"] == "JSON Valid Test"
+
+    def test_json_report_includes_actions(self, temp_db):
+        """Test that JSON reports include actions array."""
+        conn, _ = temp_db
+
+        incident = create_incident_draft(title="JSON Actions", conn=conn)
+        append_action(
+            incident.incident_id,
+            kind="shell",
+            command="df -h",
+            success=True,
+            conn=conn,
+        )
+        conn.commit()
+
+        with ReportGenerator(conn) as gen:
+            report = gen.generate_incident_report(incident.incident_id, format="json")
+
+        parsed = json.loads(report.report_text)
+        assert "actions" in parsed
+        assert len(parsed["actions"]) == 1
+
+    def test_markdown_report_shows_suspected_causes(self, temp_db):
+        """Test that Markdown reports show suspected causes when no root cause."""
+        conn, _ = temp_db
+
+        incident = create_incident_draft(title="Causes Test", conn=conn)
+        update_incident(
+            incident.incident_id,
+            suspected_causes=("DNS misconfiguration", "Firewall rules"),
+            conn=conn,
+        )
+        conn.commit()
+
+        with ReportGenerator(conn) as gen:
+            report = gen.generate_incident_report(incident.incident_id, format="markdown")
+
+        assert "Suspected Causes" in report.report_text
+
+    def test_markdown_report_resolved_outcome(self, temp_db):
+        """Test that resolved incidents show outcome and verification steps."""
+        conn, _ = temp_db
+
+        incident = create_incident_draft(title="Metrics Test", conn=conn)
+        append_action(
+            incident.incident_id,
+            kind="shell",
+            command="systemctl restart nginx",
+            success=True,
+            conn=conn,
+        )
+        finalize_outcome(
+            incident.incident_id,
+            outcome="improved",
+            verification_steps=["nginx is running"],
+            conn=conn,
+        )
+        conn.commit()
+
+        with ReportGenerator(conn) as gen:
+            report = gen.generate_incident_report(incident.incident_id, format="markdown")
+
+        assert "improved" in report.report_text
+        assert "Verification Steps" in report.report_text
+        assert "nginx is running" in report.report_text
+        assert "Actions Taken" in report.report_text
+
+
+class TestEfficacyReportFormats:
+    """Tests for efficacy report format variations."""
+
+    def test_efficacy_report_json_format(self, temp_db):
+        """Test generating efficacy report in JSON format."""
+        conn, _ = temp_db
+
+        incident = create_incident_draft(title="JSON eff", domain="net", conn=conn)
+        record_outcome(incident, "improved", conn=conn)
+        conn.commit()
+
+        with ReportGenerator(conn) as gen:
+            report = gen.generate_efficacy_report(format="json")
+
+        parsed = json.loads(report.report_text)
+        assert "total_finalized_incidents" in parsed
+        assert "overall_success_rate" in parsed
+
+    def test_efficacy_report_text_format(self, temp_db):
+        """Test generating efficacy report in text format."""
+        conn, _ = temp_db
+
+        incident = create_incident_draft(title="Text eff", domain="disk", conn=conn)
+        record_outcome(incident, "improved", conn=conn)
+        conn.commit()
+
+        with ReportGenerator(conn) as gen:
+            report = gen.generate_efficacy_report(format="text")
+
+        assert "ELLE EFFICACY REPORT" in report.report_text
+        assert "Total Incidents" in report.report_text
+
+
+class TestTrendReportEdgeCases:
+    """Tests for trend report edge cases."""
+
+    def test_trend_report_empty_database(self, temp_db):
+        """Test trend report on an empty database."""
+        conn, _ = temp_db
+
+        with ReportGenerator(conn) as gen:
+            report = gen.generate_trend_report(days=7)
+
+        assert report.total_incidents == 0
+        assert report.by_domain == {}
+        assert report.by_outcome == {}
+
+    def test_trend_report_day_range(self, temp_db):
+        """Test trend report respects the day range."""
+        conn, _ = temp_db
+
+        # All incidents are created 'now', so a 1-day range should include them
+        for _ in range(3):
+            create_incident_draft(title="Recent", domain="net", conn=conn)
+        conn.commit()
+
+        with ReportGenerator(conn) as gen:
+            report = gen.generate_trend_report(days=1)
+
+        assert report.total_incidents == 3
+
+    def test_trend_report_outcome_aggregation(self, temp_db):
+        """Test that trend report aggregates outcomes correctly."""
+        conn, _ = temp_db
+
+        for outcome in ["improved", "improved", "partial", "no_change"]:
+            inc = create_incident_draft(title=f"Trend {outcome}", domain="net", conn=conn)
+            update_incident(inc.incident_id, outcome=outcome, conn=conn)
+        conn.commit()
+
+        with ReportGenerator(conn) as gen:
+            report = gen.generate_trend_report(days=7)
+
+        assert report.total_incidents == 4
+        assert report.by_outcome.get("improved") == 2
+        assert report.by_outcome.get("partial") == 1
+        assert report.by_outcome.get("no_change") == 1
+
+
+class TestSimilarIncidentsInReports:
+    """Tests for similar incident discovery within reports."""
+
+    def test_report_finds_similar_incidents(self, temp_db):
+        """Test that reports identify similar incidents."""
+        conn, _ = temp_db
+
+        # Create resolved incidents in same domain
+        inc1 = create_incident_draft(title="Network timeout A", domain="net", conn=conn)
+        update_incident(
+            inc1.incident_id,
+            fingerprint=Fingerprint(entities=("interface:eth0",)),
+            conn=conn,
+        )
+        finalize_outcome(inc1.incident_id, "improved", conn=conn)
+
+        inc2 = create_incident_draft(title="Network timeout B", domain="net", conn=conn)
+        update_incident(
+            inc2.incident_id,
+            fingerprint=Fingerprint(entities=("interface:eth0",)),
+            conn=conn,
+        )
+        finalize_outcome(inc2.incident_id, "improved", conn=conn)
+
+        conn.commit()
+
+        with ReportGenerator(conn) as gen:
+            report = gen.generate_incident_report(inc2.incident_id, format="markdown")
+
+        # The report should find inc1 as a similar incident
+        assert len(report.similar_incidents) >= 1
+
+    def test_report_similar_incidents_exclude_self(self, temp_db):
+        """Test that similar incidents exclude the current incident."""
+        conn, _ = temp_db
+
+        inc = create_incident_draft(title="Self test", domain="net", conn=conn)
+        finalize_outcome(inc.incident_id, "improved", conn=conn)
+        conn.commit()
+
+        with ReportGenerator(conn) as gen:
+            report = gen.generate_incident_report(inc.incident_id, format="markdown")
+
+        for similar in report.similar_incidents:
+            assert similar.incident_id != inc.incident_id
+
+
+class TestReportGeneratorLifecycle:
+    """Tests for ReportGenerator lifecycle management."""
+
+    def test_generator_closes_own_connection(self, temp_db):
+        """Test that generator closes its own connection properly."""
+        conn, _ = temp_db
+
+        # When passing an existing connection, generator should NOT close it
+        gen = ReportGenerator(conn)
+        gen.close()
+        # conn should still be usable
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM incidents")
+        assert cursor.fetchone()[0] == 0
+
+    def test_generator_enter_returns_self(self, temp_db):
+        """Test that __enter__ returns the generator itself."""
+        conn, _ = temp_db
+
+        gen = ReportGenerator(conn)
+        result = gen.__enter__()
+        assert result is gen
+        gen.__exit__(None, None, None)

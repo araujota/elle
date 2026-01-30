@@ -791,7 +791,7 @@ class YQEngine:
                 mod: Any,
                 path: str = "$",
             ) -> None:
-                if type(orig) != type(mod):
+                if type(orig) is not type(mod):
                     changes.append(
                         YQChange(
                             path=path,
@@ -837,7 +837,7 @@ class YQEngine:
                             )
                         )
                     else:
-                        for i, (o, m) in enumerate(zip(orig, mod)):
+                        for i, (o, m) in enumerate(zip(orig, mod, strict=False)):
                             _compare(o, m, f"{path}[{i}]")
                 else:
                     if orig != mod:

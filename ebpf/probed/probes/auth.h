@@ -27,6 +27,18 @@ struct auth_probe_ctx {
     uint32_t last_failed_logins;
     uint32_t last_failed_sudo;
     uint32_t last_failed_ssh;
+
+    /* Per-source IP tracking for brute force detection */
+    struct auth_source_entry {
+        char ip[64];
+        uint32_t failure_count;
+        uint64_t first_seen_ns;
+        uint64_t last_seen_ns;
+    } source_tracker[256];
+    int source_tracker_count;
+    bool brute_force_detected;
+    char brute_force_source[64];
+    uint32_t brute_force_count;
 };
 
 /**

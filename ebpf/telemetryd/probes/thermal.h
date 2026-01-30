@@ -17,6 +17,9 @@
  */
 struct thermal_probe_ctx {
     int warning_celsius;    /* Temperature warning threshold (default: 80) */
+    /* CPU frequency tracking */
+    uint64_t scaling_cur_freq;
+    uint64_t scaling_max_freq;
 };
 
 /**

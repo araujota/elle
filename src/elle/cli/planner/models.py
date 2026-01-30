@@ -655,7 +655,7 @@ class PlanResult(BaseModel):
         description="Whether rule-based fallback was used",
     )
 
-    def with_plan(self, plan: CommandPlan) -> "PlanResult":
+    def with_plan(self, plan: CommandPlan) -> PlanResult:
         """Return a new result with the given plan."""
         return PlanResult(
             context=self.context,
@@ -670,7 +670,7 @@ class PlanResult(BaseModel):
             used_fallback=self.used_fallback,
         )
 
-    def with_verification(self, verification: PlanVerification) -> "PlanResult":
+    def with_verification(self, verification: PlanVerification) -> PlanResult:
         """Return a new result with verification."""
         return PlanResult(
             context=self.context,
@@ -685,7 +685,7 @@ class PlanResult(BaseModel):
             used_fallback=self.used_fallback,
         )
 
-    def with_approved(self) -> "PlanResult":
+    def with_approved(self) -> PlanResult:
         """Return a new result marked as approved."""
         return PlanResult(
             context=self.context,
@@ -700,7 +700,7 @@ class PlanResult(BaseModel):
             used_fallback=self.used_fallback,
         )
 
-    def with_step_result(self, result: StepResult) -> "PlanResult":
+    def with_step_result(self, result: StepResult) -> PlanResult:
         """Return a new result with an additional step result."""
         return PlanResult(
             context=self.context,
@@ -715,7 +715,7 @@ class PlanResult(BaseModel):
             used_fallback=self.used_fallback,
         )
 
-    def with_check_results(self, results: tuple[CheckResult, ...]) -> "PlanResult":
+    def with_check_results(self, results: tuple[CheckResult, ...]) -> PlanResult:
         """Return a new result with check results."""
         return PlanResult(
             context=self.context,
@@ -730,7 +730,7 @@ class PlanResult(BaseModel):
             used_fallback=self.used_fallback,
         )
 
-    def with_rollback_results(self, results: tuple[StepResult, ...]) -> "PlanResult":
+    def with_rollback_results(self, results: tuple[StepResult, ...]) -> PlanResult:
         """Return a new result with rollback results."""
         return PlanResult(
             context=self.context,
@@ -745,7 +745,7 @@ class PlanResult(BaseModel):
             used_fallback=self.used_fallback,
         )
 
-    def with_outcome(self, outcome: PlanOutcome) -> "PlanResult":
+    def with_outcome(self, outcome: PlanOutcome) -> PlanResult:
         """Return a new result with the given outcome."""
         return PlanResult(
             context=self.context,
@@ -760,7 +760,7 @@ class PlanResult(BaseModel):
             used_fallback=self.used_fallback,
         )
 
-    def with_incident_id(self, incident_id: str) -> "PlanResult":
+    def with_incident_id(self, incident_id: str) -> PlanResult:
         """Return a new result with the given incident ID."""
         return PlanResult(
             context=self.context,

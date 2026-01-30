@@ -18,7 +18,7 @@ import logging
 import time
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel
 
@@ -235,7 +235,7 @@ class PlanExecutor:
         self.max_parallel = max_parallel
         self.skip_confirmation_for_readonly = skip_confirmation_for_readonly
         self.use_fallback = use_fallback
-        self._capability_executor = None
+        self._capability_executor: Any = None
 
     @property
     def capability_executor(self) -> Any:
@@ -373,7 +373,7 @@ class PlanExecutor:
                         duration_ms=0,
                     )
                 )
-            else:
+            elif isinstance(result, ExecutionEvidence):
                 evidence.append(result)
 
         return evidence
@@ -542,7 +542,7 @@ class PlanExecutor:
             cap_module = importlib.import_module(module)
             input_class = getattr(cap_module, input_schema_name, None)
             if input_class:
-                return input_class(**args)
+                return cast(BaseModel, input_class(**args))
         except Exception:
             pass
 

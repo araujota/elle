@@ -238,6 +238,12 @@ struct telemetryd_config {
     int thermal_interval;
     int package_interval;
     int port_interval;
+
+    /* New probe intervals (monitoring sprint) */
+    int connpool_interval;
+    int topproc_interval;
+    int ioperf_interval;
+    int cgroup_interval;
 };
 
 /* Default configuration */
@@ -263,6 +269,10 @@ struct telemetryd_config {
     .thermal_interval = 60,                             \
     .package_interval = 300,                            \
     .port_interval = 60,                                \
+    .connpool_interval = 30,                            \
+    .topproc_interval = 60,                             \
+    .ioperf_interval = 30,                              \
+    .cgroup_interval = 60,                              \
 }
 
 /* ==========================================================================

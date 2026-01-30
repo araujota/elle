@@ -30,6 +30,8 @@
 #include "probes/conntrack.h"
 #include "probes/hardware.h"
 #include "probes/auth.h"
+#include "probes/cert.h"
+#include "probes/sysstate.h"
 
 /* ==========================================================================
  * Constants
@@ -53,6 +55,8 @@ static struct dns_probe_ctx *dns_ctx = NULL;
 static struct conntrack_probe_ctx *conntrack_ctx = NULL;
 static struct hardware_probe_ctx *hardware_ctx = NULL;
 static struct auth_probe_ctx *auth_ctx = NULL;
+static struct cert_probe_ctx *cert_ctx = NULL;
+static struct sysstate_probe_ctx *sysstate_ctx = NULL;
 
 /* ==========================================================================
  * Signal Handling
@@ -247,6 +251,10 @@ static void cleanup(void)
         hardware_probe_destroy_ctx(hardware_ctx);
     if (auth_ctx)
         auth_probe_destroy_ctx(auth_ctx);
+    if (cert_ctx)
+        cert_probe_destroy_ctx(cert_ctx);
+    if (sysstate_ctx)
+        sysstate_probe_destroy_ctx(sysstate_ctx);
 }
 
 /* ==========================================================================
@@ -394,6 +402,30 @@ int main(int argc, char **argv)
             if (verbose)
                 fprintf(stderr, "Registered auth probe (interval: %ds)\n",
                         cfg.auth_interval_sec);
+        }
+    }
+
+    if (cfg.cert_enabled) {
+        cert_ctx = cert_probe_create_ctx(&cfg);
+        if (cert_ctx) {
+            probed_scheduler_register(sched, "cert",
+                                       cert_probe_run, cert_ctx,
+                                       cfg.cert_interval_sec, true);
+            if (verbose)
+                fprintf(stderr, "Registered cert probe (interval: %ds)\n",
+                        cfg.cert_interval_sec);
+        }
+    }
+
+    if (cfg.sysstate_enabled) {
+        sysstate_ctx = sysstate_probe_create_ctx(&cfg);
+        if (sysstate_ctx) {
+            probed_scheduler_register(sched, "sysstate",
+                                       sysstate_probe_run, sysstate_ctx,
+                                       cfg.sysstate_interval_sec, true);
+            if (verbose)
+                fprintf(stderr, "Registered sysstate probe (interval: %ds)\n",
+                        cfg.sysstate_interval_sec);
         }
     }
 

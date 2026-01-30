@@ -116,7 +116,7 @@ class Tier5Patch(BaseTier):
                 is_valid=True,
                 tool_to_use="text-patch",
             )
-        except Exception as e:
+        except Exception:
             return FileEditPreview(
                 file_path=str(file_path),
                 tier_selected=5,

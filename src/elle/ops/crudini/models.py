@@ -7,7 +7,7 @@ the crudini command-line tool.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -65,7 +65,7 @@ class CrudiniChange(BaseModel):
         default=None,
         description="New value (None if deleted)",
     )
-    operation: Literal["set", "del", "add", "merge"] = Field(
+    operation: Literal["get", "set", "del", "add", "merge"] = Field(
         default="set",
         description="Type of operation performed",
     )

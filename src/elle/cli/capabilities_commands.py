@@ -181,7 +181,7 @@ async def handle_capabilities_command(input_text: str, session: Session) -> Engi
     # Try to match domain
     for domain in domains:
         if args.lower() == domain.lower():
-            output = _render_domain_capabilities(domain)  # type: ignore
+            output = _render_domain_capabilities(domain)
             return EngineResult(
                 output=output,
                 session=session,
@@ -204,7 +204,7 @@ async def handle_capabilities_command(input_text: str, session: Session) -> Engi
     domain_prefix = args.split(".")[0] if "." in args else args
     for domain in domains:
         if domain_prefix.lower() == domain.lower():
-            output = _render_domain_capabilities(domain)  # type: ignore
+            output = _render_domain_capabilities(domain)
             return EngineResult(
                 output=output,
                 session=session,
@@ -748,7 +748,7 @@ async def handle_capability_query(input_text: str, session: Session) -> EngineRe
     registry = get_registry()
     for domain in registry.list_domains():
         if f"{domain} capabilities" in text or f"capabilities for {domain}" in text:
-            output = _render_domain_capabilities(domain)  # type: ignore
+            output = _render_domain_capabilities(domain)
             return EngineResult(
                 output=output,
                 session=session,

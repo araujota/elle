@@ -16,7 +16,16 @@
  * struct disk_probe_ctx - Disk probe context
  */
 struct disk_probe_ctx {
-    double warning_pct;     /* Disk warning threshold (default: 0.90) */
+    double warning_pct;             /* Disk warning threshold (default: 0.90) */
+    double inode_warning_pct;       /* Inode usage warning (default: 0.80) */
+    double swap_thrashing_threshold; /* Swap page-in rate threshold (default: 100) */
+    /* Previous vmstat values for delta computation */
+    uint64_t prev_pswpin;
+    uint64_t prev_pswpout;
+    uint64_t prev_pgpgin;
+    uint64_t prev_pgpgout;
+    uint64_t prev_oom_kill;
+    bool has_prev_vmstat;
 };
 
 /**

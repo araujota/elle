@@ -234,9 +234,23 @@ async def handle_forecast_trigger(
 
         # Store the incident
         try:
-            from elle.daemon.incidents.store import create_incident
+            from elle.daemon.incidents.store import create_incident_draft, update_incident
 
-            await create_incident(incident_data)
+            report = create_incident_draft(
+                title=incident_data.get("title", f"Forecast: {forecast.metric}"),
+                domain=incident_data.get("domain", "other"),
+                severity=incident_data.get("severity", "warning"),
+                trigger_source=incident_data.get("trigger_source", "forecast"),
+            )
+            incident_id = report.incident_id
+            incident_data["id"] = incident_id
+            update_incident(
+                incident_id,
+                summary=incident_data.get("summary"),
+                outcome=incident_data.get("outcome"),
+                metrics=incident_data.get("metrics_json"),
+                status=incident_data.get("status"),
+            )
         except ImportError:
             logger.warning("Incident store not available, continuing without persistence")
         except Exception as e:
@@ -466,14 +480,13 @@ async def _update_incident_with_plan(
         incident_id: The incident ID.
         plan: The remediation plan.
     """
-    import json
 
     try:
         from elle.daemon.incidents.store import update_incident
 
-        await update_incident(
+        update_incident(
             incident_id,
-            prepared_plan_json=json.dumps(plan.model_dump(mode="json")),
+            metrics={"prepared_plan": plan.model_dump(mode="json")},
         )
     except ImportError:
         logger.debug("Incident store not available")
@@ -499,11 +512,11 @@ async def _update_incident_outcome(
         outcome = "improved" if success else "no_change"
         status = "mitigated" if success else "open"
 
-        await update_incident(
+        update_incident(
             incident_id,
             outcome=outcome,
             status=status,
-            plan_executed_at=datetime.utcnow().isoformat(),
+            metrics={"plan_executed_at": datetime.utcnow().isoformat()},
         )
     except ImportError:
         logger.debug("Incident store not available")
@@ -536,12 +549,12 @@ def _check_plan_autonomy(capabilities: tuple[str, ...]) -> bool:
         registry = get_registry()
 
         for cap_name in capabilities:
-            spec = registry.get(cap_name)
-            if spec is None:
+            capability = registry.get(cap_name)
+            if capability is None:
                 # Unknown capability - can't auto-run
                 return False
 
-            can_auto, _reason = engine.can_run_autonomously(cap_name, spec.risk)
+            can_auto, _reason = engine.can_run_autonomously(cap_name, capability.spec.risk)
             if not can_auto:
                 return False
 

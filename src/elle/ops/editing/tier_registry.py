@@ -7,7 +7,6 @@ This registry is the source of truth for tier selection.
 from __future__ import annotations
 
 import fnmatch
-import re
 from pathlib import Path
 
 from elle.ops.editing.models import TierInfo, TierNumber

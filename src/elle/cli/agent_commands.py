@@ -52,7 +52,7 @@ async def handle_agent_command(args: str) -> str:
     subcommand = parts[0].lower()
     subargs = parts[1] if len(parts) > 1 else ""
 
-    handlers = {
+    handlers: dict[str, Any] = {
         "last": _handle_last,
         "inspect": _handle_inspect,
         "stages": lambda _: _handle_stages(),
@@ -65,8 +65,8 @@ async def handle_agent_command(args: str) -> str:
     if handler:
         result = handler(subargs)
         if asyncio.iscoroutine(result):
-            return await result
-        return result
+            return str(await result)
+        return str(result)
 
     # If subcommand looks like an ID, treat as inspect
     if len(subcommand) >= 8:
@@ -146,7 +146,7 @@ async def _handle_last(args: str) -> str:
 
 async def _handle_inspect(args: str) -> str:
     """Handle 'agent inspect' command."""
-    from elle.cli.agentic.execution import get_execution, get_execution_store
+    from elle.cli.agentic.execution import get_execution_store
 
     execution_id = args.strip()
     if not execution_id:

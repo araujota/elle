@@ -19,13 +19,8 @@ from elle.ops.crudini.models import (
     CrudiniEditPreview,
     CrudiniEditRequest,
     CrudiniEditResult,
-    CrudiniError,
-    CrudiniOperation,
-    CrudiniParameterError,
-    CrudiniParseError,
     CrudiniRequest,
     CrudiniResult,
-    CrudiniSectionError,
     CrudiniStatus,
     CrudiniUnavailableError,
     INIFileContent,
@@ -628,7 +623,7 @@ class CrudiniEngine:
             parser.write(output)
             proposed_content = output.getvalue()
 
-        except Exception as e:
+        except Exception:
             return CrudiniEditPreview(
                 file_path=request.file_path,
                 original_content=original_content,

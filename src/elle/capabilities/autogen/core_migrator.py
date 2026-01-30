@@ -537,7 +537,7 @@ def verify_migration(store: AutogenStore | None = None) -> dict[str, Any]:
     from elle.capabilities.autogen.loader import load_capability_from_stored
 
     store = store or get_store()
-    results = {
+    results: dict[str, Any] = {
         "verified": [],
         "failed": [],
         "hash_mismatches": [],

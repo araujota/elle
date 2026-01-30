@@ -63,7 +63,13 @@ CREATE TABLE IF NOT EXISTS incidents (
 
     -- Trigger
     trigger_source TEXT NOT NULL DEFAULT 'manual',
-    trigger_command TEXT
+    trigger_command TEXT,
+
+    -- V5: Forecast incident tracking
+    forecast_metric TEXT,
+    forecast_urgency TEXT,
+    prepared_plan_json TEXT,
+    plan_executed_at TEXT
 )
 """
 

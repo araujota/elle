@@ -18,11 +18,9 @@ from elle.cli.agentic.stages import (
     CapabilityEvaluation,
     Hypothesis,
     LoopStage,
-    RetrievalResult,
     StageData,
     StageTransition,
 )
-from elle.cli.agentic.tools import ToolResult
 
 
 class ToolCallSummary(BaseModel):

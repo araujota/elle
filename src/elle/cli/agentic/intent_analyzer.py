@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any
+from typing import Any, cast
 
 from elle.cli.agentic.models import (
     ActionRequest,
@@ -343,13 +343,13 @@ class IntentAnalyzer:
                 content = content[start:end].strip()
 
         try:
-            return json.loads(content)
+            return cast(dict[str, Any], json.loads(content))
         except json.JSONDecodeError:
             # Try to find JSON object in the response
             match = re.search(r"\{[\s\S]*\}", content)
             if match:
                 try:
-                    return json.loads(match.group())
+                    return cast(dict[str, Any], json.loads(match.group()))
                 except json.JSONDecodeError:
                     pass
             return None
@@ -380,7 +380,7 @@ class IntentAnalyzer:
 
                 info_needs.append(
                     InformationNeed(
-                        category=category,  # type: ignore
+                        category=category,
                         target=need_data.get("target", ""),
                         aspects=tuple(need_data.get("aspects", ["info"])),
                         confidence=self.llm_confidence,

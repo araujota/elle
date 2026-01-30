@@ -16,6 +16,11 @@ struct dns_probe_ctx {
     int test_domain_count;
     char resolvers[4][64];
     int resolver_count;
+    /* Latency percentile tracking */
+    uint32_t latency_history[100];
+    int history_count;
+    int history_idx;
+    uint64_t total_query_count;
 };
 
 /**

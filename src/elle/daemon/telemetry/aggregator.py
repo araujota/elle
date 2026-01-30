@@ -18,6 +18,7 @@ from elle.daemon.telemetry.trends import (
     METRIC_THRESHOLDS,
     TRACKED_METRICS,
     AnomalyResult,
+    CorrelationAlert,
     Forecast,
     MetricBaseline,
     TrendConfig,
@@ -172,6 +173,112 @@ def collect_system_metrics() -> dict[str, float]:
             metrics["cpu.load_5m"] = round(load[1], 2)
             metrics["cpu.load_15m"] = round(load[2], 2)
         except (OSError, AttributeError):
+            pass
+
+    except Exception:
+        pass
+
+    # New metrics (monitoring sprint)
+    try:
+        # Inode usage
+        for mount in ["/", "/var"]:
+            try:
+                stat = os.statvfs(mount)
+                total = stat.f_files
+                free = stat.f_ffree
+                if total > 0:
+                    inode_pct = ((total - free) / total) * 100
+                    key = f"disk.{mount}.inode_pct".replace("//", "/")
+                    metrics[key] = round(inode_pct, 2)
+            except (OSError, FileNotFoundError):
+                pass
+
+        # TCP state counts from /proc/net/tcp
+        try:
+            tcp_states: dict[str, int] = {}
+            with open("/proc/net/tcp") as f:
+                next(f)
+                for line in f:
+                    parts = line.split()
+                    if len(parts) >= 4:
+                        state = parts[3].upper()
+                        tcp_states[state] = tcp_states.get(state, 0) + 1
+            metrics["net.tcp_time_wait"] = float(tcp_states.get("06", 0))
+            metrics["net.tcp_close_wait"] = float(tcp_states.get("08", 0))
+        except (OSError, FileNotFoundError):
+            pass
+
+        # TCP retransmit rate from /proc/net/snmp
+        try:
+            with open("/proc/net/snmp") as f:
+                lines = f.readlines()
+            for i, line in enumerate(lines):
+                if line.startswith("Tcp:") and i + 1 < len(lines):
+                    headers = line.split()
+                    values = lines[i + 1].split()
+                    if len(headers) == len(values):
+                        data = dict(zip(headers[1:], values[1:], strict=False))
+                        out_segs = int(data.get("OutSegs", "0"))
+                        retrans = int(data.get("RetransSegs", "0"))
+                        if out_segs > 0:
+                            metrics["net.tcp_retransmit_rate"] = round(retrans / out_segs, 6)
+                    break
+        except (OSError, FileNotFoundError, ValueError):
+            pass
+
+        # Temperature
+        try:
+            import glob
+            max_temp = 0
+            for zone in glob.glob("/sys/class/thermal/thermal_zone*/temp"):
+                try:
+                    with open(zone) as f:
+                        temp = int(f.read().strip()) // 1000
+                        max_temp = max(max_temp, temp)
+                except (OSError, ValueError):
+                    pass
+            if max_temp > 0:
+                metrics["thermal.max_temp_c"] = float(max_temp)
+        except Exception:
+            pass
+
+        # Zombie/process count
+        try:
+            from pathlib import Path
+            zombie_count = 0
+            total_count = 0
+            proc_dir = Path("/proc")
+            for entry in proc_dir.iterdir():
+                if entry.name.isdigit():
+                    total_count += 1
+                    try:
+                        content = (entry / "stat").read_text()
+                        close_paren = content.rfind(")")
+                        if close_paren >= 0 and len(content) > close_paren + 2:
+                            if content[close_paren + 2] == "Z":
+                                zombie_count += 1
+                    except (OSError, PermissionError):
+                        pass
+            metrics["proc.zombie_count"] = float(zombie_count)
+            metrics["proc.total_count"] = float(total_count)
+        except Exception:
+            pass
+
+        # PSI pressure
+        try:
+            from pathlib import Path
+            for resource, key in [("cpu", "psi.cpu_avg10"), ("memory", "psi.memory_avg10")]:
+                psi_path = Path(f"/proc/pressure/{resource}")
+                if psi_path.exists():
+                    content = psi_path.read_text()
+                    for line in content.split("\n"):
+                        if line.startswith("some"):
+                            for part in line.split():
+                                if part.startswith("avg10="):
+                                    metrics[key] = float(part.split("=")[1])
+                                    break
+                            break
+        except (OSError, ValueError):
             pass
 
     except Exception:
@@ -351,6 +458,11 @@ class TrendAggregator:
             # Update aggregation tables
             self._store_aggregations(c)
 
+            # Run correlation detection
+            correlation_alerts_list = self._run_correlations(current_metrics, c)
+            for alert in correlation_alerts_list:
+                warnings.append(f"[{alert.severity}] {alert.signature}: {alert.description}")
+
             self._last_run = now
 
             return TrendContext(
@@ -362,6 +474,7 @@ class TrendAggregator:
                 anomalies=tuple(anomalies),
                 has_warnings=len(warnings) > 0,
                 warning_messages=tuple(warnings),
+                correlation_alerts=tuple(correlation_alerts_list),
                 computed_at=now,
             )
 
@@ -439,13 +552,44 @@ class TrendAggregator:
         trend: TrendWindow,
         conn: sqlite3.Connection,
     ) -> Forecast:
-        """Compute forecast for a metric."""
+        """Compute forecast for a metric using best available method."""
         current = trend.current
         rate = trend.rate_of_change_per_hour
 
-        # Simple linear extrapolation
+        # Try advanced forecasting via ModelSelector
+        method = None
+        mape = None
+        seasonal_detected = False
         predicted_24h = current + (rate * 24)
         predicted_7d = current + (rate * 24 * 7)
+
+        try:
+            from elle.daemon.telemetry.model_selector import ModelSelector
+            selector = ModelSelector()
+            # Get raw samples for advanced forecasting
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT value FROM metric_samples WHERE metric = ? ORDER BY ts ASC",
+                (metric,),
+            )
+            values = [row[0] for row in cursor.fetchall()]
+            if len(values) >= 12:
+                result = selector.forecast(
+                    metric,
+                    values,
+                    current,
+                    trend.avg_1h or current,
+                    trend.avg_6h or current,
+                )
+                if result:
+                    predicted_24h = result.predicted_24h
+                    predicted_7d = result.predicted_7d
+                    rate = result.rate_of_change
+                    method = result.method
+                    mape = result.mape
+                    seasonal_detected = result.seasonal_detected
+        except Exception:
+            pass  # Fall back to linear
 
         # Clamp to valid range
         predicted_24h = max(0, min(100, predicted_24h))
@@ -466,6 +610,9 @@ class TrendAggregator:
         confidence = 0.5
         if trend.sample_count >= self.config.forecast_min_samples:
             confidence = min(0.9, 0.5 + (trend.sample_count / 100) * 0.4)
+        # Boost confidence if we have MAPE data
+        if mape is not None and mape < 0.1:
+            confidence = min(0.95, confidence + 0.1)
 
         return Forecast(
             metric=metric,
@@ -477,6 +624,9 @@ class TrendAggregator:
             will_cross_threshold=will_cross,
             confidence=confidence,
             rate_of_change=rate,
+            method=method,
+            mape=mape,
+            seasonal_detected=seasonal_detected,
         )
 
     def _check_anomaly(
@@ -582,6 +732,35 @@ class TrendAggregator:
             )
 
         conn.commit()
+
+    def _run_correlations(
+        self,
+        metrics: dict[str, float],
+        conn: sqlite3.Connection,
+    ) -> list[CorrelationAlert]:
+        """Run multi-variate correlation detection."""
+        try:
+            from elle.daemon.telemetry.correlator_engine import (
+                CorrelationAlert as EngineAlert,
+            )
+            from elle.daemon.telemetry.correlator_engine import (
+                CorrelationEngine,
+            )
+            engine = CorrelationEngine()
+            engine_alerts: list[EngineAlert] = engine.evaluate(metrics, {})
+            # Convert from correlator_engine.CorrelationAlert to trends.CorrelationAlert
+            return [
+                CorrelationAlert(
+                    signature=a.signature,
+                    severity=a.severity,
+                    description=a.description,
+                    contributing_metrics=a.contributing_metrics,
+                    recommended_action=a.recommended_action,
+                )
+                for a in engine_alerts
+            ]
+        except Exception:
+            return []
 
     def _store_aggregations(
         self,

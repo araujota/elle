@@ -273,9 +273,21 @@ class ConfigChangeTracker:
 
         # Store the incident
         try:
-            from elle.daemon.incidents.store import create_incident
+            from elle.daemon.incidents.store import create_incident_draft, update_incident
 
-            await create_incident(incident_data)
+            report = create_incident_draft(
+                title=incident_data["title"],
+                domain=incident_data.get("domain", "config"),
+                severity=incident_data.get("severity", "warning"),
+                trigger_source=incident_data.get("trigger_source", "config_watcher"),
+            )
+            update_incident(
+                report.incident_id,
+                summary=incident_data.get("summary"),
+                outcome=incident_data.get("outcome"),
+                metrics=incident_data.get("metrics_json"),
+                status=incident_data.get("status"),
+            )
         except ImportError:
             logger.debug("Incident store not available")
         except Exception as e:
@@ -549,11 +561,11 @@ async def get_config_backup(incident_id: str, path: str) -> dict[str, Any] | Non
     try:
         from elle.daemon.incidents.store import get_incident
 
-        incident = await get_incident(incident_id)
+        incident = get_incident(incident_id)
         if not incident:
             return None
 
-        metrics = incident.get("metrics_json", {})
+        metrics = incident.metrics or {}
         if metrics.get("path") == path and metrics.get("backup_available"):
             return {
                 "path": path,

@@ -191,7 +191,7 @@ class Tier3Format(BaseTier):
                 is_valid=True,
                 tool_to_use=tool,
             )
-        except Exception as e:
+        except Exception:
             return FileEditPreview(
                 file_path=str(file_path),
                 tier_selected=3,

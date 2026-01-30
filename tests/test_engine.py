@@ -1,7 +1,6 @@
 """Tests for the ELLE engine."""
 
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 from pydantic import ValidationError
@@ -13,10 +12,8 @@ from elle.common.session import create_session
 
 @pytest.fixture
 def mock_classifier() -> IntentClassifier:
-    """Create a classifier with mocked Ollama client for testing."""
-    mock_client = MagicMock()
-    mock_client.is_available.return_value = False  # Force rule-based only
-    return IntentClassifier(client=mock_client, log_path=Path("/tmp/elle-test-logs"))
+    """Create a classifier for testing."""
+    return IntentClassifier(log_path=Path("/tmp/elle-test-logs"))
 
 
 class TestEngine:
@@ -76,11 +73,13 @@ class TestEngine:
         assert result.action == EngineAction.CLEAR
 
     def test_status_command(self, engine: Engine, session) -> None:
-        """'status' should show session status."""
+        """'status' should return a result (daemon or fallback)."""
         result = engine.process("status", session)
 
-        assert "cwd:" in result.output
-        assert "history:" in result.output
+        # Status command returns daemon status or fallback session status
+        assert result.action == EngineAction.CONTINUE
+        assert result.success is True
+        assert len(result.output) > 0
 
     def test_history_empty(self, engine: Engine, session) -> None:
         """'history' with no commands should indicate empty."""

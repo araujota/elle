@@ -28,9 +28,6 @@ from collections.abc import Callable, Coroutine
 from datetime import datetime, timedelta
 from typing import Any
 
-# Type for the incident callback
-OnIncidentCreated = Callable[[str], Coroutine[Any, Any, None]] | Callable[[str], None] | None
-
 from elle.daemon.incidents.models import IncidentDomain
 from elle.daemon.incidents.snapshot import collect_snapshot, extract_fingerprint
 from elle.daemon.incidents.store import (
@@ -39,6 +36,9 @@ from elle.daemon.incidents.store import (
     link_events,
     update_incident,
 )
+
+# Type for the incident callback
+OnIncidentCreated = Callable[[str], Coroutine[Any, Any, None]] | Callable[[str], None] | None
 
 # Domain detection patterns
 DOMAIN_PATTERNS: list[tuple[str, re.Pattern[str], str]] = [

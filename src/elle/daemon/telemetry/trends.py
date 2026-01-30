@@ -18,6 +18,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 TimeWindow = Literal["1h", "6h", "24h", "7d"]
 
+ForecastMethod = Literal["linear", "holt_winters", "ar1", "seasonal"]
+
 
 class MetricSample(BaseModel):
     """A single metric sample."""
@@ -189,6 +191,19 @@ class Forecast(BaseModel):
         default=0.0,
         description="Rate of change per hour used for forecast",
     )
+    # Forecasting method metadata (monitoring sprint)
+    method: ForecastMethod | None = Field(
+        default=None,
+        description="Forecasting method used",
+    )
+    mape: float | None = Field(
+        default=None,
+        description="Mean Absolute Percentage Error from backtest",
+    )
+    seasonal_detected: bool = Field(
+        default=False,
+        description="Whether seasonal pattern was detected in data",
+    )
     computed_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -284,6 +299,12 @@ class TrendContext(BaseModel):
         description="Human-readable warning messages",
     )
 
+    # Correlation alerts (monitoring sprint)
+    correlation_alerts: tuple[CorrelationAlert, ...] = Field(
+        default_factory=tuple,
+        description="Active multi-variate correlation alerts",
+    )
+
     # Metadata
     computed_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -368,6 +389,25 @@ class PlanValidationResult(BaseModel):
 # =============================================================================
 
 
+class CorrelationAlert(BaseModel):
+    """Alert from multi-variate correlation detection."""
+
+    model_config = ConfigDict(frozen=True)
+
+    signature: str = Field(description="Correlation signature name")
+    severity: Literal["warning", "critical"] = Field(description="Alert severity")
+    description: str = Field(description="Human-readable description")
+    contributing_metrics: dict[str, float] = Field(
+        default_factory=dict,
+        description="Metrics that triggered this correlation",
+    )
+    recommended_action: str = Field(
+        default="",
+        description="Suggested investigation or remediation",
+    )
+    detected_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class TrendConfig(BaseModel):
     """Configuration for trend aggregation."""
 
@@ -420,6 +460,7 @@ class TrendConfig(BaseModel):
 
 # Metrics tracked by the aggregator
 TRACKED_METRICS = [
+    # Existing (9)
     "disk./.used_pct",
     "disk./home.used_pct",
     "disk./var.used_pct",
@@ -429,6 +470,28 @@ TRACKED_METRICS = [
     "cpu.load_1m",
     "cpu.load_5m",
     "cpu.load_15m",
+    # Disk metrics (3)
+    "disk./.inode_pct",
+    "disk./var.inode_pct",
+    "io.util_pct",
+    # Network metrics (3)
+    "net.tcp_retransmit_rate",
+    "net.tcp_time_wait",
+    "net.tcp_close_wait",
+    # Thermal (2)
+    "thermal.max_temp_c",
+    "thermal.freq_ratio",
+    # Process (2)
+    "proc.zombie_count",
+    "proc.total_count",
+    # DNS (1)
+    "dns.p95_ms",
+    # Cgroup (2)
+    "cgroup.max_mem_pct",
+    "cgroup.max_cpu_throttle_pct",
+    # PSI (2)
+    "psi.cpu_avg10",
+    "psi.memory_avg10",
 ]
 
 # =============================================================================

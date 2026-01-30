@@ -18,7 +18,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -283,23 +283,23 @@ async def handle_daemon_command(args: str) -> str:
     subcommand = parts[0].lower()
     subargs = parts[1] if len(parts) > 1 else ""
 
-    handlers = {
+    handlers: dict[str, Any] = {
         "status": lambda _: _handle_status(),
-        "explain": lambda _: _handle_explain(),
-        "start": lambda _: _handle_start(),
-        "stop": lambda _: _handle_stop(),
-        "restart": lambda _: _handle_restart(),
-        "logs": lambda _: _handle_logs(),
+        "explain": lambda _: _handle_explain(_),
+        "start": lambda _: _handle_start(_),
+        "stop": lambda _: _handle_stop(_),
+        "restart": lambda _: _handle_restart(_),
+        "logs": lambda _: _handle_logs(_),
         "actions": _handle_actions,
-        "help": lambda _: _handle_help(),
+        "help": lambda _: _handle_help(_),
     }
 
     handler = handlers.get(subcommand)
     if handler:
         result = handler(subargs)
         if asyncio.iscoroutine(result):
-            return await result
-        return result
+            return str(await result)
+        return str(result)
 
     return f"Unknown daemon subcommand: {subcommand}\n\n{_handle_help('')}"
 
@@ -535,7 +535,9 @@ async def _get_daemon_status() -> DaemonStatus:
 
         if is_available:
             # Fetch full status from daemon API
-            status_data = await client._request("GET", "/v1/status")
+            http_client = await client._get_client()
+            response = await http_client.get("/v1/status")
+            status_data = response.json() if response.status_code == 200 else None
             if status_data:
                 return DaemonStatus(
                     health=DaemonHealth(
@@ -633,7 +635,9 @@ async def _get_autonomous_actions(limit: int = 10) -> list[AutonomousAction]:
         from elle.cli.daemon_client import get_daemon_client
 
         client = get_daemon_client()
-        response = await client._request("GET", f"/v1/autonomous-actions?limit={limit}")
+        http_client = await client._get_client()
+        http_response = await http_client.get(f"/v1/autonomous-actions?limit={limit}")
+        response = http_response.json() if http_response.status_code == 200 else None
 
         if response and "actions" in response:
             return [

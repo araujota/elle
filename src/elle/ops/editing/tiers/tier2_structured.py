@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 from elle.ops.editing.models import (
     EditOperation,
@@ -219,7 +220,7 @@ class Tier2Structured(BaseTier):
                 is_valid=True,
                 tool_to_use=fmt,
             )
-        except Exception as e:
+        except Exception:
             return FileEditPreview(
                 file_path=str(file_path),
                 tier_selected=2,
@@ -243,7 +244,7 @@ class Tier2Structured(BaseTier):
         dropin_priority: int = 99,
     ) -> TierEditResult:
         """Apply structured data edit."""
-        from elle.ops.augeas.backup import backup_file, restore_file
+        from elle.ops.augeas.backup import backup_file
         from elle.ops.augeas.diff import colored_diff, unified_diff
 
         fmt = self._detect_format(str(file_path))
@@ -380,21 +381,21 @@ class Tier2Structured(BaseTier):
             try:
                 from ruamel.yaml import YAML
 
-                yaml = YAML()
-                yaml.preserve_quotes = True
+                ruamel_yaml = YAML()
+                ruamel_yaml.preserve_quotes = True
                 from io import StringIO
 
-                data = yaml.load(StringIO(content))
+                data = ruamel_yaml.load(StringIO(content))
                 data = self._apply_dict_edit(data, operation)
                 output = StringIO()
-                yaml.dump(data, output)
+                ruamel_yaml.dump(data, output)
                 return output.getvalue()
             except ImportError:
-                import yaml
+                import yaml as pyyaml
 
-                data = yaml.safe_load(content)
+                data = pyyaml.safe_load(content)
                 data = self._apply_dict_edit(data, operation)
-                return yaml.dump(data, default_flow_style=False)
+                return str(pyyaml.dump(data, default_flow_style=False))
 
     def _apply_toml_edit(self, content: str, operation: EditOperation) -> str:
         """Apply edit to TOML content."""
@@ -413,11 +414,11 @@ class Tier2Structured(BaseTier):
             import toml
 
             return toml.dumps(data)
-        except ImportError:
+        except ImportError as err:
             # tomllib is read-only, need toml for writing
-            raise ImportError("toml library needed for writing TOML files")
+            raise ImportError("toml library needed for writing TOML files") from err
 
-    def _apply_dict_edit(self, data: dict, operation: EditOperation) -> dict:
+    def _apply_dict_edit(self, data: dict[str, Any], operation: EditOperation) -> dict[str, Any]:
         """Apply edit operation to a dictionary."""
         if not operation.path:
             return data

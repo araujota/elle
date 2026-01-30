@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import PlainTextResponse
 
 from elle.daemon.api.auth import AuthContext, get_auth_context
 from elle.daemon.api.models import (
@@ -35,10 +36,10 @@ if TYPE_CHECKING:
 router = APIRouter(prefix="/v1", tags=["v1"])
 
 # Daemon reference set during app creation
-_daemon: "ElledDaemon | None" = None
+_daemon: ElledDaemon | None = None
 
 
-def set_daemon(daemon: "ElledDaemon") -> None:
+def set_daemon(daemon: ElledDaemon) -> None:
     """Set the daemon reference for routes.
 
     Args:
@@ -48,7 +49,7 @@ def set_daemon(daemon: "ElledDaemon") -> None:
     _daemon = daemon
 
 
-def get_daemon() -> "ElledDaemon":
+def get_daemon() -> ElledDaemon:
     """Get the daemon reference.
 
     Raises:
@@ -446,7 +447,7 @@ async def get_metrics(
 
 @router.get(
     "/metrics/prometheus",
-    response_class=None,  # Will return plain text
+    response_class=PlainTextResponse,
     responses={
         401: {"description": "Authentication required"},
         503: {"model": ErrorResponse},
@@ -464,8 +465,6 @@ async def get_prometheus_metrics(
 
     Requires authentication.
     """
-    from fastapi.responses import PlainTextResponse
-
     _ = auth
     get_daemon()  # Verify daemon is running
 

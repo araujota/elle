@@ -22,7 +22,7 @@ import time
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -848,18 +848,18 @@ async def list_capabilities(args: ListCapabilitiesInput) -> ToolResult:
 
         # Get capabilities, optionally filtered by domain
         if args.domain:
-            caps = registry.list_by_domain(args.domain)
+            from elle.capabilities.models import CapabilityDomain
+            caps = registry.list_by_domain(cast(CapabilityDomain, args.domain))
         else:
             caps = registry.list_all()
 
         for cap in caps:
-            spec = cap.spec
             info = CapabilityInfo(
-                name=spec.name,
-                domain=spec.domain,
-                risk_level=spec.risk.value if hasattr(spec.risk, 'value') else str(spec.risk),
-                description=spec.description or "",
-                is_read_only=spec.name.endswith((".status", ".logs", ".info", ".list", ".read", ".stat")),
+                name=cap.name,
+                domain=cap.domain,
+                risk_level=str(cap.risk),
+                description=cap.summary or "",
+                is_read_only=cap.name.endswith((".status", ".logs", ".info", ".list", ".read", ".stat")),
             )
             # Apply search filter
             if args.search:
@@ -1135,6 +1135,7 @@ class ToolRegistry:
 
         # Build input model for the tool
         try:
+            input_obj: Any
             if tool_name == "search_man_vault":
                 input_obj = SearchManVaultInput(**args)
                 return await handler(input_obj)

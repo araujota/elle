@@ -100,7 +100,7 @@ def get_core_capabilities() -> list[type[Capability[Any, Any]]]:
     try:
         from elle.capabilities.core.auth import AUTH_CAPABILITIES
 
-        capabilities.extend(AUTH_CAPABILITIES)
+        capabilities.extend(AUTH_CAPABILITIES)  # type: ignore[arg-type]
     except ImportError:
         pass
 

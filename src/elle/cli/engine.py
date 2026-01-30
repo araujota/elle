@@ -1156,10 +1156,11 @@ Validates package operations before execution to detect potential issues.
         """Compare two incidents structurally."""
         try:
             from elle.daemon.incidents.differ import IncidentDiffer, render_incident_diff
+            from elle.daemon.incidents.models import IncidentReport
             from elle.daemon.incidents.store import get_incident, list_incidents
 
             # Helper to resolve partial IDs
-            def resolve_incident(partial_id: str):
+            def resolve_incident(partial_id: str) -> IncidentReport | None:
                 incident = get_incident(partial_id)
                 if incident:
                     return incident
@@ -1654,7 +1655,7 @@ Validates package operations before execution to detect potential issues.
                     message,
                     stream_callback=stream_callback,
                     confirm_callback=confirm_callback,
-                    session_id=session.session_id,
+                    session_id=None,
                 )
             )
 

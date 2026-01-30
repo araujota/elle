@@ -38,6 +38,10 @@
 #include "probes/thermal.h"
 #include "probes/package.h"
 #include "probes/port.h"
+#include "probes/connpool.h"
+#include "probes/topproc.h"
+#include "probes/ioperf.h"
+#include "probes/cgroup.h"
 
 #ifdef ENABLE_EBPF
 #include "ebpf/loader.h"
@@ -335,6 +339,10 @@ static int main_loop(struct normalizer *norm, struct telem_socket *sock)
     struct thermal_probe_ctx *thermal_ctx = NULL;
     struct package_probe_ctx *package_ctx = NULL;
     struct port_probe_ctx *port_ctx = NULL;
+    struct connpool_probe_ctx *connpool_ctx = NULL;
+    struct topproc_probe_ctx *topproc_ctx = NULL;
+    struct ioperf_probe_ctx *ioperf_ctx = NULL;
+    struct cgroup_probe_ctx *cgroup_ctx = NULL;
 
     /* Poll array */
     struct pollfd pfds[10];  /* Increased for eBPF */
@@ -471,6 +479,42 @@ static int main_loop(struct normalizer *norm, struct telem_socket *sock)
                     telem_scheduler_register(probes, "port", port_probe_run,
                                               port_ctx, config.port_interval, true);
                     log_debug("  Port probe registered (interval: %ds)", config.port_interval);
+                }
+            }
+
+            if (config.connpool_interval > 0) {
+                connpool_ctx = connpool_probe_create_ctx(&config);
+                if (connpool_ctx) {
+                    telem_scheduler_register(probes, "connpool", connpool_probe_run,
+                                              connpool_ctx, config.connpool_interval, true);
+                    log_debug("  Connpool probe registered (interval: %ds)", config.connpool_interval);
+                }
+            }
+
+            if (config.topproc_interval > 0) {
+                topproc_ctx = topproc_probe_create_ctx(&config);
+                if (topproc_ctx) {
+                    telem_scheduler_register(probes, "topproc", topproc_probe_run,
+                                              topproc_ctx, config.topproc_interval, true);
+                    log_debug("  Topproc probe registered (interval: %ds)", config.topproc_interval);
+                }
+            }
+
+            if (config.ioperf_interval > 0) {
+                ioperf_ctx = ioperf_probe_create_ctx(&config);
+                if (ioperf_ctx) {
+                    telem_scheduler_register(probes, "ioperf", ioperf_probe_run,
+                                              ioperf_ctx, config.ioperf_interval, true);
+                    log_debug("  I/O perf probe registered (interval: %ds)", config.ioperf_interval);
+                }
+            }
+
+            if (config.cgroup_interval > 0) {
+                cgroup_ctx = cgroup_probe_create_ctx(&config);
+                if (cgroup_ctx) {
+                    telem_scheduler_register(probes, "cgroup", cgroup_probe_run,
+                                              cgroup_ctx, config.cgroup_interval, true);
+                    log_debug("  Cgroup probe registered (interval: %ds)", config.cgroup_interval);
                 }
             }
         } else {
@@ -615,6 +659,10 @@ static int main_loop(struct normalizer *norm, struct telem_socket *sock)
     if (thermal_ctx) thermal_probe_destroy_ctx(thermal_ctx);
     if (package_ctx) package_probe_destroy_ctx(package_ctx);
     if (port_ctx) port_probe_destroy_ctx(port_ctx);
+    if (connpool_ctx) connpool_probe_destroy_ctx(connpool_ctx);
+    if (topproc_ctx) topproc_probe_destroy_ctx(topproc_ctx);
+    if (ioperf_ctx) ioperf_probe_destroy_ctx(ioperf_ctx);
+    if (cgroup_ctx) cgroup_probe_destroy_ctx(cgroup_ctx);
     if (probes) telem_scheduler_destroy(probes);
     if (inotify) inotify_watcher_destroy(inotify);
     if (docker) docker_watcher_destroy(docker);

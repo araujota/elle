@@ -15,7 +15,7 @@ import asyncio
 import ssl
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import structlog
 from pydantic import BaseModel, ConfigDict, Field
@@ -339,7 +339,7 @@ class CloudSyncClient:
         try:
             response = await client.get(url)
             response.raise_for_status()
-            return response.json()
+            return cast(dict[str, Any], response.json())
         except Exception as e:
             logger.debug("Cloud stats query failed", error=str(e), endpoint=self._endpoint)
             raise

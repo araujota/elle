@@ -116,6 +116,68 @@ static void aggregate_failures(struct auth_probe_ctx *ctx, uint64_t now_ns,
 }
 
 /* ==========================================================================
+ * Per-Source Brute Force Tracking
+ * ========================================================================== */
+
+static void track_source_failure(struct auth_probe_ctx *ctx,
+                                  const char *source, uint64_t now_ns)
+{
+    /* Find existing entry */
+    for (int i = 0; i < ctx->source_tracker_count; i++) {
+        if (strcmp(ctx->source_tracker[i].ip, source) == 0) {
+            ctx->source_tracker[i].failure_count++;
+            ctx->source_tracker[i].last_seen_ns = now_ns;
+            return;
+        }
+    }
+
+    /* Add new entry (LRU eviction if full) */
+    int idx;
+    if (ctx->source_tracker_count < 256) {
+        idx = ctx->source_tracker_count++;
+    } else {
+        /* Evict oldest entry */
+        idx = 0;
+        uint64_t oldest = ctx->source_tracker[0].last_seen_ns;
+        for (int i = 1; i < 256; i++) {
+            if (ctx->source_tracker[i].last_seen_ns < oldest) {
+                oldest = ctx->source_tracker[i].last_seen_ns;
+                idx = i;
+            }
+        }
+    }
+
+    strncpy(ctx->source_tracker[idx].ip, source, sizeof(ctx->source_tracker[0].ip) - 1);
+    ctx->source_tracker[idx].ip[sizeof(ctx->source_tracker[0].ip) - 1] = '\0';
+    ctx->source_tracker[idx].failure_count = 1;
+    ctx->source_tracker[idx].first_seen_ns = now_ns;
+    ctx->source_tracker[idx].last_seen_ns = now_ns;
+}
+
+static void detect_brute_force(struct auth_probe_ctx *ctx, uint64_t now_ns)
+{
+    uint64_t window_ns = 60ULL * 1000000000ULL;  /* 60 second window */
+
+    ctx->brute_force_detected = false;
+    ctx->brute_force_source[0] = '\0';
+    ctx->brute_force_count = 0;
+
+    for (int i = 0; i < ctx->source_tracker_count; i++) {
+        struct auth_source_entry *entry = &ctx->source_tracker[i];
+
+        /* Check if within window and exceeds threshold */
+        if ((now_ns - entry->first_seen_ns) <= window_ns &&
+            entry->failure_count > 5) {
+            ctx->brute_force_detected = true;
+            strncpy(ctx->brute_force_source, entry->ip,
+                    sizeof(ctx->brute_force_source) - 1);
+            ctx->brute_force_count = entry->failure_count;
+            break;  /* Report first detected */
+        }
+    }
+}
+
+/* ==========================================================================
  * Journal Parsing
  * ========================================================================== */
 
@@ -220,6 +282,7 @@ static int parse_auth_failures(struct auth_probe_ctx *ctx)
 
         if (is_failure) {
             add_failure(ctx, source, user, ts_us * 1000);
+            track_source_failure(ctx, source, ts_us * 1000);
         }
     }
 
@@ -254,6 +317,9 @@ int auth_probe_run(struct probed_socket *sock, void *ctx_ptr)
                        evt.last_user,
                        evt.last_source);
 
+    /* Detect brute force per-IP pattern */
+    detect_brute_force(ctx, now_ns);
+
     /* Check for brute force */
     evt.likely_brute_force = (evt.failed_logins_1m >= (uint32_t)ctx->brute_force_threshold);
 
@@ -266,6 +332,20 @@ int auth_probe_run(struct probed_socket *sock, void *ctx_ptr)
             probed_socket_write(sock, json, strlen(json));
             free(json);
         }
+    }
+
+    /* Emit brute force event if detected */
+    if (ctx->brute_force_detected) {
+        char bf_json[512];
+        snprintf(bf_json, sizeof(bf_json),
+                 "{\"type\":\"auth_brute_force\","
+                 "\"brute_force_detected\":true,"
+                 "\"brute_force_source\":\"%s\","
+                 "\"brute_force_count\":%u,"
+                 "\"window_sec\":60}\n",
+                 ctx->brute_force_source,
+                 ctx->brute_force_count);
+        probed_socket_write(sock, bf_json, strlen(bf_json));
     }
 
     /* Update last state */

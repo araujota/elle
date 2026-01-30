@@ -145,7 +145,10 @@ class TelemetrydWatcher:
             return False
         if self._last_event_time is None:
             return True  # Just started, no events yet is OK
-        return self.last_event_age_seconds < STALE_THRESHOLD
+        age = self.last_event_age_seconds
+        if age is None:
+            return True
+        return age < STALE_THRESHOLD
 
     @property
     def restart_count(self) -> int:
@@ -388,23 +391,14 @@ class TelemetrydWatcher:
             summary: Incident summary.
         """
         try:
-            from elle.daemon.incidents.store import create_incident
+            from elle.daemon.incidents.store import create_incident_draft
 
-            incident_data = {
-                "domain": "telemetry",
-                "severity": "critical",
-                "status": "open",
-                "title": title,
-                "summary": summary,
-                "trigger_source": "health_monitor",
-                "metrics_json": {
-                    "restart_count": self._restart_count,
-                    "total_events": self._total_events,
-                    "total_errors": self._total_errors,
-                    "last_event_age_seconds": self.last_event_age_seconds,
-                },
-            }
-            await create_incident(incident_data)
+            create_incident_draft(
+                title=title,
+                domain="telemetry",
+                severity="critical",
+                trigger_source="health_monitor",
+            )
             logger.info(f"Created health incident: {title}")
 
         except ImportError:

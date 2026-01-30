@@ -1,6 +1,6 @@
 """Tests for daemon REST API endpoints."""
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -28,7 +28,7 @@ def mock_daemon(tmp_path):
         ),
     )
     daemon.get_status.return_value = DaemonStatus(
-        started_at=datetime.now(UTC),
+        started_at=datetime.now(timezone.utc),
         uptime_sec=100,
         pid=12345,
         journal_active=True,

@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -340,7 +341,7 @@ class UnifiedRetrievalPipeline:
                         outcome=incident.outcome or "unknown",
                         outcome_weight=r.outcome_weight,
                         similarity_score=r.score,
-                        days_ago=r.days_ago,
+                        days_ago=(datetime.now(timezone.utc) - incident.updated_at).days,
                         root_cause=getattr(incident, "root_cause", None),
                         decision=getattr(incident, "decision", None),
                         successful_actions=tuple(successful_actions),

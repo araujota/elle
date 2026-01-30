@@ -28,6 +28,8 @@ enum probed_event_type {
     PROBED_EVENT_CONNTRACK_STATS = 33,
     PROBED_EVENT_HARDWARE_ERROR  = 34,
     PROBED_EVENT_AUTH_AGGREGATE  = 35,
+    PROBED_EVENT_CERT_EXPIRY    = 36,
+    PROBED_EVENT_SYSSTATE       = 37,
 };
 
 /* String mappings for event types */
@@ -38,6 +40,8 @@ static const char *probed_event_type_str[] = {
     [PROBED_EVENT_CONNTRACK_STATS - 30] = "conntrack_stats",
     [PROBED_EVENT_HARDWARE_ERROR - 30]  = "hardware_error",
     [PROBED_EVENT_AUTH_AGGREGATE - 30]  = "auth_aggregate",
+    [PROBED_EVENT_CERT_EXPIRY - 30]    = "cert_expiry",
+    [PROBED_EVENT_SYSSTATE - 30]       = "sysstate",
 };
 
 /* Category mappings for event types */
@@ -48,6 +52,8 @@ static const char *probed_event_category[] = {
     [PROBED_EVENT_CONNTRACK_STATS - 30] = "net",
     [PROBED_EVENT_HARDWARE_ERROR - 30]  = "smart",
     [PROBED_EVENT_AUTH_AGGREGATE - 30]  = "auth",
+    [PROBED_EVENT_CERT_EXPIRY - 30]    = "net",
+    [PROBED_EVENT_SYSSTATE - 30]       = "other",
 };
 
 /* ============================================================================
@@ -262,6 +268,15 @@ struct probed_config {
     bool auth_enabled;
     int auth_interval_sec;
     int brute_force_threshold;
+
+    /* Certificate probe config */
+    bool cert_enabled;
+    int cert_interval_sec;
+    char cert_endpoints[1024];
+
+    /* System state probe config */
+    bool sysstate_enabled;
+    int sysstate_interval_sec;
 };
 
 /* Default configuration */
@@ -293,6 +308,11 @@ struct probed_config {
     .auth_enabled = true,                                      \
     .auth_interval_sec = 5,                                    \
     .brute_force_threshold = 5,                                \
+    .cert_enabled = true,                                      \
+    .cert_interval_sec = 3600,                                 \
+    .cert_endpoints = "localhost:443",                          \
+    .sysstate_enabled = true,                                  \
+    .sysstate_interval_sec = 300,                              \
 }
 
 /* ============================================================================
@@ -310,7 +330,7 @@ static inline uint64_t get_timestamp_ns(void)
 /* Get event type string */
 static inline const char *probed_event_type_to_str(enum probed_event_type type)
 {
-    if (type >= PROBED_EVENT_PSI_PRESSURE && type <= PROBED_EVENT_AUTH_AGGREGATE)
+    if (type >= PROBED_EVENT_PSI_PRESSURE && type <= PROBED_EVENT_SYSSTATE)
         return probed_event_type_str[type - 30];
     return "unknown";
 }
@@ -318,7 +338,7 @@ static inline const char *probed_event_type_to_str(enum probed_event_type type)
 /* Get event category */
 static inline const char *probed_event_type_to_category(enum probed_event_type type)
 {
-    if (type >= PROBED_EVENT_PSI_PRESSURE && type <= PROBED_EVENT_AUTH_AGGREGATE)
+    if (type >= PROBED_EVENT_PSI_PRESSURE && type <= PROBED_EVENT_SYSSTATE)
         return probed_event_category[type - 30];
     return "other";
 }

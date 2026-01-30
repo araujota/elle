@@ -1593,13 +1593,13 @@ class SetupWizard:
                         "error": None,
                     }
 
-                start_result = subprocess.run(
+                user_start_result = subprocess.run(
                     ["systemctl", "--user", "start", "elled"],
                     capture_output=True,
                     text=True,
                     timeout=30,
                 )
-                if start_result.returncode == 0:
+                if user_start_result.returncode == 0:
                     return {
                         "success": True,
                         "method": "systemd --user",

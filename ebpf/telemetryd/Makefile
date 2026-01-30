@@ -66,7 +66,11 @@ SRCS := \
 	probes/network.c \
 	probes/thermal.c \
 	probes/package.c \
-	probes/port.c
+	probes/port.c \
+	probes/connpool.c \
+	probes/topproc.c \
+	probes/ioperf.c \
+	probes/cgroup.c
 
 # Add eBPF loader when enabled
 ifdef ENABLE_EBPF

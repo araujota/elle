@@ -139,7 +139,7 @@ class ReportGenerator:
             self._conn.close()
             self._conn = None  # type: ignore[assignment]
 
-    def __enter__(self) -> "ReportGenerator":
+    def __enter__(self) -> ReportGenerator:
         return self
 
     def __exit__(

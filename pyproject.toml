@@ -111,6 +111,7 @@ module = [
     "croniter.*",
     "yaml.*",
     "ruamel.*",
+    "docutils.*",
     "fastapi.*",
     "tomli.*",
     "tomllib",

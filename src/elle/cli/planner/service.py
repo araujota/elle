@@ -279,9 +279,9 @@ class PlannerService:
         # Ensure we have an incident for recording (critical for Spine architecture)
         if not result.incident_id and self.use_incident_vault:
             try:
-                context = result.context or PlanContext(request="Plan execution")
+                context = result.context or PlanContext(request=TaskRequest(request="Plan execution"))
                 incident_id = self._create_incident(
-                    context.request if context else plan.title,
+                    context.request.request if context else plan.title,
                     context,
                 )
                 result = result.with_incident_id(incident_id)

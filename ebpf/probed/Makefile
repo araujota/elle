@@ -24,7 +24,9 @@ USER_OBJS := $(BUILD_DIR)/main.o \
              $(BUILD_DIR)/dns.o \
              $(BUILD_DIR)/conntrack.o \
              $(BUILD_DIR)/hardware.o \
-             $(BUILD_DIR)/auth.o
+             $(BUILD_DIR)/auth.o \
+             $(BUILD_DIR)/cert.o \
+             $(BUILD_DIR)/sysstate.o
 
 # Final binary
 TARGET := $(BUILD_DIR)/elled-probed
@@ -39,7 +41,7 @@ CFLAGS := -g -O2 -Wall -Wextra -Werror \
           -D_GNU_SOURCE
 
 # Linker flags
-LDFLAGS := -ljansson -lsystemd
+LDFLAGS := -ljansson -lsystemd -lssl -lcrypto
 
 # =============================================================================
 # Targets
@@ -114,6 +116,14 @@ $(BUILD_DIR)/hardware.o: probes/hardware.c probes/hardware.h probed.h | $(BUILD_
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/auth.o: probes/auth.c probes/auth.h probed.h | $(BUILD_DIR)
+	@echo "  CC    $<"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/cert.o: probes/cert.c probes/cert.h probed.h | $(BUILD_DIR)
+	@echo "  CC    $<"
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/sysstate.o: probes/sysstate.c probes/sysstate.h probed.h | $(BUILD_DIR)
 	@echo "  CC    $<"
 	$(CC) $(CFLAGS) -c $< -o $@
 

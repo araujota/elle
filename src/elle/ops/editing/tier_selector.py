@@ -11,7 +11,6 @@ import logging
 from pathlib import Path
 
 from elle.ops.editing.models import (
-    EditingStackError,
     EditOperation,
     NoApplicableTierError,
     TierApplicability,

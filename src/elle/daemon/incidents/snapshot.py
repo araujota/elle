@@ -630,6 +630,66 @@ def extract_fingerprint(
             # Normalize: 0°C=0.0, 100°C=1.0
             gpu_thermal_pressure = min(1.0, snapshot.gpu_max_temp_c / 100.0)
 
+    # Inode pressure
+    inode_info = _get_inode_usage()
+    inode_pressure = 0.0
+    if inode_info:
+        inode_pressure = max(d.get("used_pct", 0) / 100.0 for d in inode_info)
+
+    # I/O latency pressure (normalized: 100ms+ = 1.0)
+    io_latency_pressure = 0.0
+    io_stats = _get_io_stats()
+    if io_stats:
+        for stat in io_stats:
+            rd_ios = stat.get("rd_ios", 0)
+            wr_ios = stat.get("wr_ios", 0)
+            rd_ticks = stat.get("rd_ticks", 0)
+            wr_ticks = stat.get("wr_ticks", 0)
+            if rd_ios > 0:
+                rd_lat = rd_ticks / rd_ios
+                io_latency_pressure = max(io_latency_pressure, min(rd_lat / 100.0, 1.0))
+            if wr_ios > 0:
+                wr_lat = wr_ticks / wr_ios
+                io_latency_pressure = max(io_latency_pressure, min(wr_lat / 100.0, 1.0))
+
+    # Conntrack pressure
+    conntrack = _get_conntrack_stats()
+    conntrack_pressure = min(conntrack.get("utilization", 0) / 100.0, 1.0)
+
+    # TCP retransmit rate
+    tcp_retransmit_rate = min(_get_tcp_retransmit_rate(), 1.0)
+
+    # Zombie count
+    zombie_count = _get_zombie_count()
+
+    # Pending reboot
+    pending_reboot = 1 if _get_pending_reboot() else 0
+
+    # Certificate expiry (minimum days)
+    cert_info = _get_cert_expiry()
+    cert_expiry_days_min = 365
+    if cert_info:
+        cert_expiry_days_min = min(d.get("days_until_expiry", 365) for d in cert_info)
+        cert_expiry_days_min = max(0, cert_expiry_days_min)
+
+    # DNS p95 latency
+    dns_latency = _get_dns_latency()
+    dns_p95_ms = dns_latency.get("p95", 0.0)
+
+    # Cgroup memory pressure
+    cgroup_info = _get_cgroup_pressure()
+    cgroup_mem_pressure = 0.0
+    if cgroup_info:
+        cgroup_mem_pressure = min(max(d.get("mem_pct", 0) / 100.0 for d in cgroup_info), 1.0)
+
+    # PSI pressure
+    psi_info = _get_psi_pressure()
+    psi_cpu_avg10 = min(psi_info.get("cpu_avg10", 0.0) / 100.0, 1.0)
+    psi_memory_avg10 = min(psi_info.get("mem_avg10", 0.0) / 100.0, 1.0)
+
+    # Security events
+    security_events_1h = _get_security_events()
+
     return Fingerprint(
         disk_pressure=min(1.0, disk_pressure),
         mem_pressure=min(1.0, max(0.0, mem_pressure)),
@@ -648,6 +708,19 @@ def extract_fingerprint(
         gpu_util_pressure=gpu_util_pressure,
         gpu_thermal_pressure=gpu_thermal_pressure,
         gpu_ecc_errors_1h=snapshot.gpu_ecc_errors if hasattr(snapshot, 'gpu_ecc_errors') else 0,
+        # New monitoring sprint fields
+        inode_pressure=min(1.0, inode_pressure),
+        io_latency_pressure=min(1.0, io_latency_pressure),
+        conntrack_pressure=min(1.0, conntrack_pressure),
+        tcp_retransmit_rate=tcp_retransmit_rate,
+        zombie_count=zombie_count,
+        pending_reboot=pending_reboot,
+        cert_expiry_days_min=cert_expiry_days_min,
+        dns_p95_ms=dns_p95_ms,
+        cgroup_mem_pressure=min(1.0, cgroup_mem_pressure),
+        psi_cpu_avg10=psi_cpu_avg10,
+        psi_memory_avg10=psi_memory_avg10,
+        security_events_1h=security_events_1h,
     )
 
 
@@ -738,6 +811,303 @@ def diff_snapshots(
 # =============================================================================
 # Private probe functions
 # =============================================================================
+
+
+def _get_inode_usage() -> list[dict[str, Any]]:
+    """Get inode usage for tracked mount points."""
+    inodes = []
+    try:
+        for mount in ["/", "/home", "/var", "/tmp", "/boot"]:
+            try:
+                stat = os.statvfs(mount)
+                total = stat.f_files
+                free = stat.f_ffree
+                if total > 0:
+                    used_pct = ((total - free) / total) * 100
+                    inodes.append({
+                        "mount": mount,
+                        "total": total,
+                        "free": free,
+                        "used_pct": round(used_pct, 2),
+                    })
+            except (OSError, FileNotFoundError):
+                pass
+    except Exception:
+        pass
+    return inodes
+
+
+def _get_io_stats() -> list[dict[str, Any]]:
+    """Get I/O statistics from /proc/diskstats."""
+    stats = []
+    try:
+        with open("/proc/diskstats") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 14:
+                    dev = parts[2]
+                    # Skip partitions (ending in digit) and device-mapper
+                    if dev[-1].isdigit() or dev.startswith("dm-") or dev.startswith("loop"):
+                        continue
+                    stats.append({
+                        "dev": dev,
+                        "rd_ios": int(parts[3]),
+                        "rd_sectors": int(parts[5]),
+                        "rd_ticks": int(parts[6]),
+                        "wr_ios": int(parts[7]),
+                        "wr_sectors": int(parts[9]),
+                        "wr_ticks": int(parts[10]),
+                        "ios_in_progress": int(parts[11]),
+                        "io_ticks": int(parts[12]),
+                    })
+    except (OSError, FileNotFoundError):
+        pass
+    return stats
+
+
+def _get_conntrack_stats() -> dict[str, Any]:
+    """Get conntrack table statistics."""
+    result: dict[str, Any] = {"count": 0, "max": 0, "utilization": 0.0}
+    try:
+        count_path = Path("/proc/sys/net/netfilter/nf_conntrack_count")
+        max_path = Path("/proc/sys/net/netfilter/nf_conntrack_max")
+        if count_path.exists() and max_path.exists():
+            count = int(count_path.read_text().strip())
+            max_val = int(max_path.read_text().strip())
+            result = {
+                "count": count,
+                "max": max_val,
+                "utilization": round((count / max_val) * 100, 2) if max_val > 0 else 0.0,
+            }
+    except (OSError, ValueError):
+        pass
+    return result
+
+
+def _get_tcp_state_counts() -> dict[str, int]:
+    """Get TCP connection state counts from /proc/net/tcp."""
+    states = {
+        "01": "established",
+        "06": "time_wait",
+        "08": "close_wait",
+        "03": "syn_recv",
+        "05": "fin_wait2",
+        "0A": "listen",
+    }
+    counts: dict[str, int] = dict.fromkeys(states.values(), 0)
+    try:
+        with open("/proc/net/tcp") as f:
+            next(f)  # Skip header
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 4:
+                    state = parts[3].upper()
+                    if state in states:
+                        counts[states[state]] += 1
+    except (OSError, FileNotFoundError):
+        pass
+    return counts
+
+
+def _get_tcp_retransmit_rate() -> float:
+    """Get TCP retransmit rate from /proc/net/snmp."""
+    try:
+        with open("/proc/net/snmp") as f:
+            lines = f.readlines()
+        for i, line in enumerate(lines):
+            if line.startswith("Tcp:") and i + 1 < len(lines):
+                headers = line.split()
+                values = lines[i + 1].split()
+                if len(headers) == len(values):
+                    data = dict(zip(headers[1:], values[1:], strict=False))
+                    out_segs = int(data.get("OutSegs", "0"))
+                    retrans_segs = int(data.get("RetransSegs", "0"))
+                    if out_segs > 0:
+                        return round(retrans_segs / out_segs, 6)
+                break
+    except (OSError, FileNotFoundError, ValueError):
+        pass
+    return 0.0
+
+
+def _get_zombie_count() -> int:
+    """Get number of zombie processes."""
+    count = 0
+    try:
+        proc_dir = Path("/proc")
+        for entry in proc_dir.iterdir():
+            if entry.name.isdigit():
+                try:
+                    stat_file = entry / "stat"
+                    content = stat_file.read_text()
+                    # State is the field after (comm) — find closing paren
+                    close_paren = content.rfind(")")
+                    if close_paren >= 0 and len(content) > close_paren + 2:
+                        state = content[close_paren + 2]
+                        if state == "Z":
+                            count += 1
+                except (OSError, PermissionError):
+                    pass
+    except Exception:
+        pass
+    return count
+
+
+def _get_pending_reboot() -> bool:
+    """Check if system reboot is required."""
+    return Path("/var/run/reboot-required").exists()
+
+
+def _get_cert_expiry() -> list[dict[str, Any]]:
+    """Get TLS certificate expiry for local endpoints."""
+    results = []
+    endpoints = ["localhost:443", "localhost:8443"]
+    for endpoint in endpoints:
+        try:
+            result = subprocess.run(
+                [
+                    "openssl", "s_client", "-connect", endpoint,
+                    "-servername", endpoint.split(":")[0],
+                ],
+                input=b"",
+                capture_output=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                # Extract expiry with openssl x509
+                x509_result = subprocess.run(
+                    ["openssl", "x509", "-noout", "-enddate"],
+                    input=result.stdout,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if x509_result.returncode == 0:
+                    date_str = x509_result.stdout.strip().replace("notAfter=", "")
+                    try:
+                        from email.utils import parsedate_to_datetime
+                        expiry = parsedate_to_datetime(date_str)
+                        days = (expiry - datetime.utcnow().replace(
+                            tzinfo=expiry.tzinfo)).days
+                        results.append({
+                            "endpoint": endpoint,
+                            "days_until_expiry": days,
+                        })
+                    except Exception:
+                        pass
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            pass
+    return results
+
+
+def _get_dns_latency() -> dict[str, float]:
+    """Get DNS query latency percentiles from probed socket."""
+    result: dict[str, float] = {"p50": 0.0, "p95": 0.0, "p99": 0.0}
+    try:
+        import json as json_mod
+        import socket as sock_mod
+        s = sock_mod.socket(sock_mod.AF_UNIX, sock_mod.SOCK_STREAM)
+        s.settimeout(2.0)
+        s.connect("/run/elle/probed.sock")
+        s.sendall(b'{"query":"dns_latency"}\n')
+        data = s.recv(4096)
+        s.close()
+        if data:
+            parsed = json_mod.loads(data.decode())
+            result = {
+                "p50": parsed.get("p50_ms", 0.0),
+                "p95": parsed.get("p95_ms", 0.0),
+                "p99": parsed.get("p99_ms", 0.0),
+            }
+    except Exception:
+        pass
+    return result
+
+
+def _get_cgroup_pressure() -> list[dict[str, Any]]:
+    """Get cgroup memory pressure for system slices."""
+    cgroups = []
+    try:
+        for base in ["/sys/fs/cgroup/system.slice", "/sys/fs/cgroup/user.slice"]:
+            base_path = Path(base)
+            if not base_path.exists():
+                continue
+            for entry in sorted(base_path.iterdir())[:20]:
+                if not entry.is_dir():
+                    continue
+                mem_current = entry / "memory.current"
+                mem_max = entry / "memory.max"
+                if mem_current.exists() and mem_max.exists():
+                    try:
+                        current = int(mem_current.read_text().strip())
+                        max_str = mem_max.read_text().strip()
+                        if max_str == "max":
+                            continue  # No limit set
+                        max_val = int(max_str)
+                        if max_val > 0:
+                            pct = round((current / max_val) * 100, 2)
+                            cgroups.append({
+                                "name": entry.name,
+                                "mem_current_mb": current // (1024 * 1024),
+                                "mem_max_mb": max_val // (1024 * 1024),
+                                "mem_pct": pct,
+                            })
+                    except (ValueError, OSError):
+                        pass
+    except Exception:
+        pass
+    # Sort by memory percentage descending, return top 10
+    def _cgroup_sort_key(x: dict[str, Any]) -> float:
+        val = x.get("mem_pct", 0)
+        return float(val) if isinstance(val, (int, float)) else 0.0
+    cgroups.sort(key=_cgroup_sort_key, reverse=True)
+    return cgroups[:10]
+
+
+def _get_psi_pressure() -> dict[str, float]:
+    """Get PSI pressure averages from /proc/pressure/."""
+    result: dict[str, float] = {
+        "cpu_avg10": 0.0,
+        "mem_avg10": 0.0,
+        "io_avg10": 0.0,
+    }
+    for resource, key in [("cpu", "cpu_avg10"), ("memory", "mem_avg10"), ("io", "io_avg10")]:
+        try:
+            path = Path(f"/proc/pressure/{resource}")
+            if path.exists():
+                content = path.read_text()
+                for line in content.split("\n"):
+                    if line.startswith("some"):
+                        # Parse: some avg10=X.XX avg60=X.XX avg300=X.XX total=XXXX
+                        for part in line.split():
+                            if part.startswith("avg10="):
+                                result[key] = float(part.split("=")[1])
+                                break
+                        break
+        except (OSError, ValueError):
+            pass
+    return result
+
+
+def _get_security_events() -> int:
+    """Get count of security-relevant events in last hour."""
+    count = 0
+    try:
+        result = subprocess.run(
+            [
+                "journalctl", "-q", "--since", "1 hour ago",
+                "-t", "sshd", "-t", "sudo", "-t", "polkitd",
+                "--no-pager", "-o", "cat",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            count = len([l for l in result.stdout.strip().split("\n") if l])
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+    return count
 
 
 def _get_os_info() -> str:

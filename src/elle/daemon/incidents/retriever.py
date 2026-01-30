@@ -19,7 +19,7 @@ continues with local-only results.
 from __future__ import annotations
 
 import sqlite3
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime
 from typing import Any
 
@@ -124,7 +124,7 @@ def search(
 
         # Use ThreadPoolExecutor for parallel execution
         with ThreadPoolExecutor(max_workers=2) as executor:
-            futures = {}
+            futures: dict[str, Future[Any]] = {}
 
             # Submit local search
             futures["local"] = executor.submit(
@@ -279,7 +279,7 @@ def _create_cloud_incident_proxy(match: Any) -> IncidentReport:
         incident_id=f"cloud:{match.cloud_id}",
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
-        domain=match.domain,  # type: ignore
+        domain=match.domain,
         severity="info",
         status="resolved",
         title=f"Cloud incident {match.cloud_id[:8]}",

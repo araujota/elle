@@ -25,6 +25,14 @@ from elle.capabilities.models import (
 from elle.capabilities.protocol import BaseCapability
 from elle.capabilities.registry import CapabilityRegistry
 
+
+def _make_mock_autonomy_engine():
+    """Create a mock autonomy engine that doesn't touch the filesystem."""
+    engine = MagicMock()
+    engine.can_run_autonomously.return_value = (False, "Test mode: requires confirmation")
+    engine.update_after_execution.return_value = None
+    return engine
+
 # =============================================================================
 # Test fixtures
 # =============================================================================
@@ -145,7 +153,10 @@ class TestCapabilityExecutor:
         self.registry.register(MockCapability)
         self.registry.register(PrivilegedCapability)
         self.registry.register(FailingCapability)
-        self.executor = CapabilityExecutor(registry=self.registry)
+        self.executor = CapabilityExecutor(
+            registry=self.registry,
+            autonomy_engine=_make_mock_autonomy_engine(),
+        )
 
     @pytest.mark.asyncio
     async def test_execute_basic(self):
@@ -300,13 +311,15 @@ class TestGlobalExecutor:
         """Reset global executor."""
         reset_executor()
 
-    def test_get_executor_singleton(self):
+    @patch("elle.capabilities.executor.CapabilityExecutor.__init__", return_value=None)
+    def test_get_executor_singleton(self, mock_init):
         """Test that get_executor returns singleton."""
         exec1 = get_executor()
         exec2 = get_executor()
         assert exec1 is exec2
 
-    def test_reset_executor(self):
+    @patch("elle.capabilities.executor.CapabilityExecutor.__init__", return_value=None)
+    def test_reset_executor(self, mock_init):
         """Test that reset_executor creates new instance."""
         exec1 = get_executor()
         reset_executor()
@@ -342,7 +355,10 @@ class TestInvalidDryRun:
 
         self.registry = CapabilityRegistry()
         self.registry.register(InvalidDryRunCapability)
-        self.executor = CapabilityExecutor(registry=self.registry)
+        self.executor = CapabilityExecutor(
+            registry=self.registry,
+            autonomy_engine=_make_mock_autonomy_engine(),
+        )
 
     @pytest.mark.asyncio
     async def test_invalid_dry_run_stops_execution(self):

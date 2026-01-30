@@ -17,11 +17,14 @@ import logging
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from elle.capabilities.autogen.store import DEFAULT_DB_PATH, get_store
+
+if TYPE_CHECKING:
+    from elle.rag.ollama_client import OllamaClient
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +193,7 @@ class CapabilityRetriever:
         """
         self.db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
         self._ensure_schema()
-        self._embedder = None
+        self._embedder: OllamaClient | None = None
 
     def _ensure_schema(self) -> None:
         """Ensure FTS and embedding schema exists."""
@@ -222,7 +225,7 @@ class CapabilityRetriever:
         return conn
 
     @property
-    def embedder(self):
+    def embedder(self) -> OllamaClient | None:
         """Lazy-load embedder."""
         if self._embedder is None:
             try:
@@ -545,7 +548,7 @@ class CapabilityRetriever:
                 if row and row["total"] > 0:
                     successes = row["successes"] + self.PRIOR_SUCCESSES
                     total = row["total"] + self.PRIOR_TOTAL
-                    return successes / total
+                    return float(successes / total)
 
         except sqlite3.OperationalError:
             pass
@@ -578,7 +581,7 @@ class CapabilityRetriever:
             return None
 
         try:
-            return self.embedder.embed(text)
+            return list(self.embedder.embed(text))  # type: ignore[attr-defined]
         except Exception as e:
             logger.warning(f"Failed to get embedding: {e}")
             return None
@@ -606,7 +609,7 @@ class CapabilityRetriever:
         if len(a) != len(b):
             return 0.0
 
-        dot_product = sum(x * y for x, y in zip(a, b))
+        dot_product = sum(x * y for x, y in zip(a, b, strict=False))
         norm_a = math.sqrt(sum(x * x for x in a))
         norm_b = math.sqrt(sum(x * x for x in b))
 
@@ -630,7 +633,7 @@ class CapabilityRetriever:
     def _parse_spec_json(self, spec_json: str) -> dict[str, Any]:
         """Parse spec JSON safely."""
         try:
-            return json.loads(spec_json)
+            return dict(json.loads(spec_json))
         except json.JSONDecodeError:
             return {}
 

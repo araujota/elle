@@ -20,15 +20,11 @@ from elle.ops.xmlstarlet.models import (
     XMLEditPreview,
     XMLEditRequest,
     XMLEditResult,
-    XMLOperation,
-    XMLParseError,
     XMLRequest,
     XMLResult,
-    XMLStarletError,
     XMLStarletStatus,
     XMLStarletUnavailableError,
     XMLValidationResult,
-    XMLXPathError,
 )
 
 logger = logging.getLogger(__name__)

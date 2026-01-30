@@ -19,9 +19,7 @@ from elle.ops.jq.models import (
     JQEditPreview,
     JQEditRequest,
     JQEditResult,
-    JQError,
     JQFilterError,
-    JQParseError,
     JQRequest,
     JQResult,
     JQStatus,
@@ -639,7 +637,7 @@ class JQEngine:
         try:
             # Check if we can write
             if file_path.exists():
-                requires_privilege = not file_path.stat().st_uid == Path.cwd().stat().st_uid
+                requires_privilege = file_path.stat().st_uid != Path.cwd().stat().st_uid
         except Exception:
             pass
 
@@ -813,7 +811,7 @@ class JQEngine:
                 mod: Any,
                 path: str = "$",
             ) -> None:
-                if type(orig) != type(mod):
+                if type(orig) is not type(mod):
                     changes.append(
                         JQChange(
                             path=path,
@@ -859,7 +857,7 @@ class JQEngine:
                             )
                         )
                     else:
-                        for i, (o, m) in enumerate(zip(orig, mod)):
+                        for i, (o, m) in enumerate(zip(orig, mod, strict=False)):
                             _compare(o, m, f"{path}[{i}]")
                 else:
                     if orig != mod:

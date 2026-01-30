@@ -207,7 +207,7 @@ def create_auth_dependency(
     """
     authenticator = MobileAuthenticator(config, store, crypto)
 
-    async def get_auth_context(request: "Request") -> MobileAuthContext:
+    async def get_auth_context(request: Request) -> MobileAuthContext:
         """FastAPI dependency that extracts auth context from request.
 
         The client certificate is provided by the TLS layer and stored

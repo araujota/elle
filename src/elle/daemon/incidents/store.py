@@ -12,9 +12,10 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from elle.common.pydantic_compat import safe_model_dump
+from elle.daemon.incidents.anonymize import AnonymizedIncidentReport
 from elle.daemon.incidents.models import (
     ConfidenceBreakdown,
     ConfigFileState,
@@ -453,11 +454,11 @@ def get_prepared_plan(
         if not row:
             return None
 
-        plan_json = row["prepared_plan_json"] if "prepared_plan_json" in row else None
+        plan_json = dict(row).get("prepared_plan_json")
         if not plan_json:
             return None
 
-        return _json_loads(plan_json)
+        return cast(dict[str, Any] | None, _json_loads(plan_json))
 
 
 # =============================================================================
@@ -1375,7 +1376,7 @@ def get_config_state_by_path(
 def attach_telemetry_snapshot(
     incident_id: str,
     which: str,
-    snapshot: "TelemetrySnapshotModel",
+    snapshot: TelemetrySnapshotModel,
     conn: sqlite3.Connection | None = None,
 ) -> None:
     """Attach a telemetry snapshot to an incident.
@@ -1414,7 +1415,7 @@ def get_telemetry_snapshot(
     incident_id: str,
     which: str,
     conn: sqlite3.Connection | None = None,
-) -> "TelemetrySnapshotModel | None":
+) -> TelemetrySnapshotModel | None:
     """Get a telemetry snapshot for an incident.
 
     Args:
@@ -1448,7 +1449,7 @@ def get_telemetry_snapshot(
 def get_telemetry_snapshots(
     incident_id: str,
     conn: sqlite3.Connection | None = None,
-) -> dict[str, "TelemetrySnapshotModel"]:
+) -> dict[str, TelemetrySnapshotModel]:
     """Get all telemetry snapshots for an incident.
 
     Args:
@@ -1475,7 +1476,7 @@ def get_telemetry_snapshots(
         return result
 
 
-def _parse_telemetry_snapshot(data: dict[str, Any]) -> "TelemetrySnapshotModel | None":
+def _parse_telemetry_snapshot(data: dict[str, Any]) -> TelemetrySnapshotModel | None:
     """Parse telemetry snapshot from JSON data."""
     if not data:
         return None
@@ -1575,7 +1576,7 @@ def _parse_telemetry_snapshot(data: dict[str, Any]) -> "TelemetrySnapshotModel |
 def attach_control_surface_snapshot(
     incident_id: str,
     which: str,
-    snapshot: "ControlSurfaceSnapshotModel",
+    snapshot: ControlSurfaceSnapshotModel,
     conn: sqlite3.Connection | None = None,
 ) -> None:
     """Attach a control surface snapshot to an incident.
@@ -1616,7 +1617,7 @@ def get_control_surface_snapshot(
     incident_id: str,
     which: str,
     conn: sqlite3.Connection | None = None,
-) -> "ControlSurfaceSnapshotModel | None":
+) -> ControlSurfaceSnapshotModel | None:
     """Get a control surface snapshot for an incident.
 
     Args:
@@ -1648,7 +1649,7 @@ def get_control_surface_snapshot(
 def get_control_surface_snapshots(
     incident_id: str,
     conn: sqlite3.Connection | None = None,
-) -> dict[str, "ControlSurfaceSnapshotModel"]:
+) -> dict[str, ControlSurfaceSnapshotModel]:
     """Get all control surface snapshots for an incident.
 
     Args:
@@ -1706,10 +1707,10 @@ def get_surface_hashes(
         if not row:
             return None
 
-        return _json_loads(row["surface_hashes"])
+        return cast(dict[str, str] | None, _json_loads(row["surface_hashes"]))
 
 
-def _parse_control_surface_snapshot(data: dict[str, Any]) -> "ControlSurfaceSnapshotModel | None":
+def _parse_control_surface_snapshot(data: dict[str, Any]) -> ControlSurfaceSnapshotModel | None:
     """Parse control surface snapshot from JSON data."""
     if not data:
         return None
@@ -1736,13 +1737,13 @@ def _parse_control_surface_snapshot(data: dict[str, Any]) -> "ControlSurfaceSnap
 
         # Parse configs
         configs_data = data.get("configs", [])
-        configs = []
+        configs_list: list[ConfigFileSurface] = []
         for c in configs_data:
             # Handle mtime
             if "mtime" in c and c["mtime"] and isinstance(c["mtime"], str):
                 c["mtime"] = _parse_datetime(c["mtime"])
-            configs.append(ConfigFileSurface(**c))
-        configs = tuple(configs)
+            configs_list.append(ConfigFileSurface(**c))
+        configs = tuple(configs_list)
 
         # Parse packages
         packages_data = data.get("packages", {})
@@ -1799,7 +1800,7 @@ ControlSurfaceSnapshotModel = Any  # elle.daemon.incidents.control_surface.Contr
 def get_anonymized_incident(
     incident_id: str,
     conn: sqlite3.Connection | None = None,
-) -> "AnonymizedIncidentReport | None":
+) -> AnonymizedIncidentReport | None:
     """Get an anonymized version of an incident.
 
     Loads the incident and all associated data (actions, telemetry, surface hashes),
@@ -1814,7 +1815,6 @@ def get_anonymized_incident(
     """
     # Import here to avoid circular imports
     from elle.daemon.incidents.anonymize import (
-        AnonymizedIncidentReport,
         anonymize_incident,
     )
 

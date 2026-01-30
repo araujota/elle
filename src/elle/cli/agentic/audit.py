@@ -564,7 +564,6 @@ class AuditRecorder:
             trigger = AgenticInput.model_validate_json(row["trigger_json"])
 
             # Parse JSON arrays
-            retrieval_data = json.loads(row["retrieval_contexts_json"] or "[]")
             tool_calls_data = json.loads(row["tool_calls_json"] or "[]")
             verifications_data = json.loads(row["verifications_json"] or "[]")
 
@@ -574,7 +573,7 @@ class AuditRecorder:
                 completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
                 trigger=trigger,
                 linked_incident_id=row["linked_incident_id"],
-                retrieval_contexts=tuple(),  # Skip deserializing complex objects for listing
+                retrieval_contexts=(),  # Skip deserializing complex objects for listing
                 tool_calls=tuple(
                     ToolCallRecord.model_validate(tc) for tc in tool_calls_data
                 ),

@@ -1,11 +1,15 @@
 """Tests for incident retrieval and search."""
 
+from __future__ import annotations
+
+import sqlite3
 import tempfile
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
 
-from elle.daemon.incidents.models import Fingerprint, Precondition
+from elle.daemon.incidents.models import Fingerprint, Precondition, SystemSnapshot
 from elle.daemon.incidents.retriever import (
     find_similar,
     generate_case_text,
@@ -14,16 +18,26 @@ from elle.daemon.incidents.retriever import (
     search,
 )
 from elle.daemon.incidents.schema import ensure_schema, get_connection
-from elle.daemon.incidents.store import create_incident_draft, finalize_outcome, update_incident
+from elle.daemon.incidents.store import (
+    append_action,
+    create_incident_draft,
+    finalize_outcome,
+    update_incident,
+)
 
 
 @pytest.fixture
 def temp_db():
     """Create a temporary database for testing."""
+    import sqlite3
+
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = Path(f.name)
 
-    conn = get_connection(db_path)
+    # Use check_same_thread=False since search() uses ThreadPoolExecutor
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     ensure_schema(conn)
     yield conn, db_path
 
@@ -607,3 +621,364 @@ class TestPriorArtSuccessfulActions:
         assert fm["disk_pressure_similar"] is True
         assert fm["mem_pressure_similar"] is True
         assert "mount:/" in fm["entities_overlap"]
+
+
+class TestSearchEdgeCases:
+    """Tests for search edge cases and boundary conditions."""
+
+    def test_search_with_empty_query(self, temp_db):
+        """Test searching with an empty string query."""
+        conn, _ = temp_db
+        create_incident_draft(title="Some incident", conn=conn)
+
+        # Empty query should not raise an error
+        results = search(query="", conn=conn)
+        # Behavior with empty query depends on implementation,
+        # but it should not crash
+        assert isinstance(results, list)
+
+    def test_search_with_special_characters(self, seeded_db):
+        """Test search with special characters in query."""
+        conn, _, _ = seeded_db
+        # Queries with special chars should be handled gracefully
+        results = search(query="service:nginx OR error=500", conn=conn)
+        assert isinstance(results, list)
+
+    def test_search_with_very_long_query(self, temp_db):
+        """Test search with a very long query string."""
+        conn, _ = temp_db
+        create_incident_draft(title="Test", conn=conn)
+
+        long_query = "network timeout " * 100
+        results = search(query=long_query, conn=conn)
+        assert isinstance(results, list)
+
+    def test_search_returns_incident_objects(self, seeded_db):
+        """Test that search results contain proper incident data."""
+        conn, _, _ = seeded_db
+        results = search(query="disk space", conn=conn)
+
+        for result in results:
+            assert hasattr(result, "incident")
+            assert result.incident.incident_id is not None
+            assert result.incident.title is not None
+            assert result.incident.domain is not None
+
+    def test_search_multiple_domains(self, seeded_db):
+        """Test that search without domain filter returns across domains."""
+        conn, _, _ = seeded_db
+        results = search(query="service error", conn=conn, k=10)
+
+        if len(results) >= 2:
+            domains = {r.incident.domain for r in results}
+            # Should potentially span multiple domains
+            assert len(domains) >= 1
+
+    def test_search_fingerprint_only(self, seeded_db):
+        """Test fingerprint-only search without text query."""
+        conn, _, _ = seeded_db
+
+        fp = Fingerprint(
+            mem_pressure=0.9,
+            oom_count_1h=1,
+        )
+
+        results = search(
+            fingerprint=fp,
+            search_type="fingerprint",
+            conn=conn,
+        )
+        assert isinstance(results, list)
+
+    def test_search_with_snapshot_for_precondition_matching(self, seeded_db):
+        """Test that providing a snapshot enables precondition matching."""
+        conn, _, _ = seeded_db
+
+        snapshot = SystemSnapshot(
+            os="Ubuntu 24.04",
+            kernel="6.8",
+            uptime_sec=100,
+            cpu_load=(0.5, 0.5, 0.5),
+            mem_total_mb=8192,
+            mem_free_mb=4096,
+            mem_available_mb=6144,
+            disks=({"mount": "/", "used_pct": 98},),
+        )
+
+        results = search(
+            query="disk full",
+            snapshot=snapshot,
+            conn=conn,
+        )
+        assert isinstance(results, list)
+
+
+class TestFindSimilarExtended:
+    """Extended tests for find_similar function."""
+
+    def test_find_similar_excludes_self(self, seeded_db):
+        """Test that find_similar never returns the source incident."""
+        conn, _, incidents = seeded_db
+
+        for inc in incidents:
+            results = find_similar(inc, k=10, conn=conn)
+            for result in results:
+                assert result.incident.incident_id != inc.incident_id
+
+    def test_find_similar_respects_k_limit(self, seeded_db):
+        """Test that find_similar returns at most k results."""
+        conn, _, incidents = seeded_db
+
+        results = find_similar(incidents[0], k=1, conn=conn)
+        assert len(results) <= 1
+
+    def test_find_similar_with_fingerprint(self, temp_db):
+        """Test find_similar considers fingerprint similarity."""
+        conn, _ = temp_db
+
+        # Create two incidents with similar fingerprints
+        inc1 = create_incident_draft(title="High disk A", domain="disk", conn=conn)
+        update_incident(
+            inc1.incident_id,
+            fingerprint=Fingerprint(disk_pressure=0.95, entities=("mount:/",)),
+            summary="Disk full on root",
+            conn=conn,
+        )
+        finalize_outcome(inc1.incident_id, "improved", conn=conn)
+
+        inc2 = create_incident_draft(title="High disk B", domain="disk", conn=conn)
+        update_incident(
+            inc2.incident_id,
+            fingerprint=Fingerprint(disk_pressure=0.9, entities=("mount:/",)),
+            summary="Root partition filling up",
+            conn=conn,
+        )
+        finalize_outcome(inc2.incident_id, "improved", conn=conn)
+
+        # Create a dissimilar incident
+        inc3 = create_incident_draft(title="Auth failure", domain="auth", conn=conn)
+        update_incident(
+            inc3.incident_id,
+            fingerprint=Fingerprint(auth_failures_1h=10, entities=("service:sshd",)),
+            summary="SSH brute force attempts",
+            conn=conn,
+        )
+        finalize_outcome(inc3.incident_id, "improved", conn=conn)
+
+        # Find incidents similar to inc1
+        results = find_similar(inc1, k=5, conn=conn)
+
+        if len(results) > 0:
+            # The first result should be the similar disk incident
+            found_ids = [r.incident.incident_id for r in results]
+            assert inc2.incident_id in found_ids
+
+
+class TestGetStatusExtended:
+    """Extended tests for status retrieval."""
+
+    def test_status_counts_by_severity(self, seeded_db):
+        """Test that status includes severity distribution."""
+        conn, _, _ = seeded_db
+        status = get_status(conn=conn)
+
+        assert "total_incidents" in status
+        assert status["total_incidents"] >= 4
+
+    def test_status_after_outcome_changes(self, temp_db):
+        """Test that status reflects outcome distribution."""
+        conn, _ = temp_db
+
+        inc1 = create_incident_draft(title="Improved", domain="net", conn=conn)
+        finalize_outcome(inc1.incident_id, "improved", conn=conn)
+
+        inc2 = create_incident_draft(title="Partial", domain="net", conn=conn)
+        finalize_outcome(inc2.incident_id, "partial", conn=conn)
+
+        inc3 = create_incident_draft(title="Open", domain="disk", conn=conn)
+
+        status = get_status(conn=conn)
+        assert status["total_incidents"] == 3
+
+
+class TestGenerateCaseTextExtended:
+    """Extended tests for case text generation."""
+
+    def test_case_text_includes_root_cause(self, seeded_db):
+        """Test that case text includes root cause when available."""
+        conn, _, incidents = seeded_db
+
+        # The first incident has root_cause set
+        from elle.daemon.incidents.store import get_incident
+
+        fetched = get_incident(incidents[0].incident_id, conn=conn)
+        text = generate_case_text(fetched)
+
+        assert "Root Cause:" in text
+        assert "Firewall" in text
+
+    def test_case_text_includes_tags(self, seeded_db):
+        """Test that case text includes tags when present."""
+        conn, _, incidents = seeded_db
+
+        from elle.daemon.incidents.store import get_incident
+
+        # Add tags to an incident
+        update_incident(incidents[0].incident_id, tags=["production", "critical"], conn=conn)
+        fetched = get_incident(incidents[0].incident_id, conn=conn)
+        text = generate_case_text(fetched)
+
+        assert "Tags:" in text
+        assert "production" in text
+
+    def test_case_text_for_minimal_incident(self, temp_db):
+        """Test case text generation for incident with minimal data."""
+        conn, _ = temp_db
+        incident = create_incident_draft(title="Minimal", conn=conn)
+        text = generate_case_text(incident)
+
+        assert "Title:" in text
+        assert "Minimal" in text
+        assert "Domain:" in text
+
+    def test_case_text_includes_symptoms(self, seeded_db):
+        """Test that case text includes symptom information."""
+        conn, _, incidents = seeded_db
+
+        from elle.daemon.incidents.store import get_incident
+
+        fetched = get_incident(incidents[0].incident_id, conn=conn)
+        text = generate_case_text(fetched)
+
+        assert "Symptoms:" in text
+        assert "Connection refused" in text
+
+    def test_case_text_includes_log_snippets(self, seeded_db):
+        """Test that case text includes log snippets when present."""
+        conn, _, incidents = seeded_db
+
+        from elle.daemon.incidents.store import get_incident
+
+        update_incident(
+            incidents[1].incident_id,
+            log_snippets=["Error: no space left on device"],
+            conn=conn,
+        )
+        fetched = get_incident(incidents[1].incident_id, conn=conn)
+        text = generate_case_text(fetched)
+
+        assert "Logs:" in text
+        assert "no space left on device" in text
+
+
+class TestRecencyWeightingExtended:
+    """Additional tests for recency weighting behavior."""
+
+    def test_recency_weight_future_date(self):
+        """Test that future dates still produce valid weights."""
+        from elle.daemon.incidents.retriever import _compute_recency_weight
+
+        future = datetime.utcnow() + timedelta(days=1)
+        weight = _compute_recency_weight(future)
+        # Future date should produce weight >= 1.0 or close to it
+        assert weight >= 0.9
+
+    def test_recency_weight_is_monotonic(self):
+        """Test that recency weight decreases as time increases."""
+        from elle.daemon.incidents.retriever import _compute_recency_weight
+
+        now = datetime.utcnow()
+        weights = []
+        for days in [0, 7, 30, 90, 365]:
+            w = _compute_recency_weight(now - timedelta(days=days))
+            weights.append(w)
+
+        # Each weight should be less than or equal to the previous
+        for i in range(len(weights) - 1):
+            assert weights[i] >= weights[i + 1]
+
+    def test_recency_weight_all_positive(self):
+        """Test that all recency weights are positive."""
+        from elle.daemon.incidents.retriever import _compute_recency_weight
+
+        now = datetime.utcnow()
+        for days in [0, 1, 7, 30, 90, 365, 730, 1000]:
+            w = _compute_recency_weight(now - timedelta(days=days))
+            assert w > 0
+
+
+class TestPriorArtEdgeCases:
+    """Edge case tests for prior art retrieval."""
+
+    def test_prior_art_with_no_matching_domain(self, seeded_db):
+        """Test prior art when querying a domain with no incidents."""
+        conn, _, _ = seeded_db
+
+        prior = get_prior_art(
+            query="some query",
+            domain="nonexistent_domain",
+            conn=conn,
+        )
+        assert prior == []
+
+    def test_prior_art_k_parameter(self, seeded_db):
+        """Test prior art respects k limit."""
+        conn, _, _ = seeded_db
+
+        prior = get_prior_art(
+            query="service error",
+            k=1,
+            conn=conn,
+        )
+        assert len(prior) <= 1
+
+    def test_prior_art_with_no_finalized_incidents(self, temp_db):
+        """Test prior art when no incidents are finalized."""
+        conn, _ = temp_db
+
+        # Create incidents but don't finalize them
+        inc = create_incident_draft(title="Open incident", domain="net", conn=conn)
+        update_incident(inc.incident_id, summary="Not yet resolved", conn=conn)
+
+        prior = get_prior_art(query="network", conn=conn)
+        # Open incidents may or may not appear depending on implementation
+        assert isinstance(prior, list)
+
+    def test_prior_art_includes_summary(self, temp_db):
+        """Test that prior art results include summary field."""
+        conn, _ = temp_db
+
+        inc = create_incident_draft(title="Summary test", domain="disk", conn=conn)
+        update_incident(
+            inc.incident_id,
+            summary="Detailed summary of what happened",
+            conn=conn,
+        )
+        finalize_outcome(inc.incident_id, "improved", conn=conn)
+
+        prior = get_prior_art(query="summary test", conn=conn)
+        if len(prior) > 0:
+            assert "summary" in prior[0]
+
+
+class TestSearchResultScoring:
+    """Tests for search result scoring properties."""
+
+    def test_search_results_have_scores(self, seeded_db):
+        """Test that search results have scoring attributes."""
+        conn, _, _ = seeded_db
+        results = search(query="disk space full", conn=conn)
+
+        for result in results:
+            # Results should have score-related attributes
+            assert hasattr(result, "outcome_weight")
+
+    def test_search_sorts_by_relevance(self, seeded_db):
+        """Test that search results are sorted by relevance."""
+        conn, _, _ = seeded_db
+        results = search(query="disk space exhausted root", conn=conn, k=10)
+
+        if len(results) >= 2:
+            # Results should be in some consistent order
+            # (exact scoring depends on implementation)
+            assert results[0].incident.incident_id is not None

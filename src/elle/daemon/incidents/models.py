@@ -267,6 +267,90 @@ class Fingerprint(BaseModel):
         description="GPU ECC errors in last hour",
     )
 
+    # I/O and storage
+    inode_pressure: float = Field(
+        ge=0.0,
+        le=1.0,
+        default=0.0,
+        description="Max inode usage ratio across mounts",
+    )
+    io_latency_pressure: float = Field(
+        ge=0.0,
+        le=1.0,
+        default=0.0,
+        description="Normalized I/O latency pressure (0=OK, 1=severe)",
+    )
+
+    # Network
+    conntrack_pressure: float = Field(
+        ge=0.0,
+        le=1.0,
+        default=0.0,
+        description="Conntrack table utilization",
+    )
+    tcp_retransmit_rate: float = Field(
+        ge=0.0,
+        le=1.0,
+        default=0.0,
+        description="TCP retransmit ratio",
+    )
+
+    # Process
+    zombie_count: int = Field(
+        ge=0,
+        default=0,
+        description="Number of zombie processes",
+    )
+
+    # System state
+    pending_reboot: int = Field(
+        ge=0,
+        le=1,
+        default=0,
+        description="1 if reboot is required, 0 otherwise",
+    )
+    cert_expiry_days_min: int = Field(
+        ge=0,
+        default=365,
+        description="Minimum days until any tracked cert expires",
+    )
+
+    # DNS
+    dns_p95_ms: float = Field(
+        ge=0.0,
+        default=0.0,
+        description="DNS query p95 latency in ms",
+    )
+
+    # Cgroup
+    cgroup_mem_pressure: float = Field(
+        ge=0.0,
+        le=1.0,
+        default=0.0,
+        description="Max cgroup memory utilization",
+    )
+
+    # PSI
+    psi_cpu_avg10: float = Field(
+        ge=0.0,
+        le=1.0,
+        default=0.0,
+        description="CPU PSI some avg10 (normalized to 0-1)",
+    )
+    psi_memory_avg10: float = Field(
+        ge=0.0,
+        le=1.0,
+        default=0.0,
+        description="Memory PSI some avg10 (normalized to 0-1)",
+    )
+
+    # Security
+    security_events_1h: int = Field(
+        ge=0,
+        default=0,
+        description="Security-relevant events in last hour",
+    )
+
     # Custom features (extensible)
     custom: dict[str, Any] = Field(default_factory=dict)
 

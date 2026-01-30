@@ -472,7 +472,7 @@ class FixitResult(BaseModel):
         description="Whether rule-based fallback was used",
     )
 
-    def with_analysis(self, analysis: FixitAnalysis) -> "FixitResult":
+    def with_analysis(self, analysis: FixitAnalysis) -> FixitResult:
         """Return a new result with the given analysis."""
         return FixitResult(
             context=self.context,
@@ -489,7 +489,7 @@ class FixitResult(BaseModel):
         self,
         verified: tuple[VerifiedFixCommand, ...],
         errors: tuple[str, ...],
-    ) -> "FixitResult":
+    ) -> FixitResult:
         """Return a new result with verified suggestions."""
         return FixitResult(
             context=self.context,
@@ -502,7 +502,7 @@ class FixitResult(BaseModel):
             used_fallback=self.used_fallback,
         )
 
-    def with_action(self, action: FixitAction) -> "FixitResult":
+    def with_action(self, action: FixitAction) -> FixitResult:
         """Return a new result with an additional action."""
         return FixitResult(
             context=self.context,
@@ -515,7 +515,7 @@ class FixitResult(BaseModel):
             used_fallback=self.used_fallback,
         )
 
-    def with_outcome(self, outcome: FixitOutcome) -> "FixitResult":
+    def with_outcome(self, outcome: FixitOutcome) -> FixitResult:
         """Return a new result with the given outcome."""
         return FixitResult(
             context=self.context,
@@ -528,7 +528,7 @@ class FixitResult(BaseModel):
             used_fallback=self.used_fallback,
         )
 
-    def with_incident_id(self, incident_id: str) -> "FixitResult":
+    def with_incident_id(self, incident_id: str) -> FixitResult:
         """Return a new result with the given incident ID."""
         return FixitResult(
             context=self.context,

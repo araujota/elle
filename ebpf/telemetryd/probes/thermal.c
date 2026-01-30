@@ -142,5 +142,85 @@ int thermal_probe_run(struct normalizer *norm, struct telem_socket *sock, void *
     }
 
     globfree(&glob_result);
+
+    /* ======================================================================
+     * CPU Frequency Throttle Detection
+     * ====================================================================== */
+    {
+        uint64_t cur_freq = 0, max_freq = 0;
+        FILE *cur_f, *max_f;
+
+        cur_f = fopen("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq", "r");
+        if (cur_f) {
+            if (fscanf(cur_f, "%lu", &cur_freq) != 1)
+                cur_freq = 0;
+            fclose(cur_f);
+        }
+
+        max_f = fopen("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq", "r");
+        if (max_f) {
+            if (fscanf(max_f, "%lu", &max_freq) != 1)
+                max_freq = 0;
+            fclose(max_f);
+        }
+
+        ctx->scaling_cur_freq = cur_freq;
+        ctx->scaling_max_freq = max_freq;
+
+        if (cur_freq > 0 && max_freq > 0) {
+            double freq_ratio = (double)cur_freq / (double)max_freq;
+
+            /* Read fan speed (best-effort, may not exist) */
+            uint64_t fan_rpm = 0;
+            glob_t fan_glob;
+
+            if (glob("/sys/class/hwmon/*/fan1_input", GLOB_NOSORT, NULL, &fan_glob) == 0) {
+                if (fan_glob.gl_pathc > 0) {
+                    fan_rpm = (uint64_t)read_sysfs_int(fan_glob.gl_pathv[0]);
+                }
+                globfree(&fan_glob);
+            }
+
+            /* Read load average */
+            double loadavg = 0.0;
+            FILE *load_f = fopen("/proc/loadavg", "r");
+            if (load_f) {
+                if (fscanf(load_f, "%lf", &loadavg) != 1)
+                    loadavg = 0.0;
+                fclose(load_f);
+            }
+
+            /* Emit throttle warning if freq < 80% of max AND load > 1.0 */
+            if (freq_ratio < 0.80 && loadavg > 1.0) {
+                struct telem_event evt;
+                char message[256];
+                char *json_str;
+                bool emit;
+
+                snprintf(message, sizeof(message),
+                         "CPU throttled: %.0f%% of max freq (cur=%lu kHz, max=%lu kHz, "
+                         "load=%.2f, fan=%lu RPM)",
+                         freq_ratio * 100.0, cur_freq, max_freq, loadavg, fan_rpm);
+
+                emit = normalizer_process_prenormalized(norm,
+                    TELEM_SRC_PROBE,
+                    TELEM_SEV_WARNING,
+                    TELEM_CAT_THERMAL,
+                    message,
+                    "cpu:throttle",
+                    0,
+                    &evt);
+
+                if (emit) {
+                    json_str = telem_json_event(&evt);
+                    if (json_str) {
+                        telem_socket_write(sock, json_str, strlen(json_str));
+                        free(json_str);
+                    }
+                }
+            }
+        }
+    }
+
     return 0;
 }

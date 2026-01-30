@@ -21,6 +21,10 @@ struct iface_errors {
     char name[32];
     uint64_t rx_errors;
     uint64_t tx_errors;
+    uint64_t rx_dropped;
+    uint64_t tx_dropped;
+    uint64_t rx_packets;
+    uint64_t tx_packets;
 };
 
 /**
@@ -30,6 +34,9 @@ struct network_probe_ctx {
     int error_threshold;                        /* Threshold for error delta (default: 10) */
     struct iface_errors prev[NETWORK_MAX_IFACES];  /* Previous error counts */
     int num_prev;
+    uint64_t prev_retrans_segs;                 /* Previous TCP RetransSegs */
+    uint64_t prev_out_segs;                     /* Previous TCP OutSegs */
+    bool has_prev_snmp;                         /* Whether prev SNMP values are valid */
 };
 
 /**

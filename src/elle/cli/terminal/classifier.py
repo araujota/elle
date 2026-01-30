@@ -17,13 +17,11 @@ import logging
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
 from elle.cli.subprocess_runner import check_denylist
 from elle.cli.terminal.intent import (
-    CONFIDENCE_THRESHOLD,
     MEDIUM_CONFIDENCE,
     Intent,
     IntentResult,

@@ -115,6 +115,7 @@ int network_probe_run(struct normalizer *norm, struct telem_socket *sock, void *
     while ((entry = readdir(net_dir)) != NULL) {
         char operstate[32] = {0};
         uint64_t rx_errors = 0, tx_errors = 0;
+        uint64_t rx_dropped = 0, tx_dropped = 0, rx_packets = 0, tx_packets = 0;
         struct iface_errors *prev;
         const char *name = entry->d_name;
 
@@ -137,6 +138,18 @@ int network_probe_run(struct normalizer *norm, struct telem_socket *sock, void *
 
         snprintf(path, sizeof(path), "/sys/class/net/%s/statistics/tx_errors", name);
         tx_errors = read_sysfs_uint(path);
+
+        snprintf(path, sizeof(path), "/sys/class/net/%s/statistics/rx_dropped", name);
+        rx_dropped = read_sysfs_uint(path);
+
+        snprintf(path, sizeof(path), "/sys/class/net/%s/statistics/tx_dropped", name);
+        tx_dropped = read_sysfs_uint(path);
+
+        snprintf(path, sizeof(path), "/sys/class/net/%s/statistics/rx_packets", name);
+        rx_packets = read_sysfs_uint(path);
+
+        snprintf(path, sizeof(path), "/sys/class/net/%s/statistics/tx_packets", name);
+        tx_packets = read_sysfs_uint(path);
 
         /* Check for link down */
         if (strcmp(operstate, "down") == 0) {
@@ -203,9 +216,131 @@ int network_probe_run(struct normalizer *norm, struct telem_socket *sock, void *
                 }
             }
 
+            /* Check for dropped packets */
+            if (prev && (rx_dropped > prev->rx_dropped || tx_dropped > prev->tx_dropped)) {
+                struct telem_event drop_evt;
+                char drop_msg[256];
+                char drop_entity[128];
+                char *drop_json;
+                bool drop_emit;
+
+                snprintf(drop_msg, sizeof(drop_msg),
+                         "Dropped packets on %s: rx_dropped=%lu tx_dropped=%lu (rx_pkts=%lu tx_pkts=%lu)",
+                         name, rx_dropped, tx_dropped, rx_packets, tx_packets);
+                snprintf(drop_entity, sizeof(drop_entity), "interface:%s", name);
+
+                drop_emit = normalizer_process_prenormalized(norm,
+                    TELEM_SRC_PROBE,
+                    TELEM_SEV_WARNING,
+                    TELEM_CAT_NET,
+                    drop_msg,
+                    drop_entity,
+                    0,
+                    &drop_evt);
+
+                if (drop_emit) {
+                    drop_json = telem_json_event(&drop_evt);
+                    if (drop_json) {
+                        telem_socket_write(sock, drop_json, strlen(drop_json));
+                        free(drop_json);
+                    }
+                }
+            }
+
             /* Update previous counters */
             prev->rx_errors = rx_errors;
             prev->tx_errors = tx_errors;
+            prev->rx_dropped = rx_dropped;
+            prev->tx_dropped = tx_dropped;
+            prev->rx_packets = rx_packets;
+            prev->tx_packets = tx_packets;
+        }
+    }
+
+    /* ======================================================================
+     * TCP Retransmission Rate from /proc/net/snmp
+     * ====================================================================== */
+    {
+        FILE *snmp_fp;
+        char snmp_line[1024];
+        uint64_t retrans_segs = 0, out_segs = 0;
+        bool found_tcp_data = false;
+        int tcp_header_seen = 0;
+
+        snmp_fp = fopen("/proc/net/snmp", "r");
+        if (snmp_fp) {
+            while (fgets(snmp_line, sizeof(snmp_line), snmp_fp)) {
+                if (strncmp(snmp_line, "Tcp:", 4) == 0) {
+                    tcp_header_seen++;
+                    /* The second "Tcp:" line contains the data values */
+                    if (tcp_header_seen == 2) {
+                        /* Parse fields: RtoAlgorithm RtoMin RtoMax MaxConn ActiveOpens
+                         * PassiveOpens AttemptFails EstabResets CurrEstab InSegs
+                         * OutSegs(11) RetransSegs(12) InErrs OutRsts InCsumErrors */
+                        uint64_t fields[15] = {0};
+                        int nfields = 0;
+                        char *tok = snmp_line + 4; /* Skip "Tcp:" */
+                        char *saveptr;
+
+                        tok = strtok_r(tok, " \t\n", &saveptr);
+                        while (tok && nfields < 15) {
+                            fields[nfields++] = strtoull(tok, NULL, 10);
+                            tok = strtok_r(NULL, " \t\n", &saveptr);
+                        }
+
+                        if (nfields >= 12) {
+                            out_segs = fields[10];      /* OutSegs (field 11, 0-indexed 10) */
+                            retrans_segs = fields[11];  /* RetransSegs (field 12, 0-indexed 11) */
+                            found_tcp_data = true;
+                        }
+                        break;
+                    }
+                }
+            }
+            fclose(snmp_fp);
+
+            if (found_tcp_data && ctx->has_prev_snmp) {
+                uint64_t delta_retrans = retrans_segs - ctx->prev_retrans_segs;
+                uint64_t delta_out = out_segs - ctx->prev_out_segs;
+
+                if (delta_out > 0) {
+                    double retrans_rate = (double)delta_retrans / (double)delta_out;
+
+                    if (retrans_rate > 0.01) {
+                        struct telem_event retrans_evt;
+                        char retrans_msg[256];
+                        char *retrans_json;
+                        bool retrans_emit;
+
+                        snprintf(retrans_msg, sizeof(retrans_msg),
+                                 "TCP retransmission rate %.2f%% (retrans=%lu out=%lu)",
+                                 retrans_rate * 100.0, delta_retrans, delta_out);
+
+                        retrans_emit = normalizer_process_prenormalized(norm,
+                            TELEM_SRC_PROBE,
+                            TELEM_SEV_WARNING,
+                            TELEM_CAT_NET,
+                            retrans_msg,
+                            "tcp:retransmit",
+                            0,
+                            &retrans_evt);
+
+                        if (retrans_emit) {
+                            retrans_json = telem_json_event(&retrans_evt);
+                            if (retrans_json) {
+                                telem_socket_write(sock, retrans_json, strlen(retrans_json));
+                                free(retrans_json);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (found_tcp_data) {
+                ctx->prev_retrans_segs = retrans_segs;
+                ctx->prev_out_segs = out_segs;
+                ctx->has_prev_snmp = true;
+            }
         }
     }
 

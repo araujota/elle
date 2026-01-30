@@ -320,11 +320,9 @@ class IncidentAgenticHandler:
 
             message = f"{'Auto-' if auto_triggered else ''}Handled: {title}\n\n{response[:500]}"
 
-            await notify(
+            notify(
                 title=f"[{severity.upper()}] Incident Handled",
-                message=message,
-                priority=2 if severity == "critical" else 1,
-                tags=[severity, "incident", "handled"],
+                body=message,
             )
 
         except Exception as e:
@@ -345,11 +343,9 @@ class IncidentAgenticHandler:
 
             message = f"New incident detected: {title}\n\n{summary[:300]}"
 
-            await notify(
+            notify(
                 title=f"[{severity.upper()}] {title}",
-                message=message,
-                priority=3 if severity == "critical" else 2,
-                tags=[severity, "incident", "new"],
+                body=message,
             )
 
         except Exception as e:

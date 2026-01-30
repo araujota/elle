@@ -12,6 +12,7 @@ whether a capability requires user confirmation before execution.
 from __future__ import annotations
 
 import logging
+import sqlite3
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -279,7 +280,7 @@ class AutonomyStore:
         except Exception as e:
             logger.error(f"Failed to initialize autonomy store: {e}")
 
-    def _get_connection(self):
+    def _get_connection(self) -> sqlite3.Connection:
         """Get database connection."""
         import sqlite3
 
@@ -420,7 +421,7 @@ class AutonomyStore:
                 (capability_name,),
             )
             conn.commit()
-            return cursor.rowcount > 0
+            return bool(cursor.rowcount > 0)
 
     def list_overrides(self) -> list[AutonomyOverride]:
         """List all autonomy overrides."""

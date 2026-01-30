@@ -305,6 +305,42 @@ static int dns_query(const char *resolver, const char *domain,
 }
 
 /* ==========================================================================
+ * Latency Percentile Helpers
+ * ========================================================================== */
+
+/* Comparison function for qsort */
+static int uint32_compare(const void *a, const void *b)
+{
+    uint32_t va = *(const uint32_t *)a;
+    uint32_t vb = *(const uint32_t *)b;
+    if (va < vb) return -1;
+    if (va > vb) return 1;
+    return 0;
+}
+
+static void compute_percentiles(struct dns_probe_ctx *ctx,
+                                 uint32_t *p50, uint32_t *p95, uint32_t *p99)
+{
+    uint32_t sorted[100];
+    int count = ctx->history_count;
+
+    if (count == 0) {
+        *p50 = 0;
+        *p95 = 0;
+        *p99 = 0;
+        return;
+    }
+
+    /* Copy and sort */
+    memcpy(sorted, ctx->latency_history, sizeof(uint32_t) * count);
+    qsort(sorted, count, sizeof(uint32_t), uint32_compare);
+
+    *p50 = sorted[count / 2];
+    *p95 = sorted[count * 95 / 100];
+    *p99 = sorted[count * 99 / 100];
+}
+
+/* ==========================================================================
  * Probe Entry Point
  * ========================================================================== */
 
@@ -319,6 +355,15 @@ int dns_probe_run(struct probed_socket *sock, void *ctx_ptr)
         dns_query(ctx->resolvers[0], ctx->test_domains[i],
                   ctx->timeout_ms, &evt);
 
+        /* Record latency for percentile tracking */
+        if (evt.success) {
+            ctx->latency_history[ctx->history_idx] = evt.latency_ms;
+            ctx->history_idx = (ctx->history_idx + 1) % 100;
+            if (ctx->history_count < 100)
+                ctx->history_count++;
+            ctx->total_query_count++;
+        }
+
         /* Emit event (success or failure) */
         char *json = probed_json_dns_event(&evt);
         if (json) {
@@ -328,6 +373,20 @@ int dns_probe_run(struct probed_socket *sock, void *ctx_ptr)
 
         if (!evt.success)
             ret = -1;
+    }
+
+    /* Emit percentile stats if we have enough data */
+    if (ctx->history_count >= 5) {
+        uint32_t p50, p95, p99;
+        compute_percentiles(ctx, &p50, &p95, &p99);
+
+        char json_buf[512];
+        snprintf(json_buf, sizeof(json_buf),
+                 "{\"type\":\"dns_percentiles\","
+                 "\"p50_ms\":%u,\"p95_ms\":%u,\"p99_ms\":%u,"
+                 "\"query_count\":%lu}\n",
+                 p50, p95, p99, (unsigned long)ctx->total_query_count);
+        probed_socket_write(sock, json_buf, strlen(json_buf));
     }
 
     return ret;

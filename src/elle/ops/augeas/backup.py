@@ -500,12 +500,14 @@ def get_manager() -> BackupManager:
 def backup_file(
     file_path: str | Path,
     metadata: dict[str, Any] | None = None,
+    domain: str | None = None,
 ) -> BackupRecord:
     """Create a backup of a file (convenience function).
 
     Args:
         file_path: Path to the file to backup.
         metadata: Optional metadata.
+        domain: Optional domain hint (unused, domain is auto-detected).
 
     Returns:
         BackupRecord with backup details.

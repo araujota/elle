@@ -31,11 +31,16 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from elle.cli.agentic.audit import VerificationResult
+
+if TYPE_CHECKING:
+    from elle.cli.agentic.audit import AuditRecorder
+    from elle.cli.agentic.retrieval_pipeline import UnifiedRetrievalPipeline
+    from elle.rag.llm import LLM
 from elle.cli.agentic.prompts import (
     format_tool_observation,
     get_system_prompt,
@@ -321,12 +326,12 @@ class AgenticLoop:
         self.enable_audit = enable_audit
         self.enable_verification = enable_verification
 
-        self._llm = None
-        self._retrieval_pipeline = None
-        self._audit_recorder = None
+        self._llm: LLM | None = None
+        self._retrieval_pipeline: UnifiedRetrievalPipeline | None = None
+        self._audit_recorder: AuditRecorder | None = None
 
     @property
-    def llm(self):
+    def llm(self) -> LLM:
         """Lazy-load LLM instance."""
         if self._llm is None:
             from elle.rag.llm import get_llm
@@ -334,7 +339,7 @@ class AgenticLoop:
         return self._llm
 
     @property
-    def retrieval_pipeline(self):
+    def retrieval_pipeline(self) -> UnifiedRetrievalPipeline:
         """Lazy-load retrieval pipeline."""
         if self._retrieval_pipeline is None:
             from elle.cli.agentic.retrieval_pipeline import get_retrieval_pipeline
@@ -342,7 +347,7 @@ class AgenticLoop:
         return self._retrieval_pipeline
 
     @property
-    def audit_recorder(self):
+    def audit_recorder(self) -> AuditRecorder:
         """Lazy-load audit recorder."""
         if self._audit_recorder is None:
             from elle.cli.agentic.audit import get_audit_recorder
@@ -586,7 +591,7 @@ class AgenticLoop:
                 logger.debug(f"Retrieval took {retrieval_context.retrieval_duration_ms}ms")
 
                 # Add to audit
-                if self.enable_audit:
+                if self.enable_audit and execution_id is not None:
                     self.audit_recorder.add_retrieval(execution_id, retrieval_context)
 
             # 2. Build system prompt
@@ -695,7 +700,7 @@ class AgenticLoop:
                         tool_call_records.append(call_record)
 
                         # Add to audit
-                        if self.enable_audit:
+                        if self.enable_audit and execution_id is not None:
                             audit_call = AuditToolCallRecord.from_tool_result(
                                 tool_call.name,
                                 tool_call.arguments,
@@ -749,7 +754,7 @@ class AgenticLoop:
             duration_ms = int((time.time() - start_time) * 1000)
 
             # Complete audit
-            if self.enable_audit:
+            if self.enable_audit and execution_id is not None:
                 self.audit_recorder.complete(
                     execution_id,
                     collected_response,
@@ -784,7 +789,7 @@ class AgenticLoop:
         except LLMUnavailableError as e:
             duration_ms = int((time.time() - start_time) * 1000)
 
-            if self.enable_audit:
+            if self.enable_audit and execution_id is not None:
                 self.audit_recorder.fail(execution_id, str(e), iterations)
 
             # Record failure to incident vault
@@ -814,7 +819,7 @@ class AgenticLoop:
             logger.exception("Agentic loop failed")
             duration_ms = int((time.time() - start_time) * 1000)
 
-            if self.enable_audit:
+            if self.enable_audit and execution_id is not None:
                 self.audit_recorder.fail(execution_id, str(e), iterations)
 
             # Record failure to incident vault

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from elle.ops.editing.models import (
     EditOperation,
@@ -18,6 +19,9 @@ from elle.ops.editing.models import (
 )
 from elle.ops.editing.tier_registry import TIER1_AUGEAS_PATTERNS, matches_pattern
 from elle.ops.editing.tiers.base import BaseTier
+
+if TYPE_CHECKING:
+    from elle.ops.augeas import AugeasOp
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +134,6 @@ class Tier1Augeas(BaseTier):
         operation: EditOperation,
     ) -> FileEditPreview:
         """Preview Augeas edit."""
-        from elle.ops.augeas.diff import colored_diff, unified_diff
 
         if not self._is_available():
             return FileEditPreview(
@@ -146,7 +149,7 @@ class Tier1Augeas(BaseTier):
             )
 
         try:
-            from elle.ops.augeas import AugeasEditRequest, AugeasOp, preview_edit
+            from elle.ops.augeas import AugeasEditRequest, preview_edit
 
             # Convert our operation to Augeas operation
             aug_ops = self._convert_to_augeas_ops(operation)
@@ -172,7 +175,7 @@ class Tier1Augeas(BaseTier):
                 requires_privilege=result.requires_privilege,
                 tool_to_use="augeas",
             )
-        except Exception as e:
+        except Exception:
             # If preview fails, return empty preview
             original = file_path.read_text() if file_path.exists() else ""
             return FileEditPreview(
@@ -252,7 +255,7 @@ class Tier1Augeas(BaseTier):
                 f"Augeas error: {e}",
             )
 
-    def _convert_to_augeas_ops(self, operation: EditOperation) -> list:
+    def _convert_to_augeas_ops(self, operation: EditOperation) -> list[AugeasOp]:
         """Convert EditOperation to Augeas operations."""
         from elle.ops.augeas import AugeasOp
 
