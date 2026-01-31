@@ -247,7 +247,7 @@ static int list_failed_units(sd_bus *bus, char ***units_out, int *count_out)
     int capacity = 32;
     int r;
 
-    units = calloc(capacity, sizeof(char *));
+    units = (char **)calloc(capacity, sizeof(char *));
     if (!units)
         return -1;
 
@@ -264,7 +264,7 @@ static int list_failed_units(sd_bus *bus, char ***units_out, int *count_out)
 
     if (r < 0) {
         sd_bus_error_free(&error);
-        free(units);
+        free((void *)units);
         return -1;
     }
 
@@ -272,7 +272,7 @@ static int list_failed_units(sd_bus *bus, char ***units_out, int *count_out)
     if (r < 0) {
         sd_bus_message_unref(reply);
         sd_bus_error_free(&error);
-        free(units);
+        free((void *)units);
         return -1;
     }
 
@@ -293,7 +293,7 @@ static int list_failed_units(sd_bus *bus, char ***units_out, int *count_out)
             strcmp(active, "activating") == 0) {
             if (count >= capacity) {
                 capacity *= 2;
-                char **new_units = realloc(units, capacity * sizeof(char *));
+                char **new_units = (char **)realloc((void *)units, capacity * sizeof(char *));
                 if (!new_units)
                     break;
                 units = new_units;
@@ -363,7 +363,7 @@ int systemd_probe_run(struct probed_socket *sock, void *ctx_ptr)
         free(failed_units[i]);
     }
 
-    free(failed_units);
+    free((void *)failed_units);
     sd_bus_unref(bus);
 
     return 0;

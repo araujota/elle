@@ -132,7 +132,7 @@ static int build_dns_query(const char *domain, uint8_t *buf, size_t buflen)
 
     /* Build header */
     memset(hdr, 0, sizeof(*hdr));
-    hdr->id = htons((uint16_t)rand());
+    hdr->id = htons((uint16_t)random());
     hdr->flags = htons(DNS_FLAG_RD);  /* Recursion Desired */
     hdr->qdcount = htons(1);
 
@@ -167,7 +167,7 @@ static int build_dns_query(const char *domain, uint8_t *buf, size_t buflen)
     *ptr++ = 0; *ptr++ = 1;  /* Type A */
     *ptr++ = 0; *ptr++ = 1;  /* Class IN */
 
-    return ptr - buf;
+    return (int)(ptr - buf);
 }
 
 /* ==========================================================================

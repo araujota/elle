@@ -202,7 +202,7 @@ static int parse_auth_failures(struct auth_probe_ctx *ctx)
     }
 
     /* Seek to 1 minute ago */
-    cutoff_us = (now_ns / 1000) - (60 * 1000000);
+    cutoff_us = (now_ns / 1000) - (60ULL * 1000000);
     sd_journal_seek_realtime_usec(j, cutoff_us);
 
     /* Read entries */

@@ -44,7 +44,7 @@ static void add_common_fields(json_t *obj,
     snprintf(priority_str, sizeof(priority_str), "%d", get_priority(severity));
     json_object_set_new(obj, "PRIORITY", json_string(priority_str));
 
-    json_object_set_new(obj, "_PROBED_TS_NS", json_integer(ts_ns));
+    json_object_set_new(obj, "_PROBED_TS_NS", json_integer((json_int_t)ts_ns));
 }
 
 /* ==========================================================================
@@ -88,8 +88,8 @@ char *probed_json_psi_event(const struct probed_psi_event *evt)
     json_object_set_new(obj, "_PROBED_PSI_FULL_AVG60", json_real(evt->full_avg60));
     json_object_set_new(obj, "_PROBED_PSI_FULL_AVG300", json_real(evt->full_avg300));
 
-    json_object_set_new(obj, "_PROBED_PSI_SOME_TOTAL_US", json_integer(evt->some_total_us));
-    json_object_set_new(obj, "_PROBED_PSI_FULL_TOTAL_US", json_integer(evt->full_total_us));
+    json_object_set_new(obj, "_PROBED_PSI_SOME_TOTAL_US", json_integer((json_int_t)evt->some_total_us));
+    json_object_set_new(obj, "_PROBED_PSI_FULL_TOTAL_US", json_integer((json_int_t)evt->full_total_us));
 
     json_object_set_new(obj, "_PROBED_PSI_WARNING", json_boolean(evt->warning));
     json_object_set_new(obj, "_PROBED_PSI_CRITICAL", json_boolean(evt->critical));
@@ -153,7 +153,7 @@ char *probed_json_unit_event(const struct probed_unit_event *evt)
     json_object_set_new(obj, "_PROBED_UNIT_EXIT_CODE", json_integer(evt->exit_code));
     json_object_set_new(obj, "_PROBED_UNIT_EXIT_SIGNAL", json_integer(evt->exit_signal));
     json_object_set_new(obj, "_PROBED_UNIT_N_RESTARTS", json_integer(evt->n_restarts));
-    json_object_set_new(obj, "_PROBED_UNIT_RESTART_USEC", json_integer(evt->restart_usec));
+    json_object_set_new(obj, "_PROBED_UNIT_RESTART_USEC", json_integer((json_int_t)evt->restart_usec));
     json_object_set_new(obj, "_PROBED_UNIT_CRASHLOOP", json_boolean(evt->crashloop));
     json_object_set_new(obj, "_PROBED_UNIT_FAILED", json_boolean(evt->failed));
 
@@ -326,8 +326,8 @@ char *probed_json_hardware_event(const struct probed_hardware_event *evt)
     json_object_set_new(obj, "_PROBED_HW_SUBSYSTEM", json_string(evt->subsystem));
     json_object_set_new(obj, "_PROBED_HW_DEVICE", json_string(evt->device));
     json_object_set_new(obj, "_PROBED_HW_ERROR_TYPE", json_string(evt->error_type));
-    json_object_set_new(obj, "_PROBED_HW_ERROR_COUNT", json_integer(evt->error_count));
-    json_object_set_new(obj, "_PROBED_HW_PREV_COUNT", json_integer(evt->prev_count));
+    json_object_set_new(obj, "_PROBED_HW_ERROR_COUNT", json_integer((json_int_t)evt->error_count));
+    json_object_set_new(obj, "_PROBED_HW_PREV_COUNT", json_integer((json_int_t)evt->prev_count));
 
     if (evt->mc[0])
         json_object_set_new(obj, "_PROBED_HW_MC", json_string(evt->mc));

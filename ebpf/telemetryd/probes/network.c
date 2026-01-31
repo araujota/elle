@@ -119,7 +119,8 @@ int network_probe_run(struct normalizer *norm, struct telem_socket *sock, void *
         uint64_t rx_dropped = 0, tx_dropped = 0, rx_packets = 0, tx_packets = 0;
         struct iface_errors *prev;
         char name[32];
-        snprintf(name, sizeof(name), "%s", entry->d_name);
+        strncpy(name, entry->d_name, sizeof(name) - 1);
+        name[sizeof(name) - 1] = '\0';
 
         /* Skip . and .. */
         if (name[0] == '.')

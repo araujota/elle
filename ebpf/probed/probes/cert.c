@@ -95,7 +95,7 @@ static int check_endpoint(struct cert_probe_ctx *ctx, int idx,
     char connect_str[256];
     char json_buf[1024];
     int days = -1;
-    const char *severity = "info";
+    const char *severity;
     char subject_cn[256] = {0};
     char issuer_cn[256] = {0};
 
@@ -144,9 +144,7 @@ static int check_endpoint(struct cert_probe_ctx *ctx, int idx,
                                issuer_cn, sizeof(issuer_cn));
 
     /* Determine severity */
-    if (days <= 0) {
-        severity = "critical";
-    } else if (days <= ctx->critical_days) {
+    if (days <= ctx->critical_days) {
         severity = "critical";
     } else if (days <= ctx->warning_days) {
         severity = "warning";

@@ -71,7 +71,6 @@ static int parse_psi_file(const char *path, const char *resource,
     FILE *f;
     char line[256];
     int found_some = 0;
-    int found_full = 0;
 
     f = fopen(path, "r");
     if (!f) {
@@ -100,7 +99,6 @@ static int parse_psi_file(const char *path, const char *resource,
             evt->full_avg60 = avg60;
             evt->full_avg300 = avg300;
             evt->full_total_us = total;
-            found_full = 1;
         }
     }
 
@@ -108,7 +106,6 @@ static int parse_psi_file(const char *path, const char *resource,
 
     /* CPU only has "some" line, memory/io have both */
     return found_some ? 0 : -1;
-    (void)found_full;  /* Silence unused warning for CPU case */
 }
 
 /* ==========================================================================
