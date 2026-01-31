@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 
@@ -160,6 +161,50 @@ class FaultInjector:
 
         with patch("elle.storage.engine.get_conn", side_effect=exc) as mock:
             yield mock
+
+    @contextmanager
+    def cloud_api_flapping(self) -> Generator[dict[str, Any], None, None]:
+        """Alternate between success and failure responses from cloud API."""
+        call_count = 0
+
+        async def flapping_post(*args: Any, **kwargs: Any) -> MagicMock:
+            nonlocal call_count
+            call_count += 1
+            if call_count % 2 == 0:
+                raise httpx.ConnectError("Connection refused (flapping)")
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {"cloud_id": "test", "accepted": True, "similar_count": 0}
+            return mock_response
+
+        with patch("httpx.AsyncClient.post", side_effect=flapping_post):
+            yield {"call_count": lambda: call_count}
+
+    @contextmanager
+    def queue_corruption(self) -> Generator[MagicMock, None, None]:
+        """Return malformed QueueEntry data from mock DB."""
+        corrupted_row = {
+            "id": None,  # NULL id
+            "incident_id": "",  # Empty
+            "payload_json": "{invalid json",  # Malformed JSON
+            "original_hash": "",
+            "status": "INVALID_STATUS",
+            "retry_count": -1,  # Negative
+            "max_retries": 0,
+            "next_retry_at": "not-a-date",
+            "last_error": None,
+            "enqueued_at": "not-a-date",
+            "last_attempted_at": None,
+            "completed_at": None,
+            "cloud_id": None,
+        }
+        with patch("elle.storage.engine.get_conn") as mock_conn:
+            mock_cursor = MagicMock()
+            mock_cursor.fetchall.return_value = [corrupted_row]
+            mock_cursor.fetchone.return_value = corrupted_row
+            mock_conn.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+            mock_conn.return_value.__exit__ = MagicMock(return_value=False)
+            yield mock_cursor
 
     @staticmethod
     def _corrupted_open(target_path: str, content: str):  # type: ignore[no-untyped-def]

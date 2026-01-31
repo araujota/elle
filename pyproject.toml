@@ -43,6 +43,7 @@ dev = [
     "pytest-cov>=4.0",
     "pytest-asyncio>=0.23",
     "pytest-timeout>=2.2",
+    "hypothesis>=6.90",
     "ruff>=0.4",
     "mypy>=1.10",
     "types-toml>=0.10",
@@ -182,6 +183,19 @@ module = [
     "elle.cli.tui.*",
 ]
 disable_error_code = ["arg-type", "type-arg"]
+
+[tool.coverage.run]
+source = ["elle"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

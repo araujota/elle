@@ -722,6 +722,178 @@ jobs:
   #           -Dsonar.tests=tests/
 
   # ============================================================================
+  # Critical Path Coverage Enforcement
+  # ============================================================================
+  critical-coverage:
+    name: Critical Path Coverage (≥90%)
+    runs-on: ubuntu-24.04
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libaugeas-dev augeas-tools
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,api]"
+
+      - name: Run tests with per-module coverage
+        run: |
+          pytest tests/ --cov=elle --cov-branch --cov-report=json:coverage.json
+
+      - name: Enforce 90% on critical modules
+        run: |
+          python3 -c "
+          import json, sys
+          data = json.load(open('coverage.json'))
+          files = data['files']
+          CRITICAL = [
+              'src/elle/capabilities/executor.py',
+              'src/elle/capabilities/registry.py',
+              'src/elle/capabilities/core/service.py',
+              'src/elle/capabilities/core/auth.py',
+              'src/elle/capabilities/core/config.py',
+              'src/elle/capabilities/core/file.py',
+              'src/elle/capabilities/core/package.py',
+              'src/elle/capabilities/core/docker.py',
+              'src/elle/capabilities/autonomy.py',
+              'src/elle/capabilities/policy.py',
+              'src/elle/capabilities/autogen/generator.py',
+              'src/elle/capabilities/autogen/validator.py',
+              'src/elle/capabilities/autogen/factory.py',
+              'src/elle/capabilities/autogen/parser.py',
+              'src/elle/capabilities/autogen/loader.py',
+              'src/elle/capabilities/autogen/store.py',
+              'src/elle/capabilities/autogen/discovery.py',
+              'src/elle/policy/engine.py',
+              'src/elle/policy/matchers.py',
+              'src/elle/policy/models.py',
+              'src/elle/policy/loader.py',
+              'src/elle/policy/audit.py',
+              'src/elle/security/polkit_helper.py',
+              'src/elle/cli/subprocess_runner.py',
+              'src/elle/ops/preflight/validator.py',
+              'src/elle/ops/preflight/risk_classifier.py',
+              'src/elle/ops/preflight/apt_validator.py',
+              'src/elle/ops/preflight/nspawn_validator.py',
+              'src/elle/ops/augeas/engine.py',
+              'src/elle/ops/augeas/backup.py',
+              'src/elle/ops/augeas/controller.py',
+              'src/elle/ops/editing/tier_selector.py',
+              'src/elle/ops/crudini/engine.py',
+              'src/elle/ops/yq/engine.py',
+              'src/elle/ops/jq/engine.py',
+              'src/elle/ops/xmlstarlet/engine.py',
+              'src/elle/daemon/incidents/store.py',
+              'src/elle/daemon/incidents/config_tracker.py',
+              'src/elle/daemon/incidents/anonymize.py',
+              'src/elle/daemon/incidents/cloud_sync.py',
+              'src/elle/daemon/incidents/cloud_queue.py',
+              'src/elle/daemon/incidents/cloud_retry_worker.py',
+              'src/elle/daemon/incidents/correlator.py',
+              'src/elle/daemon/incidents/differ.py',
+              'src/elle/daemon/incidents/semantic_diff.py',
+              'src/elle/daemon/incidents/drift.py',
+              'src/elle/daemon/incidents/snapshot.py',
+              'src/elle/daemon/incidents/reports.py',
+              'src/elle/daemon/telemetry/aggregator.py',
+              'src/elle/daemon/telemetry/correlator_engine.py',
+              'src/elle/daemon/telemetry/state_cache.py',
+              'src/elle/daemon/telemetry/forecasters.py',
+              'src/elle/daemon/telemetry/telemetryd_watcher.py',
+              'src/elle/daemon/reboot/manager.py',
+              'src/elle/daemon/reboot/verifier.py',
+              'src/elle/daemon/reboot/grub.py',
+              'src/elle/cli/agentic/loop.py',
+              'src/elle/cli/agentic/incident_recorder.py',
+              'src/elle/cli/agentic/retrieval_pipeline.py',
+              'src/elle/cli/agentic/handler.py',
+              'src/elle/cli/agentic/execution.py',
+              'src/elle/cli/agentic/tools.py',
+              'src/elle/cli/planner/service.py',
+              'src/elle/cli/planner/validation.py',
+              'src/elle/cli/fixit/service.py',
+              'src/elle/reactive/engine.py',
+              'src/elle/reactive/compiler.py',
+              'src/elle/reactive/evaluator.py',
+              'src/elle/mobile/auth.py',
+              'src/elle/mobile/elevation.py',
+              'src/elle/daemon/api/auth.py',
+          ]
+          failed = []
+          for path in CRITICAL:
+              info = files.get(path)
+              if info is None:
+                  failed.append((path, 0.0, 'NOT FOUND in coverage'))
+                  continue
+              pct = info['summary']['percent_covered']
+              if pct < 90.0:
+                  failed.append((path, pct, f'{pct:.1f}% < 90%'))
+          if failed:
+              print('CRITICAL PATH COVERAGE FAILURES:')
+              for path, pct, msg in sorted(failed, key=lambda x: x[1]):
+                  print(f'  {path}: {msg}')
+              sys.exit(1)
+          print(f'All {len(CRITICAL)} critical modules at ≥90% coverage')
+          "
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: critical-coverage
+          path: coverage.json
+          retention-days: 7
+
+  # ============================================================================
+  # Property-Based Testing (Hypothesis)
+  # ============================================================================
+  property-tests:
+    name: Property-Based Tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libaugeas-dev augeas-tools
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,api]"
+
+      - name: Run hypothesis tests (CI profile)
+        run: |
+          pytest tests/test_property_based.py -v --timeout=600 \
+            --hypothesis-seed=0 -x
+
+      - name: Upload hypothesis results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: property-test-results
+          path: .hypothesis/
+          retention-days: 7
+
+  # ============================================================================
   # CI Summary
   # ============================================================================
   ci-success:
@@ -741,24 +913,28 @@ jobs:
       - lintian
       - piuparts
       - autopkgtest-qemu
+      - critical-coverage
+      - property-tests
     if: always()
     steps:
       - name: Check all jobs
         run: |
           echo "=== CI Summary ==="
-          echo "Lint:             ${{ needs.lint.result }}"
-          echo "Test:             ${{ needs.test.result }}"
-          echo "Security:         ${{ needs.security.result }}"
-          echo "C Build:          ${{ needs.c-build.result }}"
+          echo "Lint:              ${{ needs.lint.result }}"
+          echo "Test:              ${{ needs.test.result }}"
+          echo "Security:          ${{ needs.security.result }}"
+          echo "C Build:           ${{ needs.c-build.result }}"
           echo "C Static Analysis: ${{ needs.c-static-analysis.result }}"
-          echo "Valgrind:         ${{ needs.valgrind.result }}"
-          echo "Fuzz:             ${{ needs.fuzz.result }}"
-          echo "Chaos:            ${{ needs.chaos.result }}"
-          echo "Docs:             ${{ needs.docs.result }}"
-          echo "Build:            ${{ needs.build.result }}"
-          echo "Lintian:          ${{ needs.lintian.result }}"
-          echo "piuparts:         ${{ needs.piuparts.result }}"
-          echo "autopkgtest:      ${{ needs.autopkgtest-qemu.result }}"
+          echo "Valgrind:          ${{ needs.valgrind.result }}"
+          echo "Fuzz:              ${{ needs.fuzz.result }}"
+          echo "Chaos:             ${{ needs.chaos.result }}"
+          echo "Docs:              ${{ needs.docs.result }}"
+          echo "Build:             ${{ needs.build.result }}"
+          echo "Lintian:           ${{ needs.lintian.result }}"
+          echo "piuparts:          ${{ needs.piuparts.result }}"
+          echo "autopkgtest:       ${{ needs.autopkgtest-qemu.result }}"
+          echo "Critical Coverage: ${{ needs.critical-coverage.result }}"
+          echo "Property Tests:    ${{ needs.property-tests.result }}"
 
           # Fail if any required job failed
           if [[ "${{ needs.lint.result }}" == "failure" ]] || \
@@ -773,7 +949,9 @@ jobs:
              [[ "${{ needs.build.result }}" == "failure" ]] || \
              [[ "${{ needs.lintian.result }}" == "failure" ]] || \
              [[ "${{ needs.piuparts.result }}" == "failure" ]] || \
-             [[ "${{ needs.autopkgtest-qemu.result }}" == "failure" ]]; then
+             [[ "${{ needs.autopkgtest-qemu.result }}" == "failure" ]] || \
+             [[ "${{ needs.critical-coverage.result }}" == "failure" ]] || \
+             [[ "${{ needs.property-tests.result }}" == "failure" ]]; then
             echo "::error::One or more CI jobs failed"
             exit 1
           fi
