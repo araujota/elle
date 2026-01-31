@@ -1,16 +1,35 @@
 from __future__ import annotations
 
+import math
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from elle.daemon.manvault.embedder import (
-    ManVaultEmbedder,
-    cosine_similarity,
-    euclidean_distance,
-    get_embedder,
-)
+from elle.daemon.manvault.embedder import ManVaultEmbedder, get_embedder
 from elle.daemon.manvault.models import ManChunk
+
+# ---------------------------------------------------------------------------
+# Test-only utility functions
+# ---------------------------------------------------------------------------
+
+
+def cosine_similarity(a: list[float], b: list[float]) -> float:
+    """Compute cosine similarity between two vectors."""
+    if len(a) != len(b):
+        raise ValueError("Vectors must have the same length")
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(x * x for x in b))
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+def euclidean_distance(a: list[float], b: list[float]) -> float:
+    """Compute Euclidean distance between two vectors."""
+    if len(a) != len(b):
+        raise ValueError("Vectors must have the same length")
+    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b, strict=True)))
 
 # ---------------------------------------------------------------------------
 # cosine_similarity

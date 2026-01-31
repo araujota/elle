@@ -19,11 +19,7 @@ from elle.daemon.incidents.models import (
     Provenance,
     TelemetryCitation,
 )
-from elle.daemon.incidents.schema import (
-    SCHEMA_VERSION,
-    get_schema_version,
-    init_incident_schema,
-)
+from elle.daemon.incidents.schema import ensure_schema
 from elle.daemon.incidents.store import (
     create_incident_draft,
     get_config_state_by_path,
@@ -415,13 +411,6 @@ class TestConfigStateStorage:
 class TestSchemaVersion:
     """Tests for schema versioning and migration."""
 
-    def test_schema_version_is_current(self, test_db):
-        """Test that schema version matches current SCHEMA_VERSION."""
-        version = get_schema_version(test_db)
-        assert version == SCHEMA_VERSION
-        # Schema version increases as new features are added
-        assert version >= 2
-
     def test_new_tables_exist(self, test_db):
         """Test that v2 tables exist."""
         # Check decision_records table
@@ -436,7 +425,7 @@ class TestSchemaVersion:
 
     def test_fresh_schema_has_all_tables(self, test_db):
         """Test that fresh schema has all v2 tables."""
-        init_incident_schema(test_db)
+        ensure_schema(test_db)
 
         rows = test_db.execute(
             "SELECT table_name FROM information_schema.tables WHERE table_schema = 'incidents'"
@@ -451,6 +440,6 @@ class TestSchemaVersion:
             "incident_embeddings",
             "decision_records",
             "config_states",
-            "meta",
+            "_meta",
         }
         assert expected.issubset(tables)

@@ -21,11 +21,10 @@ from elle.daemon.incidents.narrative import (
 from elle.daemon.incidents.narrative_builder import (
     NarrativeBuilder,
     _ensure_narrative_schema,
-    _json_dumps,
-    _json_loads,
     get_narrative,
     get_narratives_for_incident,
 )
+from elle.storage.helpers import json_dumps, json_loads
 
 # =============================================================================
 # Fixtures
@@ -181,43 +180,43 @@ def in_memory_db(incidents_conn):
 
 
 class TestJsonHelpers:
-    """Tests for _json_dumps and _json_loads helpers."""
+    """Tests for json_dumps and json_loads helpers."""
 
     def test_json_dumps_basic(self) -> None:
         """Test basic JSON serialization."""
-        result = _json_dumps({"key": "value"})
+        result = json_dumps({"key": "value"})
         assert json.loads(result) == {"key": "value"}
 
     def test_json_dumps_datetime(self) -> None:
         """Test that datetimes are serialized via default=str."""
         dt = datetime(2024, 1, 15, 12, 30, 0)
-        result = _json_dumps({"when": dt})
+        result = json_dumps({"when": dt})
         parsed = json.loads(result)
         assert "2024-01-15" in parsed["when"]
 
     def test_json_dumps_list(self) -> None:
         """Test serializing a list."""
-        result = _json_dumps(["a", "b", "c"])
+        result = json_dumps(["a", "b", "c"])
         assert json.loads(result) == ["a", "b", "c"]
 
     def test_json_loads_valid(self) -> None:
         """Test parsing valid JSON."""
-        result = _json_loads('["a", "b"]')
+        result = json_loads('["a", "b"]')
         assert result == ["a", "b"]
 
     def test_json_loads_none(self) -> None:
         """Test that None input returns empty list."""
-        result = _json_loads(None)
+        result = json_loads(None)
         assert result == []
 
     def test_json_loads_empty_string(self) -> None:
         """Test that empty string returns empty list."""
-        result = _json_loads("")
+        result = json_loads("")
         assert result == []
 
     def test_json_loads_object(self) -> None:
         """Test parsing a JSON object."""
-        result = _json_loads('{"k": 1}')
+        result = json_loads('{"k": 1}')
         assert result == {"k": 1}
 
 

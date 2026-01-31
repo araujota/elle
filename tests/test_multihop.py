@@ -12,7 +12,6 @@ from elle.daemon.incidents.models import (
 )
 from elle.daemon.incidents.multihop import (
     MultiHopSearch,
-    _parse_datetime,
     keyword_rerank,
     temporal_rerank,
 )
@@ -20,6 +19,7 @@ from elle.daemon.incidents.narrative import (
     MultiHopConfig,
     MultiHopResult,
 )
+from elle.storage.helpers import parse_datetime
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -59,19 +59,19 @@ def _make_search_result(
 
 
 # ===========================================================================
-# _parse_datetime
+# parse_datetime
 # ===========================================================================
 
 
 class TestParseDateTime:
     def test_parses_iso_format(self):
-        result = _parse_datetime("2024-01-15T10:30:00")
+        result = parse_datetime("2024-01-15T10:30:00")
         assert result.year == 2024
         assert result.month == 1
         assert result.day == 15
 
     def test_parses_iso_with_microseconds(self):
-        result = _parse_datetime("2024-06-01T12:00:00.123456")
+        result = parse_datetime("2024-06-01T12:00:00.123456")
         assert result.microsecond == 123456
 
 

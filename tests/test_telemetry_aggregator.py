@@ -13,8 +13,6 @@ import pytest
 
 from elle.daemon.telemetry.aggregator import (
     TrendAggregator,
-    _parse_datetime,
-    _serialize_datetime,
     cleanup_old_samples,
     collect_system_metrics,
     ensure_aggregation_schema,
@@ -24,6 +22,7 @@ from elle.daemon.telemetry.aggregator import (
     record_metrics_batch,
 )
 from elle.daemon.telemetry.trends import TrendConfig, TrendWindow
+from elle.storage.helpers import parse_datetime, serialize_datetime
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -64,7 +63,7 @@ def _insert_sample(conn, metric, value, ts=None):
         ts = datetime.utcnow()
     conn.execute(
         "INSERT INTO metric_samples (metric, value, ts) VALUES (%s, %s, %s)",
-        (metric, value, _serialize_datetime(ts)),
+        (metric, value, serialize_datetime(ts)),
     )
     conn.commit()
 
@@ -76,7 +75,7 @@ def _insert_baseline(conn, metric, mean, stddev, samples):
         "VALUES (%s, %s, %s, %s, %s) "
         "ON CONFLICT (metric) DO UPDATE SET baseline_mean=EXCLUDED.baseline_mean, "
         "baseline_stddev=EXCLUDED.baseline_stddev, samples=EXCLUDED.samples, updated_at=EXCLUDED.updated_at",
-        (metric, mean, stddev, samples, _serialize_datetime(datetime.utcnow())),
+        (metric, mean, stddev, samples, serialize_datetime(datetime.utcnow())),
     )
     conn.commit()
 
@@ -89,13 +88,13 @@ def _insert_baseline(conn, metric, mean, stddev, samples):
 class TestDatetimeHelpers:
     def test_serialize_datetime(self):
         dt = datetime(2025, 6, 15, 12, 30, 0)
-        result = _serialize_datetime(dt)
+        result = serialize_datetime(dt)
         assert "2025-06-15" in result
 
     def test_parse_datetime_roundtrip(self):
         dt = datetime(2025, 6, 15, 12, 30, 0)
-        serialized = _serialize_datetime(dt)
-        parsed = _parse_datetime(serialized)
+        serialized = serialize_datetime(dt)
+        parsed = parse_datetime(serialized)
         assert parsed == dt
 
 
@@ -647,7 +646,7 @@ class TestGetMetricTrend:
         db.execute(
             "INSERT INTO metric_aggregations (metric, window, avg_value, min_value, max_value, sample_count, computed_at) "
             "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-            ("mem.used_pct", "1h", 68.0, 65.0, 70.0, 12, _serialize_datetime(now)),
+            ("mem.used_pct", "1h", 68.0, 65.0, 70.0, 12, serialize_datetime(now)),
         )
         db.commit()
 

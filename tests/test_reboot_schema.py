@@ -4,12 +4,8 @@ import psycopg.errors
 import pytest
 
 from elle.daemon.reboot.schema import (
-    SCHEMA_VERSION,
     drop_all_tables,
     ensure_schema,
-    get_schema_version,
-    init_reboot_schema,
-    needs_migration,
 )
 
 
@@ -24,7 +20,7 @@ class TestSchemaInitialization:
 
     def test_init_schema_creates_tables(self, conn):
         """Test that init creates all required tables."""
-        init_reboot_schema(conn)
+        ensure_schema(conn)
 
         cursor = conn.cursor()
 
@@ -42,7 +38,7 @@ class TestSchemaInitialization:
 
     def test_init_schema_creates_indexes(self, conn):
         """Test that init creates indexes."""
-        init_reboot_schema(conn)
+        ensure_schema(conn)
 
         cursor = conn.cursor()
         cursor.execute(
@@ -55,45 +51,16 @@ class TestSchemaInitialization:
         assert "idx_intents_boot_id" in indexes
         assert "idx_verifications_intent" in indexes
 
-    def test_init_schema_sets_version(self, conn):
-        """Test that init sets schema version."""
-        init_reboot_schema(conn)
-
-        version = get_schema_version(conn)
-        assert version == SCHEMA_VERSION
-
     def test_init_schema_idempotent(self, conn):
         """Test that init can be called multiple times safely."""
-        init_reboot_schema(conn)
-        init_reboot_schema(conn)
-        init_reboot_schema(conn)
+        ensure_schema(conn)
+        ensure_schema(conn)
+        ensure_schema(conn)
 
-        version = get_schema_version(conn)
-        assert version == SCHEMA_VERSION
-
-
-class TestSchemaVersion:
-    """Tests for schema version management."""
-
-    def test_get_version_before_init(self, conn):
-        """Test getting version before schema is initialized."""
-        version = get_schema_version(conn)
-        assert version is None
-
-    def test_get_version_after_init(self, conn):
-        """Test getting version after initialization."""
-        init_reboot_schema(conn)
-        version = get_schema_version(conn)
-        assert version == SCHEMA_VERSION
-
-    def test_needs_migration_before_init(self, conn):
-        """Test needs_migration before initialization."""
-        assert needs_migration(conn) is True
-
-    def test_needs_migration_after_init(self, conn):
-        """Test needs_migration after initialization."""
-        init_reboot_schema(conn)
-        assert needs_migration(conn) is False
+        # Verify tables still exist after multiple calls
+        cursor = conn.cursor()
+        cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_name='reboot_intents'")
+        assert cursor.fetchone() is not None
 
 
 class TestEnsureSchema:
@@ -103,8 +70,10 @@ class TestEnsureSchema:
         """Test that ensure_schema initializes if needed."""
         ensure_schema(conn)
 
-        version = get_schema_version(conn)
-        assert version == SCHEMA_VERSION
+        # Verify tables were created
+        cursor = conn.cursor()
+        cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_name='reboot_intents'")
+        assert cursor.fetchone() is not None
 
     def test_ensure_schema_idempotent(self, conn):
         """Test that ensure_schema is idempotent."""
@@ -112,8 +81,10 @@ class TestEnsureSchema:
         ensure_schema(conn)
         ensure_schema(conn)
 
-        version = get_schema_version(conn)
-        assert version == SCHEMA_VERSION
+        # Verify tables still exist after multiple calls
+        cursor = conn.cursor()
+        cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_name='reboot_intents'")
+        assert cursor.fetchone() is not None
 
 
 class TestDropAllTables:
@@ -121,7 +92,7 @@ class TestDropAllTables:
 
     def test_drop_tables(self, conn):
         """Test dropping all tables."""
-        init_reboot_schema(conn)
+        ensure_schema(conn)
 
         # Verify tables exist
         cursor = conn.cursor()
@@ -149,7 +120,7 @@ class TestTableStructure:
 
     def test_intents_columns(self, conn):
         """Test reboot_intents table has expected columns."""
-        init_reboot_schema(conn)
+        ensure_schema(conn)
 
         cursor = conn.cursor()
         cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name='reboot_intents'")
@@ -183,7 +154,7 @@ class TestTableStructure:
 
     def test_verifications_columns(self, conn):
         """Test pending_verifications table has expected columns."""
-        init_reboot_schema(conn)
+        ensure_schema(conn)
 
         cursor = conn.cursor()
         cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name='pending_verifications'")
@@ -208,7 +179,7 @@ class TestTableStructure:
 
     def test_foreign_key_constraint(self, conn):
         """Test that foreign key constraint is enforced."""
-        init_reboot_schema(conn)
+        ensure_schema(conn)
 
         cursor = conn.cursor()
 
@@ -229,7 +200,7 @@ class TestStatusConstraints:
 
     def test_valid_status_values(self, conn):
         """Test that valid status values are accepted."""
-        init_reboot_schema(conn)
+        ensure_schema(conn)
 
         cursor = conn.cursor()
         valid_statuses = ["pending", "rebooting", "verifying", "completed", "failed", "rolled_back", "cancelled"]
@@ -246,7 +217,7 @@ class TestStatusConstraints:
 
     def test_invalid_status_rejected(self, conn):
         """Test that invalid status values are rejected."""
-        init_reboot_schema(conn)
+        ensure_schema(conn)
 
         cursor = conn.cursor()
 
@@ -261,7 +232,7 @@ class TestStatusConstraints:
 
     def test_valid_outcome_values(self, conn):
         """Test that valid outcome values are accepted."""
-        init_reboot_schema(conn)
+        ensure_schema(conn)
 
         cursor = conn.cursor()
         valid_outcomes = ["improved", "failed", "rolled_back", "unknown"]
@@ -278,7 +249,7 @@ class TestStatusConstraints:
 
     def test_valid_check_type_values(self, conn):
         """Test that valid check_type values are accepted."""
-        init_reboot_schema(conn)
+        ensure_schema(conn)
 
         cursor = conn.cursor()
 
@@ -309,7 +280,7 @@ class TestCascadeDelete:
 
     def test_deleting_intent_deletes_verifications(self, conn):
         """Test that deleting an intent cascades to verifications."""
-        init_reboot_schema(conn)
+        ensure_schema(conn)
 
         cursor = conn.cursor()
 
