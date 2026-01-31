@@ -268,7 +268,9 @@ class TestTriggers:
         )
 
         # Check tsvector full-text search
-        result = conn.execute("SELECT id FROM incidents WHERE search_tsv @@ plainto_tsquery('english', 'Test')").fetchone()
+        result = conn.execute(
+            "SELECT id FROM incidents WHERE search_tsv @@ plainto_tsquery('english', 'Test')"
+        ).fetchone()
         assert result is not None
 
     def test_fts_trigger_on_delete(self, conn):

@@ -31,6 +31,7 @@ def euclidean_distance(a: list[float], b: list[float]) -> float:
         raise ValueError("Vectors must have the same length")
     return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b, strict=True)))
 
+
 # ---------------------------------------------------------------------------
 # cosine_similarity
 # ---------------------------------------------------------------------------

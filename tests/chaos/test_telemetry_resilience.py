@@ -39,7 +39,8 @@ class TestSocketDisconnect:
 
         with fault.socket_disconnect():
             watcher = TelemetrydWatcher(
-                event_queue=MagicMock(), shutdown=asyncio.Event(),
+                event_queue=MagicMock(),
+                shutdown=asyncio.Event(),
             )
             assert not watcher.connected
             # Watcher should have reconnect logic, not crash

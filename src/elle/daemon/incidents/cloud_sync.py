@@ -42,7 +42,6 @@ except ImportError:
     HTTPX_AVAILABLE = False
 
 
-
 class CloudIncidentMatch(BaseModel):
     """A matching incident from the cloud knowledge base."""
 
