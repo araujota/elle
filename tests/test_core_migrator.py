@@ -447,7 +447,7 @@ class TestCoreCapabilityMigrator:
         @contextmanager
         def bad_connection():
             raise Exception("db connection error")
-            yield  # noqa: unreachable (required for generator syntax)
+            yield  # noqa: F401 - unreachable but required for generator syntax
 
         mock_store._get_connection = bad_connection
 
