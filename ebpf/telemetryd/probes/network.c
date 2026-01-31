@@ -91,7 +91,7 @@ static struct iface_errors *get_or_create_prev(struct network_probe_ctx *ctx, co
         return NULL;
 
     prev = &ctx->prev[ctx->num_prev++];
-    strncpy(prev->name, name, sizeof(prev->name) - 1);
+    snprintf(prev->name, sizeof(prev->name), "%s", name);
     prev->rx_errors = 0;
     prev->tx_errors = 0;
     return prev;
@@ -106,7 +106,7 @@ int network_probe_run(struct normalizer *norm, struct telem_socket *sock, void *
     struct network_probe_ctx *ctx = (struct network_probe_ctx *)ctx_ptr;
     DIR *net_dir;
     struct dirent *entry;
-    char path[256];
+    char path[512];
 
     net_dir = opendir("/sys/class/net");
     if (!net_dir)
@@ -154,8 +154,8 @@ int network_probe_run(struct normalizer *norm, struct telem_socket *sock, void *
         /* Check for link down */
         if (strcmp(operstate, "down") == 0) {
             struct telem_event evt;
-            char message[256];
-            char entity[128];
+            char message[512];
+            char entity[280];
             char *json_str;
             bool emit;
 
@@ -188,8 +188,8 @@ int network_probe_run(struct normalizer *norm, struct telem_socket *sock, void *
 
             if (new_errors > ctx->error_threshold) {
                 struct telem_event evt;
-                char message[256];
-                char entity[128];
+                char message[512];
+                char entity[280];
                 char *json_str;
                 bool emit;
 
@@ -219,8 +219,8 @@ int network_probe_run(struct normalizer *norm, struct telem_socket *sock, void *
             /* Check for dropped packets */
             if (prev && (rx_dropped > prev->rx_dropped || tx_dropped > prev->tx_dropped)) {
                 struct telem_event drop_evt;
-                char drop_msg[256];
-                char drop_entity[128];
+                char drop_msg[512];
+                char drop_entity[280];
                 char *drop_json;
                 bool drop_emit;
 

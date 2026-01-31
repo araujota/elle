@@ -214,6 +214,7 @@ static int emit_event(struct gpud_collector *collector, struct gpud_client *clie
 {
     struct gpud_event evt;
     char *json;
+    (void)collector;
 
     memset(&evt, 0, sizeof(evt));
     evt.ts_ns = gpud_get_timestamp_ns();
