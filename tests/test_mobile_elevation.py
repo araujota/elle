@@ -1,8 +1,8 @@
 """Tests for ELLE Mobile Gateway elevation management."""
 
-import tempfile
+from contextlib import contextmanager
 from datetime import datetime
-from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -13,26 +13,15 @@ from elle.mobile.elevation import (
     format_ttl,
     parse_ttl,
 )
-from elle.mobile.models import DeviceStatus, MobileRole, PairedDevice
+from elle.mobile.models import DeviceStatus, Elevation, MobileRole, PairedDevice
 from elle.mobile.store import MobileStore
 
 
 @pytest.fixture
-def temp_db():
-    """Create a temporary database for testing."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = Path(tmpdir) / "mobile.db"
-        yield db_path
-
-
-@pytest.fixture
-def config(temp_db):
+def config():
     """Create test configuration."""
     return MobileGatewayConfig(
         enabled=True,
-        db_path=temp_db,
-        audit_db_path=temp_db.parent / "mobile_audit.db",
-        cert_dir=temp_db.parent / "certs",
         default_elevation_ttl_seconds=600,
         max_elevation_ttl_seconds=3600,
     )
@@ -40,8 +29,45 @@ def config(temp_db):
 
 @pytest.fixture
 def store(config):
-    """Create test store."""
-    return MobileStore(config)
+    """Create test store with in-memory mock backend."""
+    s = MagicMock(spec=MobileStore)
+    s.config = config
+    s._devices = {}
+    s._elevations = {}
+
+    def _create_device(device):
+        s._devices[device.device_id] = device
+        return device
+
+    def _get_device(device_id):
+        return s._devices.get(device_id)
+
+    def _create_elevation(elevation):
+        s._elevations[elevation.device_id] = elevation
+
+    def _get_active_elevation(device_id):
+        elev = s._elevations.get(device_id)
+        if elev and elev.is_active():
+            return elev
+        return None
+
+    def _revoke_elevation(device_id):
+        if device_id in s._elevations:
+            del s._elevations[device_id]
+            return True
+        return False
+
+    def _list_active_elevations():
+        return [e for e in s._elevations.values() if e.is_active()]
+
+    s.create_device = MagicMock(side_effect=_create_device)
+    s.get_device = MagicMock(side_effect=_get_device)
+    s.create_elevation = MagicMock(side_effect=_create_elevation)
+    s.get_active_elevation = MagicMock(side_effect=_get_active_elevation)
+    s.revoke_elevation = MagicMock(side_effect=_revoke_elevation)
+    s.list_active_elevations = MagicMock(side_effect=_list_active_elevations)
+
+    return s
 
 
 @pytest.fixture

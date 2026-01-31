@@ -1,8 +1,6 @@
 """Tests for the dependency fallback system."""
 
-import tempfile
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 
@@ -61,18 +59,21 @@ def test_dependency():
 
 
 @pytest.fixture
-def temp_db_path():
-    """Create a temporary database path."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        yield Path(tmpdir) / "test_deps.db"
+def store(pg_conn):
+    """Create a store backed by the test PostgreSQL database."""
+    from contextlib import contextmanager
+    from unittest.mock import patch
 
+    pg_conn.execute("SET search_path TO deps, public")
 
-@pytest.fixture
-def store(temp_db_path):
-    """Create a store with temporary database."""
-    s = DependencyPreferenceStore(db_path=temp_db_path)
-    yield s
-    s.close()
+    @contextmanager
+    def fake_get_conn(schema=None):
+        yield pg_conn
+
+    with patch("elle.capabilities.dependencies.store.get_conn", fake_get_conn):
+        s = DependencyPreferenceStore()
+        yield s
+        s.close()
 
 
 # =============================================================================

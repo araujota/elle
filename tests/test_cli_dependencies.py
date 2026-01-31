@@ -316,32 +316,31 @@ class TestDatabaseChecker:
     def test_name(self):
         from elle.cli.dependencies import DatabaseChecker
 
-        checker = DatabaseChecker(db_path="/tmp/test.db", db_name="test")
+        checker = DatabaseChecker(schema="test_schema", db_name="test")
         assert checker.name == "database_test"
 
     def test_fallback_message(self):
         from elle.cli.dependencies import DatabaseChecker
 
-        checker = DatabaseChecker(db_path="/tmp/test.db", db_name="mydb")
+        checker = DatabaseChecker(schema="test_schema", db_name="mydb")
         assert "mydb" in checker.fallback_message
 
     @pytest.mark.asyncio
-    async def test_check_file_not_exists(self, tmp_path):
+    async def test_check_connection_failure(self):
         from elle.cli.dependencies import DatabaseChecker
 
-        checker = DatabaseChecker(db_path=tmp_path / "nonexistent.db", db_name="test")
+        checker = DatabaseChecker(schema="nonexistent_schema", db_name="test")
         result = await checker.check()
         assert result.available is False
-        assert "does not exist" in result.message
 
     @pytest.mark.asyncio
-    async def test_check_path_is_directory(self, tmp_path):
+    async def test_check_connection_failure_has_message(self):
         from elle.cli.dependencies import DatabaseChecker
 
-        checker = DatabaseChecker(db_path=tmp_path, db_name="test")
+        checker = DatabaseChecker(schema="nonexistent_schema", db_name="test")
         result = await checker.check()
         assert result.available is False
-        assert "not a file" in result.message
+        assert result.message  # has an error message
 
     @pytest.mark.asyncio
     async def test_check_valid_database(self, deps_conn):

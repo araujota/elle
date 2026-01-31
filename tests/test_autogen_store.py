@@ -256,22 +256,22 @@ class TestAutogenStore:
 class TestGetStore:
     """Tests for get_store function."""
 
-    def test_get_store_singleton(self, tmp_path):
+    def test_get_store_singleton(self):
         """Test store singleton behavior."""
         reset_store()
 
-        store1 = get_store(tmp_path / "autogen.db")
-        store2 = get_store(tmp_path / "autogen.db")
+        store1 = get_store()
+        store2 = get_store()
 
         assert store1 is store2
 
         reset_store()
 
-    def test_reset_store(self, tmp_path):
+    def test_reset_store(self):
         """Test store reset."""
         reset_store()
-        store1 = get_store(tmp_path / "autogen.db")
+        store1 = get_store()
         reset_store()
-        store2 = get_store(tmp_path / "autogen.db")
+        store2 = get_store()
 
         assert store1 is not store2

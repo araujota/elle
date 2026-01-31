@@ -205,14 +205,14 @@ class TestJsonHelpers:
         assert result == ["a", "b"]
 
     def test_json_loads_none(self) -> None:
-        """Test that None input returns empty list."""
+        """Test that None input returns empty dict."""
         result = json_loads(None)
-        assert result == []
+        assert result == {}
 
     def test_json_loads_empty_string(self) -> None:
-        """Test that empty string returns empty list."""
+        """Test that empty string returns empty dict."""
         result = json_loads("")
-        assert result == []
+        assert result == {}
 
     def test_json_loads_object(self) -> None:
         """Test parsing a JSON object."""

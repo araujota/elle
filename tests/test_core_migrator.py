@@ -627,11 +627,11 @@ class TestVerifyMigration:
         mock_cursor = MagicMock()
         mock_cursor.fetchall.return_value = []
         mock_conn.execute.return_value = mock_cursor
-        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-        mock_conn.__exit__ = MagicMock(return_value=False)
-        mock_store._get_connection.return_value = mock_conn
 
-        result = verify_migration(mock_store)
+        with patch("elle.capabilities.autogen.core_migrator.get_conn") as mock_get_conn:
+            mock_get_conn.return_value.__enter__.return_value = mock_conn
+            mock_get_conn.return_value.__exit__.return_value = False
+            result = verify_migration(mock_store)
         assert result["total_core"] == 0
         assert result["verified"] == []
 
@@ -642,12 +642,12 @@ class TestVerifyMigration:
         mock_cursor = MagicMock()
         mock_cursor.fetchall.return_value = [mock_row]
         mock_conn.execute.return_value = mock_cursor
-        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-        mock_conn.__exit__ = MagicMock(return_value=False)
-        mock_store._get_connection.return_value = mock_conn
         mock_store.get.return_value = None
 
-        result = verify_migration(mock_store)
+        with patch("elle.capabilities.autogen.core_migrator.get_conn") as mock_get_conn:
+            mock_get_conn.return_value.__enter__.return_value = mock_conn
+            mock_get_conn.return_value.__exit__.return_value = False
+            result = verify_migration(mock_store)
         assert len(result["failed"]) == 1
         assert result["failed"][0]["error"] == "Not found in store"
 
@@ -658,9 +658,6 @@ class TestVerifyMigration:
         mock_cursor = MagicMock()
         mock_cursor.fetchall.return_value = [mock_row]
         mock_conn.execute.return_value = mock_cursor
-        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-        mock_conn.__exit__ = MagicMock(return_value=False)
-        mock_store._get_connection.return_value = mock_conn
 
         mock_stored = MagicMock()
         mock_stored.man_page_hash = "hash"
@@ -669,15 +666,18 @@ class TestVerifyMigration:
         mock_loader_module = MagicMock()
         mock_loader_module.load_capability_from_stored.return_value = None
 
-        with patch.dict(
-            "sys.modules",
-            {
-                "elle.capabilities.autogen.loader": mock_loader_module,
-            },
-        ):
-            result = verify_migration(mock_store)
-            assert len(result["failed"]) == 1
-            assert result["failed"][0]["error"] == "Failed to compile"
+        with patch("elle.capabilities.autogen.core_migrator.get_conn") as mock_get_conn:
+            mock_get_conn.return_value.__enter__.return_value = mock_conn
+            mock_get_conn.return_value.__exit__.return_value = False
+            with patch.dict(
+                "sys.modules",
+                {
+                    "elle.capabilities.autogen.loader": mock_loader_module,
+                },
+            ):
+                result = verify_migration(mock_store)
+                assert len(result["failed"]) == 1
+                assert result["failed"][0]["error"] == "Failed to compile"
 
 
 # =========================================================================

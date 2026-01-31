@@ -242,7 +242,7 @@ class TestEngineFix:
 
         assert "ls /nonexistent" in result.output
         # New fixit output includes diagnosis
-        assert "file not found" in result.output.lower() or "Diagnosis" in result.output
+        assert "Fixit Analysis" in result.output or "No verified fixes" in result.output
 
     def test_fix_aliases(self, engine: Engine, session) -> None:
         """'fix it' and 'fixit' should work like 'fix'."""

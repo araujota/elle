@@ -92,7 +92,9 @@ class TestDatetimeHelpers:
         assert "2025-06-15" in result
 
     def test_parse_datetime_roundtrip(self):
-        dt = datetime(2025, 6, 15, 12, 30, 0)
+        from datetime import timezone
+
+        dt = datetime(2025, 6, 15, 12, 30, 0, tzinfo=timezone.utc)
         serialized = serialize_datetime(dt)
         parsed = parse_datetime(serialized)
         assert parsed == dt

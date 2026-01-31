@@ -20,32 +20,32 @@ class TestInitAllSchemas:
     """Tests for init_all_schemas function."""
 
     @patch("elle.common.db.get_conn")
-    @patch("elle.common.db.run_migrations")
-    @patch("elle.common.db._import_schema_modules")
+    @patch("elle.storage.migrate.run_migrations")
+    @patch("elle.storage.provision._import_schema_modules")
     def test_calls_import_schema_modules(self, mock_import, mock_migrate, mock_conn):
         from elle.common.db import init_all_schemas
 
-        mock_conn.return_value.__enter__ = MagicMock()
-        mock_conn.return_value.__exit__ = MagicMock(return_value=False)
+        mock_conn.return_value.__enter__.return_value = MagicMock()
+        mock_conn.return_value.__exit__.return_value = False
         init_all_schemas()
         mock_import.assert_called_once()
 
     @patch("elle.common.db.get_conn")
-    @patch("elle.common.db.run_migrations")
-    @patch("elle.common.db._import_schema_modules")
+    @patch("elle.storage.migrate.run_migrations")
+    @patch("elle.storage.provision._import_schema_modules")
     def test_iterates_all_schemas(self, mock_import, mock_migrate, mock_conn):
         from elle.common.db import init_all_schemas
         from elle.storage.config import SCHEMAS
 
-        mock_conn.return_value.__enter__ = MagicMock()
-        mock_conn.return_value.__exit__ = MagicMock(return_value=False)
+        mock_conn.return_value.__enter__.return_value = MagicMock()
+        mock_conn.return_value.__exit__.return_value = False
         init_all_schemas()
         # Should call get_conn for each schema
         assert mock_conn.call_count == len(SCHEMAS)
 
     @patch("elle.common.db.get_conn")
-    @patch("elle.common.db.run_migrations")
-    @patch("elle.common.db._import_schema_modules")
+    @patch("elle.storage.migrate.run_migrations")
+    @patch("elle.storage.provision._import_schema_modules")
     def test_logs_error_on_failure(self, mock_import, mock_migrate, mock_conn):
         from elle.common.db import init_all_schemas
 

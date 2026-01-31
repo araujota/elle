@@ -124,23 +124,21 @@ class TestRunFullPipeline:
     """Tests for the full pipeline."""
 
     def test_pipeline_with_fallback(self, session_with_failure):
-        """Test pipeline uses fallback when LLM unavailable."""
+        """Test pipeline when LLM unavailable returns graceful result."""
         service = FixitService(
             use_man_vault=False,
             use_incident_vault=False,
-            use_llm=False,  # Force fallback
+            use_llm=False,  # No LLM
         )
 
         result = service.run_full_pipeline(session_with_failure)
 
-        # Should use fallback
-        assert result.used_fallback is True
-        assert result.analysis is not None
-        # Fallback should detect permission denied
-        assert result.analysis.diagnosis.error_category == "permission_denied"
+        # Without LLM, analysis is None and outcome is SKIPPED
+        assert result.analysis is None
+        assert result.outcome == FixitOutcome.SKIPPED
 
     def test_pipeline_verifies_suggestions(self, session_with_failure):
-        """Test pipeline verifies suggestions."""
+        """Test pipeline without LLM has no suggestions to verify."""
         service = FixitService(
             use_man_vault=False,
             use_incident_vault=False,
@@ -149,11 +147,9 @@ class TestRunFullPipeline:
 
         result = service.run_full_pipeline(session_with_failure)
 
-        # Should have verified suggestions
-        assert result.analysis is not None
-        # Suggestions should be verified
-        for verified in result.verified_suggestions:
-            assert verified.verification is not None
+        # Without LLM, no analysis means no suggestions
+        assert result.analysis is None
+        assert result.verified_suggestions == ()
 
     def test_pipeline_outcome_default(self, session_with_failure):
         """Test default outcome is SKIPPED."""
@@ -196,7 +192,7 @@ class TestFallbackAnalysis:
     """Tests for fallback analysis via service."""
 
     def test_command_not_found(self):
-        """Test command not found detection."""
+        """Test command not found without LLM gives no analysis."""
         session = Session(
             cwd=Path("/home/user"),
             last_cmd="foobar123",
@@ -212,11 +208,11 @@ class TestFallbackAnalysis:
 
         result = service.run_full_pipeline(session)
 
-        assert result.analysis is not None
-        assert result.analysis.diagnosis.error_category == "command_not_found"
+        assert result.analysis is None
+        assert result.outcome == FixitOutcome.SKIPPED
 
     def test_file_not_found(self):
-        """Test file not found detection."""
+        """Test file not found without LLM gives no analysis."""
         session = Session(
             cwd=Path("/home/user"),
             last_cmd="cat /nonexistent",
@@ -232,11 +228,11 @@ class TestFallbackAnalysis:
 
         result = service.run_full_pipeline(session)
 
-        assert result.analysis is not None
-        assert result.analysis.diagnosis.error_category == "file_not_found"
+        assert result.analysis is None
+        assert result.outcome == FixitOutcome.SKIPPED
 
     def test_network_error(self):
-        """Test network error detection."""
+        """Test network error without LLM gives no analysis."""
         session = Session(
             cwd=Path("/home/user"),
             last_cmd="curl http://192.0.2.1",
@@ -252,8 +248,8 @@ class TestFallbackAnalysis:
 
         result = service.run_full_pipeline(session)
 
-        assert result.analysis is not None
-        assert result.analysis.diagnosis.error_category == "network_error"
+        assert result.analysis is None
+        assert result.outcome == FixitOutcome.SKIPPED
 
 
 class TestExecuteFix:

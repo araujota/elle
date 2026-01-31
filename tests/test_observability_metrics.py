@@ -589,23 +589,23 @@ class TestGetIncidentStatistics:
         mock_conn.cursor.return_value = mock_cursor
 
         # Set up cursor.execute / fetchone / fetchall responses
+        # Source accesses rows by column name (dict keys), not position
         mock_cursor.fetchone.side_effect = [
-            (42,),  # total incidents
-            (3,),  # open incidents
-            (250.0,),  # MTTR overall
+            {"cnt": 42},  # total incidents
+            {"cnt": 3},  # open incidents
+            {"avg_ttr": 250.0},  # MTTR overall
         ]
         mock_cursor.fetchall.side_effect = [
-            [("net", 20), ("disk", 22)],  # by domain
-            [("improved", 30), ("no_change", 12)],  # by outcome
-            [("net", 120.0), ("disk", 300.5)],  # MTTR by domain
+            [{"domain": "net", "cnt": 20}, {"domain": "disk", "cnt": 22}],  # by domain
+            [{"outcome": "improved", "cnt": 30}, {"outcome": "no_change", "cnt": 12}],  # by outcome
+            [{"domain": "net", "avg_ttr": 120.0}, {"domain": "disk", "avg_ttr": 300.5}],  # MTTR by domain
         ]
 
-        # The function does `from elle.daemon.incidents.schema import get_connection`
+        # The function does `from elle.storage.engine import get_conn`
         # inside the try block, so we patch at the source module.
-        with patch(
-            "elle.daemon.incidents.schema.get_connection",
-            return_value=mock_conn,
-        ):
+        with patch("elle.storage.engine.get_conn") as mock_get:
+            mock_get.return_value.__enter__.return_value = mock_conn
+            mock_get.return_value.__exit__.return_value = False
             stats = await _get_incident_statistics()
 
         assert stats["total_incidents"] == 42
@@ -621,7 +621,7 @@ class TestGetIncidentStatistics:
         from elle.daemon.observability.metrics import _get_incident_statistics
 
         with patch(
-            "elle.daemon.incidents.schema.get_connection",
+            "elle.storage.engine.get_conn",
             side_effect=RuntimeError("DB missing"),
         ):
             stats = await _get_incident_statistics()
@@ -644,18 +644,17 @@ class TestGetEventStatistics:
         mock_conn.cursor.return_value = mock_cursor
 
         mock_cursor.fetchone.side_effect = [
-            (75,),  # events 1h
-            (1800,),  # events 24h
+            {"cnt": 75},  # events 1h
+            {"cnt": 1800},  # events 24h
         ]
         mock_cursor.fetchall.side_effect = [
-            [("error", 5), ("warning", 20)],  # by severity
-            [("journal", 50), ("kernel", 25)],  # by source
+            [{"severity": "error", "cnt": 5}, {"severity": "warning", "cnt": 20}],  # by severity
+            [{"source": "journal", "cnt": 50}, {"source": "kernel", "cnt": 25}],  # by source
         ]
 
-        with patch(
-            "elle.daemon.telemetry.schema.get_connection",
-            return_value=mock_conn,
-        ):
+        with patch("elle.storage.engine.get_conn") as mock_get:
+            mock_get.return_value.__enter__.return_value = mock_conn
+            mock_get.return_value.__exit__.return_value = False
             stats = await _get_event_statistics()
 
         assert stats["total_events_1h"] == 75
@@ -669,7 +668,7 @@ class TestGetEventStatistics:
         from elle.daemon.observability.metrics import _get_event_statistics
 
         with patch(
-            "elle.daemon.telemetry.schema.get_connection",
+            "elle.storage.engine.get_conn",
             side_effect=RuntimeError("DB missing"),
         ):
             stats = await _get_event_statistics()

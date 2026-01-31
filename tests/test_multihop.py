@@ -524,11 +524,8 @@ class TestTemporalRerank:
 
 
 class TestMultiHopSearchIntegration:
-    @patch("elle.daemon.incidents.multihop.get_conn")
-    @patch("elle.daemon.incidents.multihop.ensure_schema")
     @patch("elle.daemon.incidents.multihop.incident_search")
-    def test_search_basic_no_results(self, mock_search, mock_schema, mock_conn):
-        mock_conn.return_value = MagicMock()
+    def test_search_basic_no_results(self, mock_search):
         mock_search.return_value = []
 
         search = MultiHopSearch(config=MultiHopConfig(max_iterations=1))
@@ -537,13 +534,9 @@ class TestMultiHopSearchIntegration:
         assert isinstance(result, MultiHopResult)
         assert result.initial_query == "test query"
         assert result.total_iterations >= 0
-        mock_conn.return_value.close.assert_called_once()
 
-    @patch("elle.daemon.incidents.multihop.get_conn")
-    @patch("elle.daemon.incidents.multihop.ensure_schema")
     @patch("elle.daemon.incidents.multihop.incident_search")
-    def test_search_with_initial_event(self, mock_search, mock_schema, mock_conn):
-        mock_conn.return_value = MagicMock()
+    def test_search_with_initial_event(self, mock_search):
         mock_search.return_value = []
 
         search = MultiHopSearch(config=MultiHopConfig(max_iterations=1))
@@ -553,11 +546,8 @@ class TestMultiHopSearchIntegration:
         assert result.initial_event_id == "evt-1"
         assert result.total_events_examined >= 1  # the initial event
 
-    @patch("elle.daemon.incidents.multihop.get_conn")
-    @patch("elle.daemon.incidents.multihop.ensure_schema")
     @patch("elle.daemon.incidents.multihop.incident_search")
-    def test_search_stops_on_no_high_relevance(self, mock_search, mock_schema, mock_conn):
-        mock_conn.return_value = MagicMock()
+    def test_search_stops_on_no_high_relevance(self, mock_search):
         # Return low-score results
         inc = _make_incident()
         mock_search.return_value = [_make_search_result(incident=inc, score=0.1)]
@@ -568,25 +558,17 @@ class TestMultiHopSearchIntegration:
         # Should stop before reaching max_iterations
         assert result.total_iterations <= 5
 
-    @patch("elle.daemon.incidents.multihop.get_conn")
-    @patch("elle.daemon.incidents.multihop.ensure_schema")
     @patch("elle.daemon.incidents.multihop.incident_search")
-    def test_search_uses_provided_conn(self, mock_search, mock_schema, mock_conn):
-        provided_conn = MagicMock()
+    def test_search_returns_result(self, mock_search):
         mock_search.return_value = []
 
         search = MultiHopSearch(config=MultiHopConfig(max_iterations=1))
-        search.search("test", conn=provided_conn)
+        result = search.search("test")
 
-        # Should NOT call get_connection or close
-        mock_conn.assert_not_called()
-        provided_conn.close.assert_not_called()
+        assert isinstance(result, MultiHopResult)
 
-    @patch("elle.daemon.incidents.multihop.get_conn")
-    @patch("elle.daemon.incidents.multihop.ensure_schema")
     @patch("elle.daemon.incidents.multihop.incident_search")
-    def test_search_with_high_relevance_results(self, mock_search, mock_schema, mock_conn):
-        mock_conn.return_value = MagicMock()
+    def test_search_with_high_relevance_results(self, mock_search):
         now = datetime.utcnow()
         inc = _make_incident(created_at=now, entities=("nginx",))
         mock_search.return_value = [_make_search_result(incident=inc, score=0.9)]
@@ -596,11 +578,8 @@ class TestMultiHopSearchIntegration:
 
         assert result.total_incidents_examined >= 1
 
-    @patch("elle.daemon.incidents.multihop.get_conn")
-    @patch("elle.daemon.incidents.multihop.ensure_schema")
     @patch("elle.daemon.incidents.multihop.incident_search")
-    def test_search_best_chain_selected(self, mock_search, mock_schema, mock_conn):
-        mock_conn.return_value = MagicMock()
+    def test_search_best_chain_selected(self, mock_search):
         now = datetime.utcnow()
         inc1 = _make_incident(incident_id="inc-1", created_at=now - timedelta(minutes=2), entities=("sda1",))
         inc2 = _make_incident(incident_id="inc-2", created_at=now, entities=("sda1",))
@@ -616,11 +595,8 @@ class TestMultiHopSearchIntegration:
             assert result.best_chain is not None
             assert result.best_chain.overall_confidence > 0
 
-    @patch("elle.daemon.incidents.multihop.get_conn")
-    @patch("elle.daemon.incidents.multihop.ensure_schema")
     @patch("elle.daemon.incidents.multihop.incident_search")
-    def test_search_exception_in_search_incidents(self, mock_search, mock_schema, mock_conn):
-        mock_conn.return_value = MagicMock()
+    def test_search_exception_in_search_incidents(self, mock_search):
         mock_search.side_effect = Exception("db error")
 
         search = MultiHopSearch(config=MultiHopConfig(max_iterations=1))
