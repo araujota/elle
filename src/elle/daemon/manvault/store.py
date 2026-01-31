@@ -617,7 +617,7 @@ def _get_embeddings_batch_impl(
 ) -> dict[int, list[float]]:
     placeholders = ",".join(["%s"] * len(chunk_ids))
     cursor = conn.execute(
-        f"SELECT chunk_id, embedding FROM embeddings WHERE chunk_id IN ({placeholders})",
+        f"SELECT chunk_id, embedding FROM embeddings WHERE chunk_id IN ({placeholders})",  # nosec B608
         chunk_ids,
     )
 

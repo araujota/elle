@@ -30,7 +30,8 @@ class CapabilityRegistry:
     Maintains a mapping of capability names to implementations,
     enabling runtime discovery and instantiation.
 
-    Usage:
+    Example::
+
         registry = CapabilityRegistry()
 
         # Register a capability

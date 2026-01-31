@@ -83,7 +83,7 @@ def detect_hardware() -> HardwareProfile:
     # Detect GPUs (nvidia-smi presence)
     gpu_count = 0
     try:
-        result = os.popen("nvidia-smi --query-gpu=count --format=csv,noheader 2>/dev/null")
+        result = os.popen("nvidia-smi --query-gpu=count --format=csv,noheader 2>/dev/null")  # nosec B605
         output = result.read().strip()
         result.close()
         if output:

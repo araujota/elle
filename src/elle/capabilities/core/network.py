@@ -850,7 +850,7 @@ class NetworkListenersCapability(BaseCapability[NetworkListenersInput, NetworkLi
                         continue
 
                     # Check if wildcard
-                    is_wildcard = address in ("0.0.0.0", "::")
+                    is_wildcard = address in ("0.0.0.0", "::")  # nosec B104
 
                     # Get PID and process name
                     inode = parts[9]

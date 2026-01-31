@@ -527,7 +527,7 @@ class NotifyAlertCapability(BaseCapability[NotifyAlertInput, NotifyAlertOutput])
             data = json.dumps(payload).encode("utf-8")
             req = urllib.request.Request(url, data=data, headers=headers)
 
-            with urllib.request.urlopen(req, timeout=10) as response:
+            with urllib.request.urlopen(req, timeout=10) as response:  # nosec B310
                 result = json.loads(response.read().decode("utf-8"))
                 msg_id = result.get("id")
                 return str(msg_id) if msg_id is not None else None

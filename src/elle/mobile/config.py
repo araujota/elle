@@ -35,7 +35,7 @@ class MobileGatewayConfig:
     """
 
     enabled: bool = False
-    bind_host: str = "0.0.0.0"
+    bind_host: str = "0.0.0.0"  # nosec B104
     bind_port: int = 8378
     overlay_host: str | None = None
     pairing_token_ttl_seconds: int = 90
@@ -81,7 +81,7 @@ def load_mobile_config(toml_data: dict[str, Any] | None = None) -> MobileGateway
 
     return MobileGatewayConfig(
         enabled=get_val("enabled", False),
-        bind_host=get_val("bind_host", "0.0.0.0"),
+        bind_host=get_val("bind_host", "0.0.0.0"),  # nosec B104
         bind_port=get_val("bind_port", 8378),
         overlay_host=get_val("overlay_host", None),
         pairing_token_ttl_seconds=get_val("pairing_token_ttl_seconds", 90),

@@ -99,7 +99,7 @@ def _compile_core_capability(stored: StoredCapability) -> type | None:
         # - Imports
         # - Helper functions
         # - The capability class itself
-        exec(stored.capability_class_code, namespace)
+        exec(stored.capability_class_code, namespace)  # nosec B102
 
         cap_class = namespace.get(class_name)
         if not cap_class:

@@ -399,13 +399,13 @@ def compile_capability_class(
     try:
         # Compile input model
         input_namespace: dict[str, Any] = {}
-        exec(input_model_code, input_namespace)
+        exec(input_model_code, input_namespace)  # nosec B102
         input_class_name = spec.name.replace(".", "_").title().replace("_", "") + "Input"
         input_class = input_namespace.get(input_class_name)
 
         # Compile output model
         output_namespace: dict[str, Any] = {}
-        exec(output_model_code, output_namespace)
+        exec(output_model_code, output_namespace)  # nosec B102
         output_class_name = spec.name.replace(".", "_").title().replace("_", "") + "Output"
         output_class = output_namespace.get(output_class_name)
 
@@ -414,7 +414,7 @@ def compile_capability_class(
             "input_class": input_class,
             "output_class": output_class,
         }
-        exec(capability_code, cap_namespace)
+        exec(capability_code, cap_namespace)  # nosec B102
         cap_class_name = spec.name.replace(".", "_").title().replace("_", "") + "Capability"
         cap_class = cap_namespace.get(cap_class_name)
 

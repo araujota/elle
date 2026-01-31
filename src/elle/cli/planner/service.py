@@ -273,7 +273,7 @@ class PlannerService:
 
         result = result.with_approved()
         plan = result.plan
-        assert plan is not None  # checked above with `if not result.plan:`
+        assert plan is not None  # nosec B101 - checked above with `if not result.plan:`
         all_succeeded = True
 
         # Ensure we have an incident for recording (critical for Spine architecture)

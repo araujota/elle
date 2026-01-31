@@ -109,7 +109,7 @@ def search(
         cm = None
 
     # At this point conn is guaranteed to be non-None
-    assert conn is not None
+    assert conn is not None  # nosec B101
 
     try:
         # Run local and cloud search in parallel

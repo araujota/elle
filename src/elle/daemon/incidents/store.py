@@ -229,7 +229,7 @@ def update_incident(
         values.append(incident_id)
 
         result = c.execute(
-            f"UPDATE incidents SET {', '.join(updates)} WHERE id = %s",
+            f"UPDATE incidents SET {', '.join(updates)} WHERE id = %s",  # nosec B608
             values,
         )
 

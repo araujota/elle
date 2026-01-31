@@ -8,7 +8,8 @@ PostgreSQL refused.
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -23,7 +24,9 @@ class TestMissingSocketDir:
         from elle.daemon.telemetry.telemetryd_watcher import TelemetrydWatcher
 
         with fault.missing_directory("/run/elle"):
-            watcher = TelemetrydWatcher()
+            watcher = TelemetrydWatcher(
+                event_queue=MagicMock(), shutdown=asyncio.Event(),
+            )
             # Should not raise; watcher retries on its own
             assert watcher is not None
 
@@ -32,7 +35,9 @@ class TestMissingSocketDir:
         with fault.socket_disconnect():
             from elle.daemon.telemetry.telemetryd_watcher import TelemetrydWatcher
 
-            watcher = TelemetrydWatcher()
+            watcher = TelemetrydWatcher(
+                event_queue=MagicMock(), shutdown=asyncio.Event(),
+            )
             assert not watcher.connected
 
 

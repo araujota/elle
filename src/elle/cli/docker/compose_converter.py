@@ -149,13 +149,13 @@ def parse_docker_run(command: str) -> DockerRunConfig:
         if token.startswith("-") and not token.startswith("--"):
             if "d" in token:
                 detached = True
-            if "p" in token and len(token) == 2 and i + 1 < len(tokens) or token == "-p" and i + 1 < len(tokens):
+            if "p" in token and len(token) == 2 and i + 1 < len(tokens) or token == "-p" and i + 1 < len(tokens):  # nosec B105
                 i += 1
                 ports.append(tokens[i])
-            elif "v" in token and len(token) == 2 and i + 1 < len(tokens) or token == "-v" and i + 1 < len(tokens):
+            elif "v" in token and len(token) == 2 and i + 1 < len(tokens) or token == "-v" and i + 1 < len(tokens):  # nosec B105
                 i += 1
                 volumes.append(tokens[i])
-            elif "e" in token and len(token) == 2 and i + 1 < len(tokens) or token == "-e" and i + 1 < len(tokens):
+            elif "e" in token and len(token) == 2 and i + 1 < len(tokens) or token == "-e" and i + 1 < len(tokens):  # nosec B105
                 i += 1
                 env_var = tokens[i]
                 if "=" in env_var:

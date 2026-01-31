@@ -157,7 +157,7 @@ def update_function(
 
         cursor = c.cursor()
         cursor.execute(
-            f"UPDATE reactive_functions SET {', '.join(updates)} WHERE id = %s",
+            f"UPDATE reactive_functions SET {', '.join(updates)} WHERE id = %s",  # nosec B608
             values,
         )
 

@@ -296,7 +296,7 @@ class MobileAuditStore:
                 WHERE {where_clause}
                 ORDER BY timestamp DESC
                 LIMIT %s
-                """,
+                """,  # nosec B608
                 params,
             )
             return [self._row_to_entry(row) for row in cursor.fetchall()]

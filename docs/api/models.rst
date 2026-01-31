@@ -10,6 +10,7 @@ Capability Models
    :members:
    :undoc-members:
    :show-inheritance:
+   :no-index:
 
 Incident Models
 ---------------

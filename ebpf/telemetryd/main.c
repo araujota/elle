@@ -347,7 +347,7 @@ static int main_loop(struct normalizer *norm, struct telem_socket *sock)
     /* Poll array */
     struct pollfd pfds[10];  /* Increased for eBPF */
     int nfds = 0;
-    int socket_idx = -1, journal_idx = -1, kernel_idx = -1, docker_idx = -1, inotify_idx = -1;
+    int journal_idx = -1, kernel_idx = -1, docker_idx = -1, inotify_idx = -1;
 #ifdef ENABLE_EBPF
     int ebpf_idx = -1;
 #endif
@@ -553,7 +553,6 @@ static int main_loop(struct normalizer *norm, struct telem_socket *sock)
 #endif
 
     /* Add socket fd for accepting clients */
-    socket_idx = nfds;
     pfds[nfds].fd = telem_socket_get_fd(sock);
     pfds[nfds].events = POLLIN;
     nfds++;

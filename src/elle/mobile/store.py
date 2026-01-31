@@ -235,7 +235,7 @@ class MobileStore:
 
         with get_conn(schema=PG_SCHEMA) as conn:
             conn.execute(
-                f"UPDATE devices SET {', '.join(updates)} WHERE device_id = %s",
+                f"UPDATE devices SET {', '.join(updates)} WHERE device_id = %s",  # nosec B608
                 params,
             )
             return self.get_device(device_id)

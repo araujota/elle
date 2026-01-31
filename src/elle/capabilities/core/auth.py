@@ -256,7 +256,7 @@ class SessionTokenCapability(BaseCapability[SessionTokenInput, SessionTokenOutpu
                 passed=token is not None,
                 checks_performed=("Token file exists and readable",),
                 actual_state={"token_exists": token is not None},
-                expected_state={"token_exists": True},
+                expected_state={"token_exists": True},  # nosec B105
             )
         elif input.action == "delete":
             exists = path.exists()
@@ -264,7 +264,7 @@ class SessionTokenCapability(BaseCapability[SessionTokenInput, SessionTokenOutpu
                 passed=not exists,
                 checks_performed=("Token file deleted",),
                 actual_state={"token_exists": exists},
-                expected_state={"token_exists": False},
+                expected_state={"token_exists": False},  # nosec B105
             )
         else:
             return VerificationResult(passed=True)

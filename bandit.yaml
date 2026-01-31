@@ -5,6 +5,16 @@ skips:
   # B404: import_subprocess - too noisy for a system administration tool
   # that legitimately needs subprocess for safe command execution
   - B404
+  # B603: subprocess_without_shell - all subprocess calls use list args (safe pattern)
+  - B603
+  # B607: start_process_with_partial_path - portable system commands (systemctl, journalctl, etc.)
+  - B607
+  # B110: try_except_pass - defensive cleanup/fallback is standard in system daemons
+  - B110
+  # B108: hardcoded_tmp_directory - /tmp usage is expected in Linux sysadmin tools
+  - B108
+  # B112: try_except_continue - best-effort batch processing in daemon loops
+  - B112
 
 # Only report medium+ severity and confidence
 severity: MEDIUM

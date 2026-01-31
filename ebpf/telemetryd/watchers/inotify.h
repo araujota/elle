@@ -52,7 +52,7 @@ int inotify_watcher_add_path(struct inotify_watcher *w, const char *path, bool c
  *
  * Adds:
  * - /root/.ssh/authorized_keys
- * - /home/*\/.ssh/authorized_keys (all users)
+ * - /home/<user>/.ssh/authorized_keys (all users)
  * - /etc/ssh/sshd_config
  * - /etc/sudoers
  * - /etc/passwd

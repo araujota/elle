@@ -82,11 +82,13 @@ class ForecastTrigger(BaseModel):
     """Trigger on metric forecast conditions.
 
     Fires when a metric is predicted to cross warning or critical thresholds.
-    This enables proactive incident prevention:
-    - "prepare" urgency: Warning threshold crossing imminent, prepare remediation plan
-    - "act_now" urgency: Critical threshold crossing imminent, execute plan immediately
+    This enables proactive incident prevention.
 
-    Example:
+    - ``"prepare"`` urgency -- Warning threshold crossing imminent, prepare remediation plan
+    - ``"act_now"`` urgency -- Critical threshold crossing imminent, execute plan immediately
+
+    Example::
+
         ForecastTrigger(
             metric="disk.*",       # Match any disk metric
             urgency="prepare",     # Trigger on warning level
@@ -158,18 +160,21 @@ class Condition(BaseModel):
 
     Evaluates predicates over event payload, state probes, and system metrics.
 
-    Supported operators:
-    - Logical: all, any, not
-    - Comparison: eq, ne, gt, gte, lt, lte
-    - String: contains, matches (regex)
+    Supported operators
 
-    Variables use template syntax:
-    - {event.field} - Event payload fields
-    - {event.raw.field} - Raw event data
-    - {state.key} - Probed state values
-    - {system.metric} - System snapshot metrics
+    - Logical -- all, any, not
+    - Comparison -- eq, ne, gt, gte, lt, lte
+    - String -- contains, matches (regex)
 
-    Example expression:
+    Variables use template syntax
+
+    - ``{event.field}`` -- Event payload fields
+    - ``{event.raw.field}`` -- Raw event data
+    - ``{state.key}`` -- Probed state values
+    - ``{system.metric}`` -- System snapshot metrics
+
+    Example::
+
         {
             "all": [
                 {"gte": ["{event.raw.used_pct}", 90]},
@@ -285,13 +290,15 @@ class StateProbe(BaseModel):
 class ReactiveFunction(BaseModel):
     """Complete reactive function definition.
 
-    A reactive function is an "if-this-then-that" automation that:
+    A reactive function is an "if-this-then-that" automation.
+
     1. Triggers on events or schedules
     2. Evaluates conditions over system state
     3. Executes ELLE capabilities as actions
     4. Records everything to the incident vault
 
-    Example:
+    Example::
+
         ReactiveFunction(
             name="docker-disk-cleanup",
             description="Clean Docker when disk pressure detected",

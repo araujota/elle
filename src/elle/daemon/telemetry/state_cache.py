@@ -672,7 +672,7 @@ class StateCache:
                             addr, port_str = local.rsplit(":", 1)
 
                         port = int(port_str) if port_str.isdigit() else 0
-                        is_wildcard = addr in ("0.0.0.0", "*", "::")
+                        is_wildcard = addr in ("0.0.0.0", "*", "::")  # nosec B104
 
                         # Extract process info
                         process = "unknown"

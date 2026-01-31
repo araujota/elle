@@ -133,7 +133,7 @@ def create_intent(
                 )
 
         result = _get_intent_inner(c, intent_id)
-        assert result is not None, f"Failed to fetch just-created intent {intent_id}"
+        assert result is not None, f"Failed to fetch just-created intent {intent_id}"  # nosec B101
         return result
 
     if conn is not None:
@@ -425,7 +425,7 @@ def update_intent_status(
 
         cursor = c.cursor()
         cursor.execute(
-            f"UPDATE reboot_intents SET {', '.join(updates)} WHERE id = %s",
+            f"UPDATE reboot_intents SET {', '.join(updates)} WHERE id = %s",  # nosec B608
             values,
         )
 

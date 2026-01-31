@@ -284,7 +284,7 @@ class PairingManager:
         bind_host = self.config.bind_host
 
         # If binding to specific address, use that
-        if bind_host not in ("0.0.0.0", "::", ""):
+        if bind_host not in ("0.0.0.0", "::", ""):  # nosec B104
             return bind_host
 
         # Try to detect LAN IP

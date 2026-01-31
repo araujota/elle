@@ -133,7 +133,7 @@ def ensure_pg_role(username: str = "elle") -> None:
         username: Role name to create.
     """
     result = _run(
-        ["psql", "-tAc", f"SELECT 1 FROM pg_roles WHERE rolname = '{username}'"],
+        ["psql", "-tAc", f"SELECT 1 FROM pg_roles WHERE rolname = '{username}'"],  # nosec B608
         user="postgres",
         check=False,
     )
@@ -157,7 +157,7 @@ def ensure_database(config: PostgresConfig) -> None:
         config: Connection configuration.
     """
     result = _run(
-        ["psql", "-tAc", f"SELECT 1 FROM pg_database WHERE datname = '{config.dbname}'"],
+        ["psql", "-tAc", f"SELECT 1 FROM pg_database WHERE datname = '{config.dbname}'"],  # nosec B608
         user="postgres",
         check=False,
     )

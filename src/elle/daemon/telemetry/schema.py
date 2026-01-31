@@ -157,7 +157,7 @@ def get_table_stats(conn: psycopg.Connection) -> dict[str, int]:
     stats: dict[str, int] = {}
     for table in ["events", "probe_results"]:
         try:
-            row = conn.execute(f"SELECT COUNT(*) AS cnt FROM {table}").fetchone()  # noqa: S608
+            row = conn.execute(f"SELECT COUNT(*) AS cnt FROM {table}").fetchone()  # noqa: S608  # nosec B608
             stats[table] = row["cnt"] if row else 0
         except Exception:
             stats[table] = 0

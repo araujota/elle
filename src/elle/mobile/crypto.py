@@ -348,7 +348,7 @@ class MobileCrypto:
 
         # Add configured bind host if it's an IP
         bind_host = self.config.bind_host
-        if bind_host and bind_host not in ("0.0.0.0", "::"):
+        if bind_host and bind_host not in ("0.0.0.0", "::"):  # nosec B104
             try:
                 san_names.append(x509.IPAddress(ipaddress_from_string(bind_host)))
             except ValueError:

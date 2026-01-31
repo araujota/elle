@@ -129,7 +129,7 @@ def _lexical_search(
         WHERE {where_clause}
         ORDER BY score DESC
         LIMIT %s
-        """,
+        """,  # nosec B608
         [query] + params + [k],
     )
 
@@ -213,7 +213,7 @@ def _semantic_search(
         WHERE c.embedding IS NOT NULL{filter_clause}
         ORDER BY c.embedding <=> %s::vector
         LIMIT %s
-        """,
+        """,  # nosec B608
         params + [query_embedding, k * 2],
     )
 

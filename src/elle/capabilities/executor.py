@@ -69,7 +69,8 @@ class CapabilityExecutor:
     8. Record to incident vault
     9. Return result (or rollback on failure)
 
-    Usage:
+    Example::
+
         executor = CapabilityExecutor()
 
         result = await executor.execute(

@@ -115,7 +115,7 @@ class MobileConfig:
     """Configuration for the Mobile Gateway."""
 
     enabled: bool = False
-    bind_host: str = "0.0.0.0"
+    bind_host: str = "0.0.0.0"  # nosec B104
     bind_port: int = 8378
     overlay_host: str | None = None
     pairing_token_ttl_seconds: int = 90
@@ -438,7 +438,7 @@ def load_config(config_path: Path | None = None) -> Config:
     mobile_section = _deep_get(data, "mobile", default={})
     mobile = MobileConfig(
         enabled=_get_env("MOBILE_ENABLED", mobile_section.get("enabled", False)),
-        bind_host=_get_env("MOBILE_BIND_HOST", mobile_section.get("bind_host", "0.0.0.0")),
+        bind_host=_get_env("MOBILE_BIND_HOST", mobile_section.get("bind_host", "0.0.0.0")),  # nosec B104
         bind_port=_get_env("MOBILE_BIND_PORT", mobile_section.get("bind_port", 8378)),
         overlay_host=mobile_section.get("overlay_host"),
         pairing_token_ttl_seconds=mobile_section.get("pairing_token_ttl_seconds", 90),

@@ -55,12 +55,18 @@ intersphinx_mapping = {
 
 html_theme = "furo"
 html_title = "ELLE API Reference"
-html_static_path = ["_static"]
+html_static_path = []
 
 # Furo theme options
 html_theme_options = {
     "navigation_with_keys": True,
 }
 
-# Suppress warnings for missing modules (system-specific dependencies)
-suppress_warnings = ["autodoc.import_error"]
+# Mock imports for modules not available in docs build environment
+autodoc_mock_imports = ["structlog"]
+
+# Suppress warnings for missing modules and unresolvable Pydantic internals
+suppress_warnings = [
+    "autodoc.import_error",
+    "sphinx_autodoc_typehints.forward_reference",
+]
