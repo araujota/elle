@@ -44,32 +44,28 @@ class TestSchema:
         """Test that the manvault schema has all required tables."""
         # Check docs table
         row = conn.execute(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_schema = 'manvault' AND table_name = %s",
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'manvault' AND table_name = %s",
             ("docs",),
         ).fetchone()
         assert row is not None
 
         # Check chunks table
         row = conn.execute(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_schema = 'manvault' AND table_name = %s",
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'manvault' AND table_name = %s",
             ("chunks",),
         ).fetchone()
         assert row is not None
 
         # Check embeddings table
         row = conn.execute(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_schema = 'manvault' AND table_name = %s",
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'manvault' AND table_name = %s",
             ("embeddings",),
         ).fetchone()
         assert row is not None
 
         # Check meta table
         row = conn.execute(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_schema = 'manvault' AND table_name = %s",
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'manvault' AND table_name = %s",
             ("meta",),
         ).fetchone()
         assert row is not None
@@ -86,9 +82,7 @@ class TestSchema:
 
     def test_init_schema_creates_indexes(self, conn):
         """Test that indexes are created."""
-        rows = conn.execute(
-            "SELECT indexname FROM pg_indexes WHERE schemaname = 'manvault'"
-        ).fetchall()
+        rows = conn.execute("SELECT indexname FROM pg_indexes WHERE schemaname = 'manvault'").fetchall()
         indexes = {row["indexname"] for row in rows}
 
         assert "idx_docs_name" in indexes

@@ -44,7 +44,7 @@ _async_pool: AsyncConnectionPool | None = None
 _config: PostgresConfig | None = None
 
 
-def _on_connect(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+def _on_connect(conn: psycopg.Connection) -> None:
     """Callback executed on every new physical connection.
 
     Registers pgvector types so that ``vector`` columns are
@@ -58,7 +58,7 @@ def _on_connect(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
         logger.debug("pgvector registration skipped (extension may not be available)")
 
 
-async def _on_connect_async(conn: psycopg.AsyncConnection) -> None:  # type: ignore[type-arg]
+async def _on_connect_async(conn: psycopg.AsyncConnection) -> None:
     """Async variant of ``_on_connect``."""
     try:
         from pgvector.psycopg import register_vector_async
@@ -136,10 +136,7 @@ def get_pool() -> ConnectionPool:
         RuntimeError: If :func:`configure_pool` has not been called.
     """
     if _pool is None:
-        raise RuntimeError(
-            "PostgreSQL sync pool not configured. "
-            "Call configure_pool() during startup."
-        )
+        raise RuntimeError("PostgreSQL sync pool not configured. Call configure_pool() during startup.")
     return _pool
 
 
@@ -150,10 +147,7 @@ def get_async_pool() -> AsyncConnectionPool:
         RuntimeError: If :func:`configure_async_pool` has not been called.
     """
     if _async_pool is None:
-        raise RuntimeError(
-            "PostgreSQL async pool not configured. "
-            "Call configure_async_pool() during startup."
-        )
+        raise RuntimeError("PostgreSQL async pool not configured. Call configure_async_pool() during startup.")
     return _async_pool
 
 
@@ -168,7 +162,7 @@ def close_pools() -> None:
         _pool = None
     if _async_pool is not None:
         try:
-            _async_pool.close()
+            _async_pool.close()  # type: ignore[unused-coroutine]
         except Exception:
             logger.debug("Error closing async pool", exc_info=True)
         _async_pool = None
@@ -189,7 +183,7 @@ def reset_pools() -> None:
 
 
 @contextmanager
-def get_conn(schema: str = "public") -> Iterator[psycopg.Connection]:  # type: ignore[type-arg]
+def get_conn(schema: str = "public") -> Iterator[psycopg.Connection]:
     """Get a sync connection with ``search_path`` set to *schema*.
 
     The connection is returned to the pool when the block exits.
@@ -214,7 +208,7 @@ def get_conn(schema: str = "public") -> Iterator[psycopg.Connection]:  # type: i
 
 
 @asynccontextmanager
-async def get_async_conn(schema: str = "public") -> AsyncIterator[psycopg.AsyncConnection]:  # type: ignore[type-arg]
+async def get_async_conn(schema: str = "public") -> AsyncIterator[psycopg.AsyncConnection]:
     """Get an async connection with ``search_path`` set to *schema*.
 
     Args:

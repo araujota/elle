@@ -7,7 +7,7 @@ structures (decisions, fingerprints), and output rendering.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -28,7 +28,6 @@ from elle.daemon.incidents.models import (
     ManPageCitation,
     Provenance,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -237,29 +236,21 @@ class TestDiffIdenticalReports:
 class TestDiffDifferentReports:
     """Diffing two reports that differ in classification, symptoms, causes, etc."""
 
-    def test_time_delta(
-        self, base_report: IncidentReport, second_report: IncidentReport
-    ) -> None:
+    def test_time_delta(self, base_report: IncidentReport, second_report: IncidentReport) -> None:
         diff = IncidentDiffer.diff(base_report, second_report)
         assert diff.time_delta == timedelta(hours=3)
 
-    def test_severity_change(
-        self, base_report: IncidentReport, second_report: IncidentReport
-    ) -> None:
+    def test_severity_change(self, base_report: IncidentReport, second_report: IncidentReport) -> None:
         diff = IncidentDiffer.diff(base_report, second_report)
         assert diff.same_severity is False
         assert diff.severity1 == "warning"
         assert diff.severity2 == "error"
 
-    def test_domain_unchanged(
-        self, base_report: IncidentReport, second_report: IncidentReport
-    ) -> None:
+    def test_domain_unchanged(self, base_report: IncidentReport, second_report: IncidentReport) -> None:
         diff = IncidentDiffer.diff(base_report, second_report)
         assert diff.same_domain is True
 
-    def test_titles_differ(
-        self, base_report: IncidentReport, second_report: IncidentReport
-    ) -> None:
+    def test_titles_differ(self, base_report: IncidentReport, second_report: IncidentReport) -> None:
         diff = IncidentDiffer.diff(base_report, second_report)
         assert diff.titles_match is False
         assert diff.title1 == "DNS resolution slow"
@@ -268,41 +259,31 @@ class TestDiffDifferentReports:
         assert diff.title_similarity > 0.0
         assert diff.title_similarity < 1.0
 
-    def test_symptoms_added_and_removed(
-        self, base_report: IncidentReport, second_report: IncidentReport
-    ) -> None:
+    def test_symptoms_added_and_removed(self, base_report: IncidentReport, second_report: IncidentReport) -> None:
         diff = IncidentDiffer.diff(base_report, second_report)
         assert "SERVFAIL responses" in diff.symptoms_added
         assert "timeout on resolve" in diff.symptoms_removed
         assert "slow DNS" in diff.symptoms_common
 
-    def test_causes_added_and_common(
-        self, base_report: IncidentReport, second_report: IncidentReport
-    ) -> None:
+    def test_causes_added_and_common(self, base_report: IncidentReport, second_report: IncidentReport) -> None:
         diff = IncidentDiffer.diff(base_report, second_report)
         assert "local resolver crash" in diff.causes_added
         assert "upstream DNS flap" in diff.causes_common
         assert diff.causes_removed == ()
 
-    def test_root_cause_change(
-        self, base_report: IncidentReport, second_report: IncidentReport
-    ) -> None:
+    def test_root_cause_change(self, base_report: IncidentReport, second_report: IncidentReport) -> None:
         diff = IncidentDiffer.diff(base_report, second_report)
         assert diff.root_cause1 is None
         assert diff.root_cause2 == "systemd-resolved crash"
         assert diff.root_cause_match is False
 
-    def test_outcome_improved(
-        self, base_report: IncidentReport, second_report: IncidentReport
-    ) -> None:
+    def test_outcome_improved(self, base_report: IncidentReport, second_report: IncidentReport) -> None:
         diff = IncidentDiffer.diff(base_report, second_report)
         assert diff.outcome1 == "unknown"
         assert diff.outcome2 == "improved"
         assert diff.outcome_improved is True
 
-    def test_status_values_stored(
-        self, base_report: IncidentReport, second_report: IncidentReport
-    ) -> None:
+    def test_status_values_stored(self, base_report: IncidentReport, second_report: IncidentReport) -> None:
         diff = IncidentDiffer.diff(base_report, second_report)
         assert diff.status1 == "open"
         assert diff.status2 == "mitigated"
@@ -353,7 +334,7 @@ class TestDiffOutcomeImprovement:
             ("no_change", "partial", True),
             ("partial", "improved", True),
             ("improved", "improved", False),  # same rank -> not improved
-            ("improved", "unknown", False),   # regression
+            ("improved", "unknown", False),  # regression
             ("partial", "no_change", False),
         ],
     )
@@ -577,32 +558,24 @@ class TestStringSimilarity:
 class TestRenderIncidentDiff:
     """Tests for render_incident_diff output formatting."""
 
-    def test_render_contains_header(
-        self, base_report: IncidentReport, second_report: IncidentReport
-    ) -> None:
+    def test_render_contains_header(self, base_report: IncidentReport, second_report: IncidentReport) -> None:
         diff = IncidentDiffer.diff(base_report, second_report)
         text = render_incident_diff(diff)
         assert "INCIDENT DIFF:" in text
         assert "=" * 60 in text
 
-    def test_render_shows_time_between(
-        self, base_report: IncidentReport, second_report: IncidentReport
-    ) -> None:
+    def test_render_shows_time_between(self, base_report: IncidentReport, second_report: IncidentReport) -> None:
         diff = IncidentDiffer.diff(base_report, second_report)
         text = render_incident_diff(diff)
         assert "Time between:" in text
         assert "3h" in text
 
-    def test_render_shows_severity_change(
-        self, base_report: IncidentReport, second_report: IncidentReport
-    ) -> None:
+    def test_render_shows_severity_change(self, base_report: IncidentReport, second_report: IncidentReport) -> None:
         diff = IncidentDiffer.diff(base_report, second_report)
         text = render_incident_diff(diff)
         assert "warning -> error" in text
 
-    def test_render_shows_titles_differ(
-        self, base_report: IncidentReport, second_report: IncidentReport
-    ) -> None:
+    def test_render_shows_titles_differ(self, base_report: IncidentReport, second_report: IncidentReport) -> None:
         diff = IncidentDiffer.diff(base_report, second_report)
         text = render_incident_diff(diff)
         assert "TITLES:" in text
@@ -619,9 +592,7 @@ class TestRenderIncidentDiff:
         # Should NOT show the two-line format
         assert "TITLES:" not in text
 
-    def test_render_symptoms_changed_section(
-        self, base_report: IncidentReport, second_report: IncidentReport
-    ) -> None:
+    def test_render_symptoms_changed_section(self, base_report: IncidentReport, second_report: IncidentReport) -> None:
         diff = IncidentDiffer.diff(base_report, second_report)
         text = render_incident_diff(diff)
         assert "SYMPTOMS CHANGED:" in text
@@ -635,17 +606,13 @@ class TestRenderIncidentDiff:
         text = render_incident_diff(diff)
         assert "SYMPTOMS CHANGED:" not in text
 
-    def test_render_causes_changed_section(
-        self, base_report: IncidentReport, second_report: IncidentReport
-    ) -> None:
+    def test_render_causes_changed_section(self, base_report: IncidentReport, second_report: IncidentReport) -> None:
         diff = IncidentDiffer.diff(base_report, second_report)
         text = render_incident_diff(diff)
         assert "SUSPECTED CAUSES CHANGED:" in text
         assert "+ local resolver crash" in text
 
-    def test_render_root_cause_section(
-        self, base_report: IncidentReport, second_report: IncidentReport
-    ) -> None:
+    def test_render_root_cause_section(self, base_report: IncidentReport, second_report: IncidentReport) -> None:
         diff = IncidentDiffer.diff(base_report, second_report)
         text = render_incident_diff(diff)
         assert "ROOT CAUSE:" in text
@@ -659,9 +626,7 @@ class TestRenderIncidentDiff:
         text = render_incident_diff(diff)
         assert "ROOT CAUSE:" not in text
 
-    def test_render_outcome_section(
-        self, base_report: IncidentReport, second_report: IncidentReport
-    ) -> None:
+    def test_render_outcome_section(self, base_report: IncidentReport, second_report: IncidentReport) -> None:
         diff = IncidentDiffer.diff(base_report, second_report)
         text = render_incident_diff(diff)
         assert "OUTCOME:" in text
@@ -676,9 +641,7 @@ class TestRenderIncidentDiff:
         text = render_incident_diff(diff)
         assert "[IMPROVED]" not in text
 
-    def test_render_fingerprint_similarity(
-        self, base_report: IncidentReport, second_report: IncidentReport
-    ) -> None:
+    def test_render_fingerprint_similarity(self, base_report: IncidentReport, second_report: IncidentReport) -> None:
         diff = IncidentDiffer.diff(base_report, second_report)
         text = render_incident_diff(diff)
         assert "FINGERPRINT SIMILARITY:" in text

@@ -97,7 +97,7 @@ class AgentProgressPanel(Static):
         self._tool_info = ""
         self.update(self._render())
 
-    def _render(self) -> Text:
+    def _render(self) -> Text:  # type: ignore[override]
         """Render the progress panel."""
         text = Text()
 

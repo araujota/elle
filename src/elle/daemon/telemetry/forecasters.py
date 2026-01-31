@@ -85,9 +85,7 @@ class HoltWinters:
         n = len(data)
 
         if n < 2 * m:
-            raise ValueError(
-                f"Need at least {2 * m} samples for seasonal period {m}, got {n}"
-            )
+            raise ValueError(f"Need at least {2 * m} samples for seasonal period {m}, got {n}")
 
         # Initialize level: average of first season
         level = sum(data[:m]) / m

@@ -7,9 +7,8 @@ PostgreSQL refused.
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -44,9 +43,7 @@ class TestCorruptedConfig:
         """Config loader should return defaults when TOML is unparseable."""
         from elle.daemon.config import Config, load_config
 
-        with patch("pathlib.Path.exists", return_value=True), fault.corrupted_toml(
-            str(Path("/etc/elle/elle.toml"))
-        ):
+        with patch("pathlib.Path.exists", return_value=True), fault.corrupted_toml(str(Path("/etc/elle/elle.toml"))):
             # load_config should handle the parse error gracefully
             try:
                 config = load_config()
@@ -59,8 +56,9 @@ class TestCorruptedConfig:
         """Config should handle an empty TOML file."""
         from elle.daemon.config import Config, load_config
 
-        with patch("pathlib.Path.exists", return_value=True), fault.corrupted_toml(
-            str(Path("/etc/elle/elle.toml")), content=""
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            fault.corrupted_toml(str(Path("/etc/elle/elle.toml")), content=""),
         ):
             try:
                 config = load_config()
@@ -82,7 +80,6 @@ class TestReadOnlyStorage:
     @pytest.mark.asyncio
     async def test_event_processing_continues_on_write_failure(self, fault: FaultInjector) -> None:
         """Event processing should not crash the daemon on storage write failure."""
-        from elle.daemon.telemetry.models import TelemetryEvent
 
         mock_store = AsyncMock()
         mock_store.insert_events_batch = AsyncMock(side_effect=PermissionError("Read-only file system"))
@@ -123,7 +120,7 @@ class TestPostgreSQLRefused:
 
     def test_db_connection_refused(self, fault: FaultInjector) -> None:
         """Storage engine should raise clear error on connection refused."""
-        with fault.database_refused() as mock:
+        with fault.database_refused():
             from elle.storage.engine import get_conn
 
             with pytest.raises(Exception):

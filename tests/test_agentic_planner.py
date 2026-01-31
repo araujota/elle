@@ -13,7 +13,6 @@ from elle.cli.agentic.models import (
     CapabilityCall,
     ExecutionPlan,
     InformationNeed,
-    ParallelGroup,
 )
 from elle.cli.agentic.planner import (
     ACTION_TO_CAPABILITY,
@@ -25,7 +24,6 @@ from elle.cli.agentic.planner import (
     get_capability_planner,
     reset_capability_planner,
 )
-
 
 # =============================================================================
 # Helpers
@@ -399,11 +397,18 @@ class TestActionDependsOnCall:
 class TestParseLlmPlan:
     def test_valid_json(self) -> None:
         p = CapabilityPlanner()
-        content = json.dumps({
-            "calls": [
-                {"capability": "service.status", "args": {"service": "nginx"}, "purpose": "check", "depends_on": []},
-            ]
-        })
+        content = json.dumps(
+            {
+                "calls": [
+                    {
+                        "capability": "service.status",
+                        "args": {"service": "nginx"},
+                        "purpose": "check",
+                        "depends_on": [],
+                    },
+                ]
+            }
+        )
         calls = p._parse_llm_plan(content)
         assert calls is not None
         assert len(calls) == 1
@@ -447,12 +452,14 @@ class TestParseLlmPlan:
 
     def test_confirmation_and_readonly_flags(self) -> None:
         p = CapabilityPlanner()
-        content = json.dumps({
-            "calls": [
-                {"capability": "service.restart", "args": {"service": "nginx"}, "purpose": "restart"},
-                {"capability": "service.status", "args": {"service": "nginx"}, "purpose": "check"},
-            ]
-        })
+        content = json.dumps(
+            {
+                "calls": [
+                    {"capability": "service.restart", "args": {"service": "nginx"}, "purpose": "restart"},
+                    {"capability": "service.status", "args": {"service": "nginx"}, "purpose": "check"},
+                ]
+            }
+        )
         calls = p._parse_llm_plan(content)
         assert calls is not None
         restart_call = [c for c in calls if c.capability == "service.restart"][0]

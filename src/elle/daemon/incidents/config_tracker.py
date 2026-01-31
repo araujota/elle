@@ -445,9 +445,7 @@ class ConfigChangeTracker:
         severity = record.risk.severity if record.risk else "info"
 
         # Build title
-        verb = {"create": "created", "modify": "modified", "delete": "deleted"}[
-            record.change_type
-        ]
+        verb = {"create": "created", "modify": "modified", "delete": "deleted"}[record.change_type]
         source = "ELLE" if record.is_elle_change else "external"
         title = f"Config {verb}: {record.path} ({source})"
 

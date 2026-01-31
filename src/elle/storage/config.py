@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
 # All schemas managed in the single 'elle' database
 SCHEMAS = (
     "telemetry",

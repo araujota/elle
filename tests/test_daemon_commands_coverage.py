@@ -9,11 +9,11 @@ _handle_restart, _handle_logs, _handle_actions,
 _handle_help, _get_daemon_status, _check_daemon_health,
 _get_autonomous_actions, handle_daemon_command_sync.
 """
+
 from __future__ import annotations
 
-import asyncio
 import subprocess
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -36,7 +36,6 @@ from elle.cli.daemon_commands import (
     handle_daemon_command,
     handle_daemon_command_sync,
 )
-
 
 # ---------------------------------------------------------------------------
 # Models

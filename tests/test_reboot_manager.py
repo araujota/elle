@@ -7,43 +7,43 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from elle.daemon.reboot.models import (
-    GRUBState,
-    PendingVerification,
-    RebootIntent,
-)
 from elle.daemon.reboot.manager import (
     RebootManager,
     RebootManagerError,
     _notify_reboot,
     get_manager,
 )
+from elle.daemon.reboot.models import (
+    GRUBState,
+    PendingVerification,
+    RebootIntent,
+)
 from elle.daemon.reboot.verifier import VerificationResult
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_intent(**overrides: Any) -> RebootIntent:
-    defaults = dict(
-        id="intent-001",
-        goal="Test reboot",
-        task_description="Testing reboot flow",
-        reason="user_requested",
-        status="pending",
-        boot_id="boot-1",
-        grub_default_saved="0",
-    )
+    defaults = {
+        "id": "intent-001",
+        "goal": "Test reboot",
+        "task_description": "Testing reboot flow",
+        "reason": "user_requested",
+        "status": "pending",
+        "boot_id": "boot-1",
+        "grub_default_saved": "0",
+    }
     defaults.update(overrides)
     return RebootIntent(**defaults)
 
 
 def _make_grub_state(**overrides: Any) -> GRUBState:
-    defaults = dict(
-        default_entry="0",
-        entries=("Ubuntu", "Ubuntu Advanced"),
-    )
+    defaults = {
+        "default_entry": "0",
+        "entries": ("Ubuntu", "Ubuntu Advanced"),
+    }
     defaults.update(overrides)
     return GRUBState(**defaults)
 
@@ -51,6 +51,7 @@ def _make_grub_state(**overrides: Any) -> GRUBState:
 # ===========================================================================
 # _notify_reboot
 # ===========================================================================
+
 
 class TestNotifyReboot:
     def test_notify_reboot_success(self):
@@ -78,6 +79,7 @@ class TestNotifyReboot:
 # RebootManagerError
 # ===========================================================================
 
+
 class TestRebootManagerError:
     def test_is_exception(self):
         err = RebootManagerError("test error")
@@ -88,6 +90,7 @@ class TestRebootManagerError:
 # ===========================================================================
 # get_manager singleton
 # ===========================================================================
+
 
 class TestGetManager:
     def test_returns_manager(self):
@@ -106,6 +109,7 @@ class TestGetManager:
 # RebootManager.__init__
 # ===========================================================================
 
+
 class TestRebootManagerInit:
     def test_initial_state(self):
         mgr = RebootManager()
@@ -117,6 +121,7 @@ class TestRebootManagerInit:
 # create_reboot_intent
 # ===========================================================================
 
+
 class TestCreateRebootIntent:
     @pytest.mark.asyncio
     async def test_creates_intent_successfully(self):
@@ -124,11 +129,13 @@ class TestCreateRebootIntent:
         grub_state = _make_grub_state()
         intent = _make_intent()
 
-        with patch("elle.daemon.reboot.manager.get_active_intent", return_value=None), \
-             patch("elle.daemon.reboot.manager.get_boot_id", return_value="boot-1"), \
-             patch("elle.daemon.reboot.manager.get_grub_state", return_value=grub_state), \
-             patch.object(mgr, "_capture_snapshot", new_callable=AsyncMock, return_value={}), \
-             patch("elle.daemon.reboot.manager.create_intent", return_value=intent):
+        with (
+            patch("elle.daemon.reboot.manager.get_active_intent", return_value=None),
+            patch("elle.daemon.reboot.manager.get_boot_id", return_value="boot-1"),
+            patch("elle.daemon.reboot.manager.get_grub_state", return_value=grub_state),
+            patch.object(mgr, "_capture_snapshot", new_callable=AsyncMock, return_value={}),
+            patch("elle.daemon.reboot.manager.create_intent", return_value=intent),
+        ):
             result = await mgr.create_reboot_intent(
                 goal="Test reboot",
                 task_description="Testing",
@@ -158,11 +165,13 @@ class TestCreateRebootIntent:
         ]
         intent = _make_intent()
 
-        with patch("elle.daemon.reboot.manager.get_active_intent", return_value=None), \
-             patch("elle.daemon.reboot.manager.get_boot_id", return_value="boot-1"), \
-             patch("elle.daemon.reboot.manager.get_grub_state", return_value=grub_state), \
-             patch.object(mgr, "_capture_snapshot", new_callable=AsyncMock, return_value={}), \
-             patch("elle.daemon.reboot.manager.create_intent", return_value=intent) as mock_create:
+        with (
+            patch("elle.daemon.reboot.manager.get_active_intent", return_value=None),
+            patch("elle.daemon.reboot.manager.get_boot_id", return_value="boot-1"),
+            patch("elle.daemon.reboot.manager.get_grub_state", return_value=grub_state),
+            patch.object(mgr, "_capture_snapshot", new_callable=AsyncMock, return_value={}),
+            patch("elle.daemon.reboot.manager.create_intent", return_value=intent) as mock_create,
+        ):
             await mgr.create_reboot_intent(
                 goal="Test",
                 task_description="Testing",
@@ -176,6 +185,7 @@ class TestCreateRebootIntent:
 # ===========================================================================
 # execute_reboot
 # ===========================================================================
+
 
 class TestExecuteReboot:
     @pytest.mark.asyncio
@@ -199,12 +209,14 @@ class TestExecuteReboot:
         intent = _make_intent(status="pending", grub_entry="1")
         marked = _make_intent(status="rebooting")
 
-        with patch("elle.daemon.reboot.manager.get_intent", return_value=intent), \
-             patch("elle.daemon.reboot.manager.prepare_rollback", new_callable=AsyncMock), \
-             patch("elle.daemon.reboot.manager.set_grub_oneshot", new_callable=AsyncMock) as mock_oneshot, \
-             patch("elle.daemon.reboot.manager.get_boot_id", return_value="boot-1"), \
-             patch("elle.daemon.reboot.manager.mark_rebooting", return_value=marked), \
-             patch.object(mgr, "_execute_system_reboot", new_callable=AsyncMock) as mock_reboot:
+        with (
+            patch("elle.daemon.reboot.manager.get_intent", return_value=intent),
+            patch("elle.daemon.reboot.manager.prepare_rollback", new_callable=AsyncMock),
+            patch("elle.daemon.reboot.manager.set_grub_oneshot", new_callable=AsyncMock) as mock_oneshot,
+            patch("elle.daemon.reboot.manager.get_boot_id", return_value="boot-1"),
+            patch("elle.daemon.reboot.manager.mark_rebooting", return_value=marked),
+            patch.object(mgr, "_execute_system_reboot", new_callable=AsyncMock) as mock_reboot,
+        ):
             mock_oneshot.return_value = MagicMock(success=True)
             await mgr.execute_reboot("intent-001", countdown_seconds=0)
             mock_reboot.assert_called_once()
@@ -216,13 +228,19 @@ class TestExecuteReboot:
         marked = _make_intent(status="rebooting")
         countdown_calls = []
 
-        with patch("elle.daemon.reboot.manager.get_intent", return_value=intent), \
-             patch("elle.daemon.reboot.manager.prepare_rollback", new_callable=AsyncMock), \
-             patch("elle.daemon.reboot.manager.set_grub_oneshot", new_callable=AsyncMock, return_value=MagicMock(success=True)), \
-             patch("elle.daemon.reboot.manager.get_boot_id", return_value="boot-1"), \
-             patch("elle.daemon.reboot.manager.mark_rebooting", return_value=marked), \
-             patch.object(mgr, "_execute_system_reboot", new_callable=AsyncMock), \
-             patch("asyncio.sleep", new_callable=AsyncMock):
+        with (
+            patch("elle.daemon.reboot.manager.get_intent", return_value=intent),
+            patch("elle.daemon.reboot.manager.prepare_rollback", new_callable=AsyncMock),
+            patch(
+                "elle.daemon.reboot.manager.set_grub_oneshot",
+                new_callable=AsyncMock,
+                return_value=MagicMock(success=True),
+            ),
+            patch("elle.daemon.reboot.manager.get_boot_id", return_value="boot-1"),
+            patch("elle.daemon.reboot.manager.mark_rebooting", return_value=marked),
+            patch.object(mgr, "_execute_system_reboot", new_callable=AsyncMock),
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
             await mgr.execute_reboot(
                 "intent-001",
                 countdown_seconds=3,
@@ -235,11 +253,17 @@ class TestExecuteReboot:
         mgr = RebootManager()
         intent = _make_intent(status="pending")
 
-        with patch("elle.daemon.reboot.manager.get_intent", return_value=intent), \
-             patch("elle.daemon.reboot.manager.prepare_rollback", new_callable=AsyncMock), \
-             patch("elle.daemon.reboot.manager.set_grub_oneshot", new_callable=AsyncMock, return_value=MagicMock(success=True)), \
-             patch("elle.daemon.reboot.manager.get_boot_id", return_value="boot-1"), \
-             patch("elle.daemon.reboot.manager.mark_rebooting", return_value=None):
+        with (
+            patch("elle.daemon.reboot.manager.get_intent", return_value=intent),
+            patch("elle.daemon.reboot.manager.prepare_rollback", new_callable=AsyncMock),
+            patch(
+                "elle.daemon.reboot.manager.set_grub_oneshot",
+                new_callable=AsyncMock,
+                return_value=MagicMock(success=True),
+            ),
+            patch("elle.daemon.reboot.manager.get_boot_id", return_value="boot-1"),
+            patch("elle.daemon.reboot.manager.mark_rebooting", return_value=None),
+        ):
             with pytest.raises(RebootManagerError, match="Failed to mark"):
                 await mgr.execute_reboot("intent-001", countdown_seconds=0)
 
@@ -249,12 +273,14 @@ class TestExecuteReboot:
         intent = _make_intent(status="pending", grub_entry="1")
         marked = _make_intent(status="rebooting")
 
-        with patch("elle.daemon.reboot.manager.get_intent", return_value=intent), \
-             patch("elle.daemon.reboot.manager.prepare_rollback", new_callable=AsyncMock), \
-             patch("elle.daemon.reboot.manager.set_grub_oneshot", new_callable=AsyncMock) as mock_oneshot, \
-             patch("elle.daemon.reboot.manager.get_boot_id", return_value="boot-1"), \
-             patch("elle.daemon.reboot.manager.mark_rebooting", return_value=marked), \
-             patch.object(mgr, "_execute_system_reboot", new_callable=AsyncMock) as mock_reboot:
+        with (
+            patch("elle.daemon.reboot.manager.get_intent", return_value=intent),
+            patch("elle.daemon.reboot.manager.prepare_rollback", new_callable=AsyncMock),
+            patch("elle.daemon.reboot.manager.set_grub_oneshot", new_callable=AsyncMock) as mock_oneshot,
+            patch("elle.daemon.reboot.manager.get_boot_id", return_value="boot-1"),
+            patch("elle.daemon.reboot.manager.mark_rebooting", return_value=marked),
+            patch.object(mgr, "_execute_system_reboot", new_callable=AsyncMock) as mock_reboot,
+        ):
             mock_oneshot.return_value = MagicMock(success=False, error="GRUB error")
             await mgr.execute_reboot("intent-001", countdown_seconds=0)
             # Should still reboot despite GRUB error
@@ -265,13 +291,16 @@ class TestExecuteReboot:
 # cancel_pending_reboot
 # ===========================================================================
 
+
 class TestCancelPendingReboot:
     @pytest.mark.asyncio
     async def test_cancel_existing(self):
         mgr = RebootManager()
         intent = _make_intent(status="cancelled")
-        with patch("elle.daemon.reboot.manager.cancel_intent", return_value=intent), \
-             patch("elle.daemon.reboot.manager.clear_grub_oneshot", new_callable=AsyncMock):
+        with (
+            patch("elle.daemon.reboot.manager.cancel_intent", return_value=intent),
+            patch("elle.daemon.reboot.manager.clear_grub_oneshot", new_callable=AsyncMock),
+        ):
             result = await mgr.cancel_pending_reboot("intent-001")
             assert result is not None
             assert result.status == "cancelled"
@@ -288,6 +317,7 @@ class TestCancelPendingReboot:
 # check_pending_reboots
 # ===========================================================================
 
+
 class TestCheckPendingReboots:
     @pytest.mark.asyncio
     async def test_no_pending_reboots(self):
@@ -302,10 +332,12 @@ class TestCheckPendingReboots:
         intent = _make_intent(status="rebooting")
         cancelled = _make_intent(status="cancelled")
 
-        with patch("elle.daemon.reboot.manager.get_intents_by_status", return_value=[intent]), \
-             patch("elle.daemon.reboot.manager.get_boot_id", return_value="boot-2"), \
-             patch("elle.daemon.reboot.manager.has_rebooted_since", return_value=False), \
-             patch("elle.daemon.reboot.manager.update_intent_status", return_value=cancelled):
+        with (
+            patch("elle.daemon.reboot.manager.get_intents_by_status", return_value=[intent]),
+            patch("elle.daemon.reboot.manager.get_boot_id", return_value="boot-2"),
+            patch("elle.daemon.reboot.manager.has_rebooted_since", return_value=False),
+            patch("elle.daemon.reboot.manager.update_intent_status", return_value=cancelled),
+        ):
             result = await mgr.check_pending_reboots()
             assert result is not None
             assert result.status == "cancelled"
@@ -316,13 +348,15 @@ class TestCheckPendingReboots:
         intent = _make_intent(status="rebooting")
         completed = _make_intent(status="completed", outcome="improved")
 
-        with patch("elle.daemon.reboot.manager.get_intents_by_status", return_value=[intent]), \
-             patch("elle.daemon.reboot.manager.get_boot_id", return_value="boot-2"), \
-             patch("elle.daemon.reboot.manager.has_rebooted_since", return_value=True), \
-             patch("elle.daemon.reboot.manager.update_intent_status") as mock_update, \
-             patch.object(mgr, "_capture_snapshot", new_callable=AsyncMock, return_value={}), \
-             patch("elle.daemon.reboot.manager.get_intent", return_value=intent), \
-             patch.object(mgr, "_run_post_boot_verification", new_callable=AsyncMock, return_value=completed):
+        with (
+            patch("elle.daemon.reboot.manager.get_intents_by_status", return_value=[intent]),
+            patch("elle.daemon.reboot.manager.get_boot_id", return_value="boot-2"),
+            patch("elle.daemon.reboot.manager.has_rebooted_since", return_value=True),
+            patch("elle.daemon.reboot.manager.update_intent_status") as mock_update,
+            patch.object(mgr, "_capture_snapshot", new_callable=AsyncMock, return_value={}),
+            patch("elle.daemon.reboot.manager.get_intent", return_value=intent),
+            patch.object(mgr, "_run_post_boot_verification", new_callable=AsyncMock, return_value=completed),
+        ):
             mock_update.return_value = intent
             result = await mgr.check_pending_reboots()
             assert result.status == "completed"
@@ -332,6 +366,7 @@ class TestCheckPendingReboots:
 # _handle_verification_success
 # ===========================================================================
 
+
 class TestHandleVerificationSuccess:
     @pytest.mark.asyncio
     async def test_confirms_boot_and_completes(self):
@@ -339,10 +374,12 @@ class TestHandleVerificationSuccess:
         intent = _make_intent(status="verifying")
         completed = _make_intent(status="completed", outcome="improved")
 
-        with patch("elle.daemon.reboot.manager.confirm_boot_success", new_callable=AsyncMock) as mock_confirm, \
-             patch("elle.daemon.reboot.manager.clear_grub_oneshot", new_callable=AsyncMock), \
-             patch("elle.daemon.reboot.manager.update_intent_status", return_value=completed), \
-             patch("elle.daemon.reboot.manager._notify_reboot"):
+        with (
+            patch("elle.daemon.reboot.manager.confirm_boot_success", new_callable=AsyncMock) as mock_confirm,
+            patch("elle.daemon.reboot.manager.clear_grub_oneshot", new_callable=AsyncMock),
+            patch("elle.daemon.reboot.manager.update_intent_status", return_value=completed),
+            patch("elle.daemon.reboot.manager._notify_reboot"),
+        ):
             mock_confirm.return_value = MagicMock(success=True)
             result = await mgr._handle_verification_success(intent)
             assert result.status == "completed"
@@ -353,10 +390,12 @@ class TestHandleVerificationSuccess:
         intent = _make_intent(status="verifying")
         completed = _make_intent(status="completed")
 
-        with patch("elle.daemon.reboot.manager.confirm_boot_success", new_callable=AsyncMock) as mock_confirm, \
-             patch("elle.daemon.reboot.manager.clear_grub_oneshot", new_callable=AsyncMock), \
-             patch("elle.daemon.reboot.manager.update_intent_status", return_value=completed), \
-             patch("elle.daemon.reboot.manager._notify_reboot"):
+        with (
+            patch("elle.daemon.reboot.manager.confirm_boot_success", new_callable=AsyncMock) as mock_confirm,
+            patch("elle.daemon.reboot.manager.clear_grub_oneshot", new_callable=AsyncMock),
+            patch("elle.daemon.reboot.manager.update_intent_status", return_value=completed),
+            patch("elle.daemon.reboot.manager._notify_reboot"),
+        ):
             mock_confirm.return_value = MagicMock(success=False, error="GRUB error")
             result = await mgr._handle_verification_success(intent)
             # Should still complete
@@ -367,6 +406,7 @@ class TestHandleVerificationSuccess:
 # _handle_verification_failure
 # ===========================================================================
 
+
 class TestHandleVerificationFailure:
     @pytest.mark.asyncio
     async def test_critical_failure_initiates_rollback(self):
@@ -374,15 +414,21 @@ class TestHandleVerificationFailure:
         intent = _make_intent(status="verifying")
         rolled_back = _make_intent(status="rolled_back")
         result = VerificationResult(
-            passed=False, all_passed=False, critical_failure=True,
-            required_passed=0, required_failed=1,
-            optional_passed=0, optional_failed=0,
+            passed=False,
+            all_passed=False,
+            critical_failure=True,
+            required_passed=0,
+            required_failed=1,
+            optional_passed=0,
+            optional_failed=0,
             error="Critical failure",
         )
 
-        with patch("elle.daemon.reboot.manager.collect_failure_diagnostics", new_callable=AsyncMock) as mock_diag, \
-             patch.object(mgr, "_create_or_update_failure_incident", new_callable=AsyncMock, return_value="inc-1"), \
-             patch.object(mgr, "_initiate_rollback", new_callable=AsyncMock, return_value=rolled_back):
+        with (
+            patch("elle.daemon.reboot.manager.collect_failure_diagnostics", new_callable=AsyncMock) as mock_diag,
+            patch.object(mgr, "_create_or_update_failure_incident", new_callable=AsyncMock, return_value="inc-1"),
+            patch.object(mgr, "_initiate_rollback", new_callable=AsyncMock, return_value=rolled_back),
+        ):
             mock_diag.return_value = MagicMock(likely_causes=[], failed_services=[], read_only_mounts=[])
             res = await mgr._handle_verification_failure(intent, result)
             assert res.status == "rolled_back"
@@ -393,26 +439,33 @@ class TestHandleVerificationFailure:
         intent = _make_intent(status="verifying")
         failed = _make_intent(status="failed")
         result = VerificationResult(
-            passed=False, all_passed=False, critical_failure=False,
-            required_passed=0, required_failed=1,
-            optional_passed=0, optional_failed=0,
+            passed=False,
+            all_passed=False,
+            critical_failure=False,
+            required_passed=0,
+            required_failed=1,
+            optional_passed=0,
+            optional_failed=0,
             error="Check failed",
         )
 
-        with patch("elle.daemon.reboot.manager.collect_failure_diagnostics", new_callable=AsyncMock) as mock_diag, \
-             patch.object(mgr, "_create_or_update_failure_incident", new_callable=AsyncMock, return_value=None), \
-             patch("elle.daemon.reboot.manager.update_intent_status", return_value=failed), \
-             patch("elle.daemon.reboot.manager._notify_reboot"), \
-             patch("elle.daemon.reboot.manager.get_intent", return_value=failed), \
-             patch("asyncio.create_task") as mock_task:
+        with (
+            patch("elle.daemon.reboot.manager.collect_failure_diagnostics", new_callable=AsyncMock) as mock_diag,
+            patch.object(mgr, "_create_or_update_failure_incident", new_callable=AsyncMock, return_value=None),
+            patch("elle.daemon.reboot.manager.update_intent_status", return_value=failed),
+            patch("elle.daemon.reboot.manager._notify_reboot"),
+            patch("elle.daemon.reboot.manager.get_intent", return_value=failed),
+            patch("asyncio.create_task") as mock_task,
+        ):
             mock_diag.return_value = MagicMock(likely_causes=["error"], failed_services=[], read_only_mounts=[])
-            res = await mgr._handle_verification_failure(intent, result)
+            await mgr._handle_verification_failure(intent, result)
             mock_task.assert_called_once()
 
 
 # ===========================================================================
 # _run_post_boot_verification
 # ===========================================================================
+
 
 class TestRunPostBootVerification:
     @pytest.mark.asyncio
@@ -421,15 +474,25 @@ class TestRunPostBootVerification:
         intent = _make_intent(status="verifying")
         completed = _make_intent(status="completed")
         vresult = VerificationResult(
-            passed=True, all_passed=True, critical_failure=False,
-            required_passed=1, required_failed=0,
-            optional_passed=0, optional_failed=0,
+            passed=True,
+            all_passed=True,
+            critical_failure=False,
+            required_passed=1,
+            required_failed=0,
+            optional_passed=0,
+            optional_failed=0,
             results=({"verification_id": 1, "exit_code": 0, "passed": True},),
         )
 
-        with patch("elle.daemon.reboot.manager.run_verification_with_retry", new_callable=AsyncMock, return_value=(True, vresult)), \
-             patch("elle.daemon.reboot.manager.update_verification_result"), \
-             patch.object(mgr, "_handle_verification_success", new_callable=AsyncMock, return_value=completed):
+        with (
+            patch(
+                "elle.daemon.reboot.manager.run_verification_with_retry",
+                new_callable=AsyncMock,
+                return_value=(True, vresult),
+            ),
+            patch("elle.daemon.reboot.manager.update_verification_result"),
+            patch.object(mgr, "_handle_verification_success", new_callable=AsyncMock, return_value=completed),
+        ):
             result = await mgr._run_post_boot_verification(intent)
             assert result.status == "completed"
 
@@ -439,14 +502,24 @@ class TestRunPostBootVerification:
         intent = _make_intent(status="verifying")
         failed = _make_intent(status="failed")
         vresult = VerificationResult(
-            passed=False, all_passed=False, critical_failure=False,
-            required_passed=0, required_failed=1,
-            optional_passed=0, optional_failed=0,
+            passed=False,
+            all_passed=False,
+            critical_failure=False,
+            required_passed=0,
+            required_failed=1,
+            optional_passed=0,
+            optional_failed=0,
             results=(),
         )
 
-        with patch("elle.daemon.reboot.manager.run_verification_with_retry", new_callable=AsyncMock, return_value=(False, vresult)), \
-             patch.object(mgr, "_handle_verification_failure", new_callable=AsyncMock, return_value=failed):
+        with (
+            patch(
+                "elle.daemon.reboot.manager.run_verification_with_retry",
+                new_callable=AsyncMock,
+                return_value=(False, vresult),
+            ),
+            patch.object(mgr, "_handle_verification_failure", new_callable=AsyncMock, return_value=failed),
+        ):
             result = await mgr._run_post_boot_verification(intent)
             assert result.status == "failed"
 
@@ -455,6 +528,7 @@ class TestRunPostBootVerification:
 # force_confirm_boot
 # ===========================================================================
 
+
 class TestForceConfirmBoot:
     @pytest.mark.asyncio
     async def test_confirms_boot(self):
@@ -462,11 +536,13 @@ class TestForceConfirmBoot:
         intent = _make_intent(status="failed")
         completed = _make_intent(status="completed")
 
-        with patch("elle.daemon.reboot.manager.get_intent", return_value=intent), \
-             patch.object(mgr, "cancel_pending_rollback", new_callable=AsyncMock, return_value=True), \
-             patch("elle.daemon.reboot.manager.confirm_boot_success", new_callable=AsyncMock), \
-             patch("elle.daemon.reboot.manager.clear_grub_oneshot", new_callable=AsyncMock), \
-             patch("elle.daemon.reboot.manager.update_intent_status", return_value=completed):
+        with (
+            patch("elle.daemon.reboot.manager.get_intent", return_value=intent),
+            patch.object(mgr, "cancel_pending_rollback", new_callable=AsyncMock, return_value=True),
+            patch("elle.daemon.reboot.manager.confirm_boot_success", new_callable=AsyncMock),
+            patch("elle.daemon.reboot.manager.clear_grub_oneshot", new_callable=AsyncMock),
+            patch("elle.daemon.reboot.manager.update_intent_status", return_value=completed),
+        ):
             result = await mgr.force_confirm_boot("intent-001")
             assert result.status == "completed"
 
@@ -482,6 +558,7 @@ class TestForceConfirmBoot:
 # force_rollback
 # ===========================================================================
 
+
 class TestForceRollback:
     @pytest.mark.asyncio
     async def test_initiates_rollback(self):
@@ -489,8 +566,10 @@ class TestForceRollback:
         intent = _make_intent(status="failed")
         rolled_back = _make_intent(status="rolled_back")
 
-        with patch("elle.daemon.reboot.manager.get_intent", return_value=intent), \
-             patch.object(mgr, "_initiate_rollback", new_callable=AsyncMock, return_value=rolled_back):
+        with (
+            patch("elle.daemon.reboot.manager.get_intent", return_value=intent),
+            patch.object(mgr, "_initiate_rollback", new_callable=AsyncMock, return_value=rolled_back),
+        ):
             result = await mgr.force_rollback("intent-001")
             assert result.status == "rolled_back"
 
@@ -506,6 +585,7 @@ class TestForceRollback:
 # _initiate_rollback
 # ===========================================================================
 
+
 class TestInitiateRollback:
     @pytest.mark.asyncio
     async def test_successful_rollback(self):
@@ -513,11 +593,13 @@ class TestInitiateRollback:
         intent = _make_intent(grub_default_saved="0")
         rolled_back = _make_intent(status="rolled_back")
 
-        with patch("elle.daemon.reboot.manager.trigger_rollback_reboot", new_callable=AsyncMock) as mock_trigger, \
-             patch("elle.daemon.reboot.manager.update_intent_status", return_value=rolled_back), \
-             patch("elle.daemon.reboot.manager._notify_reboot"), \
-             patch.object(mgr, "_execute_system_reboot", new_callable=AsyncMock), \
-             patch("elle.daemon.reboot.manager.get_intent", return_value=rolled_back):
+        with (
+            patch("elle.daemon.reboot.manager.trigger_rollback_reboot", new_callable=AsyncMock) as mock_trigger,
+            patch("elle.daemon.reboot.manager.update_intent_status", return_value=rolled_back),
+            patch("elle.daemon.reboot.manager._notify_reboot"),
+            patch.object(mgr, "_execute_system_reboot", new_callable=AsyncMock),
+            patch("elle.daemon.reboot.manager.get_intent", return_value=rolled_back),
+        ):
             mock_trigger.return_value = MagicMock(success=True)
             result = await mgr._initiate_rollback(intent, "test reason")
             assert result.status == "rolled_back"
@@ -528,8 +610,10 @@ class TestInitiateRollback:
         intent = _make_intent(grub_default_saved="0")
         failed = _make_intent(status="failed")
 
-        with patch("elle.daemon.reboot.manager.trigger_rollback_reboot", new_callable=AsyncMock) as mock_trigger, \
-             patch("elle.daemon.reboot.manager.update_intent_status", return_value=failed):
+        with (
+            patch("elle.daemon.reboot.manager.trigger_rollback_reboot", new_callable=AsyncMock) as mock_trigger,
+            patch("elle.daemon.reboot.manager.update_intent_status", return_value=failed),
+        ):
             mock_trigger.return_value = MagicMock(success=False, error="GRUB write failed")
             result = await mgr._initiate_rollback(intent, "test reason")
             assert result.status == "failed"
@@ -540,11 +624,13 @@ class TestInitiateRollback:
         intent = _make_intent(grub_default_saved=None)
         rolled_back = _make_intent(status="rolled_back")
 
-        with patch("elle.daemon.reboot.manager.trigger_rollback_reboot", new_callable=AsyncMock) as mock_trigger, \
-             patch("elle.daemon.reboot.manager.update_intent_status", return_value=rolled_back), \
-             patch("elle.daemon.reboot.manager._notify_reboot"), \
-             patch.object(mgr, "_execute_system_reboot", new_callable=AsyncMock), \
-             patch("elle.daemon.reboot.manager.get_intent", return_value=rolled_back):
+        with (
+            patch("elle.daemon.reboot.manager.trigger_rollback_reboot", new_callable=AsyncMock) as mock_trigger,
+            patch("elle.daemon.reboot.manager.update_intent_status", return_value=rolled_back),
+            patch("elle.daemon.reboot.manager._notify_reboot"),
+            patch.object(mgr, "_execute_system_reboot", new_callable=AsyncMock),
+            patch("elle.daemon.reboot.manager.get_intent", return_value=rolled_back),
+        ):
             mock_trigger.return_value = MagicMock(success=True)
             await mgr._initiate_rollback(intent, "test")
             mock_trigger.assert_called_once_with("0")
@@ -553,6 +639,7 @@ class TestInitiateRollback:
 # ===========================================================================
 # cancel_pending_rollback
 # ===========================================================================
+
 
 class TestCancelPendingRollback:
     @pytest.mark.asyncio
@@ -585,6 +672,7 @@ class TestCancelPendingRollback:
 # cleanup_stale_intents
 # ===========================================================================
 
+
 class TestCleanupStaleIntents:
     @pytest.mark.asyncio
     async def test_no_stale_intents(self):
@@ -601,8 +689,10 @@ class TestCleanupStaleIntents:
             updated_at=datetime.utcnow() - timedelta(hours=48),
         )
 
-        with patch("elle.daemon.reboot.manager.get_intents_by_status", return_value=[stale_intent]), \
-             patch("elle.daemon.reboot.manager.update_intent_status") as mock_update:
+        with (
+            patch("elle.daemon.reboot.manager.get_intents_by_status", return_value=[stale_intent]),
+            patch("elle.daemon.reboot.manager.update_intent_status") as mock_update,
+        ):
             result = await mgr.cleanup_stale_intents()
             assert result == 1
             mock_update.assert_called_once()
@@ -615,8 +705,10 @@ class TestCleanupStaleIntents:
             updated_at=datetime.utcnow(),
         )
 
-        with patch("elle.daemon.reboot.manager.get_intents_by_status", return_value=[recent_intent]), \
-             patch("elle.daemon.reboot.manager.update_intent_status") as mock_update:
+        with (
+            patch("elle.daemon.reboot.manager.get_intents_by_status", return_value=[recent_intent]),
+            patch("elle.daemon.reboot.manager.update_intent_status") as mock_update,
+        ):
             result = await mgr.cleanup_stale_intents()
             assert result == 0
             mock_update.assert_not_called()
@@ -625,6 +717,7 @@ class TestCleanupStaleIntents:
 # ===========================================================================
 # _capture_snapshot
 # ===========================================================================
+
 
 class TestCaptureSnapshot:
     @pytest.mark.asyncio
@@ -655,6 +748,7 @@ class TestCaptureSnapshot:
 # ===========================================================================
 # get_last_diagnostics / get_llm_retry_context
 # ===========================================================================
+
 
 class TestDiagnosticsAccess:
     def test_get_last_diagnostics_none_initially(self):
@@ -691,6 +785,7 @@ class TestDiagnosticsAccess:
 # _delayed_rollback
 # ===========================================================================
 
+
 class TestDelayedRollback:
     @pytest.mark.asyncio
     async def test_rollback_on_timeout(self):
@@ -698,8 +793,10 @@ class TestDelayedRollback:
         intent = _make_intent()
         rolled_back = _make_intent(status="rolled_back")
 
-        with patch("elle.daemon.reboot.manager.AUTO_ROLLBACK_DELAY_SEC", 0.01), \
-             patch.object(mgr, "_initiate_rollback", new_callable=AsyncMock, return_value=rolled_back):
+        with (
+            patch("elle.daemon.reboot.manager.AUTO_ROLLBACK_DELAY_SEC", 0.01),
+            patch.object(mgr, "_initiate_rollback", new_callable=AsyncMock, return_value=rolled_back),
+        ):
             await mgr._delayed_rollback(intent)
             mgr._initiate_rollback.assert_called_once()
 
@@ -708,8 +805,10 @@ class TestDelayedRollback:
         mgr = RebootManager()
         intent = _make_intent()
 
-        with patch("elle.daemon.reboot.manager.AUTO_ROLLBACK_DELAY_SEC", 10), \
-             patch.object(mgr, "_initiate_rollback", new_callable=AsyncMock) as mock_rollback:
+        with (
+            patch("elle.daemon.reboot.manager.AUTO_ROLLBACK_DELAY_SEC", 10),
+            patch.object(mgr, "_initiate_rollback", new_callable=AsyncMock) as mock_rollback,
+        ):
             # Set intervention event before delay expires
             async def set_event():
                 await asyncio.sleep(0.01)

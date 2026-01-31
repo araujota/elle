@@ -1,17 +1,10 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from elle.cli.agentic.models import (
-    ActionRequest,
-    ActionType,
-    AgenticIntent,
-    InformationNeed,
-)
 from elle.cli.agentic.intent_analyzer import (
     ACTION_PATTERNS,
     CONDITION_PATTERNS,
@@ -20,7 +13,11 @@ from elle.cli.agentic.intent_analyzer import (
     get_intent_analyzer,
     reset_intent_analyzer,
 )
-
+from elle.cli.agentic.models import (
+    ActionRequest,
+    ActionType,
+    InformationNeed,
+)
 
 # =============================================================================
 # Singleton
@@ -322,13 +319,13 @@ class TestAnalyzeLlmFallback:
         mock_llm = MagicMock()
         mock_llm.is_available.return_value = True
         mock_response = MagicMock()
-        mock_response.content = json.dumps({
-            "information_needs": [
-                {"category": "service", "target": "complex-svc", "aspects": ["status"]}
-            ],
-            "action_requests": [],
-            "goal_summary": "Check complex service",
-        })
+        mock_response.content = json.dumps(
+            {
+                "information_needs": [{"category": "service", "target": "complex-svc", "aspects": ["status"]}],
+                "action_requests": [],
+                "goal_summary": "Check complex service",
+            }
+        )
         mock_llm.generate.return_value = mock_response
 
         with patch("elle.rag.llm.get_llm", return_value=mock_llm):

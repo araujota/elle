@@ -12,20 +12,17 @@ import pytest
 
 from elle.daemon.telemetry.models import TelemetryEvent
 from elle.daemon.telemetry.telemetryd_watcher import (
-    HEALTH_CHECK_INTERVAL,
-    MAX_RECONNECT_DELAY,
     MAX_RESTART_ATTEMPTS,
-    RECONNECT_DELAY,
     RESTART_COOLDOWN,
     STALE_THRESHOLD,
     TelemetrydWatcher,
     is_telemetryd_available,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_raw_event(**overrides: Any) -> dict[str, Any]:
     """Build a raw NDJSON event dict as it arrives from telemetryd."""
@@ -75,6 +72,7 @@ def watcher(tmp_path):
 # is_telemetryd_available (module-level helper)
 # ---------------------------------------------------------------------------
 
+
 class TestIsTelemetrydAvailable:
     def test_socket_not_exists(self, tmp_path):
         assert is_telemetryd_available(tmp_path / "no.sock") is False
@@ -101,6 +99,7 @@ class TestIsTelemetrydAvailable:
 # ---------------------------------------------------------------------------
 # TelemetrydWatcher: init / properties
 # ---------------------------------------------------------------------------
+
 
 class TestWatcherProperties:
     def test_initial_state(self, watcher):
@@ -136,6 +135,7 @@ class TestWatcherProperties:
         watcher._running = True
         watcher._connected = True
         from datetime import timedelta
+
         watcher._last_event_time = datetime.now(timezone.utc) - timedelta(seconds=STALE_THRESHOLD + 10)
         assert watcher.is_healthy is False
 
@@ -143,6 +143,7 @@ class TestWatcherProperties:
 # ---------------------------------------------------------------------------
 # _convert_to_event
 # ---------------------------------------------------------------------------
+
 
 class TestConvertToEvent:
     def test_valid_event(self, watcher):
@@ -201,6 +202,7 @@ class TestConvertToEvent:
 # _queue_event
 # ---------------------------------------------------------------------------
 
+
 class TestQueueEvent:
     def test_successful_queue(self, watcher):
         event = TelemetryEvent(source="journal", message="hi")
@@ -220,6 +222,7 @@ class TestQueueEvent:
 # ---------------------------------------------------------------------------
 # start / stop
 # ---------------------------------------------------------------------------
+
 
 class TestStartStop:
     async def test_stop_clears_state(self, watcher):
@@ -258,6 +261,7 @@ class TestStartStop:
 # ---------------------------------------------------------------------------
 # _connect / _disconnect
 # ---------------------------------------------------------------------------
+
 
 class TestConnectDisconnect:
     async def test_connect_no_socket(self, watcher):
@@ -313,6 +317,7 @@ class TestConnectDisconnect:
 # _check_health
 # ---------------------------------------------------------------------------
 
+
 class TestCheckHealth:
     async def test_no_reader(self, watcher):
         watcher._reader = None
@@ -349,6 +354,7 @@ class TestCheckHealth:
 # _send_ping
 # ---------------------------------------------------------------------------
 
+
 class TestSendPing:
     async def test_no_writer(self, watcher):
         watcher._writer = None
@@ -374,6 +380,7 @@ class TestSendPing:
 # _attempt_recovery
 # ---------------------------------------------------------------------------
 
+
 class TestAttemptRecovery:
     async def test_max_restarts_exceeded(self, watcher):
         watcher._restart_count = MAX_RESTART_ATTEMPTS
@@ -383,6 +390,7 @@ class TestAttemptRecovery:
 
     async def test_cooldown_resets_counter(self, watcher):
         from datetime import timedelta
+
         watcher._restart_count = 3
         watcher._last_restart_time = datetime.now(timezone.utc) - timedelta(seconds=RESTART_COOLDOWN + 10)
         watcher._writer = None
@@ -404,18 +412,17 @@ class TestAttemptRecovery:
 # _create_health_incident
 # ---------------------------------------------------------------------------
 
+
 class TestCreateHealthIncident:
     async def test_import_error(self, watcher):
-        with patch("elle.daemon.telemetry.telemetryd_watcher.logger") as mock_log:
+        with patch("elle.daemon.telemetry.telemetryd_watcher.logger"):
             with patch.dict("sys.modules", {"elle.daemon.incidents.store": None}):
                 # The import inside will raise ImportError
                 await watcher._create_health_incident("title", "summary")
 
     async def test_success(self, watcher):
         mock_create = MagicMock()
-        with patch(
-            "elle.daemon.incidents.store.create_incident_draft", mock_create
-        ):
+        with patch("elle.daemon.incidents.store.create_incident_draft", mock_create):
             await watcher._create_health_incident("Test", "Test summary")
         mock_create.assert_called_once()
 
@@ -423,6 +430,7 @@ class TestCreateHealthIncident:
 # ---------------------------------------------------------------------------
 # check_available
 # ---------------------------------------------------------------------------
+
 
 class TestCheckAvailable:
     async def test_no_file(self, watcher):

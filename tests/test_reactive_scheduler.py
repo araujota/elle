@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -21,10 +19,10 @@ from elle.reactive.scheduler import (
     reset_scheduler,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _sched_func(name: str = "sched-func", cron: str = "*/5 * * * *") -> ReactiveFunction:
     return ReactiveFunction(
@@ -71,6 +69,7 @@ class _FakeCroniter:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def _reset():
     reset_scheduler()
@@ -93,6 +92,7 @@ def scheduler(engine):
 # ---------------------------------------------------------------------------
 # SchedulerStats
 # ---------------------------------------------------------------------------
+
 
 class TestSchedulerStats:
     def test_initial_values(self):
@@ -122,6 +122,7 @@ class TestSchedulerStats:
 # Scheduler init / properties
 # ---------------------------------------------------------------------------
 
+
 class TestSchedulerInit:
     def test_defaults(self):
         s = ReactiveScheduler()
@@ -142,6 +143,7 @@ class TestSchedulerInit:
 # Engine property
 # ---------------------------------------------------------------------------
 
+
 class TestEngineProperty:
     def test_provided(self, engine):
         s = ReactiveScheduler(engine=engine)
@@ -157,6 +159,7 @@ class TestEngineProperty:
 # ---------------------------------------------------------------------------
 # schedule / unschedule (using fake croniter)
 # ---------------------------------------------------------------------------
+
 
 class TestScheduleUnschedule:
     @patch("elle.reactive.scheduler.croniter", _FakeCroniter)
@@ -206,6 +209,7 @@ class TestScheduleUnschedule:
 # _should_run
 # ---------------------------------------------------------------------------
 
+
 class TestShouldRun:
     def test_not_scheduled(self, scheduler):
         func = _sched_func()
@@ -225,6 +229,7 @@ class TestShouldRun:
 # ---------------------------------------------------------------------------
 # _run_function
 # ---------------------------------------------------------------------------
+
 
 class TestRunFunction:
     async def test_success(self, scheduler, engine):
@@ -257,6 +262,7 @@ class TestRunFunction:
 # _check_and_schedule
 # ---------------------------------------------------------------------------
 
+
 class TestCheckAndSchedule:
     @patch("elle.reactive.scheduler.croniter", _FakeCroniter)
     @patch("elle.reactive.scheduler.HAS_CRONITER", True)
@@ -283,6 +289,7 @@ class TestCheckAndSchedule:
 # ---------------------------------------------------------------------------
 # start / stop
 # ---------------------------------------------------------------------------
+
 
 class TestStartStop:
     async def test_stop(self, scheduler):
@@ -318,6 +325,7 @@ class TestStartStop:
 # ---------------------------------------------------------------------------
 # Singleton
 # ---------------------------------------------------------------------------
+
 
 class TestSingleton:
     def test_get_returns_same(self):

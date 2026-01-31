@@ -182,6 +182,7 @@ class TestEssentialPackages:
     def test_get_essential_packages_timeout(self, mock_run):
         """Test Essential query timeout handling."""
         import subprocess
+
         mock_run.side_effect = subprocess.TimeoutExpired("cmd", 30)
 
         essential = get_essential_packages()

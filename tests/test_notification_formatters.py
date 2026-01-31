@@ -7,8 +7,6 @@ and event message formatting.
 
 from __future__ import annotations
 
-import pytest
-
 from elle.daemon.notifications.formatters import (
     _format_domain_metrics,
     _metric_to_label,
@@ -33,7 +31,6 @@ from elle.daemon.notifications.formatters import (
     format_service_issue,
     format_temperature_issue,
 )
-
 
 # ---------------------------------------------------------------------------
 # Tests: format_entity
@@ -274,15 +271,11 @@ class TestFormatMemoryIssue:
         assert "Only" in result
 
     def test_with_swap(self):
-        result = format_memory_issue(
-            available_mb=256, total_mb=8192, swap_used_mb=1500, swap_total_mb=2048
-        )
+        result = format_memory_issue(available_mb=256, total_mb=8192, swap_used_mb=1500, swap_total_mb=2048)
         assert "Swap" in result
 
     def test_swap_not_shown_when_low(self):
-        result = format_memory_issue(
-            available_mb=4096, total_mb=8192, swap_used_mb=100, swap_total_mb=2048
-        )
+        result = format_memory_issue(available_mb=4096, total_mb=8192, swap_used_mb=100, swap_total_mb=2048)
         assert "Swap" not in result
 
     def test_no_info_fallback(self):
@@ -847,16 +840,12 @@ class TestFormatHealthTitle:
 
 class TestFormatHealthBody:
     def test_disk_metrics(self):
-        result = format_health_body(
-            "disk", "Disk is full", metrics={"mount": "/var", "used_pct": 95, "avail_gb": 1.5}
-        )
+        result = format_health_body("disk", "Disk is full", metrics={"mount": "/var", "used_pct": 95, "avail_gb": 1.5})
         assert "/var is 95%" in result
         assert "1.5 GB" in result
 
     def test_memory_metrics(self):
-        result = format_health_body(
-            "memory", "Low memory", metrics={"available_mb": 256, "used_pct": 88}
-        )
+        result = format_health_body("memory", "Low memory", metrics={"available_mb": 256, "used_pct": 88})
         assert "256 MB" in result
         assert "88%" in result
 
@@ -940,9 +929,7 @@ class TestFormatEventMessage:
         assert "Network issue" in result
 
     def test_docker_category_with_entity(self):
-        result = format_event_message(
-            "docker", "", entity="container:webapp", raw={"state": "exited", "exit_code": 1}
-        )
+        result = format_event_message("docker", "", entity="container:webapp", raw={"state": "exited", "exit_code": 1})
         assert "webapp" in result
 
     def test_docker_category_no_entity(self):

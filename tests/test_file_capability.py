@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from elle.capabilities.core.file import (
-    FORBIDDEN_PATHS,
     FileCopyCapability,
     FileCopyInput,
     FileDeleteCapability,
@@ -26,7 +25,6 @@ from elle.capabilities.core.file import (
     _is_sensitive_path,
     _snapshot_store,
 )
-
 
 # =========================================================================
 # Path helper tests
@@ -125,7 +123,7 @@ class TestFileReadCapability:
         result = cap.run(FileReadInput(path=str(f)))
         assert result.success is True
         assert result.output.content == "hello world"
-        assert result.output.size_bytes == len("hello world".encode("utf-8"))
+        assert result.output.size_bytes == len(b"hello world")
 
     def test_run_failure(self, cap: FileReadCapability, tmp_path: Path) -> None:
         result = cap.run(FileReadInput(path=str(tmp_path / "missing.txt")))
@@ -182,19 +180,14 @@ class TestFileWriteCapability:
     def test_run_no_backup(self, cap: FileWriteCapability, tmp_path: Path) -> None:
         target = tmp_path / "existing.txt"
         target.write_text("old")
-        result = cap.run(FileWriteInput(
-            path=str(target), content="new", create_backup=False
-        ))
+        result = cap.run(FileWriteInput(path=str(target), content="new", create_backup=False))
         assert result.success is True
         assert result.output.backup_path is None
 
     def test_run_sets_mode(self, cap: FileWriteCapability, tmp_path: Path) -> None:
         target = tmp_path / "script.sh"
-        result = cap.run(FileWriteInput(
-            path=str(target), content="#!/bin/sh", mode=0o755
-        ))
+        result = cap.run(FileWriteInput(path=str(target), content="#!/bin/sh", mode=0o755))
         assert result.success is True
-        import stat
         mode = target.stat().st_mode & 0o777
         assert mode == 0o755
 
@@ -211,9 +204,7 @@ class TestFileWriteCapability:
         assert result.passed is False
 
     def test_verify_file_missing(self, cap: FileWriteCapability, tmp_path: Path) -> None:
-        result = cap.verify(FileWriteInput(
-            path=str(tmp_path / "missing.txt"), content="x"
-        ))
+        result = cap.verify(FileWriteInput(path=str(tmp_path / "missing.txt"), content="x"))
         assert result.passed is False
 
     def test_rollback_with_backup(self, cap: FileWriteCapability, tmp_path: Path) -> None:
@@ -239,6 +230,7 @@ class TestFileWriteCapability:
 
     def test_rollback_no_output(self, cap: FileWriteCapability) -> None:
         from elle.capabilities.models import CapabilityResult
+
         run_result = CapabilityResult(success=True, output=None)
         rollback_result = cap.rollback(
             FileWriteInput(path="/tmp/x", content="x"),
@@ -305,19 +297,16 @@ class TestFileDeleteCapability:
         f = tmp_path / "deleteme.txt"
         f.write_text("restore me")
         run_result = cap.run(FileDeleteInput(path=str(f)))
-        rollback_result = cap.rollback(
-            FileDeleteInput(path=str(f)), run_result
-        )
+        rollback_result = cap.rollback(FileDeleteInput(path=str(f)), run_result)
         assert rollback_result.success is True
         assert f.exists()
         assert f.read_text() == "restore me"
 
     def test_rollback_no_backup(self, cap: FileDeleteCapability) -> None:
         from elle.capabilities.models import CapabilityResult
+
         run_result = CapabilityResult(success=True, output=None)
-        rollback_result = cap.rollback(
-            FileDeleteInput(path="/tmp/x"), run_result
-        )
+        rollback_result = cap.rollback(FileDeleteInput(path="/tmp/x"), run_result)
         assert rollback_result.success is False
 
 
@@ -336,10 +325,12 @@ class TestFileCopyCapability:
         assert cap.spec.risk == "low"
 
     def test_dry_run_source_missing(self, cap: FileCopyCapability, tmp_path: Path) -> None:
-        result = cap.dry_run(FileCopyInput(
-            source=str(tmp_path / "missing.txt"),
-            destination=str(tmp_path / "dest.txt"),
-        ))
+        result = cap.dry_run(
+            FileCopyInput(
+                source=str(tmp_path / "missing.txt"),
+                destination=str(tmp_path / "dest.txt"),
+            )
+        )
         assert result.is_valid is False
 
     def test_dry_run_dest_exists_no_overwrite(self, cap: FileCopyCapability, tmp_path: Path) -> None:
@@ -347,26 +338,20 @@ class TestFileCopyCapability:
         dst = tmp_path / "dst.txt"
         src.write_text("source")
         dst.write_text("existing")
-        result = cap.dry_run(FileCopyInput(
-            source=str(src), destination=str(dst), overwrite=False
-        ))
+        result = cap.dry_run(FileCopyInput(source=str(src), destination=str(dst), overwrite=False))
         assert result.is_valid is False
 
     def test_dry_run_forbidden_dest(self, cap: FileCopyCapability, tmp_path: Path) -> None:
         src = tmp_path / "src.txt"
         src.write_text("data")
         with patch("elle.capabilities.core.file.Path.resolve", return_value=Path("/etc/passwd")):
-            result = cap.dry_run(FileCopyInput(
-                source=str(src), destination="/etc/passwd"
-            ))
+            result = cap.dry_run(FileCopyInput(source=str(src), destination="/etc/passwd"))
             assert result.is_valid is False
 
     def test_dry_run_valid(self, cap: FileCopyCapability, tmp_path: Path) -> None:
         src = tmp_path / "src.txt"
         src.write_text("data")
-        result = cap.dry_run(FileCopyInput(
-            source=str(src), destination=str(tmp_path / "dst.txt")
-        ))
+        result = cap.dry_run(FileCopyInput(source=str(src), destination=str(tmp_path / "dst.txt")))
         assert result.is_valid is True
 
     def test_run_success(self, cap: FileCopyCapability, tmp_path: Path) -> None:
@@ -396,9 +381,7 @@ class TestFileCopyCapability:
     def test_verify_dest_missing(self, cap: FileCopyCapability, tmp_path: Path) -> None:
         src = tmp_path / "src.txt"
         src.write_text("x")
-        result = cap.verify(FileCopyInput(
-            source=str(src), destination=str(tmp_path / "missing.txt")
-        ))
+        result = cap.verify(FileCopyInput(source=str(src), destination=str(tmp_path / "missing.txt")))
         assert result.passed is False
 
     def test_rollback_deletes_copy(self, cap: FileCopyCapability, tmp_path: Path) -> None:
@@ -441,18 +424,14 @@ class TestFileDiffCapability:
     def test_run_no_changes(self, cap: FileDiffCapability, tmp_path: Path) -> None:
         f = tmp_path / "test.txt"
         f.write_text("same content")
-        result = cap.run(FileDiffInput(
-            path=str(f), previous_content="same content"
-        ))
+        result = cap.run(FileDiffInput(path=str(f), previous_content="same content"))
         assert result.success is True
         assert result.output.has_changes is False
 
     def test_run_with_changes(self, cap: FileDiffCapability, tmp_path: Path) -> None:
         f = tmp_path / "test.txt"
         f.write_text("new line\n")
-        result = cap.run(FileDiffInput(
-            path=str(f), previous_content="old line\n"
-        ))
+        result = cap.run(FileDiffInput(path=str(f), previous_content="old line\n"))
         assert result.success is True
         assert result.output.has_changes is True
         assert result.output.lines_added > 0
@@ -496,9 +475,7 @@ class TestFileWatchSnapshotCapability:
     def test_run_creates_snapshot(self, cap: FileWatchSnapshotCapability, tmp_path: Path) -> None:
         f = tmp_path / "test.txt"
         f.write_text("snapshot data")
-        result = cap.run(FileWatchSnapshotInput(
-            path=str(f), snapshot_id="test-snap"
-        ))
+        result = cap.run(FileWatchSnapshotInput(path=str(f), snapshot_id="test-snap"))
         assert result.success is True
         assert result.output.snapshot_id == "test-snap"
         assert "test-snap" in _snapshot_store

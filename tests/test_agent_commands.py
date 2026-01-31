@@ -1,12 +1,12 @@
-from __future__ import annotations
-
 """Tests for agent_commands.py - agent loop introspection commands."""
 
-import pytest
+from __future__ import annotations
+
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # _truncate
@@ -16,25 +16,30 @@ from unittest.mock import MagicMock, patch
 class TestTruncate:
     def test_short_text_unchanged(self):
         from elle.cli.agent_commands import _truncate
+
         assert _truncate("hello", 10) == "hello"
 
     def test_exact_length_unchanged(self):
         from elle.cli.agent_commands import _truncate
+
         assert _truncate("hello", 5) == "hello"
 
     def test_long_text_truncated(self):
         from elle.cli.agent_commands import _truncate
+
         result = _truncate("hello world this is long", 10)
         assert result.endswith("...")
         assert len(result) == 10
 
     def test_newlines_replaced(self):
         from elle.cli.agent_commands import _truncate
+
         result = _truncate("line1\nline2\nline3", 50)
         assert "\n" not in result
 
     def test_whitespace_stripped(self):
         from elle.cli.agent_commands import _truncate
+
         result = _truncate("  hello  ", 50)
         assert result == "hello"
 
@@ -47,46 +52,54 @@ class TestTruncate:
 class TestFormatTime:
     def test_just_now(self):
         from elle.cli.agent_commands import _format_time
+
         now = datetime.now().isoformat()
         result = _format_time(now)
         assert result == "just now"
 
     def test_minutes_ago(self):
         from elle.cli.agent_commands import _format_time
+
         t = (datetime.now() - timedelta(minutes=5)).isoformat()
         result = _format_time(t)
         assert "m ago" in result
 
     def test_hours_ago(self):
         from elle.cli.agent_commands import _format_time
+
         t = (datetime.now() - timedelta(hours=3)).isoformat()
         result = _format_time(t)
         assert "h ago" in result
 
     def test_yesterday(self):
         from elle.cli.agent_commands import _format_time
+
         t = (datetime.now() - timedelta(days=1)).isoformat()
         result = _format_time(t)
         assert result == "yesterday"
 
     def test_days_ago(self):
         from elle.cli.agent_commands import _format_time
+
         t = (datetime.now() - timedelta(days=4)).isoformat()
         result = _format_time(t)
         assert "d ago" in result
 
     def test_old_date(self):
         from elle.cli.agent_commands import _format_time
+
         result = _format_time("2020-06-15T10:00:00")
         assert "2020-06-15" in result
 
     def test_invalid_time(self):
         from elle.cli.agent_commands import _format_time
+
         result = _format_time("not-a-time")
         assert result == "not-a-time"
 
     def test_empty_string(self):
         from elle.cli.agent_commands import _format_time
+
         result = _format_time("")
         assert result == "unknown"
 
@@ -99,6 +112,7 @@ class TestFormatTime:
 class TestHandleHelp:
     def test_help_contains_commands(self):
         from elle.cli.agent_commands import _handle_help
+
         help_text = _handle_help()
         assert "agent last" in help_text
         assert "agent inspect" in help_text
@@ -121,6 +135,7 @@ class TestHandleStages:
             mock_stages.explain_stages.return_value = "STAGE_INFO"
             with patch.dict("sys.modules", {"elle.cli.agentic.stages": mock_stages}):
                 from elle.cli.agent_commands import _handle_stages
+
                 result = _handle_stages()
                 assert result == "STAGE_INFO"
 
@@ -135,24 +150,28 @@ class TestHandleAgentCommand:
     @patch("elle.cli.agent_commands._handle_last")
     async def test_empty_args_calls_last(self, mock_last):
         from elle.cli.agent_commands import handle_agent_command
+
         mock_last.return_value = "LAST_RESULTS"
-        result = await handle_agent_command("")
+        await handle_agent_command("")
         mock_last.assert_called_once_with("5")
 
     @patch("elle.cli.agent_commands._handle_last")
     async def test_last_without_number(self, mock_last):
         from elle.cli.agent_commands import handle_agent_command
+
         mock_last.return_value = "LAST_RESULTS"
-        result = await handle_agent_command("last")
+        await handle_agent_command("last")
         mock_last.assert_called_once_with("5")
 
     async def test_help_subcommand(self):
         from elle.cli.agent_commands import handle_agent_command
+
         result = await handle_agent_command("help")
         assert "agent last" in result
 
     async def test_unknown_subcommand(self):
         from elle.cli.agent_commands import handle_agent_command
+
         result = await handle_agent_command("xyz")
         assert "Unknown agent subcommand" in result
 
@@ -166,11 +185,13 @@ class TestHandleAgentCommand:
 class TestHandleLast:
     async def test_invalid_number(self):
         from elle.cli.agent_commands import _handle_last
+
         result = await _handle_last("abc")
         assert "Invalid number" in result
 
     async def test_no_executions(self):
         from elle.cli.agent_commands import _handle_last
+
         mock_exec = MagicMock()
         mock_exec.get_execution_summaries.return_value = []
         with patch.dict("sys.modules", {"elle.cli.agentic.execution": mock_exec}):
@@ -179,6 +200,7 @@ class TestHandleLast:
 
     async def test_with_executions(self):
         from elle.cli.agent_commands import _handle_last
+
         summary = {
             "execution_id": "abcd1234efgh5678",
             "user_input": "Why is my CPU hot?",
@@ -198,6 +220,7 @@ class TestHandleLast:
 
     async def test_exception_handling(self):
         from elle.cli.agent_commands import _handle_last
+
         mock_exec = MagicMock()
         mock_exec.get_execution_summaries.side_effect = RuntimeError("db err")
         with patch.dict("sys.modules", {"elle.cli.agentic.execution": mock_exec}):
@@ -214,11 +237,13 @@ class TestHandleLast:
 class TestHandleInspect:
     async def test_no_execution_id(self):
         from elle.cli.agent_commands import _handle_inspect
+
         result = await _handle_inspect("")
         assert "Usage" in result
 
     async def test_not_found(self):
         from elle.cli.agent_commands import _handle_inspect
+
         mock_store = MagicMock()
         mock_store.return_value.get.return_value = None
         mock_store.return_value.get_summary.return_value = []
@@ -230,6 +255,7 @@ class TestHandleInspect:
 
     async def test_exception_handling(self):
         from elle.cli.agent_commands import _handle_inspect
+
         mock_exec = MagicMock()
         mock_exec.get_execution_store.side_effect = RuntimeError("db err")
         with patch.dict("sys.modules", {"elle.cli.agentic.execution": mock_exec}):
@@ -246,11 +272,13 @@ class TestHandleInspect:
 class TestHandleHypotheses:
     async def test_no_execution_id(self):
         from elle.cli.agent_commands import _handle_hypotheses
+
         result = await _handle_hypotheses("")
         assert "Usage" in result
 
     async def test_not_found(self):
         from elle.cli.agent_commands import _handle_hypotheses
+
         mock_store = MagicMock()
         mock_store.return_value.get.return_value = None
         mock_store.return_value.get_summary.return_value = []
@@ -262,6 +290,7 @@ class TestHandleHypotheses:
 
     async def test_no_hypotheses(self):
         from elle.cli.agent_commands import _handle_hypotheses
+
         execution = SimpleNamespace(
             execution_id="abc12345",
             hypotheses=[],
@@ -276,6 +305,7 @@ class TestHandleHypotheses:
 
     async def test_with_hypotheses(self):
         from elle.cli.agent_commands import _handle_hypotheses
+
         h = SimpleNamespace(
             hypothesis_id="hyp-001-abcdef12",
             chosen=True,
@@ -311,11 +341,13 @@ class TestHandleHypotheses:
 class TestHandleTools:
     async def test_no_execution_id(self):
         from elle.cli.agent_commands import _handle_tools
+
         result = await _handle_tools("")
         assert "Usage" in result
 
     async def test_not_found(self):
         from elle.cli.agent_commands import _handle_tools
+
         mock_store = MagicMock()
         mock_store.return_value.get.return_value = None
         mock_store.return_value.get_summary.return_value = []
@@ -327,6 +359,7 @@ class TestHandleTools:
 
     async def test_no_tool_calls(self):
         from elle.cli.agent_commands import _handle_tools
+
         execution = SimpleNamespace(
             execution_id="abc12345",
             tool_calls=[],
@@ -341,6 +374,7 @@ class TestHandleTools:
 
     async def test_with_tool_calls(self):
         from elle.cli.agent_commands import _handle_tools
+
         tc = SimpleNamespace(
             tool="search_man_vault",
             success=True,
@@ -370,6 +404,7 @@ class TestHandleTools:
 class TestRenderExecutionDetail:
     def test_minimal_execution(self):
         from elle.cli.agent_commands import _render_execution_detail
+
         execution = SimpleNamespace(
             execution_id="exec-001",
             started_at=datetime(2024, 3, 15, 10, 0, 0),
@@ -400,6 +435,7 @@ class TestRenderExecutionDetail:
 
     def test_execution_with_error(self):
         from elle.cli.agent_commands import _render_execution_detail
+
         execution = SimpleNamespace(
             execution_id="exec-002",
             started_at=datetime(2024, 3, 15, 10, 0, 0),
@@ -427,6 +463,7 @@ class TestRenderExecutionDetail:
 
     def test_execution_with_incident(self):
         from elle.cli.agent_commands import _render_execution_detail
+
         execution = SimpleNamespace(
             execution_id="exec-003",
             started_at=datetime(2024, 3, 15, 10, 0, 0),
@@ -453,6 +490,7 @@ class TestRenderExecutionDetail:
 
     def test_execution_with_stage_transitions(self):
         from elle.cli.agent_commands import _render_execution_detail
+
         trans = SimpleNamespace(
             from_stage=SimpleNamespace(value="OBSERVE"),
             to_stage=SimpleNamespace(value="CLASSIFY"),
@@ -494,7 +532,6 @@ class TestHandleAgentCommandSync:
     @patch("elle.cli.agent_commands.handle_agent_command")
     def test_sync_wrapper(self, mock_async):
         from elle.cli.agent_commands import handle_agent_command_sync
-        import asyncio
 
         async def fake_handler(args):
             return "SYNC_RESULT"

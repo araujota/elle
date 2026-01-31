@@ -95,9 +95,7 @@ class FallbackProvider(LLMProvider):
         self._last_failure_time = time.time()
 
         if was_healthy:
-            logger.warning(
-                f"Primary LLM provider failed, falling back to secondary: {error}"
-            )
+            logger.warning(f"Primary LLM provider failed, falling back to secondary: {error}")
             self._fallback_logged = True
         else:
             logger.debug(f"Primary LLM provider still unhealthy: {error}")

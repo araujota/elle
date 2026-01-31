@@ -171,9 +171,7 @@ class TierSelector:
 
         # If a preferred tier is specified, validate it first
         if preferred_tier is not None:
-            applicability = self._check_tier_applicability(
-                preferred_tier, path_str, operation
-            )
+            applicability = self._check_tier_applicability(preferred_tier, path_str, operation)
             if applicability.applicable and applicability.tool_available:
                 return TierSelection(
                     tier=preferred_tier,

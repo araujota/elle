@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import asyncio
 import subprocess
 import time
-from unittest.mock import MagicMock, AsyncMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -12,12 +11,10 @@ from elle.daemon.notifications.models import (
     NotificationAction,
     NotificationCategory,
     NotificationResult,
-    NotificationUrgency,
 )
 from elle.daemon.notifications.service import (
-    APP_NAME,
-    NotificationService,
     RATE_LIMIT_SECONDS,
+    NotificationService,
     _cancel_reboot,
     _create_action_callback,
     _find_terminal,
@@ -38,17 +35,17 @@ from elle.daemon.notifications.service import (
     send,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_notification(**overrides) -> Notification:
-    defaults = dict(
-        title="Test Title",
-        body="Test body",
-        category=NotificationCategory.INFO,
-    )
+    defaults = {
+        "title": "Test Title",
+        "body": "Test body",
+        "category": NotificationCategory.INFO,
+    }
     defaults.update(overrides)
     return Notification(**defaults)
 
@@ -72,6 +69,7 @@ def clear_terminal_cache():
 # ===========================================================================
 # _should_send (rate limiting)
 # ===========================================================================
+
 
 class TestShouldSend:
     def test_first_notification_allowed(self):
@@ -109,6 +107,7 @@ class TestShouldSend:
 # _send_via_notify_send
 # ===========================================================================
 
+
 class TestSendViaNotifySend:
     def test_notify_send_not_found(self):
         with patch("shutil.which", return_value=None):
@@ -118,8 +117,7 @@ class TestSendViaNotifySend:
             assert "not found" in result.error
 
     def test_notify_send_success(self):
-        with patch("shutil.which", return_value="/usr/bin/notify-send"), \
-             patch("subprocess.run") as mock_run:
+        with patch("shutil.which", return_value="/usr/bin/notify-send"), patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
             n = _make_notification()
             result = _send_via_notify_send(n)
@@ -127,31 +125,33 @@ class TestSendViaNotifySend:
             assert result.method == "notify-send"
 
     def test_notify_send_failure(self):
-        with patch("shutil.which", return_value="/usr/bin/notify-send"), \
-             patch("subprocess.run") as mock_run:
+        with patch("shutil.which", return_value="/usr/bin/notify-send"), patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="display error")
             n = _make_notification()
             result = _send_via_notify_send(n)
             assert result.success is False
 
     def test_notify_send_timeout(self):
-        with patch("shutil.which", return_value="/usr/bin/notify-send"), \
-             patch("subprocess.run", side_effect=subprocess.TimeoutExpired("cmd", 5)):
+        with (
+            patch("shutil.which", return_value="/usr/bin/notify-send"),
+            patch("subprocess.run", side_effect=subprocess.TimeoutExpired("cmd", 5)),
+        ):
             n = _make_notification()
             result = _send_via_notify_send(n)
             assert result.success is False
             assert "timed out" in result.error
 
     def test_notify_send_exception(self):
-        with patch("shutil.which", return_value="/usr/bin/notify-send"), \
-             patch("subprocess.run", side_effect=OSError("failed")):
+        with (
+            patch("shutil.which", return_value="/usr/bin/notify-send"),
+            patch("subprocess.run", side_effect=OSError("failed")),
+        ):
             n = _make_notification()
             result = _send_via_notify_send(n)
             assert result.success is False
 
     def test_notify_send_with_actions(self):
-        with patch("shutil.which", return_value="/usr/bin/notify-send"), \
-             patch("subprocess.run") as mock_run:
+        with patch("shutil.which", return_value="/usr/bin/notify-send"), patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
             n = _make_notification(
                 actions=(NotificationAction(id="open", label="Open"),),
@@ -161,17 +161,18 @@ class TestSendViaNotifySend:
             assert result.success is True
 
     def test_notify_send_with_action_response(self):
-        with patch("shutil.which", return_value="/usr/bin/notify-send"), \
-             patch("subprocess.run") as mock_run, \
-             patch("elle.daemon.notifications.service._handle_notify_send_action") as mock_handle:
+        with (
+            patch("shutil.which", return_value="/usr/bin/notify-send"),
+            patch("subprocess.run") as mock_run,
+            patch("elle.daemon.notifications.service._handle_notify_send_action") as mock_handle,
+        ):
             mock_run.return_value = MagicMock(returncode=0, stdout="open\n", stderr="")
             n = _make_notification()
             _send_via_notify_send(n)
             mock_handle.assert_called_once_with("open", n)
 
     def test_notify_send_empty_stderr_fallback(self):
-        with patch("shutil.which", return_value="/usr/bin/notify-send"), \
-             patch("subprocess.run") as mock_run:
+        with patch("shutil.which", return_value="/usr/bin/notify-send"), patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=2, stdout="", stderr="")
             n = _make_notification()
             result = _send_via_notify_send(n)
@@ -182,6 +183,7 @@ class TestSendViaNotifySend:
 # ===========================================================================
 # _handle_notify_send_action
 # ===========================================================================
+
 
 class TestHandleNotifySendAction:
     def test_open_action(self):
@@ -218,9 +220,12 @@ class TestHandleNotifySendAction:
 # _find_terminal
 # ===========================================================================
 
+
 class TestFindTerminal:
     def test_finds_available_terminal(self):
-        with patch("shutil.which", side_effect=lambda name: "/usr/bin/gnome-terminal" if name == "gnome-terminal" else None):
+        with patch(
+            "shutil.which", side_effect=lambda name: "/usr/bin/gnome-terminal" if name == "gnome-terminal" else None
+        ):
             result = _find_terminal()
             assert result is not None
             assert result[0] == "gnome-terminal"
@@ -235,6 +240,7 @@ class TestFindTerminal:
             if name == "kitty":
                 return "/usr/bin/kitty"
             return None
+
         with patch("shutil.which", side_effect=mock_which):
             result = _find_terminal()
             assert result is not None
@@ -245,6 +251,7 @@ class TestFindTerminal:
 # _open_elle_repl
 # ===========================================================================
 
+
 class TestOpenElleRepl:
     def test_no_terminal_returns_false(self):
         with patch("elle.daemon.notifications.service._find_terminal", return_value=None):
@@ -252,58 +259,92 @@ class TestOpenElleRepl:
             assert result is False
 
     def test_opens_gnome_terminal(self):
-        with patch("elle.daemon.notifications.service._find_terminal", return_value=("gnome-terminal", ["gnome-terminal", "--", "elle"])), \
-             patch("subprocess.Popen") as mock_popen:
+        with (
+            patch(
+                "elle.daemon.notifications.service._find_terminal",
+                return_value=("gnome-terminal", ["gnome-terminal", "--", "elle"]),
+            ),
+            patch("subprocess.Popen") as mock_popen,
+        ):
             result = _open_elle_repl()
             assert result is True
             mock_popen.assert_called_once()
 
     def test_opens_with_incident_context(self):
-        with patch("elle.daemon.notifications.service._find_terminal", return_value=("gnome-terminal", ["gnome-terminal", "--", "elle"])), \
-             patch("subprocess.Popen") as mock_popen:
+        with (
+            patch(
+                "elle.daemon.notifications.service._find_terminal",
+                return_value=("gnome-terminal", ["gnome-terminal", "--", "elle"]),
+            ),
+            patch("subprocess.Popen") as mock_popen,
+        ):
             _open_elle_repl(context_type="incident", context_id="inc-1")
             args = mock_popen.call_args[0][0]
             assert "incident" in args
             assert "inc-1" in args
 
     def test_opens_with_reboot_context(self):
-        with patch("elle.daemon.notifications.service._find_terminal", return_value=("konsole", ["konsole", "-e", "elle"])), \
-             patch("subprocess.Popen") as mock_popen:
+        with (
+            patch(
+                "elle.daemon.notifications.service._find_terminal", return_value=("konsole", ["konsole", "-e", "elle"])
+            ),
+            patch("subprocess.Popen") as mock_popen,
+        ):
             _open_elle_repl(context_type="reboot", context_id="int-1")
             args = mock_popen.call_args[0][0]
             assert "reboot" in args
 
     def test_opens_kitty_terminal(self):
-        with patch("elle.daemon.notifications.service._find_terminal", return_value=("kitty", ["kitty", "elle"])), \
-             patch("subprocess.Popen") as mock_popen:
+        with (
+            patch("elle.daemon.notifications.service._find_terminal", return_value=("kitty", ["kitty", "elle"])),
+            patch("subprocess.Popen") as mock_popen,
+        ):
             _open_elle_repl()
             assert mock_popen.called
 
     def test_opens_alacritty_terminal(self):
-        with patch("elle.daemon.notifications.service._find_terminal", return_value=("alacritty", ["alacritty", "-e", "elle"])), \
-             patch("subprocess.Popen") as mock_popen:
+        with (
+            patch(
+                "elle.daemon.notifications.service._find_terminal",
+                return_value=("alacritty", ["alacritty", "-e", "elle"]),
+            ),
+            patch("subprocess.Popen") as mock_popen,
+        ):
             _open_elle_repl()
             assert mock_popen.called
 
     def test_opens_generic_terminal(self):
-        with patch("elle.daemon.notifications.service._find_terminal", return_value=("xterm", ["xterm", "-e", "elle"])), \
-             patch("subprocess.Popen") as mock_popen:
+        with (
+            patch("elle.daemon.notifications.service._find_terminal", return_value=("xterm", ["xterm", "-e", "elle"])),
+            patch("subprocess.Popen") as mock_popen,
+        ):
             _open_elle_repl()
             assert mock_popen.called
 
     def test_popen_failure_returns_false(self):
-        with patch("elle.daemon.notifications.service._find_terminal", return_value=("gnome-terminal", ["gnome-terminal", "--", "elle"])), \
-             patch("subprocess.Popen", side_effect=OSError("fail")):
+        with (
+            patch(
+                "elle.daemon.notifications.service._find_terminal",
+                return_value=("gnome-terminal", ["gnome-terminal", "--", "elle"]),
+            ),
+            patch("subprocess.Popen", side_effect=OSError("fail")),
+        ):
             result = _open_elle_repl()
             assert result is False
 
     def test_sets_display_env(self):
         import os
+
         env_copy = os.environ.copy()
         env_copy.pop("DISPLAY", None)
-        with patch("elle.daemon.notifications.service._find_terminal", return_value=("gnome-terminal", ["gnome-terminal", "--", "elle"])), \
-             patch("subprocess.Popen") as mock_popen, \
-             patch.dict(os.environ, {}, clear=True):
+        with (
+            patch(
+                "elle.daemon.notifications.service._find_terminal",
+                return_value=("gnome-terminal", ["gnome-terminal", "--", "elle"]),
+            ),
+            patch("subprocess.Popen") as mock_popen,
+            patch.dict(os.environ, {}, clear=True),
+        ):
             _open_elle_repl()
             if mock_popen.called:
                 kw = mock_popen.call_args[1]
@@ -314,6 +355,7 @@ class TestOpenElleRepl:
 # send (public API with fallback)
 # ===========================================================================
 
+
 class TestSend:
     def test_rate_limited_notification(self):
         n = _make_notification()
@@ -323,9 +365,11 @@ class TestSend:
             assert result.method == "rate_limit"
 
     def test_fallback_to_notify_send(self):
-        with patch("elle.daemon.notifications.service._gi_available", False), \
-             patch("elle.daemon.notifications.service._push_to_mobile"), \
-             patch("elle.daemon.notifications.service._send_via_notify_send") as mock_ns:
+        with (
+            patch("elle.daemon.notifications.service._gi_available", False),
+            patch("elle.daemon.notifications.service._push_to_mobile"),
+            patch("elle.daemon.notifications.service._send_via_notify_send") as mock_ns,
+        ):
             mock_ns.return_value = NotificationResult(success=True, method="notify-send")
             n = _make_notification()
             result = send(n)
@@ -333,9 +377,11 @@ class TestSend:
             mock_ns.assert_called_once()
 
     def test_mobile_push_called(self):
-        with patch("elle.daemon.notifications.service._gi_available", False), \
-             patch("elle.daemon.notifications.service._push_to_mobile") as mock_mobile, \
-             patch("elle.daemon.notifications.service._send_via_notify_send") as mock_ns:
+        with (
+            patch("elle.daemon.notifications.service._gi_available", False),
+            patch("elle.daemon.notifications.service._push_to_mobile") as mock_mobile,
+            patch("elle.daemon.notifications.service._send_via_notify_send") as mock_ns,
+        ):
             mock_ns.return_value = NotificationResult(success=True, method="notify-send")
             n = _make_notification()
             send(n)
@@ -345,6 +391,7 @@ class TestSend:
 # ===========================================================================
 # notify convenience function
 # ===========================================================================
+
 
 class TestNotify:
     def test_basic_notify(self):
@@ -376,6 +423,7 @@ class TestNotify:
 # ===========================================================================
 # Convenience functions
 # ===========================================================================
+
 
 class TestConvenienceFunctions:
     def test_notify_job_complete_success(self):
@@ -425,12 +473,15 @@ class TestConvenienceFunctions:
 # _cancel_reboot
 # ===========================================================================
 
+
 class TestCancelReboot:
     def test_cancel_reboot_calls_manager(self):
         mock_manager = MagicMock()
         mock_manager.cancel_pending_reboot = AsyncMock()
-        with patch("elle.daemon.reboot.get_manager", return_value=mock_manager), \
-             patch("asyncio.create_task") as mock_task:
+        with (
+            patch("elle.daemon.reboot.get_manager", return_value=mock_manager),
+            patch("asyncio.create_task") as mock_task,
+        ):
             _cancel_reboot("int-1")
             mock_task.assert_called_once()
 
@@ -449,13 +500,16 @@ class TestCancelReboot:
 # _push_to_mobile
 # ===========================================================================
 
+
 class TestPushToMobile:
     def test_push_when_available(self):
         mock_notifier = MagicMock()
         mock_notifier.is_available.return_value = True
         mock_notifier.push_notification = AsyncMock()
-        with patch("elle.daemon.notifications.mobile_push.get_mobile_notifier", return_value=mock_notifier), \
-             patch("asyncio.create_task") as mock_task:
+        with (
+            patch("elle.daemon.notifications.mobile_push.get_mobile_notifier", return_value=mock_notifier),
+            patch("asyncio.create_task") as mock_task,
+        ):
             n = _make_notification()
             _push_to_mobile(n)
             mock_task.assert_called_once()
@@ -463,8 +517,10 @@ class TestPushToMobile:
     def test_push_when_not_available(self):
         mock_notifier = MagicMock()
         mock_notifier.is_available.return_value = False
-        with patch("elle.daemon.notifications.mobile_push.get_mobile_notifier", return_value=mock_notifier), \
-             patch("asyncio.create_task") as mock_task:
+        with (
+            patch("elle.daemon.notifications.mobile_push.get_mobile_notifier", return_value=mock_notifier),
+            patch("asyncio.create_task") as mock_task,
+        ):
             n = _make_notification()
             _push_to_mobile(n)
             mock_task.assert_not_called()
@@ -479,6 +535,7 @@ class TestPushToMobile:
 # ===========================================================================
 # NotificationService
 # ===========================================================================
+
 
 class TestNotificationService:
     def test_get_service_singleton(self):
@@ -539,6 +596,7 @@ class TestNotificationService:
 # ===========================================================================
 # _create_action_callback
 # ===========================================================================
+
 
 class TestCreateActionCallback:
     def test_custom_command_action(self):

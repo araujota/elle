@@ -1253,10 +1253,7 @@ class PlannerService:
             is_rollback: Whether this is a rollback action.
         """
         if not incident_id:
-            logger.debug(
-                f"No incident_id for action recording: {command} "
-                f"(success={step_result.success})"
-            )
+            logger.debug(f"No incident_id for action recording: {command} (success={step_result.success})")
             return
 
         try:

@@ -24,7 +24,6 @@ from pathlib import Path
 import psycopg
 
 from elle.daemon.manvault.models import ManChunk, ManDiscoveryItem, ManDoc
-from elle.daemon.manvault.schema import ensure_schema
 from elle.daemon.manvault.store import (
     delete_chunks_for_doc,
     get_all_hashes,
@@ -539,7 +538,7 @@ def index_page(
     section: str,
     lang: str = "en",
     source_path: str | None = None,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> bool:
     """Index a single man page.
 
@@ -561,7 +560,7 @@ def index_page(
 
 
 def _index_page_impl(
-    conn: psycopg.Connection,  # type: ignore[type-arg]
+    conn: psycopg.Connection,
     name: str,
     section: str,
     lang: str,
@@ -619,7 +618,7 @@ def _index_page_impl(
 
 def index_all(
     paths: list[Path] | None = None,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
     progress_callback: Callable[[int, int], None] | None = None,
     lang_filter: str = "en",
 ) -> int:
@@ -642,7 +641,7 @@ def index_all(
 
 
 def _index_all_impl(
-    conn: psycopg.Connection,  # type: ignore[type-arg]
+    conn: psycopg.Connection,
     paths: list[Path] | None,
     progress_callback: Callable[[int, int], None] | None,
     lang_filter: str,
@@ -683,7 +682,7 @@ def _index_all_impl(
 
 def index_incremental(
     paths: list[Path] | None = None,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
     lang_filter: str = "en",
 ) -> tuple[int, int]:
     """Incremental index: only changed/new pages.
@@ -707,7 +706,7 @@ def index_incremental(
 
 
 def _index_incremental_impl(
-    conn: psycopg.Connection,  # type: ignore[type-arg]
+    conn: psycopg.Connection,
     paths: list[Path] | None,
     lang_filter: str,
 ) -> tuple[int, int]:
@@ -759,7 +758,7 @@ def _index_incremental_impl(
 
 
 def seed_core_commands(
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
     progress_callback: Callable[[int, int], None] | None = None,
 ) -> int:
     """Seed the Man Vault with essential core commands.
@@ -786,7 +785,7 @@ def seed_core_commands(
 
 
 def _seed_core_commands_impl(
-    conn: psycopg.Connection,  # type: ignore[type-arg]
+    conn: psycopg.Connection,
     progress_callback: Callable[[int, int], None] | None,
 ) -> int:
     total = len(CORE_COMMANDS)
@@ -822,7 +821,7 @@ def _seed_core_commands_impl(
     return count
 
 
-def get_seeded_count(conn: psycopg.Connection | None = None) -> int:  # type: ignore[type-arg]
+def get_seeded_count(conn: psycopg.Connection | None = None) -> int:
     """Get the number of core commands currently indexed.
 
     Args:
@@ -838,7 +837,7 @@ def get_seeded_count(conn: psycopg.Connection | None = None) -> int:  # type: ig
         return _get_seeded_count_impl(c)
 
 
-def _get_seeded_count_impl(conn: psycopg.Connection) -> int:  # type: ignore[type-arg]
+def _get_seeded_count_impl(conn: psycopg.Connection) -> int:
     count = 0
     for name, section in CORE_COMMANDS:
         if get_doc(conn, name, section, "en"):
@@ -846,7 +845,7 @@ def _get_seeded_count_impl(conn: psycopg.Connection) -> int:  # type: ignore[typ
     return count
 
 
-def is_core_seeded(conn: psycopg.Connection | None = None, threshold: float = 0.5) -> bool:  # type: ignore[type-arg]
+def is_core_seeded(conn: psycopg.Connection | None = None, threshold: float = 0.5) -> bool:
     """Check if core commands have been seeded.
 
     Args:

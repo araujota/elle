@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -12,7 +12,6 @@ from elle.daemon.observability.metrics import (
     collect_observability_metrics,
     format_prometheus,
 )
-
 
 # =============================================================================
 # ObservabilityMetrics Model Tests
@@ -199,13 +198,13 @@ class TestFormatPrometheus:
     def test_incident_counter_metric(self, populated_metrics):
         """Test that incident total is formatted as a counter."""
         output = format_prometheus(populated_metrics)
-        assert '# TYPE elle_incidents_total counter' in output
+        assert "# TYPE elle_incidents_total counter" in output
         assert "elle_incidents_total 20" in output
 
     def test_open_incidents_gauge(self, populated_metrics):
         """Test that open incidents is a gauge metric."""
         output = format_prometheus(populated_metrics)
-        assert '# TYPE elle_incidents_open gauge' in output
+        assert "# TYPE elle_incidents_open gauge" in output
         assert "elle_incidents_open 2" in output
 
     def test_labeled_severity_metrics(self, populated_metrics):
@@ -333,30 +332,37 @@ class TestCollectObservabilityMetrics:
     @pytest.mark.asyncio
     async def test_returns_observability_metrics(self):
         """Test that collect returns an ObservabilityMetrics instance."""
-        with patch(
-            "elle.daemon.observability.metrics._get_incident_statistics",
-            new_callable=AsyncMock,
-            return_value={},
-        ), patch(
-            "elle.daemon.observability.metrics._get_event_statistics",
-            new_callable=AsyncMock,
-            return_value={},
-        ), patch(
-            "elle.daemon.observability.metrics._get_efficacy_statistics",
-            new_callable=AsyncMock,
-            return_value={},
-        ), patch(
-            "elle.daemon.observability.metrics._get_forecast_statistics",
-            new_callable=AsyncMock,
-            return_value={},
-        ), patch(
-            "elle.daemon.observability.metrics._get_reactive_statistics",
-            new_callable=AsyncMock,
-            return_value={},
-        ), patch(
-            "elle.daemon.observability.metrics._get_system_health",
-            new_callable=AsyncMock,
-            return_value={},
+        with (
+            patch(
+                "elle.daemon.observability.metrics._get_incident_statistics",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_event_statistics",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_efficacy_statistics",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_forecast_statistics",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_reactive_statistics",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_system_health",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
         ):
             result = await collect_observability_metrics()
             assert isinstance(result, ObservabilityMetrics)
@@ -364,30 +370,37 @@ class TestCollectObservabilityMetrics:
     @pytest.mark.asyncio
     async def test_aggregates_all_subsystem_stats(self):
         """Test that stats from all subsystems are aggregated."""
-        with patch(
-            "elle.daemon.observability.metrics._get_incident_statistics",
-            new_callable=AsyncMock,
-            return_value={"total_incidents": 10, "open_incidents": 2},
-        ), patch(
-            "elle.daemon.observability.metrics._get_event_statistics",
-            new_callable=AsyncMock,
-            return_value={"total_events_1h": 50},
-        ), patch(
-            "elle.daemon.observability.metrics._get_efficacy_statistics",
-            new_callable=AsyncMock,
-            return_value={"capability_executions_1h": 3},
-        ), patch(
-            "elle.daemon.observability.metrics._get_forecast_statistics",
-            new_callable=AsyncMock,
-            return_value={"active_warnings": 1},
-        ), patch(
-            "elle.daemon.observability.metrics._get_reactive_statistics",
-            new_callable=AsyncMock,
-            return_value={"reactive_functions_enabled": 5},
-        ), patch(
-            "elle.daemon.observability.metrics._get_system_health",
-            new_callable=AsyncMock,
-            return_value={"daemon_uptime_sec": 7200.0},
+        with (
+            patch(
+                "elle.daemon.observability.metrics._get_incident_statistics",
+                new_callable=AsyncMock,
+                return_value={"total_incidents": 10, "open_incidents": 2},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_event_statistics",
+                new_callable=AsyncMock,
+                return_value={"total_events_1h": 50},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_efficacy_statistics",
+                new_callable=AsyncMock,
+                return_value={"capability_executions_1h": 3},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_forecast_statistics",
+                new_callable=AsyncMock,
+                return_value={"active_warnings": 1},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_reactive_statistics",
+                new_callable=AsyncMock,
+                return_value={"reactive_functions_enabled": 5},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_system_health",
+                new_callable=AsyncMock,
+                return_value={"daemon_uptime_sec": 7200.0},
+            ),
         ):
             result = await collect_observability_metrics()
             assert result.total_incidents == 10
@@ -401,30 +414,37 @@ class TestCollectObservabilityMetrics:
     @pytest.mark.asyncio
     async def test_graceful_on_incident_stats_failure(self):
         """Test that collection continues when incident stats fail."""
-        with patch(
-            "elle.daemon.observability.metrics._get_incident_statistics",
-            new_callable=AsyncMock,
-            side_effect=RuntimeError("DB unavailable"),
-        ), patch(
-            "elle.daemon.observability.metrics._get_event_statistics",
-            new_callable=AsyncMock,
-            return_value={"total_events_1h": 25},
-        ), patch(
-            "elle.daemon.observability.metrics._get_efficacy_statistics",
-            new_callable=AsyncMock,
-            return_value={},
-        ), patch(
-            "elle.daemon.observability.metrics._get_forecast_statistics",
-            new_callable=AsyncMock,
-            return_value={},
-        ), patch(
-            "elle.daemon.observability.metrics._get_reactive_statistics",
-            new_callable=AsyncMock,
-            return_value={},
-        ), patch(
-            "elle.daemon.observability.metrics._get_system_health",
-            new_callable=AsyncMock,
-            return_value={},
+        with (
+            patch(
+                "elle.daemon.observability.metrics._get_incident_statistics",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("DB unavailable"),
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_event_statistics",
+                new_callable=AsyncMock,
+                return_value={"total_events_1h": 25},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_efficacy_statistics",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_forecast_statistics",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_reactive_statistics",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_system_health",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
         ):
             result = await collect_observability_metrics()
             # Should still return a result with the event data
@@ -434,30 +454,37 @@ class TestCollectObservabilityMetrics:
     @pytest.mark.asyncio
     async def test_graceful_on_event_stats_failure(self):
         """Test that collection continues when event stats fail."""
-        with patch(
-            "elle.daemon.observability.metrics._get_incident_statistics",
-            new_callable=AsyncMock,
-            return_value={"total_incidents": 5},
-        ), patch(
-            "elle.daemon.observability.metrics._get_event_statistics",
-            new_callable=AsyncMock,
-            side_effect=RuntimeError("DB locked"),
-        ), patch(
-            "elle.daemon.observability.metrics._get_efficacy_statistics",
-            new_callable=AsyncMock,
-            return_value={},
-        ), patch(
-            "elle.daemon.observability.metrics._get_forecast_statistics",
-            new_callable=AsyncMock,
-            return_value={},
-        ), patch(
-            "elle.daemon.observability.metrics._get_reactive_statistics",
-            new_callable=AsyncMock,
-            return_value={},
-        ), patch(
-            "elle.daemon.observability.metrics._get_system_health",
-            new_callable=AsyncMock,
-            return_value={},
+        with (
+            patch(
+                "elle.daemon.observability.metrics._get_incident_statistics",
+                new_callable=AsyncMock,
+                return_value={"total_incidents": 5},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_event_statistics",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("DB locked"),
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_efficacy_statistics",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_forecast_statistics",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_reactive_statistics",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_system_health",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
         ):
             result = await collect_observability_metrics()
             assert isinstance(result, ObservabilityMetrics)
@@ -466,30 +493,37 @@ class TestCollectObservabilityMetrics:
     @pytest.mark.asyncio
     async def test_graceful_on_all_stats_failure(self):
         """Test that collection returns defaults when all subsystems fail."""
-        with patch(
-            "elle.daemon.observability.metrics._get_incident_statistics",
-            new_callable=AsyncMock,
-            side_effect=RuntimeError("fail"),
-        ), patch(
-            "elle.daemon.observability.metrics._get_event_statistics",
-            new_callable=AsyncMock,
-            side_effect=RuntimeError("fail"),
-        ), patch(
-            "elle.daemon.observability.metrics._get_efficacy_statistics",
-            new_callable=AsyncMock,
-            side_effect=RuntimeError("fail"),
-        ), patch(
-            "elle.daemon.observability.metrics._get_forecast_statistics",
-            new_callable=AsyncMock,
-            side_effect=RuntimeError("fail"),
-        ), patch(
-            "elle.daemon.observability.metrics._get_reactive_statistics",
-            new_callable=AsyncMock,
-            side_effect=RuntimeError("fail"),
-        ), patch(
-            "elle.daemon.observability.metrics._get_system_health",
-            new_callable=AsyncMock,
-            side_effect=RuntimeError("fail"),
+        with (
+            patch(
+                "elle.daemon.observability.metrics._get_incident_statistics",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("fail"),
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_event_statistics",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("fail"),
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_efficacy_statistics",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("fail"),
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_forecast_statistics",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("fail"),
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_reactive_statistics",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("fail"),
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_system_health",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("fail"),
+            ),
         ):
             result = await collect_observability_metrics()
             assert isinstance(result, ObservabilityMetrics)
@@ -500,30 +534,37 @@ class TestCollectObservabilityMetrics:
     @pytest.mark.asyncio
     async def test_collected_at_is_set(self):
         """Test that collected_at is populated with current time."""
-        with patch(
-            "elle.daemon.observability.metrics._get_incident_statistics",
-            new_callable=AsyncMock,
-            return_value={},
-        ), patch(
-            "elle.daemon.observability.metrics._get_event_statistics",
-            new_callable=AsyncMock,
-            return_value={},
-        ), patch(
-            "elle.daemon.observability.metrics._get_efficacy_statistics",
-            new_callable=AsyncMock,
-            return_value={},
-        ), patch(
-            "elle.daemon.observability.metrics._get_forecast_statistics",
-            new_callable=AsyncMock,
-            return_value={},
-        ), patch(
-            "elle.daemon.observability.metrics._get_reactive_statistics",
-            new_callable=AsyncMock,
-            return_value={},
-        ), patch(
-            "elle.daemon.observability.metrics._get_system_health",
-            new_callable=AsyncMock,
-            return_value={},
+        with (
+            patch(
+                "elle.daemon.observability.metrics._get_incident_statistics",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_event_statistics",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_efficacy_statistics",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_forecast_statistics",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_reactive_statistics",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
+                "elle.daemon.observability.metrics._get_system_health",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
         ):
             result = await collect_observability_metrics()
             assert result.collected_at is not None
@@ -549,14 +590,14 @@ class TestGetIncidentStatistics:
 
         # Set up cursor.execute / fetchone / fetchall responses
         mock_cursor.fetchone.side_effect = [
-            (42,),    # total incidents
-            (3,),     # open incidents
-            (250.0,), # MTTR overall
+            (42,),  # total incidents
+            (3,),  # open incidents
+            (250.0,),  # MTTR overall
         ]
         mock_cursor.fetchall.side_effect = [
-            [("net", 20), ("disk", 22)],             # by domain
-            [("improved", 30), ("no_change", 12)],   # by outcome
-            [("net", 120.0), ("disk", 300.5)],        # MTTR by domain
+            [("net", 20), ("disk", 22)],  # by domain
+            [("improved", 30), ("no_change", 12)],  # by outcome
+            [("net", 120.0), ("disk", 300.5)],  # MTTR by domain
         ]
 
         # The function does `from elle.daemon.incidents.schema import get_connection`
@@ -603,11 +644,11 @@ class TestGetEventStatistics:
         mock_conn.cursor.return_value = mock_cursor
 
         mock_cursor.fetchone.side_effect = [
-            (75,),   # events 1h
-            (1800,), # events 24h
+            (75,),  # events 1h
+            (1800,),  # events 24h
         ]
         mock_cursor.fetchall.side_effect = [
-            [("error", 5), ("warning", 20)],   # by severity
+            [("error", 5), ("warning", 20)],  # by severity
             [("journal", 50), ("kernel", 25)],  # by source
         ]
 
@@ -646,12 +687,15 @@ class TestGetReactiveStatistics:
         """Test that reactive function stats are fetched from store."""
         from elle.daemon.observability.metrics import _get_reactive_statistics
 
-        with patch(
-            "elle.reactive.store.get_function_count",
-            return_value=6,
-        ), patch(
-            "elle.reactive.store.get_execution_count",
-            return_value=15,
+        with (
+            patch(
+                "elle.reactive.store.get_function_count",
+                return_value=6,
+            ),
+            patch(
+                "elle.reactive.store.get_execution_count",
+                return_value=15,
+            ),
         ):
             stats = await _get_reactive_statistics()
 

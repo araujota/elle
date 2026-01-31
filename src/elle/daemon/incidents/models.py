@@ -586,9 +586,7 @@ class IncidentSearchResult(BaseModel):
 
     incident: IncidentReport
     score: float = Field(ge=0.0, description="Relevance score")
-    match_type: Literal["fingerprint", "lexical", "semantic", "hybrid", "cloud"] = Field(
-        default="hybrid"
-    )
+    match_type: Literal["fingerprint", "lexical", "semantic", "hybrid", "cloud"] = Field(default="hybrid")
     precondition_match_ratio: float = Field(
         ge=0.0,
         le=1.0,

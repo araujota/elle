@@ -10,7 +10,6 @@ Provides database operations for the Man Vault:
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 
 import psycopg
 
@@ -22,7 +21,7 @@ logger = logging.getLogger(__name__)
 PG_SCHEMA = "manvault"
 
 
-def upsert_doc(conn: psycopg.Connection | None, doc: ManDoc) -> int:  # type: ignore[type-arg]
+def upsert_doc(conn: psycopg.Connection | None, doc: ManDoc) -> int:
     """Insert or update a document.
 
     Uses INSERT ... ON CONFLICT ... DO UPDATE to handle both cases.
@@ -41,7 +40,7 @@ def upsert_doc(conn: psycopg.Connection | None, doc: ManDoc) -> int:  # type: ig
         return _upsert_doc_impl(c, doc)
 
 
-def _upsert_doc_impl(conn: psycopg.Connection, doc: ManDoc) -> int:  # type: ignore[type-arg]
+def _upsert_doc_impl(conn: psycopg.Connection, doc: ManDoc) -> int:
     cursor = conn.execute(
         """
         INSERT INTO docs (name, section, lang, source_path, sha256, text, updated_at, package_hint, priority)
@@ -74,7 +73,7 @@ def _upsert_doc_impl(conn: psycopg.Connection, doc: ManDoc) -> int:  # type: ign
 
 
 def upsert_docs_batch(
-    conn: psycopg.Connection | None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None,
     docs: list[ManDoc],
     batch_size: int = 500,
 ) -> int:
@@ -96,7 +95,7 @@ def upsert_docs_batch(
 
 
 def _upsert_docs_batch_impl(
-    conn: psycopg.Connection,  # type: ignore[type-arg]
+    conn: psycopg.Connection,
     docs: list[ManDoc],
     batch_size: int,
 ) -> int:
@@ -136,7 +135,7 @@ def _upsert_docs_batch_impl(
 
 
 def get_doc(
-    conn: psycopg.Connection | None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None,
     name: str,
     section: str,
     lang: str = "en",
@@ -160,7 +159,7 @@ def get_doc(
 
 
 def _get_doc_impl(
-    conn: psycopg.Connection,  # type: ignore[type-arg]
+    conn: psycopg.Connection,
     name: str,
     section: str,
     lang: str,
@@ -190,7 +189,7 @@ def _get_doc_impl(
     return None
 
 
-def get_doc_by_id(conn: psycopg.Connection | None, doc_id: int) -> ManDoc | None:  # type: ignore[type-arg]
+def get_doc_by_id(conn: psycopg.Connection | None, doc_id: int) -> ManDoc | None:
     """Get a document by ID.
 
     Args:
@@ -207,7 +206,7 @@ def get_doc_by_id(conn: psycopg.Connection | None, doc_id: int) -> ManDoc | None
         return _get_doc_by_id_impl(c, doc_id)
 
 
-def _get_doc_by_id_impl(conn: psycopg.Connection, doc_id: int) -> ManDoc | None:  # type: ignore[type-arg]
+def _get_doc_by_id_impl(conn: psycopg.Connection, doc_id: int) -> ManDoc | None:
     cursor = conn.execute(
         """
         SELECT id, name, section, lang, source_path, sha256, text, updated_at, package_hint, priority
@@ -233,7 +232,7 @@ def _get_doc_by_id_impl(conn: psycopg.Connection, doc_id: int) -> ManDoc | None:
     return None
 
 
-def get_all_hashes(conn: psycopg.Connection | None) -> dict[tuple[str, str, str], str]:  # type: ignore[type-arg]
+def get_all_hashes(conn: psycopg.Connection | None) -> dict[tuple[str, str, str], str]:
     """Get all document hashes for change detection.
 
     Returns a mapping of (name, section, lang) -> sha256 hash.
@@ -251,12 +250,12 @@ def get_all_hashes(conn: psycopg.Connection | None) -> dict[tuple[str, str, str]
         return _get_all_hashes_impl(c)
 
 
-def _get_all_hashes_impl(conn: psycopg.Connection) -> dict[tuple[str, str, str], str]:  # type: ignore[type-arg]
+def _get_all_hashes_impl(conn: psycopg.Connection) -> dict[tuple[str, str, str], str]:
     cursor = conn.execute("SELECT name, section, lang, sha256 FROM docs")
     return {(row["name"], row["section"], row["lang"]): row["sha256"] for row in cursor}
 
 
-def delete_doc(conn: psycopg.Connection | None, doc_id: int) -> bool:  # type: ignore[type-arg]
+def delete_doc(conn: psycopg.Connection | None, doc_id: int) -> bool:
     """Delete a document and its chunks.
 
     Chunks and embeddings are deleted via CASCADE.
@@ -275,13 +274,13 @@ def delete_doc(conn: psycopg.Connection | None, doc_id: int) -> bool:  # type: i
         return _delete_doc_impl(c, doc_id)
 
 
-def _delete_doc_impl(conn: psycopg.Connection, doc_id: int) -> bool:  # type: ignore[type-arg]
+def _delete_doc_impl(conn: psycopg.Connection, doc_id: int) -> bool:
     cursor = conn.execute("DELETE FROM docs WHERE id = %s", (doc_id,))
     return cursor.rowcount > 0
 
 
 def delete_doc_by_key(
-    conn: psycopg.Connection | None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None,
     name: str,
     section: str,
     lang: str = "en",
@@ -305,7 +304,7 @@ def delete_doc_by_key(
 
 
 def _delete_doc_by_key_impl(
-    conn: psycopg.Connection,  # type: ignore[type-arg]
+    conn: psycopg.Connection,
     name: str,
     section: str,
     lang: str,
@@ -317,7 +316,7 @@ def _delete_doc_by_key_impl(
     return cursor.rowcount > 0
 
 
-def upsert_chunk(conn: psycopg.Connection | None, chunk: ManChunk) -> int:  # type: ignore[type-arg]
+def upsert_chunk(conn: psycopg.Connection | None, chunk: ManChunk) -> int:
     """Insert or update a chunk.
 
     Args:
@@ -334,7 +333,7 @@ def upsert_chunk(conn: psycopg.Connection | None, chunk: ManChunk) -> int:  # ty
         return _upsert_chunk_impl(c, chunk)
 
 
-def _upsert_chunk_impl(conn: psycopg.Connection, chunk: ManChunk) -> int:  # type: ignore[type-arg]
+def _upsert_chunk_impl(conn: psycopg.Connection, chunk: ManChunk) -> int:
     cursor = conn.execute(
         """
         INSERT INTO chunks (doc_id, chunk_index, text, heading, start_line, end_line)
@@ -361,7 +360,7 @@ def _upsert_chunk_impl(conn: psycopg.Connection, chunk: ManChunk) -> int:  # typ
     return int(row["id"])
 
 
-def upsert_chunks_batch(conn: psycopg.Connection | None, chunks: list[ManChunk]) -> int:  # type: ignore[type-arg]
+def upsert_chunks_batch(conn: psycopg.Connection | None, chunks: list[ManChunk]) -> int:
     """Batch upsert chunks.
 
     Args:
@@ -381,7 +380,7 @@ def upsert_chunks_batch(conn: psycopg.Connection | None, chunks: list[ManChunk])
         return _upsert_chunks_batch_impl(c, chunks)
 
 
-def _upsert_chunks_batch_impl(conn: psycopg.Connection, chunks: list[ManChunk]) -> int:  # type: ignore[type-arg]
+def _upsert_chunks_batch_impl(conn: psycopg.Connection, chunks: list[ManChunk]) -> int:
     for chunk in chunks:
         conn.execute(
             """
@@ -406,7 +405,7 @@ def _upsert_chunks_batch_impl(conn: psycopg.Connection, chunks: list[ManChunk]) 
     return len(chunks)
 
 
-def get_chunks_for_doc(conn: psycopg.Connection | None, doc_id: int) -> list[ManChunk]:  # type: ignore[type-arg]
+def get_chunks_for_doc(conn: psycopg.Connection | None, doc_id: int) -> list[ManChunk]:
     """Get all chunks for a document.
 
     Args:
@@ -423,7 +422,7 @@ def get_chunks_for_doc(conn: psycopg.Connection | None, doc_id: int) -> list[Man
         return _get_chunks_for_doc_impl(c, doc_id)
 
 
-def _get_chunks_for_doc_impl(conn: psycopg.Connection, doc_id: int) -> list[ManChunk]:  # type: ignore[type-arg]
+def _get_chunks_for_doc_impl(conn: psycopg.Connection, doc_id: int) -> list[ManChunk]:
     cursor = conn.execute(
         """
         SELECT id, doc_id, chunk_index, text, heading, start_line, end_line
@@ -447,7 +446,7 @@ def _get_chunks_for_doc_impl(conn: psycopg.Connection, doc_id: int) -> list[ManC
     ]
 
 
-def delete_chunks_for_doc(conn: psycopg.Connection | None, doc_id: int) -> int:  # type: ignore[type-arg]
+def delete_chunks_for_doc(conn: psycopg.Connection | None, doc_id: int) -> int:
     """Delete all chunks for a document.
 
     Args:
@@ -464,13 +463,13 @@ def delete_chunks_for_doc(conn: psycopg.Connection | None, doc_id: int) -> int: 
         return _delete_chunks_for_doc_impl(c, doc_id)
 
 
-def _delete_chunks_for_doc_impl(conn: psycopg.Connection, doc_id: int) -> int:  # type: ignore[type-arg]
+def _delete_chunks_for_doc_impl(conn: psycopg.Connection, doc_id: int) -> int:
     cursor = conn.execute("DELETE FROM chunks WHERE doc_id = %s", (doc_id,))
     return cursor.rowcount
 
 
 def upsert_embedding(
-    conn: psycopg.Connection | None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None,
     chunk_id: int,
     embedding: list[float],
     model: str,
@@ -494,7 +493,7 @@ def upsert_embedding(
 
 
 def _upsert_embedding_impl(
-    conn: psycopg.Connection,  # type: ignore[type-arg]
+    conn: psycopg.Connection,
     chunk_id: int,
     embedding: list[float],
     model: str,
@@ -513,7 +512,7 @@ def _upsert_embedding_impl(
 
 
 def upsert_embeddings_batch(
-    conn: psycopg.Connection | None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None,
     embeddings: list[tuple[int, list[float]]],
     model: str,
 ) -> int:
@@ -538,7 +537,7 @@ def upsert_embeddings_batch(
 
 
 def _upsert_embeddings_batch_impl(
-    conn: psycopg.Connection,  # type: ignore[type-arg]
+    conn: psycopg.Connection,
     embeddings: list[tuple[int, list[float]]],
     model: str,
 ) -> int:
@@ -558,7 +557,7 @@ def _upsert_embeddings_batch_impl(
     return len(embeddings)
 
 
-def get_embedding(conn: psycopg.Connection | None, chunk_id: int) -> list[float] | None:  # type: ignore[type-arg]
+def get_embedding(conn: psycopg.Connection | None, chunk_id: int) -> list[float] | None:
     """Get embedding for a chunk.
 
     pgvector returns list[float] natively -- no struct.unpack needed.
@@ -577,7 +576,7 @@ def get_embedding(conn: psycopg.Connection | None, chunk_id: int) -> list[float]
         return _get_embedding_impl(c, chunk_id)
 
 
-def _get_embedding_impl(conn: psycopg.Connection, chunk_id: int) -> list[float] | None:  # type: ignore[type-arg]
+def _get_embedding_impl(conn: psycopg.Connection, chunk_id: int) -> list[float] | None:
     cursor = conn.execute(
         "SELECT embedding FROM embeddings WHERE chunk_id = %s",
         (chunk_id,),
@@ -590,7 +589,7 @@ def _get_embedding_impl(conn: psycopg.Connection, chunk_id: int) -> list[float] 
 
 
 def get_embeddings_batch(
-    conn: psycopg.Connection | None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None,
     chunk_ids: list[int],
 ) -> dict[int, list[float]]:
     """Get embeddings for multiple chunks.
@@ -613,7 +612,7 @@ def get_embeddings_batch(
 
 
 def _get_embeddings_batch_impl(
-    conn: psycopg.Connection,  # type: ignore[type-arg]
+    conn: psycopg.Connection,
     chunk_ids: list[int],
 ) -> dict[int, list[float]]:
     placeholders = ",".join(["%s"] * len(chunk_ids))
@@ -630,7 +629,7 @@ def _get_embeddings_batch_impl(
 
 
 def get_all_embeddings(
-    conn: psycopg.Connection | None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None,
     model: str | None = None,
 ) -> list[tuple[int, list[float]]]:
     """Get all embeddings, optionally filtered by model.
@@ -650,7 +649,7 @@ def get_all_embeddings(
 
 
 def _get_all_embeddings_impl(
-    conn: psycopg.Connection,  # type: ignore[type-arg]
+    conn: psycopg.Connection,
     model: str | None,
 ) -> list[tuple[int, list[float]]]:
     if model:
@@ -668,7 +667,7 @@ def _get_all_embeddings_impl(
     return result
 
 
-def get_chunks_without_embeddings(conn: psycopg.Connection | None, limit: int = 1000) -> list[ManChunk]:  # type: ignore[type-arg]
+def get_chunks_without_embeddings(conn: psycopg.Connection | None, limit: int = 1000) -> list[ManChunk]:
     """Get chunks that don't have embeddings yet.
 
     Args:
@@ -685,7 +684,7 @@ def get_chunks_without_embeddings(conn: psycopg.Connection | None, limit: int = 
         return _get_chunks_without_embeddings_impl(c, limit)
 
 
-def _get_chunks_without_embeddings_impl(conn: psycopg.Connection, limit: int) -> list[ManChunk]:  # type: ignore[type-arg]
+def _get_chunks_without_embeddings_impl(conn: psycopg.Connection, limit: int) -> list[ManChunk]:
     cursor = conn.execute(
         """
         SELECT c.id, c.doc_id, c.chunk_index, c.text, c.heading, c.start_line, c.end_line
@@ -710,7 +709,7 @@ def _get_chunks_without_embeddings_impl(conn: psycopg.Connection, limit: int) ->
     ]
 
 
-def count_docs(conn: psycopg.Connection | None) -> int:  # type: ignore[type-arg]
+def count_docs(conn: psycopg.Connection | None) -> int:
     """Count total documents.
 
     Args:
@@ -726,7 +725,7 @@ def count_docs(conn: psycopg.Connection | None) -> int:  # type: ignore[type-arg
         return _count_docs_impl(c)
 
 
-def _count_docs_impl(conn: psycopg.Connection) -> int:  # type: ignore[type-arg]
+def _count_docs_impl(conn: psycopg.Connection) -> int:
     cursor = conn.execute("SELECT COUNT(*) AS cnt FROM docs")
     row = cursor.fetchone()
     if row is None:
@@ -734,7 +733,7 @@ def _count_docs_impl(conn: psycopg.Connection) -> int:  # type: ignore[type-arg]
     return int(row["cnt"])
 
 
-def count_chunks(conn: psycopg.Connection | None) -> int:  # type: ignore[type-arg]
+def count_chunks(conn: psycopg.Connection | None) -> int:
     """Count total chunks.
 
     Args:
@@ -750,7 +749,7 @@ def count_chunks(conn: psycopg.Connection | None) -> int:  # type: ignore[type-a
         return _count_chunks_impl(c)
 
 
-def _count_chunks_impl(conn: psycopg.Connection) -> int:  # type: ignore[type-arg]
+def _count_chunks_impl(conn: psycopg.Connection) -> int:
     cursor = conn.execute("SELECT COUNT(*) AS cnt FROM chunks")
     row = cursor.fetchone()
     if row is None:
@@ -758,7 +757,7 @@ def _count_chunks_impl(conn: psycopg.Connection) -> int:  # type: ignore[type-ar
     return int(row["cnt"])
 
 
-def count_embeddings(conn: psycopg.Connection | None) -> int:  # type: ignore[type-arg]
+def count_embeddings(conn: psycopg.Connection | None) -> int:
     """Count total embeddings.
 
     Args:
@@ -774,7 +773,7 @@ def count_embeddings(conn: psycopg.Connection | None) -> int:  # type: ignore[ty
         return _count_embeddings_impl(c)
 
 
-def _count_embeddings_impl(conn: psycopg.Connection) -> int:  # type: ignore[type-arg]
+def _count_embeddings_impl(conn: psycopg.Connection) -> int:
     cursor = conn.execute("SELECT COUNT(*) AS cnt FROM embeddings")
     row = cursor.fetchone()
     if row is None:
@@ -782,7 +781,7 @@ def _count_embeddings_impl(conn: psycopg.Connection) -> int:  # type: ignore[typ
     return int(row["cnt"])
 
 
-def get_section_counts(conn: psycopg.Connection | None) -> dict[str, int]:  # type: ignore[type-arg]
+def get_section_counts(conn: psycopg.Connection | None) -> dict[str, int]:
     """Get document counts by section.
 
     Args:
@@ -798,12 +797,12 @@ def get_section_counts(conn: psycopg.Connection | None) -> dict[str, int]:  # ty
         return _get_section_counts_impl(c)
 
 
-def _get_section_counts_impl(conn: psycopg.Connection) -> dict[str, int]:  # type: ignore[type-arg]
+def _get_section_counts_impl(conn: psycopg.Connection) -> dict[str, int]:
     cursor = conn.execute("SELECT section, COUNT(*) AS count FROM docs GROUP BY section")
     return {row["section"]: row["count"] for row in cursor}
 
 
-def set_meta(conn: psycopg.Connection | None, key: str, value: str) -> None:  # type: ignore[type-arg]
+def set_meta(conn: psycopg.Connection | None, key: str, value: str) -> None:
     """Set a metadata value.
 
     Args:
@@ -819,7 +818,7 @@ def set_meta(conn: psycopg.Connection | None, key: str, value: str) -> None:  # 
         _set_meta_impl(c, key, value)
 
 
-def _set_meta_impl(conn: psycopg.Connection, key: str, value: str) -> None:  # type: ignore[type-arg]
+def _set_meta_impl(conn: psycopg.Connection, key: str, value: str) -> None:
     conn.execute(
         """
         INSERT INTO meta (key, value) VALUES (%s, %s)
@@ -829,7 +828,7 @@ def _set_meta_impl(conn: psycopg.Connection, key: str, value: str) -> None:  # t
     )
 
 
-def get_meta(conn: psycopg.Connection | None, key: str) -> str | None:  # type: ignore[type-arg]
+def get_meta(conn: psycopg.Connection | None, key: str) -> str | None:
     """Get a metadata value.
 
     Args:
@@ -846,7 +845,7 @@ def get_meta(conn: psycopg.Connection | None, key: str) -> str | None:  # type: 
         return _get_meta_impl(c, key)
 
 
-def _get_meta_impl(conn: psycopg.Connection, key: str) -> str | None:  # type: ignore[type-arg]
+def _get_meta_impl(conn: psycopg.Connection, key: str) -> str | None:
     cursor = conn.execute("SELECT value FROM meta WHERE key = %s", (key,))
     row = cursor.fetchone()
     return row["value"] if row else None

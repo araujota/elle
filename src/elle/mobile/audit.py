@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
+from typing import Any
 
 import psycopg
 
@@ -29,7 +30,7 @@ PG_SCHEMA = "mobile"
 # =============================================================================
 
 
-def _migrate_audit_v2(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+def _migrate_audit_v2(conn: psycopg.Connection) -> None:
     """Create the audit_log table in the mobile schema."""
     conn.execute("""
         CREATE TABLE IF NOT EXISTS audit_log (
@@ -367,7 +368,7 @@ class MobileAuditStore:
             )
             return cursor.rowcount
 
-    def _row_to_entry(self, row: dict) -> MobileAuditEntry:
+    def _row_to_entry(self, row: dict[str, Any]) -> MobileAuditEntry:
         """Convert database row to MobileAuditEntry."""
         timestamp = row["timestamp"]
         if isinstance(timestamp, str):

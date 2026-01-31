@@ -262,20 +262,22 @@ def explain_stages() -> str:
             lines.append(f"    {stage.description}")
             lines.append("")
 
-    lines.extend([
-        "STAGE FLOW:",
-        "",
-        "  Simple query (no action needed):",
-        "    OBSERVE -> CLASSIFY -> RETRIEVE -> HYPOTHESIZE -> COMPLETE",
-        "",
-        "  Action required:",
-        "    OBSERVE -> CLASSIFY -> RETRIEVE -> HYPOTHESIZE -> SELECT -> ACT -> VERIFY -> RECORD -> COMPLETE",
-        "",
-        "  Multi-step action:",
-        "    ... -> ACT -> VERIFY -> SELECT -> ACT -> VERIFY -> RECORD -> COMPLETE",
-        "",
-        "The loop may iterate through SELECT/ACT/VERIFY multiple times",
-        "until the task is complete or an error occurs.",
-    ])
+    lines.extend(
+        [
+            "STAGE FLOW:",
+            "",
+            "  Simple query (no action needed):",
+            "    OBSERVE -> CLASSIFY -> RETRIEVE -> HYPOTHESIZE -> COMPLETE",
+            "",
+            "  Action required:",
+            "    OBSERVE -> CLASSIFY -> RETRIEVE -> HYPOTHESIZE -> SELECT -> ACT -> VERIFY -> RECORD -> COMPLETE",
+            "",
+            "  Multi-step action:",
+            "    ... -> ACT -> VERIFY -> SELECT -> ACT -> VERIFY -> RECORD -> COMPLETE",
+            "",
+            "The loop may iterate through SELECT/ACT/VERIFY multiple times",
+            "until the task is complete or an error occurs.",
+        ]
+    )
 
     return "\n".join(lines)

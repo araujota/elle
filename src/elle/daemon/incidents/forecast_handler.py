@@ -214,16 +214,9 @@ async def handle_forecast_trigger(
         incident_data = create_forecast_incident(
             metric=forecast.metric,
             current_value=forecast.current_value,
-            threshold=(
-                forecast.critical_threshold
-                if urgency == "act_now"
-                else forecast.warning_threshold
-            )
-            or 0.0,
+            threshold=(forecast.critical_threshold if urgency == "act_now" else forecast.warning_threshold) or 0.0,
             time_to_threshold=(
-                forecast.time_to_critical_hours
-                if urgency == "act_now"
-                else forecast.time_to_warning_hours
+                forecast.time_to_critical_hours if urgency == "act_now" else forecast.time_to_warning_hours
             ),
             rate_of_change=forecast.rate_of_change,
             urgency=urgency,
@@ -273,7 +266,9 @@ async def handle_forecast_trigger(
                 outcome = "improved" if success else "no_change"
 
                 await _notify_forecast_remediated(
-                    forecast, incident_id, outcome,
+                    forecast,
+                    incident_id,
+                    outcome,
                     plan_summary=plan.summary,
                     cause_description=plan.cause_description,
                 )
@@ -289,7 +284,9 @@ async def handle_forecast_trigger(
             else:
                 # Notify user with plan + "Execute Now" action
                 await _notify_forecast_warning(
-                    forecast, incident_id, plan,
+                    forecast,
+                    incident_id,
+                    plan,
                 )
 
                 return ForecastIncidentResult(
@@ -307,7 +304,9 @@ async def handle_forecast_trigger(
             # Notify after execution
             outcome = "improved" if success else "no_change"
             await _notify_forecast_remediated(
-                forecast, incident_id, outcome,
+                forecast,
+                incident_id,
+                outcome,
             )
 
             return ForecastIncidentResult(

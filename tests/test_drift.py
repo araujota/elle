@@ -1,7 +1,5 @@
 """Tests for surface drift detection."""
 
-import pytest
-
 from elle.daemon.incidents.control_surface import (
     ConfigFileSurface,
     ControlSurfaceSnapshot,
@@ -94,9 +92,7 @@ class TestDetectSurfaceDrift:
     def test_drift_on_new_service(self) -> None:
         """New service should be detected as drift."""
         snap1 = make_snapshot(services=())
-        snap2 = make_snapshot(
-            services=(SystemdServiceSurface(unit_name="new.service", enabled=True),)
-        )
+        snap2 = make_snapshot(services=(SystemdServiceSurface(unit_name="new.service", enabled=True),))
         drift = detect_surface_drift(snap1, snap2)
         assert drift.get("service:new.service") is True
 

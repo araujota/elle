@@ -23,6 +23,7 @@ from elle.daemon.incidents.store import (
     create_incident_draft,
     delete_incident,
     finalize_outcome,
+    get_action_count,
     get_actions,
     get_all_embeddings,
     get_config_state_by_path,
@@ -33,12 +34,11 @@ from elle.daemon.incidents.store import (
     get_embedding,
     get_incident,
     get_incident_count,
-    get_action_count,
-    get_snapshot_count,
     get_incidents_without_embeddings,
     get_linked_events,
     get_prepared_plan,
     get_snapshot,
+    get_snapshot_count,
     get_snapshots,
     get_surface_hashes,
     get_telemetry_snapshot,
@@ -529,7 +529,7 @@ class TestDecisionRecords:
         """Test decision record with full provenance details."""
         incident = create_incident_draft(title="Provenance test", conn=conn)
 
-        from elle.daemon.incidents.models import ManPageCitation, IncidentCitation
+        from elle.daemon.incidents.models import IncidentCitation, ManPageCitation
 
         provenance = Provenance(
             man_pages=(
@@ -834,7 +834,7 @@ class TestListIncidentsFilters:
 
     def test_list_by_status(self, conn):
         """Test listing incidents filtered by status."""
-        inc1 = create_incident_draft(title="Open inc", conn=conn)
+        create_incident_draft(title="Open inc", conn=conn)
         inc2 = create_incident_draft(title="Resolved inc", conn=conn)
         finalize_outcome(inc2.incident_id, "improved", conn=conn)
 
@@ -867,7 +867,7 @@ class TestListIncidentsFilters:
     def test_list_ordering_by_updated_at(self, conn):
         """Test that list_incidents returns incidents ordered by updated_at descending."""
         inc1 = create_incident_draft(title="First", conn=conn)
-        inc2 = create_incident_draft(title="Second", conn=conn)
+        create_incident_draft(title="Second", conn=conn)
         # Update the first incident so its updated_at becomes most recent
         update_incident(inc1.incident_id, summary="Updated", conn=conn)
 
@@ -1057,14 +1057,22 @@ class TestSnapshotReplacement:
         incident = create_incident_draft(title="Replace snap", conn=conn)
 
         snap1 = SystemSnapshot(
-            os="Ubuntu", kernel="6.5", uptime_sec=100,
-            cpu_load=(1.0, 1.0, 1.0), mem_total_mb=8000,
-            mem_free_mb=1000, mem_available_mb=2000,
+            os="Ubuntu",
+            kernel="6.5",
+            uptime_sec=100,
+            cpu_load=(1.0, 1.0, 1.0),
+            mem_total_mb=8000,
+            mem_free_mb=1000,
+            mem_available_mb=2000,
         )
         snap2 = SystemSnapshot(
-            os="Ubuntu", kernel="6.8", uptime_sec=500,
-            cpu_load=(0.1, 0.1, 0.1), mem_total_mb=16000,
-            mem_free_mb=8000, mem_available_mb=12000,
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=500,
+            cpu_load=(0.1, 0.1, 0.1),
+            mem_total_mb=16000,
+            mem_free_mb=8000,
+            mem_available_mb=12000,
         )
 
         attach_snapshot(incident.incident_id, "pre", snap1, conn=conn)
@@ -1120,9 +1128,13 @@ class TestDeleteCascade:
         incident = create_incident_draft(title="Cascade snap", conn=conn)
 
         snap = SystemSnapshot(
-            os="Ubuntu", kernel="6.8", uptime_sec=100,
-            cpu_load=(0.5, 0.5, 0.5), mem_total_mb=1000,
-            mem_free_mb=500, mem_available_mb=600,
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=100,
+            cpu_load=(0.5, 0.5, 0.5),
+            mem_total_mb=1000,
+            mem_free_mb=500,
+            mem_available_mb=600,
         )
         attach_snapshot(incident.incident_id, "pre", snap, conn=conn)
 

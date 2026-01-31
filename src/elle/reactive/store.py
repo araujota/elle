@@ -34,7 +34,6 @@ from elle.storage.helpers import json_dumps, json_loads, parse_datetime, seriali
 PG_SCHEMA = "reactive"
 
 
-
 # =============================================================================
 # Reactive Function CRUD
 # =============================================================================
@@ -42,7 +41,7 @@ PG_SCHEMA = "reactive"
 
 def create_function(
     func: ReactiveFunction,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> ReactiveFunction:
     """Create a new reactive function.
 
@@ -57,7 +56,7 @@ def create_function(
         psycopg.errors.UniqueViolation: If name already exists.
     """
 
-    def _run(c: psycopg.Connection) -> ReactiveFunction:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> ReactiveFunction:
         cursor = c.cursor()
         cursor.execute(
             """
@@ -106,7 +105,7 @@ def update_function(
     policy: PolicySpec | None = None,
     state: dict[str, StateProbe] | None = None,
     tags: tuple[str, ...] | None = None,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> ReactiveFunction | None:
     """Update an existing reactive function.
 
@@ -121,7 +120,7 @@ def update_function(
         Updated ReactiveFunction, or None if not found.
     """
 
-    def _run(c: psycopg.Connection) -> ReactiveFunction | None:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> ReactiveFunction | None:
         # Build update statement dynamically
         updates = ["updated_at = %s"]
         values: list[Any] = [serialize_datetime(datetime.utcnow())]
@@ -176,7 +175,7 @@ def update_function(
 
 def get_function(
     function_id: str,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> ReactiveFunction | None:
     """Get a reactive function by ID.
 
@@ -195,7 +194,7 @@ def get_function(
 
 
 def _get_function_inner(
-    c: psycopg.Connection,  # type: ignore[type-arg]
+    c: psycopg.Connection,
     function_id: str,
 ) -> ReactiveFunction | None:
     """Internal helper to get a function within an existing connection."""
@@ -211,7 +210,7 @@ def _get_function_inner(
 
 def get_function_by_name(
     name: str,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> ReactiveFunction | None:
     """Get a reactive function by name.
 
@@ -223,7 +222,7 @@ def get_function_by_name(
         ReactiveFunction if found, None otherwise.
     """
 
-    def _run(c: psycopg.Connection) -> ReactiveFunction | None:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> ReactiveFunction | None:
         cursor = c.cursor()
         cursor.execute("SELECT * FROM reactive_functions WHERE name = %s", (name,))
         row = cursor.fetchone()
@@ -245,7 +244,7 @@ def list_functions(
     tags: list[str] | None = None,
     limit: int = 100,
     offset: int = 0,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> list[ReactiveFunction]:
     """List reactive functions with optional filtering.
 
@@ -260,7 +259,7 @@ def list_functions(
         List of ReactiveFunctions.
     """
 
-    def _run(c: psycopg.Connection) -> list[ReactiveFunction]:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> list[ReactiveFunction]:
         query = "SELECT * FROM reactive_functions WHERE 1=1"
         params: list[Any] = []
 
@@ -289,7 +288,7 @@ def list_functions(
 
 
 def list_enabled_with_event_trigger(
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> list[ReactiveFunction]:
     """List enabled functions that have event triggers.
 
@@ -302,7 +301,7 @@ def list_enabled_with_event_trigger(
         List of enabled ReactiveFunctions with event triggers.
     """
 
-    def _run(c: psycopg.Connection) -> list[ReactiveFunction]:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> list[ReactiveFunction]:
         cursor = c.cursor()
         # Use PostgreSQL JSONB extraction for trigger type
         cursor.execute(
@@ -324,7 +323,7 @@ def list_enabled_with_event_trigger(
 
 
 def list_enabled_with_schedule_trigger(
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> list[ReactiveFunction]:
     """List enabled functions that have schedule triggers.
 
@@ -337,7 +336,7 @@ def list_enabled_with_schedule_trigger(
         List of enabled ReactiveFunctions with schedule triggers.
     """
 
-    def _run(c: psycopg.Connection) -> list[ReactiveFunction]:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> list[ReactiveFunction]:
         cursor = c.cursor()
         cursor.execute(
             """
@@ -359,7 +358,7 @@ def list_enabled_with_schedule_trigger(
 
 def list_enabled_with_forecast_trigger(
     urgency: str | None = None,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> list[ReactiveFunction]:
     """List enabled functions that have forecast triggers.
 
@@ -374,7 +373,7 @@ def list_enabled_with_forecast_trigger(
         List of enabled ReactiveFunctions with forecast triggers.
     """
 
-    def _run(c: psycopg.Connection) -> list[ReactiveFunction]:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> list[ReactiveFunction]:
         cursor = c.cursor()
 
         if urgency:
@@ -409,7 +408,7 @@ def list_enabled_with_forecast_trigger(
 
 def delete_function(
     function_id: str,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> bool:
     """Delete a reactive function and all related data.
 
@@ -421,7 +420,7 @@ def delete_function(
         True if deleted, False if not found.
     """
 
-    def _run(c: psycopg.Connection) -> bool:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> bool:
         cursor = c.cursor()
         cursor.execute("DELETE FROM reactive_functions WHERE id = %s", (function_id,))
         return cursor.rowcount > 0
@@ -435,7 +434,7 @@ def delete_function(
 
 def delete_function_by_name(
     name: str,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> bool:
     """Delete a reactive function by name.
 
@@ -447,7 +446,7 @@ def delete_function_by_name(
         True if deleted, False if not found.
     """
 
-    def _run(c: psycopg.Connection) -> bool:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> bool:
         cursor = c.cursor()
         cursor.execute("DELETE FROM reactive_functions WHERE name = %s", (name,))
         return cursor.rowcount > 0
@@ -459,7 +458,7 @@ def delete_function_by_name(
         return _run(c)
 
 
-def _row_to_function(row: dict) -> ReactiveFunction:
+def _row_to_function(row: dict[str, Any]) -> ReactiveFunction:
     """Convert a database row to a ReactiveFunction."""
     # Parse trigger
     trigger_data = json_loads(row["trigger_json"])
@@ -546,7 +545,7 @@ def _parse_trigger(data: dict[str, Any]) -> Trigger:
 
 def record_execution(
     record: ExecutionRecord,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> ExecutionRecord:
     """Record a reactive function execution.
 
@@ -558,7 +557,7 @@ def record_execution(
         The stored ExecutionRecord.
     """
 
-    def _run(c: psycopg.Connection) -> ExecutionRecord:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> ExecutionRecord:
         cursor = c.cursor()
         cursor.execute(
             """
@@ -598,7 +597,7 @@ def get_execution_history(
     function_id: str,
     limit: int = 50,
     offset: int = 0,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> list[ExecutionRecord]:
     """Get execution history for a function.
 
@@ -612,7 +611,7 @@ def get_execution_history(
         List of ExecutionRecords, most recent first.
     """
 
-    def _run(c: psycopg.Connection) -> list[ExecutionRecord]:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> list[ExecutionRecord]:
         cursor = c.cursor()
         cursor.execute(
             """
@@ -636,7 +635,7 @@ def get_execution_history(
 def get_recent_executions(
     limit: int = 50,
     success_only: bool = False,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> list[ExecutionRecord]:
     """Get recent executions across all functions.
 
@@ -649,7 +648,7 @@ def get_recent_executions(
         List of ExecutionRecords, most recent first.
     """
 
-    def _run(c: psycopg.Connection) -> list[ExecutionRecord]:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> list[ExecutionRecord]:
         query = "SELECT * FROM execution_history"
         params: list[Any] = []
 
@@ -671,7 +670,7 @@ def get_recent_executions(
         return _run(c)
 
 
-def _row_to_execution(row: dict) -> ExecutionRecord:
+def _row_to_execution(row: dict[str, Any]) -> ExecutionRecord:
     """Convert a database row to an ExecutionRecord."""
     # Parse actions_results
     actions_results_data = json_loads(row["actions_results_json"]) or []
@@ -705,7 +704,7 @@ def _row_to_execution(row: dict) -> ExecutionRecord:
 
 def get_rate_limit_state(
     function_id: str,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> RateLimitState:
     """Get rate limiting state for a function.
 
@@ -717,7 +716,7 @@ def get_rate_limit_state(
         RateLimitState (with defaults if no state exists).
     """
 
-    def _run(c: psycopg.Connection) -> RateLimitState:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> RateLimitState:
         cursor = c.cursor()
         cursor.execute(
             """
@@ -754,7 +753,7 @@ def update_rate_limit_state(
     last_execution: datetime,
     daily_executions: int,
     daily_reset_date: str,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> None:
     """Update rate limiting state for a function.
 
@@ -766,7 +765,7 @@ def update_rate_limit_state(
         conn: psycopg connection.
     """
 
-    def _run(c: psycopg.Connection) -> None:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> None:
         cursor = c.cursor()
         now = serialize_datetime(datetime.utcnow())
 
@@ -800,7 +799,7 @@ def set_function_state(
     function_id: str,
     key: str,
     value: Any,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> None:
     """Set a custom state value for a function.
 
@@ -811,7 +810,7 @@ def set_function_state(
         conn: psycopg connection.
     """
 
-    def _run(c: psycopg.Connection) -> None:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> None:
         cursor = c.cursor()
         cursor.execute(
             """
@@ -834,7 +833,7 @@ def set_function_state(
 def get_function_state(
     function_id: str,
     key: str,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> Any:
     """Get a custom state value for a function.
 
@@ -847,7 +846,7 @@ def get_function_state(
         State value, or None if not found.
     """
 
-    def _run(c: psycopg.Connection) -> Any:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> Any:
         cursor = c.cursor()
         cursor.execute(
             """
@@ -877,7 +876,7 @@ def get_function_state(
 
 def get_function_count(
     enabled_only: bool = False,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> int:
     """Get total number of reactive functions.
 
@@ -889,7 +888,7 @@ def get_function_count(
         Total function count.
     """
 
-    def _run(c: psycopg.Connection) -> int:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> int:
         cursor = c.cursor()
         if enabled_only:
             cursor.execute("SELECT COUNT(*) AS cnt FROM reactive_functions WHERE enabled = TRUE")
@@ -908,7 +907,7 @@ def get_function_count(
 def get_execution_count(
     function_id: str | None = None,
     since: datetime | None = None,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> int:
     """Get total number of executions.
 
@@ -921,7 +920,7 @@ def get_execution_count(
         Total execution count.
     """
 
-    def _run(c: psycopg.Connection) -> int:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> int:
         query = "SELECT COUNT(*) AS cnt FROM execution_history WHERE 1=1"
         params: list[Any] = []
 

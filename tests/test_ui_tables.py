@@ -1,12 +1,11 @@
-from __future__ import annotations
-
 """Tests for elle.cli.ui.tables -- Table formatting and display."""
+
+from __future__ import annotations
 
 from datetime import datetime, timedelta
 
 import pytest
 from rich.table import Table
-from rich.text import Text
 
 from elle.cli.ui.tables import (
     command_history_table,
@@ -21,10 +20,10 @@ from elle.cli.ui.tables import (
     snapshot_diff_table,
 )
 
-
 # ---------------------------------------------------------------------------
 # Incident Table
 # ---------------------------------------------------------------------------
+
 
 class TestIncidentTable:
     def test_empty(self):
@@ -123,6 +122,7 @@ class TestIncidentTable:
 # Incident Table Compact
 # ---------------------------------------------------------------------------
 
+
 class TestIncidentTableCompact:
     def test_empty(self):
         result = incident_table_compact([])
@@ -164,6 +164,7 @@ class TestIncidentTableCompact:
 # ---------------------------------------------------------------------------
 # Event Table
 # ---------------------------------------------------------------------------
+
 
 class TestEventTable:
     def test_empty(self):
@@ -230,6 +231,7 @@ class TestEventTable:
 # Man Vault Results Table
 # ---------------------------------------------------------------------------
 
+
 class TestManvaultResultsTable:
     def test_empty(self):
         result = manvault_results_table([])
@@ -247,6 +249,7 @@ class TestManvaultResultsTable:
 # ---------------------------------------------------------------------------
 # Disk Status Table
 # ---------------------------------------------------------------------------
+
 
 class TestDiskStatusTable:
     def test_basic(self):
@@ -266,6 +269,7 @@ class TestDiskStatusTable:
 # Service Status Table
 # ---------------------------------------------------------------------------
 
+
 class TestServiceStatusTable:
     def test_basic(self):
         services = [
@@ -281,6 +285,7 @@ class TestServiceStatusTable:
 # Interface Status Table
 # ---------------------------------------------------------------------------
 
+
 class TestInterfaceStatusTable:
     def test_basic(self):
         interfaces = [
@@ -295,6 +300,7 @@ class TestInterfaceStatusTable:
 # Command History Table
 # ---------------------------------------------------------------------------
 
+
 class TestCommandHistoryTable:
     def test_basic(self):
         commands = [
@@ -305,10 +311,7 @@ class TestCommandHistoryTable:
         assert isinstance(result, Table)
 
     def test_max_rows(self):
-        commands = [
-            {"command": f"cmd-{i}", "exit_code": 0}
-            for i in range(20)
-        ]
+        commands = [{"command": f"cmd-{i}", "exit_code": 0} for i in range(20)]
         result = command_history_table(commands, max_rows=5)
         assert isinstance(result, Table)
 
@@ -321,6 +324,7 @@ class TestCommandHistoryTable:
 # ---------------------------------------------------------------------------
 # Options Table
 # ---------------------------------------------------------------------------
+
 
 class TestOptionsTable:
     def test_basic(self):
@@ -342,6 +346,7 @@ class TestOptionsTable:
 # ---------------------------------------------------------------------------
 # Snapshot Diff Table
 # ---------------------------------------------------------------------------
+
 
 class TestSnapshotDiffTable:
     def test_basic(self):

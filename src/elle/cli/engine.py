@@ -241,9 +241,7 @@ class Engine:
             case Intent.SYSTEM_QUESTION | Intent.SYSTEM_TASK:
                 # Route through unified agentic loop when enabled
                 # Falls back to legacy handlers if loop is disabled
-                return self._handle_via_agentic_loop(
-                    user_input, intent_result, session, stream_output=stream_output
-                )
+                return self._handle_via_agentic_loop(user_input, intent_result, session, stream_output=stream_output)
             case Intent.FIXIT:
                 return self._handle_fix(session, interactive=stream_output)
             case Intent.EXPLAIN_COMMAND:
@@ -1436,7 +1434,7 @@ Validates package operations before execution to detect potential issues.
         parts.append(response.answer)
 
         # Actions taken (if any)
-        if hasattr(response, 'actions_taken') and response.actions_taken:
+        if hasattr(response, "actions_taken") and response.actions_taken:
             parts.append("")
             parts.append(f"{Colors.BOLD}Actions taken:{Colors.RESET}")
             for action in response.actions_taken:
@@ -1467,7 +1465,7 @@ Validates package operations before execution to detect potential issues.
             parts.append(f"\n{Colors.DIM}Try: {response.follow_up_suggestions[0]}{Colors.RESET}")
 
         # Iteration count (if multiple)
-        if hasattr(response, 'iterations') and response.iterations > 1:
+        if hasattr(response, "iterations") and response.iterations > 1:
             parts.append(f"{Colors.DIM}(Completed in {response.iterations} iterations){Colors.RESET}")
 
         return "\n".join(parts)
@@ -1675,9 +1673,7 @@ Validates package operations before execution to detect potential issues.
 
             # Add audit trail link if available
             if result.execution_id:
-                output_parts.append(
-                    f"{Colors.DIM}[Audit: {result.execution_id[:8]}]{Colors.RESET}"
-                )
+                output_parts.append(f"{Colors.DIM}[Audit: {result.execution_id[:8]}]{Colors.RESET}")
 
             return EngineResult(
                 output="\n".join(output_parts) if output_parts else "",

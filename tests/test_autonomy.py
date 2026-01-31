@@ -1,31 +1,28 @@
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from pathlib import Path
 
 from elle.capabilities.autonomy import (
-    AutonomyLevel,
-    risk_allowed,
     RISK_ORDERING,
-    EarnedAutonomyConfig,
-    AutonomyPreferences,
-    AutonomyOverride,
-    ExecutionStats,
-    AutonomyStatus,
-    AutonomyStore,
     AutonomyEngine,
+    AutonomyLevel,
+    AutonomyPreferences,
+    AutonomyStore,
+    EarnedAutonomyConfig,
+    ExecutionStats,
     get_autonomy_engine,
     reset_autonomy_engine,
+    risk_allowed,
 )
-
 
 # ---------------------------------------------------------------------------
 # AutonomyLevel
 # ---------------------------------------------------------------------------
 
-class TestAutonomyLevel:
 
+class TestAutonomyLevel:
     def test_readonly_max_risk(self):
         assert AutonomyLevel.READONLY.max_risk is None
 
@@ -46,8 +43,8 @@ class TestAutonomyLevel:
 # risk_allowed
 # ---------------------------------------------------------------------------
 
-class TestRiskAllowed:
 
+class TestRiskAllowed:
     def test_none_max_denies_all(self):
         assert risk_allowed("low", None) is False
 
@@ -72,8 +69,8 @@ class TestRiskAllowed:
 # ExecutionStats
 # ---------------------------------------------------------------------------
 
-class TestExecutionStats:
 
+class TestExecutionStats:
     def test_success_rate_no_executions(self):
         stats = ExecutionStats(capability_name="test")
         assert stats.success_rate == 0.0
@@ -91,13 +88,11 @@ class TestExecutionStats:
 # AutonomyStore (with tmp_path)
 # ---------------------------------------------------------------------------
 
-class TestAutonomyStore:
 
+class TestAutonomyStore:
     @pytest.fixture
     def store(self, deps_conn):
-        with patch(
-            "elle.capabilities.autonomy.AutonomyStore._ensure_schema"
-        ):
+        with patch("elle.capabilities.autonomy.AutonomyStore._ensure_schema"):
             s = AutonomyStore.__new__(AutonomyStore)
             s.conn = deps_conn
         return s
@@ -189,13 +184,11 @@ class TestAutonomyStore:
 # AutonomyEngine
 # ---------------------------------------------------------------------------
 
-class TestAutonomyEngine:
 
+class TestAutonomyEngine:
     @pytest.fixture
     def engine_store(self, deps_conn):
-        with patch(
-            "elle.capabilities.autonomy.AutonomyStore._ensure_schema"
-        ):
+        with patch("elle.capabilities.autonomy.AutonomyStore._ensure_schema"):
             s = AutonomyStore.__new__(AutonomyStore)
             s.conn = deps_conn
         return s
@@ -359,10 +352,11 @@ class TestAutonomyEngine:
 # Module-level functions
 # ---------------------------------------------------------------------------
 
-class TestModuleFunctions:
 
+class TestModuleFunctions:
     def test_get_and_reset_engine(self):
         import elle.capabilities.autonomy as mod
+
         reset_autonomy_engine()
         assert mod._engine is None
         with patch("elle.capabilities.autonomy.AutonomyStore"):

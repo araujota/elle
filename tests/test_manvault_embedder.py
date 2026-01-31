@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,10 +12,10 @@ from elle.daemon.manvault.embedder import (
 )
 from elle.daemon.manvault.models import ManChunk
 
-
 # ---------------------------------------------------------------------------
 # cosine_similarity
 # ---------------------------------------------------------------------------
+
 
 class TestCosineSimilarity:
     def test_identical_vectors(self):
@@ -47,6 +46,7 @@ class TestCosineSimilarity:
 # euclidean_distance
 # ---------------------------------------------------------------------------
 
+
 class TestEuclideanDistance:
     def test_same_point(self):
         v = [1.0, 2.0, 3.0]
@@ -65,6 +65,7 @@ class TestEuclideanDistance:
 # ---------------------------------------------------------------------------
 # ManVaultEmbedder
 # ---------------------------------------------------------------------------
+
 
 class TestManVaultEmbedder:
     def test_init_defaults(self):
@@ -163,9 +164,11 @@ class TestManVaultEmbedder:
         mock_client = MagicMock()
         e = ManVaultEmbedder(client=mock_client, model="m")
         chunk = ManChunk(id=42, doc_id=1, chunk_index=0, text="hello")
-        with patch("elle.daemon.manvault.embedder.get_connection") as mock_conn, \
-             patch("elle.daemon.manvault.embedder.ensure_schema"), \
-             patch("elle.daemon.manvault.embedder.get_embedding", return_value=[0.1]):
+        with (
+            patch("elle.daemon.manvault.embedder.get_connection") as mock_conn,
+            patch("elle.daemon.manvault.embedder.ensure_schema"),
+            patch("elle.daemon.manvault.embedder.get_embedding", return_value=[0.1]),
+        ):
             mock_c = MagicMock()
             mock_c.close = MagicMock()
             mock_conn.return_value = mock_c
@@ -177,10 +180,12 @@ class TestManVaultEmbedder:
         mock_client.generate_embedding.return_value = [0.1, 0.2]
         e = ManVaultEmbedder(client=mock_client, model="m")
         chunk = ManChunk(id=42, doc_id=1, chunk_index=0, text="hello")
-        with patch("elle.daemon.manvault.embedder.get_connection") as mock_conn, \
-             patch("elle.daemon.manvault.embedder.ensure_schema"), \
-             patch("elle.daemon.manvault.embedder.get_embedding", return_value=None), \
-             patch("elle.daemon.manvault.embedder.upsert_embedding"):
+        with (
+            patch("elle.daemon.manvault.embedder.get_connection") as mock_conn,
+            patch("elle.daemon.manvault.embedder.ensure_schema"),
+            patch("elle.daemon.manvault.embedder.get_embedding", return_value=None),
+            patch("elle.daemon.manvault.embedder.upsert_embedding"),
+        ):
             mock_c = MagicMock()
             mock_c.close = MagicMock()
             mock_conn.return_value = mock_c
@@ -190,12 +195,15 @@ class TestManVaultEmbedder:
     def test_embed_chunk_error(self):
         mock_client = MagicMock()
         from elle.rag.ollama_client import OllamaError
+
         mock_client.generate_embedding.side_effect = OllamaError("fail")
         e = ManVaultEmbedder(client=mock_client, model="m")
         chunk = ManChunk(id=42, doc_id=1, chunk_index=0, text="hello")
-        with patch("elle.daemon.manvault.embedder.get_connection") as mock_conn, \
-             patch("elle.daemon.manvault.embedder.ensure_schema"), \
-             patch("elle.daemon.manvault.embedder.get_embedding", return_value=None):
+        with (
+            patch("elle.daemon.manvault.embedder.get_connection") as mock_conn,
+            patch("elle.daemon.manvault.embedder.ensure_schema"),
+            patch("elle.daemon.manvault.embedder.get_embedding", return_value=None),
+        ):
             mock_c = MagicMock()
             mock_c.close = MagicMock()
             mock_conn.return_value = mock_c
@@ -205,9 +213,11 @@ class TestManVaultEmbedder:
     def test_embed_document_no_chunks(self):
         mock_client = MagicMock()
         e = ManVaultEmbedder(client=mock_client, model="m")
-        with patch("elle.daemon.manvault.embedder.get_connection") as mock_conn, \
-             patch("elle.daemon.manvault.embedder.ensure_schema"), \
-             patch("elle.daemon.manvault.embedder.get_chunks_for_doc", return_value=[]):
+        with (
+            patch("elle.daemon.manvault.embedder.get_connection") as mock_conn,
+            patch("elle.daemon.manvault.embedder.ensure_schema"),
+            patch("elle.daemon.manvault.embedder.get_chunks_for_doc", return_value=[]),
+        ):
             mock_c = MagicMock()
             mock_c.close = MagicMock()
             mock_conn.return_value = mock_c
@@ -223,11 +233,13 @@ class TestManVaultEmbedder:
             ManChunk(id=2, doc_id=1, chunk_index=1, text="world"),
             ManChunk(id=None, doc_id=1, chunk_index=2, text="skip"),
         ]
-        with patch("elle.daemon.manvault.embedder.get_connection") as mock_conn, \
-             patch("elle.daemon.manvault.embedder.ensure_schema"), \
-             patch("elle.daemon.manvault.embedder.get_chunks_for_doc", return_value=chunks), \
-             patch("elle.daemon.manvault.embedder.get_embedding", return_value=None), \
-             patch("elle.daemon.manvault.embedder.upsert_embeddings_batch"):
+        with (
+            patch("elle.daemon.manvault.embedder.get_connection") as mock_conn,
+            patch("elle.daemon.manvault.embedder.ensure_schema"),
+            patch("elle.daemon.manvault.embedder.get_chunks_for_doc", return_value=chunks),
+            patch("elle.daemon.manvault.embedder.get_embedding", return_value=None),
+            patch("elle.daemon.manvault.embedder.upsert_embeddings_batch"),
+        ):
             mock_c = MagicMock()
             mock_c.close = MagicMock()
             mock_conn.return_value = mock_c
@@ -238,10 +250,12 @@ class TestManVaultEmbedder:
         mock_client = MagicMock()
         e = ManVaultEmbedder(client=mock_client, model="m")
         chunks = [ManChunk(id=1, doc_id=1, chunk_index=0, text="hello")]
-        with patch("elle.daemon.manvault.embedder.get_connection") as mock_conn, \
-             patch("elle.daemon.manvault.embedder.ensure_schema"), \
-             patch("elle.daemon.manvault.embedder.get_chunks_for_doc", return_value=chunks), \
-             patch("elle.daemon.manvault.embedder.get_embedding", return_value=[0.1]):
+        with (
+            patch("elle.daemon.manvault.embedder.get_connection") as mock_conn,
+            patch("elle.daemon.manvault.embedder.ensure_schema"),
+            patch("elle.daemon.manvault.embedder.get_chunks_for_doc", return_value=chunks),
+            patch("elle.daemon.manvault.embedder.get_embedding", return_value=[0.1]),
+        ):
             mock_c = MagicMock()
             mock_c.close = MagicMock()
             mock_conn.return_value = mock_c
@@ -251,9 +265,11 @@ class TestManVaultEmbedder:
     def test_embed_all_pending_empty(self):
         mock_client = MagicMock()
         e = ManVaultEmbedder(client=mock_client, model="m")
-        with patch("elle.daemon.manvault.embedder.get_connection") as mock_conn, \
-             patch("elle.daemon.manvault.embedder.ensure_schema"), \
-             patch("elle.daemon.manvault.embedder.get_chunks_without_embeddings", return_value=[]):
+        with (
+            patch("elle.daemon.manvault.embedder.get_connection") as mock_conn,
+            patch("elle.daemon.manvault.embedder.ensure_schema"),
+            patch("elle.daemon.manvault.embedder.get_chunks_without_embeddings", return_value=[]),
+        ):
             mock_c = MagicMock()
             mock_c.close = MagicMock()
             mock_conn.return_value = mock_c
@@ -266,16 +282,19 @@ class TestManVaultEmbedder:
         e = ManVaultEmbedder(client=mock_client, model="m")
 
         call_count = [0]
+
         def fake_get_chunks(conn, limit):
             call_count[0] += 1
             if call_count[0] == 1:
                 return [ManChunk(id=1, doc_id=1, chunk_index=0, text="a")]
             return []
 
-        with patch("elle.daemon.manvault.embedder.get_connection") as mock_conn, \
-             patch("elle.daemon.manvault.embedder.ensure_schema"), \
-             patch("elle.daemon.manvault.embedder.get_chunks_without_embeddings", side_effect=fake_get_chunks), \
-             patch("elle.daemon.manvault.embedder.upsert_embeddings_batch"):
+        with (
+            patch("elle.daemon.manvault.embedder.get_connection") as mock_conn,
+            patch("elle.daemon.manvault.embedder.ensure_schema"),
+            patch("elle.daemon.manvault.embedder.get_chunks_without_embeddings", side_effect=fake_get_chunks),
+            patch("elle.daemon.manvault.embedder.upsert_embeddings_batch"),
+        ):
             mock_c = MagicMock()
             mock_c.close = MagicMock()
             mock_conn.return_value = mock_c
@@ -288,6 +307,7 @@ class TestManVaultEmbedder:
         e = ManVaultEmbedder(client=mock_client, model="m")
 
         call_count = [0]
+
         def fake_get_chunks(conn, limit):
             call_count[0] += 1
             if call_count[0] == 1:
@@ -295,10 +315,12 @@ class TestManVaultEmbedder:
             return []
 
         progress_calls = []
-        with patch("elle.daemon.manvault.embedder.get_connection") as mock_conn, \
-             patch("elle.daemon.manvault.embedder.ensure_schema"), \
-             patch("elle.daemon.manvault.embedder.get_chunks_without_embeddings", side_effect=fake_get_chunks), \
-             patch("elle.daemon.manvault.embedder.upsert_embeddings_batch"):
+        with (
+            patch("elle.daemon.manvault.embedder.get_connection") as mock_conn,
+            patch("elle.daemon.manvault.embedder.ensure_schema"),
+            patch("elle.daemon.manvault.embedder.get_chunks_without_embeddings", side_effect=fake_get_chunks),
+            patch("elle.daemon.manvault.embedder.upsert_embeddings_batch"),
+        ):
             mock_c = MagicMock()
             mock_c.close = MagicMock()
             mock_conn.return_value = mock_c
@@ -314,9 +336,11 @@ class TestManVaultEmbedder:
 # Module singleton
 # ---------------------------------------------------------------------------
 
+
 class TestGetEmbedder:
     def test_singleton(self):
         import elle.daemon.manvault.embedder as mod
+
         old = mod._embedder
         mod._embedder = None
         try:

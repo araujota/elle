@@ -59,9 +59,7 @@ class EditOperation(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    kind: Literal["set", "rm", "add", "replace", "append", "insert"] = Field(
-        description="Type of edit operation"
-    )
+    kind: Literal["set", "rm", "add", "replace", "append", "insert"] = Field(description="Type of edit operation")
     path: str | None = Field(
         default=None,
         description="Path expression (JSONPath, XPath, Augeas path, INI section.key, etc.)",
@@ -414,6 +412,5 @@ class Tier5RequiresJustificationError(EditingStackError):
     def __init__(self, file_path: str) -> None:
         self.file_path = file_path
         super().__init__(
-            f"Tier 5 (Text Patching) requires justification for {file_path}. "
-            "Set tier5_justification in the request."
+            f"Tier 5 (Text Patching) requires justification for {file_path}. Set tier5_justification in the request."
         )

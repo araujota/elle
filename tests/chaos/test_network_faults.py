@@ -7,7 +7,7 @@ DNS failure, and connection refused scenarios.
 from __future__ import annotations
 
 import ssl
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -42,9 +42,7 @@ class TestExpiredMTLSCert:
     async def test_cloud_sync_handles_cert_error(self, fault: FaultInjector) -> None:
         """Cloud sync worker should handle SSL certificate errors."""
         mock_client = AsyncMock()
-        mock_client.post = AsyncMock(
-            side_effect=ssl.SSLError(1, "[SSL] certificate verify failed")
-        )
+        mock_client.post = AsyncMock(side_effect=ssl.SSLError(1, "[SSL] certificate verify failed"))
 
         with pytest.raises(ssl.SSLError):
             await mock_client.post("https://cloud.elle.dev/api/incidents")
@@ -67,9 +65,7 @@ class TestUnreachableNotificationEndpoint:
     async def test_notification_falls_back_on_endpoint_failure(self) -> None:
         """NotificationService should fall back to local delivery when remote fails."""
         mock_service = MagicMock()
-        mock_service.send = MagicMock(
-            return_value=MagicMock(success=True, method="notify-send")
-        )
+        mock_service.send = MagicMock(return_value=MagicMock(success=True, method="notify-send"))
 
         # When remote endpoint fails, local notify-send should work
         result = mock_service.send(MagicMock(title="Test", body="Fallback"))
@@ -82,9 +78,7 @@ class TestUnreachableNotificationEndpoint:
         import httpx
 
         mock_client = AsyncMock()
-        mock_client.post = AsyncMock(
-            side_effect=httpx.ReadTimeout("Read timed out")
-        )
+        mock_client.post = AsyncMock(side_effect=httpx.ReadTimeout("Read timed out"))
 
         with pytest.raises(httpx.ReadTimeout):
             await mock_client.post(
@@ -130,9 +124,7 @@ class TestDNSFailure:
         import httpx
 
         mock_client = AsyncMock()
-        mock_client.post = AsyncMock(
-            side_effect=httpx.ConnectError("Name resolution failed")
-        )
+        mock_client.post = AsyncMock(side_effect=httpx.ConnectError("Name resolution failed"))
 
         with pytest.raises(httpx.ConnectError, match="Name resolution"):
             await mock_client.post("https://cloud.elle.dev/api/incidents")
@@ -152,7 +144,7 @@ class TestConnectionRefused:
     @pytest.mark.asyncio
     async def test_ollama_connection_refused(self, fault: FaultInjector) -> None:
         """LLM client should handle Ollama connection refused."""
-        with fault.service_unavailable("httpx.AsyncClient.post") as mock:
+        with fault.service_unavailable("httpx.AsyncClient.post"):
             import httpx
 
             with pytest.raises(ConnectionRefusedError):
@@ -171,9 +163,7 @@ class TestConnectionRefused:
     async def test_api_server_connection_refused(self) -> None:
         """API client should handle daemon API connection refused."""
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(
-            side_effect=ConnectionRefusedError("Connection refused")
-        )
+        mock_client.get = AsyncMock(side_effect=ConnectionRefusedError("Connection refused"))
 
         with pytest.raises(ConnectionRefusedError):
             await mock_client.get("http://localhost:7778/api/status")

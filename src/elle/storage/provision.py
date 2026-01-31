@@ -83,8 +83,7 @@ def check_postgresql_installed() -> str:
     pg_config = shutil.which("pg_config")
     if not pg_config:
         raise ProvisionError(
-            "PostgreSQL is not installed.  "
-            "Install with: apt install postgresql-16 postgresql-16-pgvector"
+            "PostgreSQL is not installed.  Install with: apt install postgresql-16 postgresql-16-pgvector"
         )
     result = _run([pg_config, "--version"])
     version = result.stdout.strip().split()[-1]
@@ -107,13 +106,16 @@ def ensure_system_user(username: str = "elle") -> None:
         _run(["id", username])
         logger.info("System user '%s' already exists", username)
     except subprocess.CalledProcessError:
-        _run([
-            "useradd",
-            "--system",
-            "--no-create-home",
-            "--shell", "/usr/sbin/nologin",
-            username,
-        ])
+        _run(
+            [
+                "useradd",
+                "--system",
+                "--no-create-home",
+                "--shell",
+                "/usr/sbin/nologin",
+                username,
+            ]
+        )
         logger.info("Created system user '%s'", username)
 
 

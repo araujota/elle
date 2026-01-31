@@ -1,8 +1,7 @@
-from __future__ import annotations
-
 """Tests for mobile_commands.py - mobile gateway REPL commands."""
 
-import pytest
+from __future__ import annotations
+
 from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -11,6 +10,7 @@ from unittest.mock import MagicMock, patch
 def _make_session():
     """Return a minimal real session."""
     from elle.common.session import create_session
+
     return create_session()
 
 
@@ -22,11 +22,13 @@ def _make_session():
 class TestColors:
     def test_has_reset(self):
         from elle.cli.mobile_commands import Colors
+
         assert Colors.RESET == "\033[0m"
 
     def test_has_bold(self):
         from elle.cli.mobile_commands import Colors
-        assert "\033[1m" == Colors.BOLD
+
+        assert Colors.BOLD == "\033[1m"
 
 
 # ---------------------------------------------------------------------------
@@ -37,22 +39,27 @@ class TestColors:
 class TestIsMobileCommand:
     def test_slash_mobile(self):
         from elle.cli.mobile_commands import is_mobile_command
+
         assert is_mobile_command("/mobile") is True
 
     def test_slash_mobile_up(self):
         from elle.cli.mobile_commands import is_mobile_command
+
         assert is_mobile_command("/mobile up") is True
 
     def test_elle_mobile(self):
         from elle.cli.mobile_commands import is_mobile_command
+
         assert is_mobile_command("elle mobile status") is True
 
     def test_unrelated(self):
         from elle.cli.mobile_commands import is_mobile_command
+
         assert is_mobile_command("hello world") is False
 
     def test_case_insensitive(self):
         from elle.cli.mobile_commands import is_mobile_command
+
         assert is_mobile_command("/Mobile UP") is True
 
 
@@ -64,18 +71,21 @@ class TestIsMobileCommand:
 class TestHandleMobileCommandRouting:
     def test_no_subcommand_shows_help(self):
         from elle.cli.mobile_commands import handle_mobile_command
+
         output, success = handle_mobile_command("/mobile", _make_session())
         assert success is True
         assert "Mobile Gateway" in output
 
     def test_help_subcommand(self):
         from elle.cli.mobile_commands import handle_mobile_command
+
         output, success = handle_mobile_command("/mobile help", _make_session())
         assert success is True
         assert "Mobile Gateway" in output
 
     def test_unknown_subcommand(self):
         from elle.cli.mobile_commands import handle_mobile_command
+
         output, success = handle_mobile_command("/mobile foobar", _make_session())
         assert success is False
         assert "Unknown subcommand" in output
@@ -89,6 +99,7 @@ class TestHandleMobileCommandRouting:
 class TestMobileHelp:
     def test_contains_expected_commands(self):
         from elle.cli.mobile_commands import _mobile_help
+
         help_text = _mobile_help()
         assert "/mobile up" in help_text
         assert "/mobile down" in help_text
@@ -107,7 +118,6 @@ class TestMobileHelp:
 class TestMobileDown:
     @patch("elle.cli.mobile_commands.GatewayServer", create=True)
     def test_stop_success(self, _mock):
-        from elle.cli.mobile_commands import _mobile_down
         # We need to patch at import-time inside the function
         with patch.dict("sys.modules", {"elle.mobile.server": MagicMock()}):
             with patch("elle.cli.mobile_commands._mobile_down") as mock_fn:
@@ -117,6 +127,7 @@ class TestMobileDown:
 
     def test_stop_gateway_stopped(self):
         from elle.cli.mobile_commands import _mobile_down
+
         mock_server = MagicMock()
         mock_server.return_value.stop.return_value = True
         mock_module = MagicMock()
@@ -128,6 +139,7 @@ class TestMobileDown:
 
     def test_stop_gateway_not_running(self):
         from elle.cli.mobile_commands import _mobile_down
+
         mock_server = MagicMock()
         mock_server.return_value.stop.return_value = False
         mock_module = MagicMock()
@@ -139,6 +151,7 @@ class TestMobileDown:
 
     def test_stop_exception(self):
         from elle.cli.mobile_commands import _mobile_down
+
         mock_server = MagicMock()
         mock_server.return_value.stop.side_effect = RuntimeError("oops")
         mock_module = MagicMock()
@@ -157,6 +170,7 @@ class TestMobileDown:
 class TestMobileStatus:
     def test_status_running(self):
         from elle.cli.mobile_commands import _mobile_status
+
         status_obj = SimpleNamespace(
             running=True,
             pid=12345,
@@ -179,6 +193,7 @@ class TestMobileStatus:
 
     def test_status_not_running(self):
         from elle.cli.mobile_commands import _mobile_status
+
         status_obj = SimpleNamespace(
             running=False,
             pid=None,
@@ -200,6 +215,7 @@ class TestMobileStatus:
 
     def test_status_exception(self):
         from elle.cli.mobile_commands import _mobile_status
+
         mock_server = MagicMock()
         mock_server.return_value.get_status.side_effect = RuntimeError("oops")
         mock_module = MagicMock()
@@ -218,29 +234,35 @@ class TestMobileStatus:
 class TestMobileRevoke:
     def test_revoke_no_device_id(self):
         from elle.cli.mobile_commands import _mobile_revoke
+
         output, success = _mobile_revoke(None, _make_session())
         assert success is False
         assert "Usage" in output
 
     def test_revoke_device_not_found(self):
         from elle.cli.mobile_commands import _mobile_revoke
+
         mock_store = MagicMock()
         mock_store.return_value.list_devices.return_value = []
         mock_store_mod = MagicMock()
         mock_store_mod.MobileStore = mock_store
         mock_elev_mod = MagicMock()
         mock_models = MagicMock()
-        with patch.dict("sys.modules", {
-            "elle.mobile.store": mock_store_mod,
-            "elle.mobile.elevation": mock_elev_mod,
-            "elle.mobile.models": mock_models,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.mobile.store": mock_store_mod,
+                "elle.mobile.elevation": mock_elev_mod,
+                "elle.mobile.models": mock_models,
+            },
+        ):
             output, success = _mobile_revoke("abc123", _make_session())
             assert success is False
             assert "not found" in output
 
     def test_revoke_multiple_matches(self):
         from elle.cli.mobile_commands import _mobile_revoke
+
         d1 = SimpleNamespace(device_id="abc123xxx", name="Phone 1")
         d2 = SimpleNamespace(device_id="abc123yyy", name="Phone 2")
         mock_store = MagicMock()
@@ -249,11 +271,14 @@ class TestMobileRevoke:
         mock_store_mod.MobileStore = mock_store
         mock_elev_mod = MagicMock()
         mock_models = MagicMock()
-        with patch.dict("sys.modules", {
-            "elle.mobile.store": mock_store_mod,
-            "elle.mobile.elevation": mock_elev_mod,
-            "elle.mobile.models": mock_models,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.mobile.store": mock_store_mod,
+                "elle.mobile.elevation": mock_elev_mod,
+                "elle.mobile.models": mock_models,
+            },
+        ):
             output, success = _mobile_revoke("abc123", _make_session())
             assert success is False
             assert "Multiple matches" in output
@@ -267,23 +292,28 @@ class TestMobileRevoke:
 class TestMobileApprove:
     def test_approve_no_args(self):
         from elle.cli.mobile_commands import _mobile_approve
+
         output, success = _mobile_approve([], _make_session())
         assert success is False
         assert "Usage" in output
 
     def test_approve_device_not_found(self):
         from elle.cli.mobile_commands import _mobile_approve
+
         mock_store = MagicMock()
         mock_store.return_value.list_devices.return_value = []
         mock_store_mod = MagicMock()
         mock_store_mod.MobileStore = mock_store
         mock_elev_mod = MagicMock()
         mock_models = MagicMock()
-        with patch.dict("sys.modules", {
-            "elle.mobile.store": mock_store_mod,
-            "elle.mobile.elevation": mock_elev_mod,
-            "elle.mobile.models": mock_models,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.mobile.store": mock_store_mod,
+                "elle.mobile.elevation": mock_elev_mod,
+                "elle.mobile.models": mock_models,
+            },
+        ):
             output, success = _mobile_approve(["abc123"], _make_session())
             assert success is False
             assert "not found" in output
@@ -297,6 +327,7 @@ class TestMobileApprove:
 class TestMobileAudit:
     def test_audit_no_entries(self):
         from elle.cli.mobile_commands import _mobile_audit
+
         mock_audit = MagicMock()
         mock_audit.return_value.get_recent.return_value = []
         mock_mod = MagicMock()
@@ -308,6 +339,7 @@ class TestMobileAudit:
 
     def test_audit_with_entries(self):
         from elle.cli.mobile_commands import _mobile_audit
+
         entry = SimpleNamespace(
             timestamp=datetime(2024, 3, 15, 10, 30, 0),
             action=SimpleNamespace(value="pair"),
@@ -329,6 +361,7 @@ class TestMobileAudit:
 
     def test_audit_exception(self):
         from elle.cli.mobile_commands import _mobile_audit
+
         mock_audit = MagicMock()
         mock_audit.return_value.get_recent.side_effect = RuntimeError("db error")
         mock_mod = MagicMock()
@@ -340,6 +373,7 @@ class TestMobileAudit:
 
     def test_audit_with_hours_arg(self):
         from elle.cli.mobile_commands import _mobile_audit
+
         mock_audit = MagicMock()
         mock_audit.return_value.get_recent.return_value = []
         mock_mod = MagicMock()
@@ -351,6 +385,7 @@ class TestMobileAudit:
 
     def test_audit_entry_with_endpoint_and_error(self):
         from elle.cli.mobile_commands import _mobile_audit
+
         entry = SimpleNamespace(
             timestamp=datetime(2024, 3, 15, 10, 30, 0),
             action=SimpleNamespace(value="revoke"),
@@ -380,34 +415,42 @@ class TestMobileAudit:
 class TestMobileDevices:
     def test_no_devices(self):
         from elle.cli.mobile_commands import _mobile_devices
+
         mock_store = MagicMock()
         mock_store.return_value.list_devices.return_value = []
         mock_store_mod = MagicMock()
         mock_store_mod.MobileStore = mock_store
         mock_elev_mod = MagicMock()
         mock_models = MagicMock()
-        with patch.dict("sys.modules", {
-            "elle.mobile.store": mock_store_mod,
-            "elle.mobile.elevation": mock_elev_mod,
-            "elle.mobile.models": mock_models,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.mobile.store": mock_store_mod,
+                "elle.mobile.elevation": mock_elev_mod,
+                "elle.mobile.models": mock_models,
+            },
+        ):
             output, success = _mobile_devices(_make_session())
             assert success is True
             assert "No paired devices" in output
 
     def test_exception(self):
         from elle.cli.mobile_commands import _mobile_devices
+
         mock_store = MagicMock()
         mock_store.return_value.list_devices.side_effect = RuntimeError("db error")
         mock_store_mod = MagicMock()
         mock_store_mod.MobileStore = mock_store
         mock_elev_mod = MagicMock()
         mock_models = MagicMock()
-        with patch.dict("sys.modules", {
-            "elle.mobile.store": mock_store_mod,
-            "elle.mobile.elevation": mock_elev_mod,
-            "elle.mobile.models": mock_models,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.mobile.store": mock_store_mod,
+                "elle.mobile.elevation": mock_elev_mod,
+                "elle.mobile.models": mock_models,
+            },
+        ):
             output, success = _mobile_devices(_make_session())
             assert success is False
             assert "Error" in output
@@ -421,6 +464,7 @@ class TestMobileDevices:
 class TestMobileUp:
     def test_up_server_error(self):
         from elle.cli.mobile_commands import _mobile_up
+
         # Build mock modules that raise ServerError on start
         mock_config_mod = MagicMock()
         mock_models = MagicMock()
@@ -430,47 +474,58 @@ class TestMobileUp:
         server_error_cls = type("ServerError", (Exception,), {})
         mock_server_mod.ServerError = server_error_cls
         mock_server_mod.GatewayServer.return_value.start.side_effect = server_error_cls("port in use")
-        with patch.dict("sys.modules", {
-            "elle.mobile.config": mock_config_mod,
-            "elle.mobile.models": mock_models,
-            "elle.mobile.pairing": mock_pairing,
-            "elle.mobile.server": mock_server_mod,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.mobile.config": mock_config_mod,
+                "elle.mobile.models": mock_models,
+                "elle.mobile.pairing": mock_pairing,
+                "elle.mobile.server": mock_server_mod,
+            },
+        ):
             output, success = _mobile_up([], _make_session())
             assert success is False
             assert "Failed to start" in output
 
     def test_up_generic_exception(self):
         from elle.cli.mobile_commands import _mobile_up
+
         mock_config_mod = MagicMock()
         mock_config_mod.get_mobile_config.side_effect = RuntimeError("kaboom")
         mock_models = MagicMock()
         mock_pairing = MagicMock()
         mock_server_mod = MagicMock()
         mock_server_mod.ServerError = type("ServerError", (Exception,), {})
-        with patch.dict("sys.modules", {
-            "elle.mobile.config": mock_config_mod,
-            "elle.mobile.models": mock_models,
-            "elle.mobile.pairing": mock_pairing,
-            "elle.mobile.server": mock_server_mod,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.mobile.config": mock_config_mod,
+                "elle.mobile.models": mock_models,
+                "elle.mobile.pairing": mock_pairing,
+                "elle.mobile.server": mock_server_mod,
+            },
+        ):
             output, success = _mobile_up([], _make_session())
             assert success is False
             assert "Error" in output
 
     def test_up_invalid_port(self):
         from elle.cli.mobile_commands import _mobile_up
+
         mock_config_mod = MagicMock()
         mock_models = MagicMock()
         mock_pairing = MagicMock()
         mock_server_mod = MagicMock()
         mock_server_mod.ServerError = type("ServerError", (Exception,), {})
-        with patch.dict("sys.modules", {
-            "elle.mobile.config": mock_config_mod,
-            "elle.mobile.models": mock_models,
-            "elle.mobile.pairing": mock_pairing,
-            "elle.mobile.server": mock_server_mod,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.mobile.config": mock_config_mod,
+                "elle.mobile.models": mock_models,
+                "elle.mobile.pairing": mock_pairing,
+                "elle.mobile.server": mock_server_mod,
+            },
+        ):
             output, success = _mobile_up(["--port", "notanumber"], _make_session())
             assert success is False
             assert "Invalid port" in output

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -13,17 +11,14 @@ from elle.cli.agentic.models import (
     ExecutionEvidence,
     ExecutionPlan,
     ExecutionResult,
-    InformationNeed,
     ParallelGroup,
 )
 from elle.cli.agentic.plan_executor import (
-    FALLBACK_CAPABILITIES,
     PlanExecutor,
     _fallback_execution,
     get_plan_executor,
     reset_plan_executor,
 )
-
 
 # =============================================================================
 # Helpers
@@ -118,9 +113,12 @@ class TestPlanExecutorInit:
         assert pe.use_fallback is False
 
     def test_capability_executor_lazy_init_import_error(self) -> None:
-        pe = PlanExecutor()
+        PlanExecutor()
         with patch.dict("sys.modules", {"elle.capabilities.executor": None}):
-            with patch("elle.cli.agentic.plan_executor.PlanExecutor.capability_executor", new_callable=lambda: property(lambda self: None)):
+            with patch(
+                "elle.cli.agentic.plan_executor.PlanExecutor.capability_executor",
+                new_callable=lambda: property(lambda self: None),
+            ):
                 pass
         # Just verify the property returns None when import fails
         pe2 = PlanExecutor()
@@ -187,7 +185,7 @@ class TestExecuteConfirmation:
         callback = AsyncMock(return_value=True)
 
         with patch.object(type(pe), "capability_executor", new_callable=lambda: property(lambda self: None)):
-            result = await pe.execute(plan, skip_confirmation=True, confirm_callback=callback)
+            await pe.execute(plan, skip_confirmation=True, confirm_callback=callback)
             callback.assert_not_awaited()
 
 
@@ -232,8 +230,10 @@ class TestExecuteCallFallback:
         mock_result.stdout = "ActiveState=active"
         mock_result.stderr = ""
 
-        with patch.object(type(pe), "capability_executor", new_callable=lambda: property(lambda self: None)), \
-             patch("elle.cli.subprocess_runner.run_safe", return_value=mock_result):
+        with (
+            patch.object(type(pe), "capability_executor", new_callable=lambda: property(lambda self: None)),
+            patch("elle.cli.subprocess_runner.run_safe", return_value=mock_result),
+        ):
             ev = await pe._execute_call(call)
             assert ev.success is True
             assert ev.output == "ActiveState=active"
@@ -262,8 +262,10 @@ class TestExecuteCallFallback:
         pe = PlanExecutor(use_fallback=True)
         call = _make_call(capability="service.status", args={"service": "nginx"})
 
-        with patch.object(type(pe), "capability_executor", new_callable=lambda: property(lambda self: None)), \
-             patch("elle.cli.agentic.plan_executor._fallback_execution", side_effect=RuntimeError("boom")):
+        with (
+            patch.object(type(pe), "capability_executor", new_callable=lambda: property(lambda self: None)),
+            patch("elle.cli.agentic.plan_executor._fallback_execution", side_effect=RuntimeError("boom")),
+        ):
             ev = await pe._execute_call(call)
             assert ev.success is False
 

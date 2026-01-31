@@ -380,9 +380,8 @@ class IncidentCorrelator:
         except Exception as e:
             # Don't let callback failure break incident creation
             import logging
-            logging.getLogger(__name__).warning(
-                f"Incident callback failed for {incident_id}: {e}"
-            )
+
+            logging.getLogger(__name__).warning(f"Incident callback failed for {incident_id}: {e}")
 
     def clear_active_incident(self, key: str) -> None:
         """Clear an active incident tracking key."""
@@ -438,7 +437,6 @@ def initialize_with_agentic_handler() -> IncidentCorrelator:
     except ImportError:
         # Agentic handler not available - use bare correlator
         import logging
-        logging.getLogger(__name__).debug(
-            "Agentic handler not available, using basic correlator"
-        )
+
+        logging.getLogger(__name__).debug("Agentic handler not available, using basic correlator")
         return get_correlator()

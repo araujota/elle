@@ -5,13 +5,12 @@ from __future__ import annotations
 import asyncio
 import time
 from datetime import datetime
-from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from elle.cli.agentic.health import (
-    AbortReason,
     DEFAULT_CONFIG,
+    AbortReason,
     IterationTracker,
     LLMCallTracker,
     LoopAbortedError,
@@ -27,7 +26,6 @@ from elle.cli.agentic.health import (
     get_health_monitor,
     reset_health_monitor,
 )
-
 
 # =============================================================================
 # LoopHealthConfig Tests
@@ -590,6 +588,7 @@ class TestLoopTracker:
         tracker = LoopTracker(config)
         # Set start_time far in the past to exceed 1-second limit
         from datetime import timedelta
+
         tracker.stats.start_time = datetime.utcnow() - timedelta(seconds=10)
 
         exceeded, message = tracker.check_max_duration()
@@ -794,15 +793,11 @@ class TestHealthMonitorIntegration:
         async with monitor.track_loop() as tracker:
             async with tracker.track_iteration(1) as iter_tracker:
                 async with iter_tracker.track_llm_call() as llm_tracker:
-                    result = await llm_tracker.with_timeout(
-                        self._mock_llm_call("Hello from LLM")
-                    )
+                    result = await llm_tracker.with_timeout(self._mock_llm_call("Hello from LLM"))
                     assert result == "Hello from LLM"
 
                 async with iter_tracker.track_tool_call("search_man_vault") as tool_tracker:
-                    result = await tool_tracker.with_timeout(
-                        self._mock_tool_call("search results")
-                    )
+                    result = await tool_tracker.with_timeout(self._mock_tool_call("search results"))
                     assert result == "search results"
 
         assert tracker.state == LoopState.COMPLETED
@@ -825,9 +820,7 @@ class TestHealthMonitorIntegration:
             for i in range(1, 4):
                 async with tracker.track_iteration(i) as iter_tracker:
                     async with iter_tracker.track_llm_call() as llm_tracker:
-                        await llm_tracker.with_timeout(
-                            self._mock_llm_call(f"response {i}")
-                        )
+                        await llm_tracker.with_timeout(self._mock_llm_call(f"response {i}"))
 
         assert tracker.stats.iterations == 3
         assert tracker.stats.llm_calls == 3

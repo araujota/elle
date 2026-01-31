@@ -752,9 +752,7 @@ class FixitService:
         if analysis is None:
             import logging
 
-            logging.getLogger(__name__).info(
-                "LLM unavailable; cannot analyze command failure"
-            )
+            logging.getLogger(__name__).info("LLM unavailable; cannot analyze command failure")
 
         if analysis:
             result = FixitResult(

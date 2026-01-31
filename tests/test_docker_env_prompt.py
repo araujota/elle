@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-import pytest
-from unittest.mock import patch, MagicMock, PropertyMock
 from io import StringIO
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from elle.cli.docker.env_models import (
+    EnvVarPromptResult,
     EnvVarSpec,
     EnvVarValue,
-    EnvVarPromptResult,
     SavedEnvVar,
 )
 from elle.cli.docker.env_prompt import (
@@ -16,10 +17,10 @@ from elle.cli.docker.env_prompt import (
     prompt_for_image,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_specs() -> tuple[EnvVarSpec, ...]:
     return (
@@ -38,6 +39,7 @@ def _make_session(
     save_values=True,
 ) -> EnvVarPromptSession:
     from rich.console import Console
+
     console = Console(file=StringIO())
     return EnvVarPromptSession(
         specs=specs or _make_specs(),
@@ -54,8 +56,8 @@ def _make_session(
 # EnvVarPromptSession init
 # ---------------------------------------------------------------------------
 
-class TestEnvVarPromptSessionInit:
 
+class TestEnvVarPromptSessionInit:
     def test_init(self):
         session = _make_session()
         assert session.image == "postgres:15"
@@ -67,19 +69,23 @@ class TestEnvVarPromptSessionInit:
 # run - quit
 # ---------------------------------------------------------------------------
 
-class TestSessionRunQuit:
 
+class TestSessionRunQuit:
     def test_quit_returns_cancelled(self):
         session = _make_session()
-        with patch.object(session, "_show_overview_panel"), \
-             patch.object(session, "_prompt_initial_action", return_value="q"):
+        with (
+            patch.object(session, "_show_overview_panel"),
+            patch.object(session, "_prompt_initial_action", return_value="q"),
+        ):
             result = session.run()
         assert result.cancelled is True
 
     def test_skip_returns_skipped(self):
         session = _make_session()
-        with patch.object(session, "_show_overview_panel"), \
-             patch.object(session, "_prompt_initial_action", return_value="s"):
+        with (
+            patch.object(session, "_show_overview_panel"),
+            patch.object(session, "_prompt_initial_action", return_value="s"),
+        ):
             result = session.run()
         assert len(result.skipped) == 3
         assert result.cancelled is False
@@ -87,6 +93,7 @@ class TestSessionRunQuit:
     def test_use_saved_values(self):
         mock_store = MagicMock()
         from datetime import datetime
+
         mock_store.get_saved_values.return_value = [
             SavedEnvVar(
                 image_family="postgres",
@@ -97,19 +104,23 @@ class TestSessionRunQuit:
             ),
         ]
         session = _make_session(store=mock_store)
-        with patch.object(session, "_show_overview_panel"), \
-             patch.object(session, "_prompt_initial_action", return_value="u"), \
-             patch.object(session, "_prompt_single_var"), \
-             patch.object(session, "_show_summary_and_confirm", return_value=True):
+        with (
+            patch.object(session, "_show_overview_panel"),
+            patch.object(session, "_prompt_initial_action", return_value="u"),
+            patch.object(session, "_prompt_single_var"),
+            patch.object(session, "_show_summary_and_confirm", return_value=True),
+        ):
             result = session.run()
         # DB_PASSWORD should be collected from saved
         assert "DB_PASSWORD" in {v.name for v in result.values}
 
     def test_enter_values(self):
         session = _make_session()
-        with patch.object(session, "_show_overview_panel"), \
-             patch.object(session, "_prompt_initial_action", return_value="e"), \
-             patch.object(session, "_prompt_all_vars") as mock_prompt_all:
+        with (
+            patch.object(session, "_show_overview_panel"),
+            patch.object(session, "_prompt_initial_action", return_value="e"),
+            patch.object(session, "_prompt_all_vars") as mock_prompt_all,
+        ):
             # Simulate user entering a value
             def add_value(saved):
                 session._collected["DB_PASSWORD"] = EnvVarValue(
@@ -117,6 +128,7 @@ class TestSessionRunQuit:
                     value="mypass",
                     sensitive=True,
                 )
+
             mock_prompt_all.side_effect = add_value
             with patch.object(session, "_show_summary_and_confirm", return_value=True):
                 result = session.run()
@@ -124,15 +136,19 @@ class TestSessionRunQuit:
 
     def test_enter_then_cancel(self):
         session = _make_session()
-        with patch.object(session, "_show_overview_panel"), \
-             patch.object(session, "_prompt_initial_action", return_value="e"), \
-             patch.object(session, "_prompt_all_vars") as mock_prompt_all:
+        with (
+            patch.object(session, "_show_overview_panel"),
+            patch.object(session, "_prompt_initial_action", return_value="e"),
+            patch.object(session, "_prompt_all_vars") as mock_prompt_all,
+        ):
+
             def add_value(saved):
                 session._collected["DB_PASSWORD"] = EnvVarValue(
                     name="DB_PASSWORD",
                     value="mypass",
                     sensitive=True,
                 )
+
             mock_prompt_all.side_effect = add_value
             with patch.object(session, "_show_summary_and_confirm", return_value=False):
                 result = session.run()
@@ -142,25 +158,31 @@ class TestSessionRunQuit:
         mock_store = MagicMock()
         mock_store.get_saved_values.return_value = []
         session = _make_session(store=mock_store, save_values=True)
-        with patch.object(session, "_show_overview_panel"), \
-             patch.object(session, "_prompt_initial_action", return_value="e"), \
-             patch.object(session, "_prompt_all_vars") as mock_prompt_all:
+        with (
+            patch.object(session, "_show_overview_panel"),
+            patch.object(session, "_prompt_initial_action", return_value="e"),
+            patch.object(session, "_prompt_all_vars") as mock_prompt_all,
+        ):
+
             def add_value(saved):
                 session._collected["DB_PASSWORD"] = EnvVarValue(
                     name="DB_PASSWORD",
                     value="mypass",
                     sensitive=True,
                 )
+
             mock_prompt_all.side_effect = add_value
             with patch.object(session, "_show_summary_and_confirm", return_value=True):
-                result = session.run()
+                session.run()
         mock_store.save_values.assert_called_once()
 
     def test_no_collected_returns_empty(self):
         session = _make_session()
-        with patch.object(session, "_show_overview_panel"), \
-             patch.object(session, "_prompt_initial_action", return_value="e"), \
-             patch.object(session, "_prompt_all_vars"):
+        with (
+            patch.object(session, "_show_overview_panel"),
+            patch.object(session, "_prompt_initial_action", return_value="e"),
+            patch.object(session, "_prompt_all_vars"),
+        ):
             result = session.run()
         assert len(result.values) == 0
         assert not result.cancelled
@@ -168,6 +190,7 @@ class TestSessionRunQuit:
     def test_use_saved_with_missing_required(self):
         mock_store = MagicMock()
         from datetime import datetime
+
         mock_store.get_saved_values.return_value = [
             SavedEnvVar(
                 image_family="postgres",
@@ -177,14 +200,20 @@ class TestSessionRunQuit:
             ),
         ]
         session = _make_session(store=mock_store)
-        with patch.object(session, "_show_overview_panel"), \
-             patch.object(session, "_prompt_initial_action", return_value="u"), \
-             patch.object(session, "_prompt_single_var") as mock_prompt_single, \
-             patch.object(session, "_show_summary_and_confirm", return_value=True):
+        with (
+            patch.object(session, "_show_overview_panel"),
+            patch.object(session, "_prompt_initial_action", return_value="u"),
+            patch.object(session, "_prompt_single_var") as mock_prompt_single,
+            patch.object(session, "_show_summary_and_confirm", return_value=True),
+        ):
+
             def add_required(spec, saved):
                 session._collected["DB_PASSWORD"] = EnvVarValue(
-                    name="DB_PASSWORD", value="pass", sensitive=True,
+                    name="DB_PASSWORD",
+                    value="pass",
+                    sensitive=True,
                 )
+
             mock_prompt_single.side_effect = add_required
             result = session.run()
         # Both DB_USER (saved) and DB_PASSWORD (prompted) should be collected
@@ -197,10 +226,11 @@ class TestSessionRunQuit:
 # _format_var_line
 # ---------------------------------------------------------------------------
 
-class TestFormatVarLine:
 
+class TestFormatVarLine:
     def test_format_sensitive(self):
         from rich.text import Text
+
         session = _make_session()
         content = Text()
         spec = EnvVarSpec(name="SECRET", sensitive=True, required=True)
@@ -211,6 +241,7 @@ class TestFormatVarLine:
 
     def test_format_with_saved(self):
         from rich.text import Text
+
         session = _make_session()
         content = Text()
         spec = EnvVarSpec(name="KEY")
@@ -220,6 +251,7 @@ class TestFormatVarLine:
 
     def test_format_with_default(self):
         from rich.text import Text
+
         session = _make_session()
         content = Text()
         spec = EnvVarSpec(name="KEY", default="defval")
@@ -229,6 +261,7 @@ class TestFormatVarLine:
 
     def test_format_with_description(self):
         from rich.text import Text
+
         session = _make_session()
         content = Text()
         spec = EnvVarSpec(name="KEY", description="A description")
@@ -241,8 +274,8 @@ class TestFormatVarLine:
 # _prompt_initial_action
 # ---------------------------------------------------------------------------
 
-class TestPromptInitialAction:
 
+class TestPromptInitialAction:
     def test_valid_input(self):
         session = _make_session()
         with patch("builtins.input", return_value="e"):
@@ -272,9 +305,11 @@ class TestPromptInitialAction:
                 return "?"
             return "e"
 
-        with patch("builtins.input", side_effect=side_effect), \
-             patch.object(session, "_show_explanations"), \
-             patch.object(session, "_show_overview_panel"):
+        with (
+            patch("builtins.input", side_effect=side_effect),
+            patch.object(session, "_show_explanations"),
+            patch.object(session, "_show_overview_panel"),
+        ):
             result = session._prompt_initial_action(False)
         assert result == "e"
 
@@ -296,8 +331,8 @@ class TestPromptInitialAction:
 # _prompt_single_var
 # ---------------------------------------------------------------------------
 
-class TestPromptSingleVar:
 
+class TestPromptSingleVar:
     def test_enter_value(self):
         session = _make_session()
         spec = EnvVarSpec(name="MY_VAR", required=True)
@@ -353,8 +388,7 @@ class TestPromptSingleVar:
         session = _make_session()
         spec = EnvVarSpec(name="MY_VAR", required=True)
         inputs = iter(["?", "value"])
-        with patch("builtins.input", side_effect=lambda *a: next(inputs)), \
-             patch.object(session, "_explain_single_var"):
+        with patch("builtins.input", side_effect=lambda *a: next(inputs)), patch.object(session, "_explain_single_var"):
             session._prompt_single_var(spec, {})
         assert session._collected["MY_VAR"].value == "value"
 
@@ -370,8 +404,8 @@ class TestPromptSingleVar:
 # _show_summary_and_confirm
 # ---------------------------------------------------------------------------
 
-class TestShowSummaryAndConfirm:
 
+class TestShowSummaryAndConfirm:
     def test_confirm(self):
         session = _make_session()
         session._collected["X"] = EnvVarValue(name="X", value="v")
@@ -398,8 +432,7 @@ class TestShowSummaryAndConfirm:
         session._collected["X"] = EnvVarValue(name="X", value="v")
         # First "e" to edit, then "c" to confirm (after re-prompt)
         inputs = iter(["e", "c"])
-        with patch("builtins.input", side_effect=lambda *a: next(inputs)), \
-             patch.object(session, "_prompt_all_vars"):
+        with patch("builtins.input", side_effect=lambda *a: next(inputs)), patch.object(session, "_prompt_all_vars"):
             result = session._show_summary_and_confirm()
         assert result is True
 
@@ -423,8 +456,8 @@ class TestShowSummaryAndConfirm:
 # _show_explanations / _explain_single_var
 # ---------------------------------------------------------------------------
 
-class TestExplanations:
 
+class TestExplanations:
     def test_show_explanations(self):
         session = _make_session()
         with patch.object(session, "_explain_single_var"):
@@ -464,14 +497,16 @@ class TestExplanations:
 # Convenience functions
 # ---------------------------------------------------------------------------
 
-class TestConvenienceFunctions:
 
+class TestConvenienceFunctions:
     def test_prompt_env_vars(self):
         specs = _make_specs()
         mock_session = MagicMock()
         mock_session.run.return_value = EnvVarPromptResult(image="postgres:15")
-        with patch("elle.cli.docker.env_prompt.DockerEnvStore") as MockStore, \
-             patch("elle.cli.docker.env_prompt.EnvVarPromptSession", return_value=mock_session):
+        with (
+            patch("elle.cli.docker.env_prompt.DockerEnvStore") as MockStore,
+            patch("elle.cli.docker.env_prompt.EnvVarPromptSession", return_value=mock_session),
+        ):
             result = prompt_env_vars(specs, "postgres:15")
         assert result.image == "postgres:15"
         MockStore.return_value.close.assert_called_once()
@@ -493,19 +528,23 @@ class TestConvenienceFunctions:
 
     def test_prompt_for_image_with_specs(self):
         specs = _make_specs()
-        with patch("elle.cli.docker.env_detector.DockerEnvDetector") as MockDetector, \
-             patch("elle.cli.docker.env_prompt.prompt_env_vars") as mock_prompt:
+        with (
+            patch("elle.cli.docker.env_detector.DockerEnvDetector") as MockDetector,
+            patch("elle.cli.docker.env_prompt.prompt_env_vars") as mock_prompt,
+        ):
             MockDetector.return_value.detect_from_image.return_value = specs
             mock_prompt.return_value = EnvVarPromptResult(image="img")
-            result = prompt_for_image("img")
+            prompt_for_image("img")
         mock_prompt.assert_called_once()
 
     def test_prompt_env_vars_store_close_on_exception(self):
         specs = _make_specs()
         mock_session = MagicMock()
         mock_session.run.side_effect = RuntimeError("boom")
-        with patch("elle.cli.docker.env_prompt.DockerEnvStore") as MockStore, \
-             patch("elle.cli.docker.env_prompt.EnvVarPromptSession", return_value=mock_session):
+        with (
+            patch("elle.cli.docker.env_prompt.DockerEnvStore") as MockStore,
+            patch("elle.cli.docker.env_prompt.EnvVarPromptSession", return_value=mock_session),
+        ):
             with pytest.raises(RuntimeError):
                 prompt_env_vars(specs, "test")
         MockStore.return_value.close.assert_called_once()

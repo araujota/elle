@@ -134,6 +134,53 @@ module = [
 ]
 ignore_missing_imports = true
 
+# psycopg dict_row: connections use row_factory=dict_row so rows are
+# dict[str, Any] at runtime, but psycopg stubs type them as tuple.
+# Suppress the false-positive call-overload on row["column"] access.
+[[tool.mypy.overrides]]
+module = [
+    "elle.capabilities.autogen.core_migrator",
+    "elle.capabilities.autogen.retriever",
+    "elle.capabilities.autogen.store",
+    "elle.capabilities.autonomy",
+    "elle.capabilities.dependencies.store",
+    "elle.cli.agentic.audit",
+    "elle.cli.agentic.execution",
+    "elle.cli.dependencies",
+    "elle.cli.docker.env_store",
+    "elle.daemon.api.auth",
+    "elle.daemon.incidents.cloud_queue",
+    "elle.daemon.incidents.efficacy_tracker",
+    "elle.daemon.incidents.narrative_builder",
+    "elle.daemon.incidents.reports",
+    "elle.daemon.incidents.retriever",
+    "elle.daemon.incidents.service",
+    "elle.daemon.incidents.store",
+    "elle.daemon.manvault.embedder",
+    "elle.daemon.manvault.retriever",
+    "elle.daemon.manvault.service",
+    "elle.daemon.manvault.store",
+    "elle.daemon.observability.metrics",
+    "elle.daemon.reboot.store",
+    "elle.daemon.telemetry.aggregator",
+    "elle.daemon.telemetry.schema",
+    "elle.daemon.telemetry.store",
+    "elle.mobile.audit",
+    "elle.mobile.store",
+    "elle.reactive.store",
+    "elle.storage.migrate",
+    "elle.storage.testing",
+]
+disable_error_code = ["call-overload", "arg-type"]
+
+# Textual TUI widgets: textual's typing is incomplete and produces
+# false positives with Static() kwargs and Screen/App generics.
+[[tool.mypy.overrides]]
+module = [
+    "elle.cli.tui.*",
+]
+disable_error_code = ["arg-type", "type-arg"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

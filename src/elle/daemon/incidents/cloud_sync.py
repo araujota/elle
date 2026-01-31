@@ -366,12 +366,7 @@ class CloudSyncClient:
         Returns:
             True if endpoint and certificates are configured, False otherwise.
         """
-        return bool(
-            self._endpoint
-            and self._ca_cert_path
-            and self._client_cert_path
-            and self._client_key_path
-        )
+        return bool(self._endpoint and self._ca_cert_path and self._client_cert_path and self._client_key_path)
 
     def is_available(self) -> bool:
         """Check if cloud sync is available (synchronous check).

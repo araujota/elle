@@ -27,36 +27,28 @@ class TestSchemaCreation:
         """Test that init creates the incidents table."""
         init_incident_schema(conn)
 
-        row = conn.execute(
-            "SELECT 1 FROM information_schema.tables WHERE table_name = 'incidents'"
-        ).fetchone()
+        row = conn.execute("SELECT 1 FROM information_schema.tables WHERE table_name = 'incidents'").fetchone()
         assert row is not None
 
     def test_init_creates_actions_table(self, conn):
         """Test that init creates the incident_actions table."""
         init_incident_schema(conn)
 
-        row = conn.execute(
-            "SELECT 1 FROM information_schema.tables WHERE table_name = 'incident_actions'"
-        ).fetchone()
+        row = conn.execute("SELECT 1 FROM information_schema.tables WHERE table_name = 'incident_actions'").fetchone()
         assert row is not None
 
     def test_init_creates_snapshots_table(self, conn):
         """Test that init creates the incident_snapshots table."""
         init_incident_schema(conn)
 
-        row = conn.execute(
-            "SELECT 1 FROM information_schema.tables WHERE table_name = 'incident_snapshots'"
-        ).fetchone()
+        row = conn.execute("SELECT 1 FROM information_schema.tables WHERE table_name = 'incident_snapshots'").fetchone()
         assert row is not None
 
     def test_init_creates_events_table(self, conn):
         """Test that init creates the incident_events table."""
         init_incident_schema(conn)
 
-        row = conn.execute(
-            "SELECT 1 FROM information_schema.tables WHERE table_name = 'incident_events'"
-        ).fetchone()
+        row = conn.execute("SELECT 1 FROM information_schema.tables WHERE table_name = 'incident_events'").fetchone()
         assert row is not None
 
     def test_init_creates_embeddings_table(self, conn):
@@ -72,18 +64,14 @@ class TestSchemaCreation:
         """Test that init creates the full-text search index."""
         init_incident_schema(conn)
 
-        row = conn.execute(
-            "SELECT 1 FROM pg_indexes WHERE indexname = 'incidents_fts_idx'"
-        ).fetchone()
+        row = conn.execute("SELECT 1 FROM pg_indexes WHERE indexname = 'incidents_fts_idx'").fetchone()
         assert row is not None
 
     def test_init_creates_meta_table(self, conn):
         """Test that init creates the meta table."""
         init_incident_schema(conn)
 
-        row = conn.execute(
-            "SELECT 1 FROM information_schema.tables WHERE table_name = 'meta'"
-        ).fetchone()
+        row = conn.execute("SELECT 1 FROM information_schema.tables WHERE table_name = 'meta'").fetchone()
         assert row is not None
 
 
@@ -120,8 +108,7 @@ class TestEnsureSchema:
         ensure_schema(conn)
 
         row = conn.execute(
-            "SELECT COUNT(*) AS cnt FROM information_schema.tables "
-            "WHERE table_schema = 'incidents'"
+            "SELECT COUNT(*) AS cnt FROM information_schema.tables WHERE table_schema = 'incidents'"
         ).fetchone()
         assert row["cnt"] > 0
 
@@ -142,9 +129,7 @@ class TestDropTables:
         init_incident_schema(conn)
         drop_all_tables(conn)
 
-        row = conn.execute(
-            "SELECT 1 FROM information_schema.tables WHERE table_name = 'incidents'"
-        ).fetchone()
+        row = conn.execute("SELECT 1 FROM information_schema.tables WHERE table_name = 'incidents'").fetchone()
         assert row is None
 
 
@@ -200,8 +185,7 @@ class TestV4Tables:
         init_incident_schema(conn)
 
         rows = conn.execute(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'telemetry_snapshots'"
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'telemetry_snapshots'"
         ).fetchall()
         columns = {row["column_name"] for row in rows}
 
@@ -216,8 +200,7 @@ class TestV4Tables:
         init_incident_schema(conn)
 
         rows = conn.execute(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'control_surface_snapshots'"
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'control_surface_snapshots'"
         ).fetchall()
         columns = {row["column_name"] for row in rows}
 
@@ -250,6 +233,7 @@ class TestV4Tables:
 
         # Invalid 'which' value should fail
         import psycopg.errors
+
         with pytest.raises(psycopg.errors.CheckViolation):
             conn.execute(
                 """
@@ -281,6 +265,7 @@ class TestV4Tables:
 
         # Invalid 'which' value should fail
         import psycopg.errors
+
         with pytest.raises(psycopg.errors.CheckViolation):
             conn.execute(
                 """
@@ -309,9 +294,7 @@ class TestTriggers:
         )
 
         # Check tsvector full-text search
-        result = conn.execute(
-            "SELECT id FROM incidents WHERE fts @@ plainto_tsquery('english', 'Test')"
-        ).fetchone()
+        result = conn.execute("SELECT id FROM incidents WHERE fts @@ plainto_tsquery('english', 'Test')").fetchone()
         assert result is not None
 
     def test_fts_trigger_on_delete(self, conn):

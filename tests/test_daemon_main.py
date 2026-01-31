@@ -21,6 +21,7 @@ from elle.daemon.telemetry.models import DaemonStatus, TelemetryEvent
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _test_config(tmp_path: Path) -> Config:
     """Create a Config suitable for testing."""
     return Config(
@@ -47,6 +48,7 @@ def _mock_event(**kw: Any) -> TelemetryEvent:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def cfg(tmp_path):
     return _test_config(tmp_path)
@@ -60,6 +62,7 @@ def daemon(cfg):
 # ---------------------------------------------------------------------------
 # ElledDaemon: init / properties
 # ---------------------------------------------------------------------------
+
 
 class TestDaemonInit:
     def test_default_state(self, daemon):
@@ -90,6 +93,7 @@ class TestDaemonInit:
 # get_status
 # ---------------------------------------------------------------------------
 
+
 class TestGetStatus:
     def test_not_started(self, daemon):
         status = daemon.get_status()
@@ -101,6 +105,7 @@ class TestGetStatus:
         daemon.started_at = datetime.now(timezone.utc)
         daemon._events_total = 42
         from elle.daemon.telemetry.queue import TelemetryQueue
+
         daemon.event_queue = TelemetryQueue(maxsize=100, name="events")
         status = daemon.get_status()
         assert status.events_total == 42
@@ -126,6 +131,7 @@ class TestGetStatus:
 # _init_database
 # ---------------------------------------------------------------------------
 
+
 class TestInitDatabase:
     @patch("elle.common.db.init_all_schemas")
     @patch("elle.storage.engine.configure_pool")
@@ -144,6 +150,7 @@ class TestInitDatabase:
 # ---------------------------------------------------------------------------
 # start
 # ---------------------------------------------------------------------------
+
 
 class TestStart:
     @patch("elle.daemon.main.is_telemetryd_available", return_value=False)
@@ -175,7 +182,9 @@ class TestStart:
                                         mock_cq.return_value = (MagicMock(), MagicMock())
                                         with patch.object(daemon, "_processor_loop", new_callable=AsyncMock):
                                             # Prevent manvault import error
-                                            with patch.dict("sys.modules", {"elle.daemon.manvault.service": MagicMock()}):
+                                            with patch.dict(
+                                                "sys.modules", {"elle.daemon.manvault.service": MagicMock()}
+                                            ):
                                                 await daemon.start()
 
         assert daemon.started_at is not None
@@ -186,6 +195,7 @@ class TestStart:
 # ---------------------------------------------------------------------------
 # stop
 # ---------------------------------------------------------------------------
+
 
 class TestStop:
     async def test_stop_sets_shutdown(self, daemon):
@@ -248,6 +258,7 @@ class TestStop:
 # _warmup_models
 # ---------------------------------------------------------------------------
 
+
 class TestWarmupModels:
     async def test_import_error(self, daemon):
         with patch.dict("sys.modules", {"elle.rag.model_warmup": None}):
@@ -263,6 +274,7 @@ class TestWarmupModels:
 # ---------------------------------------------------------------------------
 # _stop_warmup_service
 # ---------------------------------------------------------------------------
+
 
 class TestStopWarmupService:
     async def test_no_service(self, daemon):
@@ -287,6 +299,7 @@ class TestStopWarmupService:
 # _start_notification_service
 # ---------------------------------------------------------------------------
 
+
 class TestStartNotificationService:
     async def test_import_error(self, daemon):
         with patch.dict("sys.modules", {"elle.daemon.notifications": None}):
@@ -305,6 +318,7 @@ class TestStartNotificationService:
 # _stop_notification_service
 # ---------------------------------------------------------------------------
 
+
 class TestStopNotificationService:
     async def test_no_service(self, daemon):
         daemon._notification_service = None
@@ -320,6 +334,7 @@ class TestStopNotificationService:
 # ---------------------------------------------------------------------------
 # _check_reboot_recovery
 # ---------------------------------------------------------------------------
+
 
 class TestCheckRebootRecovery:
     async def test_import_error(self, daemon):
@@ -355,6 +370,7 @@ class TestCheckRebootRecovery:
 # _update_incident_with_reboot_result
 # ---------------------------------------------------------------------------
 
+
 class TestUpdateIncidentWithRebootResult:
     async def test_improved(self, daemon):
         mock_intent = MagicMock()
@@ -387,6 +403,7 @@ class TestUpdateIncidentWithRebootResult:
 # _notify_incident
 # ---------------------------------------------------------------------------
 
+
 class TestNotifyIncident:
     async def test_low_severity_skipped(self, daemon):
         await daemon._notify_incident("inc1", "test", "warning", "disk")
@@ -406,6 +423,7 @@ class TestNotifyIncident:
 # ---------------------------------------------------------------------------
 # _handle_package_event
 # ---------------------------------------------------------------------------
+
 
 class TestHandlePackageEvent:
     async def test_no_versioner(self, daemon):
@@ -431,6 +449,7 @@ class TestHandlePackageEvent:
 # _route_to_reactive
 # ---------------------------------------------------------------------------
 
+
 class TestRouteToReactive:
     async def test_import_error(self, daemon):
         events = [_mock_event()]
@@ -453,6 +472,7 @@ class TestRouteToReactive:
 # setup_logging
 # ---------------------------------------------------------------------------
 
+
 class TestSetupLogging:
     def test_setup_default(self):
         setup_logging("INFO")
@@ -465,6 +485,7 @@ class TestSetupLogging:
 # ---------------------------------------------------------------------------
 # _run_api
 # ---------------------------------------------------------------------------
+
 
 class TestRunApi:
     async def test_import_error(self, daemon):
@@ -485,6 +506,7 @@ class TestRunApi:
 # ---------------------------------------------------------------------------
 # run
 # ---------------------------------------------------------------------------
+
 
 class TestRun:
     async def test_run_calls_start_and_stop(self, daemon):

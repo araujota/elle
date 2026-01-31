@@ -409,7 +409,6 @@ class TestPriorArtSuccessfulActions:
 
     def test_prior_art_includes_successful_actions(self, conn):
         """Test that prior art includes successful actions."""
-        from elle.daemon.incidents.store import append_action
 
         # Create an incident with successful actions
         incident = create_incident_draft(
@@ -466,7 +465,6 @@ class TestPriorArtSuccessfulActions:
 
     def test_prior_art_excludes_failed_actions(self, conn):
         """Test that prior art only includes successful actions."""
-        from elle.daemon.incidents.store import append_action
 
         incident = create_incident_draft(
             title="service failed",
@@ -759,7 +757,7 @@ class TestGetStatusExtended:
         inc2 = create_incident_draft(title="Partial", domain="net", conn=conn)
         finalize_outcome(inc2.incident_id, "partial", conn=conn)
 
-        inc3 = create_incident_draft(title="Open", domain="disk", conn=conn)
+        create_incident_draft(title="Open", domain="disk", conn=conn)
 
         status = get_status(conn=conn)
         assert status["total_incidents"] == 3

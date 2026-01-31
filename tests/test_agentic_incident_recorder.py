@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-import time
-from typing import Any
-from unittest.mock import MagicMock, patch, call
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from elle.cli.agentic.incident_recorder import (
     RecordingResult,
@@ -19,7 +15,6 @@ from elle.cli.agentic.incident_recorder import (
     record_arm_action,
     record_execution_to_incident,
 )
-
 
 # =============================================================================
 # RecordingResult
@@ -55,6 +50,7 @@ class TestWithRetry:
 
     def test_failure_all_retries(self) -> None:
         calls = {"count": 0}
+
         def fail():
             calls["count"] += 1
             raise RuntimeError("db locked")
@@ -66,6 +62,7 @@ class TestWithRetry:
 
     def test_success_on_retry(self) -> None:
         attempts = {"n": 0}
+
         def eventually_succeed():
             attempts["n"] += 1
             if attempts["n"] < 2:
@@ -268,7 +265,10 @@ class TestCalculateConfidence:
 
     def test_exception_returns_fallback(self) -> None:
         # When ConfidenceBreakdown raises, the except block catches and returns a fallback
-        with patch("elle.daemon.incidents.models.ConfidenceBreakdown", side_effect=[Exception("fail"), MagicMock(overall=0.5, from_llm=0.5)]):
+        with patch(
+            "elle.daemon.incidents.models.ConfidenceBreakdown",
+            side_effect=[Exception("fail"), MagicMock(overall=0.5, from_llm=0.5)],
+        ):
             conf = _calculate_confidence(None, True, 1)
         # Either the normal path or fallback should return an object with overall
         assert conf is not None
@@ -318,11 +318,12 @@ class TestRecordExecutionToIncident:
         mock_incident = MagicMock()
         mock_incident.incident_id = "inc-new"
 
-        with patch("elle.daemon.incidents.store.create_incident_draft", return_value=mock_incident) as mock_create, \
-             patch("elle.daemon.incidents.store.get_incident") as mock_get, \
-             patch("elle.daemon.incidents.store.update_incident") as mock_update, \
-             patch("elle.daemon.incidents.store.append_action") as mock_append:
-
+        with (
+            patch("elle.daemon.incidents.store.create_incident_draft", return_value=mock_incident) as mock_create,
+            patch("elle.daemon.incidents.store.get_incident"),
+            patch("elle.daemon.incidents.store.update_incident") as mock_update,
+            patch("elle.daemon.incidents.store.append_action") as mock_append,
+        ):
             result = record_execution_to_incident(
                 execution_id="exec-1",
                 user_input="check nginx status",
@@ -350,11 +351,12 @@ class TestRecordExecutionToIncident:
         mock_incident = MagicMock()
         mock_incident.incident_id = "inc-exist"
 
-        with patch("elle.daemon.incidents.store.get_incident", return_value=mock_incident) as mock_get, \
-             patch("elle.daemon.incidents.store.create_incident_draft") as mock_create, \
-             patch("elle.daemon.incidents.store.update_incident") as mock_update, \
-             patch("elle.daemon.incidents.store.append_action"):
-
+        with (
+            patch("elle.daemon.incidents.store.get_incident", return_value=mock_incident),
+            patch("elle.daemon.incidents.store.create_incident_draft") as mock_create,
+            patch("elle.daemon.incidents.store.update_incident"),
+            patch("elle.daemon.incidents.store.append_action"),
+        ):
             result = record_execution_to_incident(
                 execution_id="exec-2",
                 user_input="test",
@@ -373,11 +375,12 @@ class TestRecordExecutionToIncident:
         mock_new = MagicMock()
         mock_new.incident_id = "inc-new2"
 
-        with patch("elle.daemon.incidents.store.get_incident", return_value=None), \
-             patch("elle.daemon.incidents.store.create_incident_draft", return_value=mock_new), \
-             patch("elle.daemon.incidents.store.update_incident"), \
-             patch("elle.daemon.incidents.store.append_action"):
-
+        with (
+            patch("elle.daemon.incidents.store.get_incident", return_value=None),
+            patch("elle.daemon.incidents.store.create_incident_draft", return_value=mock_new),
+            patch("elle.daemon.incidents.store.update_incident"),
+            patch("elle.daemon.incidents.store.append_action"),
+        ):
             result = record_execution_to_incident(
                 execution_id="exec-3",
                 user_input="test",
@@ -395,11 +398,12 @@ class TestRecordExecutionToIncident:
         mock_incident = MagicMock()
         mock_incident.incident_id = "inc-shell"
 
-        with patch("elle.daemon.incidents.store.create_incident_draft", return_value=mock_incident), \
-             patch("elle.daemon.incidents.store.get_incident"), \
-             patch("elle.daemon.incidents.store.update_incident"), \
-             patch("elle.daemon.incidents.store.append_action") as mock_append:
-
+        with (
+            patch("elle.daemon.incidents.store.create_incident_draft", return_value=mock_incident),
+            patch("elle.daemon.incidents.store.get_incident"),
+            patch("elle.daemon.incidents.store.update_incident"),
+            patch("elle.daemon.incidents.store.append_action") as mock_append,
+        ):
             record_execution_to_incident(
                 execution_id="exec-4",
                 user_input="run df",
@@ -423,11 +427,12 @@ class TestRecordExecutionToIncident:
         mock_incident = MagicMock()
         mock_incident.incident_id = "inc-verify"
 
-        with patch("elle.daemon.incidents.store.create_incident_draft", return_value=mock_incident), \
-             patch("elle.daemon.incidents.store.get_incident"), \
-             patch("elle.daemon.incidents.store.update_incident"), \
-             patch("elle.daemon.incidents.store.append_action") as mock_append:
-
+        with (
+            patch("elle.daemon.incidents.store.create_incident_draft", return_value=mock_incident),
+            patch("elle.daemon.incidents.store.get_incident"),
+            patch("elle.daemon.incidents.store.update_incident"),
+            patch("elle.daemon.incidents.store.append_action") as mock_append,
+        ):
             record_execution_to_incident(
                 execution_id="exec-5",
                 user_input="search for info",
@@ -493,10 +498,11 @@ class TestRecordArmAction:
         mock_incident = MagicMock()
         mock_incident.incident_id = "arm-1"
 
-        with patch("elle.daemon.incidents.store.create_incident_draft", return_value=mock_incident), \
-             patch("elle.daemon.incidents.store.update_incident"), \
-             patch("elle.daemon.incidents.store.append_action"):
-
+        with (
+            patch("elle.daemon.incidents.store.create_incident_draft", return_value=mock_incident),
+            patch("elle.daemon.incidents.store.update_incident"),
+            patch("elle.daemon.incidents.store.append_action"),
+        ):
             result = record_arm_action(
                 arm_name="package_learning",
                 action="learn_package",
@@ -510,10 +516,11 @@ class TestRecordArmAction:
         mock_incident = MagicMock()
         mock_incident.incident_id = "arm-2"
 
-        with patch("elle.daemon.incidents.store.create_incident_draft", return_value=mock_incident), \
-             patch("elle.daemon.incidents.store.update_incident"), \
-             patch("elle.daemon.incidents.store.append_action"):
-
+        with (
+            patch("elle.daemon.incidents.store.create_incident_draft", return_value=mock_incident),
+            patch("elle.daemon.incidents.store.update_incident"),
+            patch("elle.daemon.incidents.store.append_action"),
+        ):
             result = record_arm_action(
                 arm_name="reactive_functions",
                 action="add_function",
@@ -534,10 +541,11 @@ class TestRecordArmAction:
                 raise RuntimeError("db busy")
             return mock_incident
 
-        with patch("elle.daemon.incidents.store.create_incident_draft", side_effect=side_effect), \
-             patch("elle.daemon.incidents.store.update_incident"), \
-             patch("elle.daemon.incidents.store.append_action"):
-
+        with (
+            patch("elle.daemon.incidents.store.create_incident_draft", side_effect=side_effect),
+            patch("elle.daemon.incidents.store.update_incident"),
+            patch("elle.daemon.incidents.store.append_action"),
+        ):
             result = record_arm_action(
                 arm_name="mobile_gateway",
                 action="pair",
@@ -560,10 +568,11 @@ class TestRecordArmAction:
         mock_incident = MagicMock()
         mock_incident.incident_id = "arm-domain"
 
-        with patch("elle.daemon.incidents.store.create_incident_draft", return_value=mock_incident) as mock_create, \
-             patch("elle.daemon.incidents.store.update_incident"), \
-             patch("elle.daemon.incidents.store.append_action"):
-
+        with (
+            patch("elle.daemon.incidents.store.create_incident_draft", return_value=mock_incident) as mock_create,
+            patch("elle.daemon.incidents.store.update_incident"),
+            patch("elle.daemon.incidents.store.append_action"),
+        ):
             record_arm_action(
                 arm_name="gui_mapping",
                 action="map_window",
@@ -577,10 +586,11 @@ class TestRecordArmAction:
         mock_incident = MagicMock()
         mock_incident.incident_id = "arm-exec"
 
-        with patch("elle.daemon.incidents.store.create_incident_draft", return_value=mock_incident), \
-             patch("elle.daemon.incidents.store.update_incident"), \
-             patch("elle.daemon.incidents.store.append_action") as mock_append:
-
+        with (
+            patch("elle.daemon.incidents.store.create_incident_draft", return_value=mock_incident),
+            patch("elle.daemon.incidents.store.update_incident"),
+            patch("elle.daemon.incidents.store.append_action") as mock_append,
+        ):
             record_arm_action(
                 arm_name="package_learning",
                 action="execute_something",

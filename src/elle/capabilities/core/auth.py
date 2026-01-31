@@ -37,9 +37,7 @@ class SessionTokenInput(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    action: Literal["generate", "read", "delete", "validate"] = Field(
-        description="Action to perform"
-    )
+    action: Literal["generate", "read", "delete", "validate"] = Field(description="Action to perform")
     token: str | None = Field(
         default=None,
         description="Token to validate (required for 'validate' action)",
@@ -197,7 +195,9 @@ class SessionTokenCapability(BaseCapability[SessionTokenInput, SessionTokenOutpu
                             reversible=False,
                             description="Deleted session token file",
                         ),
-                    ) if deleted else (),
+                    )
+                    if deleted
+                    else (),
                     execution_time_ms=int((time.time() - start_time) * 1000),
                     evidence=CapabilityEvidence(
                         files_modified=(str(path),) if deleted else (),

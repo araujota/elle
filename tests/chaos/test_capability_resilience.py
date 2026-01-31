@@ -7,7 +7,7 @@ and permission denied errors gracefully.
 from __future__ import annotations
 
 import subprocess
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -37,7 +37,7 @@ class TestCapabilityTimeout:
 
     def test_long_running_command_timeout(self, fault: FaultInjector) -> None:
         """Commands that exceed timeout should be killed, not hang."""
-        with fault.subprocess_timeout(timeout_sec=5.0) as mock:
+        with fault.subprocess_timeout(timeout_sec=5.0):
             with pytest.raises(subprocess.TimeoutExpired) as exc_info:
                 subprocess.run(["find", "/", "-name", "*.log"], timeout=5)
 
@@ -94,9 +94,7 @@ class TestPermissionDenied:
     async def test_capability_elevates_or_fails(self) -> None:
         """Capabilities requiring privilege should fail clearly when not elevated."""
         mock_capability = AsyncMock()
-        mock_capability.run = AsyncMock(
-            side_effect=PermissionError("Operation requires root privileges")
-        )
+        mock_capability.run = AsyncMock(side_effect=PermissionError("Operation requires root privileges"))
 
         with pytest.raises(PermissionError, match="root privileges"):
             await mock_capability.run(input={})

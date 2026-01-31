@@ -39,10 +39,10 @@ from elle.reactive.store import (
     update_rate_limit_state,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_func(
     name: str = "test-func",
@@ -80,6 +80,7 @@ def _make_func(
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def conn(reactive_conn):
     return reactive_conn
@@ -88,6 +89,7 @@ def conn(reactive_conn):
 # ---------------------------------------------------------------------------
 # create_function
 # ---------------------------------------------------------------------------
+
 
 class TestCreateFunction:
     def test_basic_create(self, conn):
@@ -98,6 +100,7 @@ class TestCreateFunction:
 
     def test_duplicate_name_raises(self, conn):
         import psycopg.errors
+
         create_function(_make_func(name="dupe"), conn=conn)
         with pytest.raises(psycopg.errors.UniqueViolation):
             create_function(_make_func(name="dupe"), conn=conn)
@@ -140,6 +143,7 @@ class TestCreateFunction:
 # get_function / get_function_by_name
 # ---------------------------------------------------------------------------
 
+
 class TestGetFunction:
     def test_not_found(self, conn):
         assert get_function("nonexistent", conn=conn) is None
@@ -165,6 +169,7 @@ class TestGetFunction:
 # ---------------------------------------------------------------------------
 # update_function
 # ---------------------------------------------------------------------------
+
 
 class TestUpdateFunction:
     def test_update_name(self, conn):
@@ -204,6 +209,7 @@ class TestUpdateFunction:
 # list_functions
 # ---------------------------------------------------------------------------
 
+
 class TestListFunctions:
     def test_empty(self, conn):
         assert list_functions(conn=conn) == []
@@ -238,6 +244,7 @@ class TestListFunctions:
 # ---------------------------------------------------------------------------
 # list_enabled_with_*_trigger
 # ---------------------------------------------------------------------------
+
 
 class TestListByTriggerType:
     def test_event_triggers(self, conn):
@@ -276,6 +283,7 @@ class TestListByTriggerType:
 # delete_function
 # ---------------------------------------------------------------------------
 
+
 class TestDeleteFunction:
     def test_delete_by_id(self, conn):
         func = _make_func()
@@ -299,6 +307,7 @@ class TestDeleteFunction:
 # ---------------------------------------------------------------------------
 # record_execution / execution history
 # ---------------------------------------------------------------------------
+
 
 class TestExecutionHistory:
     def test_record_and_retrieve(self, conn):
@@ -340,8 +349,11 @@ class TestExecutionHistory:
         create_function(func, conn=conn)
         for success in [True, False, True]:
             rec = ExecutionRecord(
-                function_id=func.id, function_name=func.name,
-                triggered_at=datetime.utcnow(), condition_result=True, success=success,
+                function_id=func.id,
+                function_name=func.name,
+                triggered_at=datetime.utcnow(),
+                condition_result=True,
+                success=success,
             )
             record_execution(rec, conn=conn)
         recent = get_recent_executions(success_only=True, conn=conn)
@@ -351,6 +363,7 @@ class TestExecutionHistory:
 # ---------------------------------------------------------------------------
 # Rate limit state
 # ---------------------------------------------------------------------------
+
 
 class TestRateLimitState:
     def test_default_state(self, conn):
@@ -363,7 +376,9 @@ class TestRateLimitState:
         func = _make_func()
         create_function(func, conn=conn)
         now = datetime.utcnow()
-        update_rate_limit_state(func.id, last_execution=now, daily_executions=3, daily_reset_date="2024-01-15", conn=conn)
+        update_rate_limit_state(
+            func.id, last_execution=now, daily_executions=3, daily_reset_date="2024-01-15", conn=conn
+        )
         state = get_rate_limit_state(func.id, conn=conn)
         assert state.daily_executions == 3
         assert state.daily_reset_date == "2024-01-15"
@@ -373,6 +388,7 @@ class TestRateLimitState:
 # ---------------------------------------------------------------------------
 # Custom function state
 # ---------------------------------------------------------------------------
+
 
 class TestFunctionState:
     def test_set_and_get(self, conn):
@@ -396,6 +412,7 @@ class TestFunctionState:
 # Statistics
 # ---------------------------------------------------------------------------
 
+
 class TestStatistics:
     def test_function_count_empty(self, conn):
         assert get_function_count(conn=conn) == 0
@@ -412,8 +429,11 @@ class TestStatistics:
         for _ in range(3):
             record_execution(
                 ExecutionRecord(
-                    function_id=func.id, function_name=func.name,
-                    triggered_at=datetime.utcnow(), condition_result=True, success=True,
+                    function_id=func.id,
+                    function_name=func.name,
+                    triggered_at=datetime.utcnow(),
+                    condition_result=True,
+                    success=True,
                 ),
                 conn=conn,
             )
@@ -425,8 +445,11 @@ class TestStatistics:
         create_function(func, conn=conn)
         record_execution(
             ExecutionRecord(
-                function_id=func.id, function_name=func.name,
-                triggered_at=datetime.utcnow(), condition_result=True, success=True,
+                function_id=func.id,
+                function_name=func.name,
+                triggered_at=datetime.utcnow(),
+                condition_result=True,
+                success=True,
             ),
             conn=conn,
         )

@@ -1356,8 +1356,7 @@ class NetworkDiagnoseCapability(BaseCapability[NetworkDiagnoseInput, NetworkDiag
             would_modify=(),
             estimated_risk="none",
             requires_confirmation=False,
-            preview_text=f"Would diagnose connectivity to {input.target}"
-            + (f":{input.port}" if input.port else ""),
+            preview_text=f"Would diagnose connectivity to {input.target}" + (f":{input.port}" if input.port else ""),
             is_valid=True,
         )
 
@@ -1391,9 +1390,7 @@ class NetworkDiagnoseCapability(BaseCapability[NetworkDiagnoseInput, NetworkDiag
                         "DNS resolution",
                         "ip route get",
                         "firewall check",
-                        f"TCP connect to {input.target}:{input.port}"
-                        if input.port
-                        else f"ping {input.target}",
+                        f"TCP connect to {input.target}:{input.port}" if input.port else f"ping {input.target}",
                     ),
                     rationale=f"Diagnosed {input.target}: "
                     + ("reachable" if diagnosis.reachable else diagnosis.likely_cause or "unreachable"),

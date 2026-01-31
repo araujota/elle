@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -12,10 +12,8 @@ from elle.ops.jq.models import (
     JQEditRequest,
     JQFilterError,
     JQRequest,
-    JQResult,
     JQUnavailableError,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -33,9 +31,7 @@ SAMPLE_JSON = json.dumps(
 
 def _make_completed(stdout: str = "", stderr: str = "", rc: int = 0):
     """Build a fake subprocess.CompletedProcess."""
-    return subprocess.CompletedProcess(
-        args=["jq"], returncode=rc, stdout=stdout, stderr=stderr
-    )
+    return subprocess.CompletedProcess(args=["jq"], returncode=rc, stdout=stdout, stderr=stderr)
 
 
 # ---------------------------------------------------------------------------
@@ -297,7 +293,7 @@ class TestJQQuery:
         """query() parses multi-line output as a list."""
         with patch(
             "elle.ops.jq.engine.subprocess.run",
-            return_value=_make_completed(stdout='1\n2\n3\n'),
+            return_value=_make_completed(stdout="1\n2\n3\n"),
         ):
             result = engine.query("[1,2,3]", ".[]")
 
@@ -331,7 +327,7 @@ class TestJQQuery:
 
         with patch(
             "elle.ops.jq.engine.subprocess.run",
-            return_value=_make_completed(stdout='1\n2\n'),
+            return_value=_make_completed(stdout="1\n2\n"),
         ):
             result = engine.query_file(str(json_file), ".[].a")
 

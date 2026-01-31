@@ -1375,6 +1375,7 @@ class SetupWizard:
                         llm_result = await asyncio.wait_for(warmup.warm_llm(), timeout=300.0)
                     except TimeoutError:
                         from elle.rag.model_warmup import WarmupResult
+
                         llm_result = WarmupResult(
                             success=False,
                             model=llm_model,

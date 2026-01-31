@@ -236,7 +236,9 @@ class ReportGenerator:
                     timeline=timeline,
                     explanation=row["explanation"] or "",
                     keywords=keywords,
-                    generated_at=datetime.fromisoformat(row["generated_at"]) if row["generated_at"] else datetime.utcnow(),
+                    generated_at=datetime.fromisoformat(row["generated_at"])
+                    if row["generated_at"]
+                    else datetime.utcnow(),
                     model_used=row["model_used"] or "",
                 )
         except psycopg.errors.UndefinedTable:

@@ -1,11 +1,9 @@
-from __future__ import annotations
-
 """Tests for elle.cli.ui.prompt -- User prompt handling."""
 
-from pathlib import Path
+from __future__ import annotations
+
 from unittest.mock import MagicMock, patch
 
-import pytest
 from prompt_toolkit.formatted_text import FormattedText
 
 from elle.cli.ui.prompt import (
@@ -17,10 +15,10 @@ from elle.cli.ui.prompt import (
     get_status_bar,
 )
 
-
 # ---------------------------------------------------------------------------
 # get_prompt_text
 # ---------------------------------------------------------------------------
+
 
 class TestGetPromptText:
     def test_idle_state(self):
@@ -54,6 +52,7 @@ class TestGetPromptText:
 # ---------------------------------------------------------------------------
 # get_status_bar
 # ---------------------------------------------------------------------------
+
 
 class TestGetStatusBar:
     def test_empty(self):
@@ -112,6 +111,7 @@ class TestGetStatusBar:
 # ElleCompleter
 # ---------------------------------------------------------------------------
 
+
 class TestElleCompleter:
     def test_init(self):
         completer = ElleCompleter()
@@ -142,6 +142,7 @@ class TestElleCompleter:
 # create_prompt_session
 # ---------------------------------------------------------------------------
 
+
 class TestCreatePromptSession:
     def test_defaults(self):
         session = create_prompt_session()
@@ -165,6 +166,7 @@ class TestCreatePromptSession:
 # ---------------------------------------------------------------------------
 # EllePrompt
 # ---------------------------------------------------------------------------
+
 
 class TestEllePrompt:
     def test_init_defaults(self):
@@ -354,6 +356,7 @@ class TestEllePrompt:
 # ---------------------------------------------------------------------------
 # SLASH_COMMANDS
 # ---------------------------------------------------------------------------
+
 
 class TestSlashCommands:
     def test_has_commands(self):

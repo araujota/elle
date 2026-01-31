@@ -1,37 +1,36 @@
 from __future__ import annotations
 
-import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from elle.daemon.reboot.grub import (
-    detect_grub_mode,
-    is_grub_available,
-    get_grub_default,
-    get_saved_default,
-    get_grub_entries,
-    _find_submenu_entries,
-    get_grub_state,
-    _get_grub_oneshot,
-    set_grub_oneshot,
-    confirm_boot_success,
-    clear_grub_oneshot,
-    set_grub_default,
-    prepare_rollback,
-    trigger_rollback_reboot,
-    get_boot_id,
-    has_rebooted_since,
     GRUBResult,
-    GRUBError,
+    _find_submenu_entries,
+    _get_grub_oneshot,
+    clear_grub_oneshot,
+    confirm_boot_success,
+    detect_grub_mode,
+    get_boot_id,
+    get_grub_default,
+    get_grub_entries,
+    get_grub_state,
+    get_saved_default,
+    has_rebooted_since,
+    is_grub_available,
+    prepare_rollback,
+    set_grub_default,
+    set_grub_oneshot,
+    trigger_rollback_reboot,
 )
-
 
 # ---------------------------------------------------------------------------
 # detect_grub_mode
 # ---------------------------------------------------------------------------
 
-class TestDetectGrubMode:
 
+class TestDetectGrubMode:
     def test_efi_detected(self):
         """EFI directory exists -> 'efi'."""
         efi_mock = MagicMock()
@@ -46,8 +45,10 @@ class TestDetectGrubMode:
         efi_mock.exists.return_value = False
         grub_cfg_mock = MagicMock()
         grub_cfg_mock.exists.return_value = True
-        with patch("elle.daemon.reboot.grub.Path", return_value=efi_mock), \
-             patch("elle.daemon.reboot.grub.GRUB_CONFIG", grub_cfg_mock):
+        with (
+            patch("elle.daemon.reboot.grub.Path", return_value=efi_mock),
+            patch("elle.daemon.reboot.grub.GRUB_CONFIG", grub_cfg_mock),
+        ):
             result = detect_grub_mode()
         assert result == "legacy"
 
@@ -57,8 +58,10 @@ class TestDetectGrubMode:
         efi_mock.exists.return_value = False
         grub_cfg_mock = MagicMock()
         grub_cfg_mock.exists.return_value = False
-        with patch("elle.daemon.reboot.grub.Path", return_value=efi_mock), \
-             patch("elle.daemon.reboot.grub.GRUB_CONFIG", grub_cfg_mock):
+        with (
+            patch("elle.daemon.reboot.grub.Path", return_value=efi_mock),
+            patch("elle.daemon.reboot.grub.GRUB_CONFIG", grub_cfg_mock),
+        ):
             result = detect_grub_mode()
         assert result == "unknown"
 
@@ -67,8 +70,8 @@ class TestDetectGrubMode:
 # is_grub_available
 # ---------------------------------------------------------------------------
 
-class TestIsGrubAvailable:
 
+class TestIsGrubAvailable:
     def test_available(self):
         mock_result = MagicMock()
         mock_result.returncode = 0
@@ -90,8 +93,8 @@ class TestIsGrubAvailable:
 # get_grub_default
 # ---------------------------------------------------------------------------
 
-class TestGetGrubDefault:
 
+class TestGetGrubDefault:
     def test_reads_default(self, tmp_path):
         grub_file = tmp_path / "grub"
         grub_file.write_text('GRUB_DEFAULT="saved"\nGRUB_TIMEOUT=5\n')
@@ -114,8 +117,10 @@ class TestGetGrubDefault:
     def test_read_error(self, tmp_path):
         grub_file = tmp_path / "grub"
         grub_file.write_text("GRUB_DEFAULT=0\n")
-        with patch("elle.daemon.reboot.grub.GRUB_DEFAULT", grub_file), \
-             patch.object(Path, "read_text", side_effect=PermissionError):
+        with (
+            patch("elle.daemon.reboot.grub.GRUB_DEFAULT", grub_file),
+            patch.object(Path, "read_text", side_effect=PermissionError),
+        ):
             result = get_grub_default()
         assert result is None
 
@@ -124,14 +129,16 @@ class TestGetGrubDefault:
 # get_saved_default
 # ---------------------------------------------------------------------------
 
-class TestGetSavedDefault:
 
+class TestGetSavedDefault:
     def test_reads_saved_entry(self):
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = "saved_entry=Ubuntu\nother=thing\n"
-        with patch("elle.daemon.reboot.grub.GRUB_ENV", MagicMock(exists=MagicMock(return_value=True))), \
-             patch("elle.daemon.reboot.grub.subprocess.run", return_value=mock_result):
+        with (
+            patch("elle.daemon.reboot.grub.GRUB_ENV", MagicMock(exists=MagicMock(return_value=True))),
+            patch("elle.daemon.reboot.grub.subprocess.run", return_value=mock_result),
+        ):
             result = get_saved_default()
         assert result == "Ubuntu"
 
@@ -139,8 +146,10 @@ class TestGetSavedDefault:
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = "other=value\n"
-        with patch("elle.daemon.reboot.grub.GRUB_ENV", MagicMock(exists=MagicMock(return_value=True))), \
-             patch("elle.daemon.reboot.grub.subprocess.run", return_value=mock_result):
+        with (
+            patch("elle.daemon.reboot.grub.GRUB_ENV", MagicMock(exists=MagicMock(return_value=True))),
+            patch("elle.daemon.reboot.grub.subprocess.run", return_value=mock_result),
+        ):
             result = get_saved_default()
         assert result is None
 
@@ -152,14 +161,18 @@ class TestGetSavedDefault:
     def test_command_fails(self):
         mock_result = MagicMock()
         mock_result.returncode = 1
-        with patch("elle.daemon.reboot.grub.GRUB_ENV", MagicMock(exists=MagicMock(return_value=True))), \
-             patch("elle.daemon.reboot.grub.subprocess.run", return_value=mock_result):
+        with (
+            patch("elle.daemon.reboot.grub.GRUB_ENV", MagicMock(exists=MagicMock(return_value=True))),
+            patch("elle.daemon.reboot.grub.subprocess.run", return_value=mock_result),
+        ):
             result = get_saved_default()
         assert result is None
 
     def test_exception(self):
-        with patch("elle.daemon.reboot.grub.GRUB_ENV", MagicMock(exists=MagicMock(return_value=True))), \
-             patch("elle.daemon.reboot.grub.subprocess.run", side_effect=Exception("fail")):
+        with (
+            patch("elle.daemon.reboot.grub.GRUB_ENV", MagicMock(exists=MagicMock(return_value=True))),
+            patch("elle.daemon.reboot.grub.subprocess.run", side_effect=Exception("fail")),
+        ):
             result = get_saved_default()
         assert result is None
 
@@ -168,14 +181,11 @@ class TestGetSavedDefault:
 # get_grub_entries
 # ---------------------------------------------------------------------------
 
-class TestGetGrubEntries:
 
+class TestGetGrubEntries:
     def test_parses_entries(self, tmp_path):
         cfg = tmp_path / "grub.cfg"
-        cfg.write_text(
-            "menuentry 'Ubuntu' {\n}\n"
-            "menuentry 'Recovery' {\n}\n"
-        )
+        cfg.write_text("menuentry 'Ubuntu' {\n}\nmenuentry 'Recovery' {\n}\n")
         with patch("elle.daemon.reboot.grub.GRUB_CONFIG", cfg):
             entries = get_grub_entries()
         assert "Ubuntu" in entries
@@ -188,12 +198,7 @@ class TestGetGrubEntries:
 
     def test_with_submenu(self, tmp_path):
         cfg = tmp_path / "grub.cfg"
-        cfg.write_text(
-            "menuentry 'Ubuntu' {\n}\n"
-            "submenu 'Advanced' {\n"
-            "  menuentry 'Ubuntu (old)' {\n  }\n"
-            "}\n"
-        )
+        cfg.write_text("menuentry 'Ubuntu' {\n}\nsubmenu 'Advanced' {\n  menuentry 'Ubuntu (old)' {\n  }\n}\n")
         with patch("elle.daemon.reboot.grub.GRUB_CONFIG", cfg):
             entries = get_grub_entries()
         assert "Ubuntu" in entries
@@ -202,8 +207,7 @@ class TestGetGrubEntries:
     def test_parse_exception(self, tmp_path):
         cfg = tmp_path / "grub.cfg"
         cfg.write_text("menuentry 'Ubuntu' {\n}\n")
-        with patch("elle.daemon.reboot.grub.GRUB_CONFIG", cfg), \
-             patch.object(Path, "read_text", side_effect=IOError):
+        with patch("elle.daemon.reboot.grub.GRUB_CONFIG", cfg), patch.object(Path, "read_text", side_effect=IOError):
             entries = get_grub_entries()
         assert entries == []
 
@@ -212,15 +216,10 @@ class TestGetGrubEntries:
 # _find_submenu_entries
 # ---------------------------------------------------------------------------
 
-class TestFindSubmenuEntries:
 
+class TestFindSubmenuEntries:
     def test_finds_entries(self):
-        content = (
-            "submenu 'Advanced' {\n"
-            "  menuentry 'Ubuntu (old)' {}\n"
-            "  menuentry 'Ubuntu (recovery)' {}\n"
-            "}\n"
-        )
+        content = "submenu 'Advanced' {\n  menuentry 'Ubuntu (old)' {}\n  menuentry 'Ubuntu (recovery)' {}\n}\n"
         entries = _find_submenu_entries(content, "Advanced")
         assert "Ubuntu (old)" in entries
         assert "Ubuntu (recovery)" in entries
@@ -234,13 +233,15 @@ class TestFindSubmenuEntries:
 # get_grub_state
 # ---------------------------------------------------------------------------
 
-class TestGetGrubState:
 
+class TestGetGrubState:
     def test_returns_state(self):
-        with patch("elle.daemon.reboot.grub.get_grub_default", return_value="0"), \
-             patch("elle.daemon.reboot.grub.get_grub_entries", return_value=["Ubuntu"]), \
-             patch("elle.daemon.reboot.grub.get_saved_default", return_value="Ubuntu"), \
-             patch("elle.daemon.reboot.grub._get_grub_oneshot", return_value=None):
+        with (
+            patch("elle.daemon.reboot.grub.get_grub_default", return_value="0"),
+            patch("elle.daemon.reboot.grub.get_grub_entries", return_value=["Ubuntu"]),
+            patch("elle.daemon.reboot.grub.get_saved_default", return_value="Ubuntu"),
+            patch("elle.daemon.reboot.grub._get_grub_oneshot", return_value=None),
+        ):
             state = get_grub_state()
         assert state.default_entry == "0"
         assert "Ubuntu" in state.entries
@@ -250,14 +251,16 @@ class TestGetGrubState:
 # _get_grub_oneshot
 # ---------------------------------------------------------------------------
 
-class TestGetGrubOneshot:
 
+class TestGetGrubOneshot:
     def test_reads_next_entry(self):
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = "next_entry=2\n"
-        with patch("elle.daemon.reboot.grub.GRUB_ENV", MagicMock(exists=MagicMock(return_value=True))), \
-             patch("elle.daemon.reboot.grub.subprocess.run", return_value=mock_result):
+        with (
+            patch("elle.daemon.reboot.grub.GRUB_ENV", MagicMock(exists=MagicMock(return_value=True))),
+            patch("elle.daemon.reboot.grub.subprocess.run", return_value=mock_result),
+        ):
             result = _get_grub_oneshot()
         assert result == "2"
 
@@ -265,8 +268,10 @@ class TestGetGrubOneshot:
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = "saved_entry=0\n"
-        with patch("elle.daemon.reboot.grub.GRUB_ENV", MagicMock(exists=MagicMock(return_value=True))), \
-             patch("elle.daemon.reboot.grub.subprocess.run", return_value=mock_result):
+        with (
+            patch("elle.daemon.reboot.grub.GRUB_ENV", MagicMock(exists=MagicMock(return_value=True))),
+            patch("elle.daemon.reboot.grub.subprocess.run", return_value=mock_result),
+        ):
             result = _get_grub_oneshot()
         assert result is None
 
@@ -280,8 +285,8 @@ class TestGetGrubOneshot:
 # Async boot management
 # ---------------------------------------------------------------------------
 
-class TestSetGrubOneshot:
 
+class TestSetGrubOneshot:
     @pytest.mark.asyncio
     async def test_grub_not_available(self):
         with patch("elle.daemon.reboot.grub.is_grub_available", return_value=False):
@@ -292,27 +297,28 @@ class TestSetGrubOneshot:
     async def test_success(self):
         mock_helper = MagicMock()
         mock_helper._run_pkexec = AsyncMock(return_value=MagicMock(success=True))
-        with patch("elle.daemon.reboot.grub.is_grub_available", return_value=True), \
-             patch("elle.security.polkit_helper.get_helper", return_value=mock_helper), \
-             patch("elle.security.polkit_helper.PolkitAction"):
+        with (
+            patch("elle.daemon.reboot.grub.is_grub_available", return_value=True),
+            patch("elle.security.polkit_helper.get_helper", return_value=mock_helper),
+            patch("elle.security.polkit_helper.PolkitAction"),
+        ):
             result = await set_grub_oneshot("0")
         assert result.success is True
 
     @pytest.mark.asyncio
     async def test_failure(self):
         mock_helper = MagicMock()
-        mock_helper._run_pkexec = AsyncMock(
-            return_value=MagicMock(success=False, error="denied", exit_code=126)
-        )
-        with patch("elle.daemon.reboot.grub.is_grub_available", return_value=True), \
-             patch("elle.security.polkit_helper.get_helper", return_value=mock_helper), \
-             patch("elle.security.polkit_helper.PolkitAction"):
+        mock_helper._run_pkexec = AsyncMock(return_value=MagicMock(success=False, error="denied", exit_code=126))
+        with (
+            patch("elle.daemon.reboot.grub.is_grub_available", return_value=True),
+            patch("elle.security.polkit_helper.get_helper", return_value=mock_helper),
+            patch("elle.security.polkit_helper.PolkitAction"),
+        ):
             result = await set_grub_oneshot("0")
         assert result.success is False
 
 
 class TestConfirmBootSuccess:
-
     @pytest.mark.asyncio
     async def test_grub_not_available(self):
         with patch("elle.daemon.reboot.grub.is_grub_available", return_value=False):
@@ -323,9 +329,11 @@ class TestConfirmBootSuccess:
     async def test_success_with_entry(self):
         mock_helper = MagicMock()
         mock_helper._run_pkexec = AsyncMock(return_value=MagicMock(success=True))
-        with patch("elle.daemon.reboot.grub.is_grub_available", return_value=True), \
-             patch("elle.security.polkit_helper.get_helper", return_value=mock_helper), \
-             patch("elle.security.polkit_helper.PolkitAction"):
+        with (
+            patch("elle.daemon.reboot.grub.is_grub_available", return_value=True),
+            patch("elle.security.polkit_helper.get_helper", return_value=mock_helper),
+            patch("elle.security.polkit_helper.PolkitAction"),
+        ):
             result = await confirm_boot_success("0")
         assert result.success is True
 
@@ -333,28 +341,29 @@ class TestConfirmBootSuccess:
     async def test_success_without_entry(self):
         mock_helper = MagicMock()
         mock_helper._run_pkexec = AsyncMock(return_value=MagicMock(success=True))
-        with patch("elle.daemon.reboot.grub.is_grub_available", return_value=True), \
-             patch("elle.security.polkit_helper.get_helper", return_value=mock_helper), \
-             patch("elle.daemon.reboot.grub.get_saved_default", return_value="saved_val"), \
-             patch("elle.security.polkit_helper.PolkitAction"):
+        with (
+            patch("elle.daemon.reboot.grub.is_grub_available", return_value=True),
+            patch("elle.security.polkit_helper.get_helper", return_value=mock_helper),
+            patch("elle.daemon.reboot.grub.get_saved_default", return_value="saved_val"),
+            patch("elle.security.polkit_helper.PolkitAction"),
+        ):
             result = await confirm_boot_success(None)
         assert result.success is True
 
     @pytest.mark.asyncio
     async def test_failure(self):
         mock_helper = MagicMock()
-        mock_helper._run_pkexec = AsyncMock(
-            return_value=MagicMock(success=False, error="fail", exit_code=1)
-        )
-        with patch("elle.daemon.reboot.grub.is_grub_available", return_value=True), \
-             patch("elle.security.polkit_helper.get_helper", return_value=mock_helper), \
-             patch("elle.security.polkit_helper.PolkitAction"):
+        mock_helper._run_pkexec = AsyncMock(return_value=MagicMock(success=False, error="fail", exit_code=1))
+        with (
+            patch("elle.daemon.reboot.grub.is_grub_available", return_value=True),
+            patch("elle.security.polkit_helper.get_helper", return_value=mock_helper),
+            patch("elle.security.polkit_helper.PolkitAction"),
+        ):
             result = await confirm_boot_success("0")
         assert result.success is False
 
 
 class TestClearGrubOneshot:
-
     @pytest.mark.asyncio
     async def test_grub_not_available(self):
         with patch("elle.daemon.reboot.grub.is_grub_available", return_value=False):
@@ -365,9 +374,11 @@ class TestClearGrubOneshot:
     async def test_success(self):
         mock_helper = MagicMock()
         mock_helper._run_pkexec = AsyncMock(return_value=MagicMock(success=True))
-        with patch("elle.daemon.reboot.grub.is_grub_available", return_value=True), \
-             patch("elle.security.polkit_helper.get_helper", return_value=mock_helper), \
-             patch("elle.security.polkit_helper.PolkitAction"):
+        with (
+            patch("elle.daemon.reboot.grub.is_grub_available", return_value=True),
+            patch("elle.security.polkit_helper.get_helper", return_value=mock_helper),
+            patch("elle.security.polkit_helper.PolkitAction"),
+        ):
             result = await clear_grub_oneshot()
         assert result.success is True
 
@@ -375,16 +386,17 @@ class TestClearGrubOneshot:
     async def test_failure_still_returns_true(self):
         mock_helper = MagicMock()
         mock_helper._run_pkexec = AsyncMock(return_value=MagicMock(success=False))
-        with patch("elle.daemon.reboot.grub.is_grub_available", return_value=True), \
-             patch("elle.security.polkit_helper.get_helper", return_value=mock_helper), \
-             patch("elle.security.polkit_helper.PolkitAction"):
+        with (
+            patch("elle.daemon.reboot.grub.is_grub_available", return_value=True),
+            patch("elle.security.polkit_helper.get_helper", return_value=mock_helper),
+            patch("elle.security.polkit_helper.PolkitAction"),
+        ):
             result = await clear_grub_oneshot()
         # Even failure returns success=True (see source)
         assert result.success is True
 
 
 class TestSetGrubDefault:
-
     @pytest.mark.asyncio
     async def test_delegates(self):
         with patch("elle.daemon.reboot.grub.confirm_boot_success", new_callable=AsyncMock) as mock:
@@ -397,20 +409,24 @@ class TestSetGrubDefault:
 # Rollback
 # ---------------------------------------------------------------------------
 
-class TestPrepareRollback:
 
+class TestPrepareRollback:
     @pytest.mark.asyncio
     async def test_with_fallback(self):
-        with patch("elle.daemon.reboot.grub.get_grub_default", return_value="0"), \
-             patch("elle.daemon.reboot.grub.get_saved_default", return_value="0"):
+        with (
+            patch("elle.daemon.reboot.grub.get_grub_default", return_value="0"),
+            patch("elle.daemon.reboot.grub.get_saved_default", return_value="0"),
+        ):
             result = await prepare_rollback("1")
         assert result.success is True
         assert "1" in result.message
 
     @pytest.mark.asyncio
     async def test_default_fallback(self):
-        with patch("elle.daemon.reboot.grub.get_grub_default", return_value="0"), \
-             patch("elle.daemon.reboot.grub.get_saved_default", return_value="0"):
+        with (
+            patch("elle.daemon.reboot.grub.get_grub_default", return_value="0"),
+            patch("elle.daemon.reboot.grub.get_saved_default", return_value="0"),
+        ):
             result = await prepare_rollback()
         assert result.success is True
 
@@ -418,20 +434,23 @@ class TestPrepareRollback:
     async def test_saved_mode_without_saved_entry(self):
         mock_helper = MagicMock()
         mock_helper._run_pkexec = AsyncMock(return_value=MagicMock(success=True))
-        with patch("elle.daemon.reboot.grub.get_grub_default", return_value="saved"), \
-             patch("elle.daemon.reboot.grub.get_saved_default", return_value=None), \
-             patch("elle.security.polkit_helper.get_helper", return_value=mock_helper), \
-             patch("elle.security.polkit_helper.PolkitAction"):
+        with (
+            patch("elle.daemon.reboot.grub.get_grub_default", return_value="saved"),
+            patch("elle.daemon.reboot.grub.get_saved_default", return_value=None),
+            patch("elle.security.polkit_helper.get_helper", return_value=mock_helper),
+            patch("elle.security.polkit_helper.PolkitAction"),
+        ):
             result = await prepare_rollback()
         assert result.success is True
 
 
 class TestTriggerRollbackReboot:
-
     @pytest.mark.asyncio
     async def test_success(self):
-        with patch("elle.daemon.reboot.grub.set_grub_default", new_callable=AsyncMock) as mock_default, \
-             patch("elle.daemon.reboot.grub.clear_grub_oneshot", new_callable=AsyncMock):
+        with (
+            patch("elle.daemon.reboot.grub.set_grub_default", new_callable=AsyncMock) as mock_default,
+            patch("elle.daemon.reboot.grub.clear_grub_oneshot", new_callable=AsyncMock),
+        ):
             mock_default.return_value = GRUBResult(success=True)
             result = await trigger_rollback_reboot("0")
         assert result.success is True
@@ -448,8 +467,8 @@ class TestTriggerRollbackReboot:
 # Boot ID
 # ---------------------------------------------------------------------------
 
-class TestBootId:
 
+class TestBootId:
     def test_get_boot_id(self, tmp_path):
         boot_id_file = tmp_path / "boot_id"
         boot_id_file.write_text("abc-123\n")

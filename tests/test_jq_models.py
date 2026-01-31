@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 import pytest
 from pydantic import ValidationError
@@ -21,7 +21,6 @@ from elle.ops.jq.models import (
     JQStatus,
     JQUnavailableError,
 )
-
 
 # =============================================================================
 # Fixtures
@@ -71,7 +70,7 @@ def sample_jq_edit_request() -> JQEditRequest:
     """Create a basic JQEditRequest for reuse."""
     return JQEditRequest(
         file_path="/etc/app/config.json",
-        filter='.timeout = 60',
+        filter=".timeout = 60",
         description="Set timeout to 60 seconds",
     )
 
@@ -165,14 +164,14 @@ class TestJQOperation:
 
     def test_json_round_trip(self) -> None:
         """Test JSON serialization and deserialization."""
-        op = JQOperation(kind="transform", filter='.x = 1', raw_output=True)
+        op = JQOperation(kind="transform", filter=".x = 1", raw_output=True)
         json_str = op.model_dump_json()
         restored = JQOperation.model_validate_json(json_str)
         assert restored == op
 
     def test_complex_filter_expression(self) -> None:
         """Test a complex jq filter expression is stored correctly."""
-        expr = '.[] | select(.age > 21) | {name, age}'
+        expr = ".[] | select(.age > 21) | {name, age}"
         op = JQOperation(kind="query", filter=expr)
         assert op.filter == expr
 
@@ -397,7 +396,7 @@ class TestJQResult:
         """Test parsed_output with complex types (list, dict)."""
         result = JQResult(
             success=True,
-            output='[1,2,3]',
+            output="[1,2,3]",
             parsed_output=[1, 2, 3],
         )
         assert result.parsed_output == [1, 2, 3]
@@ -444,11 +443,11 @@ class TestJQEditRequest:
         """Test creating a basic edit request."""
         req = JQEditRequest(
             file_path="/etc/app/config.json",
-            filter='.timeout = 60',
+            filter=".timeout = 60",
             description="Set timeout to 60 seconds",
         )
         assert req.file_path == "/etc/app/config.json"
-        assert req.filter == '.timeout = 60'
+        assert req.filter == ".timeout = 60"
         assert req.description == "Set timeout to 60 seconds"
 
     def test_default_values(self) -> None:
@@ -469,7 +468,7 @@ class TestJQEditRequest:
         """Test dry_run flag."""
         req = JQEditRequest(
             file_path="/tmp/test.json",
-            filter='.x = 1',
+            filter=".x = 1",
             description="test",
             dry_run=True,
         )
@@ -479,7 +478,7 @@ class TestJQEditRequest:
         """Test linking to an incident."""
         req = JQEditRequest(
             file_path="/tmp/test.json",
-            filter='.x = 1',
+            filter=".x = 1",
             description="test",
             incident_id="inc-abc-123",
         )
@@ -559,7 +558,7 @@ class TestJQEditRequest:
         """Test JSON serialization and deserialization."""
         req = JQEditRequest(
             file_path="/tmp/test.json",
-            filter='.x = 1',
+            filter=".x = 1",
             description="set x",
             indent=4,
             dry_run=True,

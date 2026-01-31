@@ -100,7 +100,6 @@ def ensure_aggregation_schema(conn: psycopg.Connection) -> None:
     conn.commit()
 
 
-
 # =============================================================================
 # Metric Collection
 # =============================================================================
@@ -220,6 +219,7 @@ def collect_system_metrics() -> dict[str, float]:
         # Temperature
         try:
             import glob
+
             max_temp = 0
             for zone in glob.glob("/sys/class/thermal/thermal_zone*/temp"):
                 try:
@@ -236,6 +236,7 @@ def collect_system_metrics() -> dict[str, float]:
         # Zombie/process count
         try:
             from pathlib import Path
+
             zombie_count = 0
             total_count = 0
             proc_dir = Path("/proc")
@@ -258,6 +259,7 @@ def collect_system_metrics() -> dict[str, float]:
         # PSI pressure
         try:
             from pathlib import Path
+
             for resource, key in [("cpu", "psi.cpu_avg10"), ("memory", "psi.memory_avg10")]:
                 psi_path = Path(f"/proc/pressure/{resource}")
                 if psi_path.exists():
@@ -553,6 +555,7 @@ class TrendAggregator:
 
         try:
             from elle.daemon.telemetry.model_selector import ModelSelector
+
             selector = ModelSelector()
             # Get raw samples for advanced forecasting
             cursor = conn.cursor()
@@ -734,6 +737,7 @@ class TrendAggregator:
             from elle.daemon.telemetry.correlator_engine import (
                 CorrelationEngine,
             )
+
             engine = CorrelationEngine()
             engine_alerts: list[EngineAlert] = engine.evaluate(metrics, {})
             # Convert from correlator_engine.CorrelationAlert to trends.CorrelationAlert

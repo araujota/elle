@@ -120,7 +120,7 @@ INDEXES = [
 # ---------------------------------------------------------------------------
 
 
-def _migrate_to_v2(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+def _migrate_to_v2(conn: psycopg.Connection) -> None:
     """Create the full reboot schema at v2."""
     conn.execute(INTENTS_TABLE)
     conn.execute(VERIFICATIONS_TABLE)
@@ -136,7 +136,7 @@ register_migration(PG_SCHEMA, 2, _migrate_to_v2)
 # ---------------------------------------------------------------------------
 
 
-def ensure_schema(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+def ensure_schema(conn: psycopg.Connection) -> None:
     """Ensure the reboot schema is up to date.
 
     Args:
@@ -147,7 +147,7 @@ def ensure_schema(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
     run_migrations(conn, PG_SCHEMA)
 
 
-def drop_all_tables(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+def drop_all_tables(conn: psycopg.Connection) -> None:
     """Drop all Reboot tables.
 
     WARNING: This destroys all data. Use only for testing.

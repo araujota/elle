@@ -623,25 +623,17 @@ class ConfigRollbackCapability(BaseCapability[ConfigRollbackInput, ConfigRollbac
 
                     with concurrent.futures.ThreadPoolExecutor() as pool:
                         backup = pool.submit(
-                            lambda: asyncio.run(
-                                get_config_backup(input.incident_id, input.path)
-                            )
+                            lambda: asyncio.run(get_config_backup(input.incident_id, input.path))
                         ).result()
                 else:
-                    backup = loop.run_until_complete(
-                        get_config_backup(input.incident_id, input.path)
-                    )
+                    backup = loop.run_until_complete(get_config_backup(input.incident_id, input.path))
             except RuntimeError:
-                backup = asyncio.run(
-                    get_config_backup(input.incident_id, input.path)
-                )
+                backup = asyncio.run(get_config_backup(input.incident_id, input.path))
 
             if not backup:
                 return DryRunResult(
                     is_valid=False,
-                    validation_errors=(
-                        f"No backup found for {input.path} in incident {input.incident_id}",
-                    ),
+                    validation_errors=(f"No backup found for {input.path} in incident {input.incident_id}",),
                     preview_text="Cannot rollback: no backup found",
                 )
 
@@ -660,9 +652,7 @@ class ConfigRollbackCapability(BaseCapability[ConfigRollbackInput, ConfigRollbac
                 would_modify=(input.path,),
                 estimated_risk="high",
                 requires_confirmation=True,
-                preview_text=(
-                    f"Would restore {input.path} from backup {backup_path}"
-                ),
+                preview_text=(f"Would restore {input.path} from backup {backup_path}"),
                 is_valid=True,
             )
 
@@ -699,18 +689,12 @@ class ConfigRollbackCapability(BaseCapability[ConfigRollbackInput, ConfigRollbac
 
                     with concurrent.futures.ThreadPoolExecutor() as pool:
                         backup = pool.submit(
-                            lambda: asyncio.run(
-                                get_config_backup(input.incident_id, input.path)
-                            )
+                            lambda: asyncio.run(get_config_backup(input.incident_id, input.path))
                         ).result()
                 else:
-                    backup = loop.run_until_complete(
-                        get_config_backup(input.incident_id, input.path)
-                    )
+                    backup = loop.run_until_complete(get_config_backup(input.incident_id, input.path))
             except RuntimeError:
-                backup = asyncio.run(
-                    get_config_backup(input.incident_id, input.path)
-                )
+                backup = asyncio.run(get_config_backup(input.incident_id, input.path))
 
             if not backup:
                 return CapabilityResult(
@@ -760,9 +744,7 @@ class ConfigRollbackCapability(BaseCapability[ConfigRollbackInput, ConfigRollbac
                             import concurrent.futures
 
                             with concurrent.futures.ThreadPoolExecutor() as pool:
-                                result = pool.submit(
-                                    lambda: asyncio.run(validate_config(target_path))
-                                ).result()
+                                result = pool.submit(lambda: asyncio.run(validate_config(target_path))).result()
                         else:
                             result = loop.run_until_complete(validate_config(target_path))
                     except RuntimeError:
@@ -772,10 +754,7 @@ class ConfigRollbackCapability(BaseCapability[ConfigRollbackInput, ConfigRollbac
 
                     # Revert if validation failed
                     if not validation_passed:
-                        logger.warning(
-                            f"Rollback validation failed for {input.path}, "
-                            "keeping restored state anyway"
-                        )
+                        logger.warning(f"Rollback validation failed for {input.path}, keeping restored state anyway")
 
                 except ImportError:
                     # Validators not available, assume OK

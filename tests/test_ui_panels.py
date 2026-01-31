@@ -1,12 +1,9 @@
-from __future__ import annotations
-
 """Tests for elle.cli.ui.panels -- Rich panel rendering code."""
 
-from datetime import datetime, timedelta
-from unittest.mock import patch
+from __future__ import annotations
 
-import pytest
-from rich.console import Group
+from datetime import datetime, timedelta
+
 from rich.panel import Panel
 from rich.text import Text
 
@@ -24,10 +21,10 @@ from elle.cli.ui.panels import (
     search_results_panel,
 )
 
-
 # ---------------------------------------------------------------------------
 # fixit_panel
 # ---------------------------------------------------------------------------
+
 
 class TestFixitPanel:
     """Tests for the fixit_panel function."""
@@ -145,6 +142,7 @@ class TestFixitPanel:
 # fixit_compact
 # ---------------------------------------------------------------------------
 
+
 class TestFixitCompact:
     def test_returns_text(self):
         result = fixit_compact(command="apt install foo", fix_command="apt install foobar")
@@ -159,6 +157,7 @@ class TestFixitCompact:
 # ---------------------------------------------------------------------------
 # rationale_panel
 # ---------------------------------------------------------------------------
+
 
 class TestRationalePanel:
     def test_empty_rationale(self):
@@ -222,6 +221,7 @@ class TestRationalePanel:
 # ---------------------------------------------------------------------------
 # plan_panel
 # ---------------------------------------------------------------------------
+
 
 class TestPlanPanel:
     def test_basic_plan_panel(self):
@@ -303,6 +303,7 @@ class TestPlanPanel:
 # plan_step_result
 # ---------------------------------------------------------------------------
 
+
 class TestPlanStepResult:
     def test_success(self):
         result = plan_step_result(1, "Install package", success=True)
@@ -320,6 +321,7 @@ class TestPlanStepResult:
 # ---------------------------------------------------------------------------
 # incident_panel
 # ---------------------------------------------------------------------------
+
 
 class TestIncidentPanel:
     def test_minimal_incident_panel(self):
@@ -366,6 +368,7 @@ class TestIncidentPanel:
 # incident_compact
 # ---------------------------------------------------------------------------
 
+
 class TestIncidentCompact:
     def test_returns_text(self):
         result = incident_compact(
@@ -381,6 +384,7 @@ class TestIncidentCompact:
 # ---------------------------------------------------------------------------
 # search_results_panel
 # ---------------------------------------------------------------------------
+
 
 class TestSearchResultsPanel:
     def test_empty_results(self):
@@ -408,6 +412,7 @@ class TestSearchResultsPanel:
 # ---------------------------------------------------------------------------
 # config_diff_panel
 # ---------------------------------------------------------------------------
+
 
 class TestConfigDiffPanel:
     def test_basic_config_diff(self):
@@ -440,6 +445,7 @@ class TestConfigDiffPanel:
 # ---------------------------------------------------------------------------
 # apply_confirmation / rollback_confirmation
 # ---------------------------------------------------------------------------
+
 
 class TestConfirmationPanels:
     def test_apply_confirmation_low_risk(self):

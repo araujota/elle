@@ -127,9 +127,7 @@ class JQEngine:
         """
         self._jq_path = _find_jq()
         if self._jq_path is None:
-            raise JQUnavailableError(
-                "jq is not installed. Install with: sudo apt install jq"
-            )
+            raise JQUnavailableError("jq is not installed. Install with: sudo apt install jq")
         logger.debug(f"Initialized JQEngine with jq at {self._jq_path}")
 
     def __enter__(self) -> JQEngine:

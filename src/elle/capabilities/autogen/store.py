@@ -13,6 +13,7 @@ import hashlib
 import logging
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 import psycopg
 
@@ -71,7 +72,7 @@ INDEXES = [
 # =============================================================================
 
 
-def _migrate_to_v1(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+def _migrate_to_v1(conn: psycopg.Connection) -> None:
     """Create the initial autogen schema."""
     conn.execute(GENERATED_CAPABILITIES_TABLE)
     for idx in INDEXES:
@@ -212,9 +213,7 @@ class AutogenStore:
     def list_all(self) -> list[StoredCapability]:
         """List all stored capabilities."""
         with get_conn(schema=PG_SCHEMA) as conn:
-            rows = conn.execute(
-                "SELECT * FROM generated_capabilities ORDER BY capability_name"
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM generated_capabilities ORDER BY capability_name").fetchall()
             return [self._row_to_stored(row) for row in rows]
 
     def list_approved_enabled(self) -> list[StoredCapability]:
@@ -353,7 +352,7 @@ class AutogenStore:
         new_hash = hashlib.sha256(new_man_page_text.encode()).hexdigest()[:16]
         return stored.man_page_hash != new_hash
 
-    def _row_to_stored(self, row: dict) -> StoredCapability:  # type: ignore[type-arg]
+    def _row_to_stored(self, row: dict[str, Any]) -> StoredCapability:
         """Convert database row to StoredCapability."""
         generated_at = row["generated_at"]
         if isinstance(generated_at, str):

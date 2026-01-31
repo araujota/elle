@@ -356,18 +356,22 @@ class ExecutionStore:
             )
             results = []
             for row in cursor.fetchall():
-                results.append({
-                    "execution_id": row["execution_id"],
-                    "started_at": row["started_at"],
-                    "user_input": row["user_input"],
-                    "classified_intent": row["classified_intent"],
-                    "success": bool(row["success"]),
-                    "incident_id": row["incident_id"],
-                    "iterations": row["iterations"],
-                    "total_tool_calls": row["total_tool_calls"],
-                    "capabilities_executed": row["capabilities_executed"].split(",") if row["capabilities_executed"] else [],
-                    "total_duration_ms": row["total_duration_ms"],
-                })
+                results.append(
+                    {
+                        "execution_id": row["execution_id"],
+                        "started_at": row["started_at"],
+                        "user_input": row["user_input"],
+                        "classified_intent": row["classified_intent"],
+                        "success": bool(row["success"]),
+                        "incident_id": row["incident_id"],
+                        "iterations": row["iterations"],
+                        "total_tool_calls": row["total_tool_calls"],
+                        "capabilities_executed": row["capabilities_executed"].split(",")
+                        if row["capabilities_executed"]
+                        else [],
+                        "total_duration_ms": row["total_duration_ms"],
+                    }
+                )
             return results
 
 

@@ -130,9 +130,7 @@ class CrudiniEngine:
         """
         self._crudini_path = _find_crudini()
         if self._crudini_path is None:
-            raise CrudiniUnavailableError(
-                "crudini is not installed. Install with: sudo apt install crudini"
-            )
+            raise CrudiniUnavailableError("crudini is not installed. Install with: sudo apt install crudini")
         logger.debug(f"Initialized CrudiniEngine with crudini at {self._crudini_path}")
 
     def __enter__(self) -> CrudiniEngine:

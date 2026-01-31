@@ -75,7 +75,7 @@ def _update_domain_efficacy(
     domain: str,
     outcome: str,
     now: datetime,
-    conn: psycopg.Connection,  # type: ignore[type-arg]
+    conn: psycopg.Connection,
 ) -> None:
     """Update domain efficacy statistics."""
     cursor = conn.cursor()
@@ -139,7 +139,7 @@ def _update_entity_efficacy(
     entity: str,
     outcome: str,
     now: datetime,
-    conn: psycopg.Connection,  # type: ignore[type-arg]
+    conn: psycopg.Connection,
 ) -> None:
     """Update entity efficacy statistics."""
     cursor = conn.cursor()
@@ -203,7 +203,7 @@ def _update_approach_efficacy(
     outcome: str,
     time_to_resolve: int | None,
     now: datetime,
-    conn: psycopg.Connection,  # type: ignore[type-arg]
+    conn: psycopg.Connection,
 ) -> None:
     """Update solution approach efficacy statistics."""
     cursor = conn.cursor()

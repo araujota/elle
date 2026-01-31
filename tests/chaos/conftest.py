@@ -6,13 +6,11 @@ faults are created.
 
 from __future__ import annotations
 
-import asyncio
 import errno
-import json
 import os
+from collections.abc import Generator
 from contextlib import contextmanager
-from pathlib import Path
-from typing import Any, Generator
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -40,8 +38,9 @@ class FaultInjector:
                 return False
             return original_isdir(p)
 
-        with patch("os.path.isdir", side_effect=fake_isdir), patch(
-            "pathlib.Path.mkdir", side_effect=FileNotFoundError(errno.ENOENT, "No such file or directory", path)
+        with (
+            patch("os.path.isdir", side_effect=fake_isdir),
+            patch("pathlib.Path.mkdir", side_effect=FileNotFoundError(errno.ENOENT, "No such file or directory", path)),
         ):
             yield
 
@@ -143,8 +142,9 @@ class FaultInjector:
         original_time = time.time
         original_monotonic = time.monotonic
 
-        with patch("time.time", side_effect=lambda: original_time() + offset_seconds), patch(
-            "time.monotonic", side_effect=lambda: original_monotonic() + offset_seconds
+        with (
+            patch("time.time", side_effect=lambda: original_time() + offset_seconds),
+            patch("time.monotonic", side_effect=lambda: original_monotonic() + offset_seconds),
         ):
             yield
 

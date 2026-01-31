@@ -7,7 +7,7 @@ forecast generation, baseline updates, and aggregation storage.
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -24,7 +24,6 @@ from elle.daemon.telemetry.aggregator import (
     record_metrics_batch,
 )
 from elle.daemon.telemetry.trends import TrendConfig, TrendWindow
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -107,21 +106,15 @@ class TestDatetimeHelpers:
 
 class TestEnsureAggregationSchema:
     def test_creates_metric_samples_table(self, db):
-        cursor = db.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_name='metric_samples'"
-        )
+        cursor = db.execute("SELECT table_name FROM information_schema.tables WHERE table_name='metric_samples'")
         assert cursor.fetchone() is not None
 
     def test_creates_metric_aggregations_table(self, db):
-        cursor = db.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_name='metric_aggregations'"
-        )
+        cursor = db.execute("SELECT table_name FROM information_schema.tables WHERE table_name='metric_aggregations'")
         assert cursor.fetchone() is not None
 
     def test_creates_metric_baselines_table(self, db):
-        cursor = db.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_name='metric_baselines'"
-        )
+        cursor = db.execute("SELECT table_name FROM information_schema.tables WHERE table_name='metric_baselines'")
         assert cursor.fetchone() is not None
 
     def test_idempotent(self, db):
@@ -579,9 +572,7 @@ class TestRunAggregationCycle:
         assert ctx.swap_trend.current == 25.0
 
     @patch("elle.daemon.telemetry.aggregator.collect_system_metrics")
-    def test_aggregation_cycle_generates_warnings_above_threshold(
-        self, mock_collect, aggregator, db
-    ):
+    def test_aggregation_cycle_generates_warnings_above_threshold(self, mock_collect, aggregator, db):
         # Default METRIC_THRESHOLDS for disk./.used_pct is 80.0
         mock_collect.return_value = {"disk./.used_pct": 95.0}
 
@@ -590,9 +581,7 @@ class TestRunAggregationCycle:
         assert len(ctx.warning_messages) > 0
 
     @patch("elle.daemon.telemetry.aggregator.collect_system_metrics")
-    def test_aggregation_cycle_no_warnings_below_threshold(
-        self, mock_collect, aggregator, db
-    ):
+    def test_aggregation_cycle_no_warnings_below_threshold(self, mock_collect, aggregator, db):
         mock_collect.return_value = {"mem.used_pct": 30.0}
 
         ctx = aggregator.run_aggregation_cycle(conn=db)

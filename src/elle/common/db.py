@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import logging
 
-import psycopg
-
 from elle.storage.engine import get_conn
 
 logger = logging.getLogger(__name__)

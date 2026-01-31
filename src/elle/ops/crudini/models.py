@@ -27,9 +27,7 @@ class CrudiniOperation(BaseModel):
     kind: Literal["get", "set", "del", "merge"] = Field(
         description="Type of operation: get (read), set (write), del (delete), merge (combine)"
     )
-    section: str = Field(
-        description="INI section name (e.g., 'DEFAULT', 'database', 'server')"
-    )
+    section: str = Field(description="INI section name (e.g., 'DEFAULT', 'database', 'server')")
     parameter: str | None = Field(
         default=None,
         description="Parameter/key name within the section (None for section-level ops)",

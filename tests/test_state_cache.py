@@ -6,10 +6,8 @@ Docker/network/firewall state parsing, and listeners.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import subprocess
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -25,7 +23,6 @@ from elle.daemon.telemetry.state_cache import (
     StateCache,
     SystemState,
 )
-
 
 # ---------------------------------------------------------------------------
 # Tests: Pydantic Models
@@ -67,9 +64,7 @@ class TestDockerState:
         assert ds.swarm_active is False
 
     def test_with_containers(self):
-        c = ContainerInfo(
-            id="abc", names="web", image="img", status="Up", state="running"
-        )
+        c = ContainerInfo(id="abc", names="web", image="img", status="Up", state="running")
         ds = DockerState(docker_available=True, running_containers=(c,))
         assert len(ds.running_containers) == 1
         assert ds.docker_available is True
@@ -328,15 +323,17 @@ class TestGetContainers:
     async def test_parse_container_json(self):
         cache = StateCache()
 
-        container_json = json.dumps({
-            "ID": "abc123def456",
-            "Names": "webapp",
-            "Image": "nginx:latest",
-            "Status": "Up 2 hours",
-            "State": "running",
-            "Ports": "0.0.0.0:80->80/tcp",
-            "CreatedAt": "2025-06-15",
-        })
+        container_json = json.dumps(
+            {
+                "ID": "abc123def456",
+                "Names": "webapp",
+                "Image": "nginx:latest",
+                "Status": "Up 2 hours",
+                "State": "running",
+                "Ports": "0.0.0.0:80->80/tcp",
+                "CreatedAt": "2025-06-15",
+            }
+        )
 
         mock_result = MagicMock()
         mock_result.returncode = 0
@@ -521,22 +518,24 @@ class TestGetInterfaces:
     async def test_parse_interfaces(self):
         cache = StateCache()
 
-        ip_json = json.dumps([
-            {
-                "ifname": "eth0",
-                "operstate": "UP",
-                "address": "00:11:22:33:44:55",
-                "mtu": 1500,
-                "addr_info": [
-                    {"local": "192.168.1.10", "family": "inet"},
-                ],
-            },
-            {
-                "ifname": "lo",
-                "operstate": "UNKNOWN",
-                "addr_info": [{"local": "127.0.0.1"}],
-            },
-        ])
+        ip_json = json.dumps(
+            [
+                {
+                    "ifname": "eth0",
+                    "operstate": "UP",
+                    "address": "00:11:22:33:44:55",
+                    "mtu": 1500,
+                    "addr_info": [
+                        {"local": "192.168.1.10", "family": "inet"},
+                    ],
+                },
+                {
+                    "ifname": "lo",
+                    "operstate": "UNKNOWN",
+                    "addr_info": [{"local": "127.0.0.1"}],
+                },
+            ]
+        )
 
         mock_result = MagicMock()
         mock_result.returncode = 0
@@ -874,7 +873,9 @@ class TestRefreshNetworkState:
                 with patch.object(cache, "_get_dns_servers", new_callable=AsyncMock, return_value=()):
                     with patch.object(cache, "_get_hostname", new_callable=AsyncMock, return_value="test"):
                         with patch.object(cache, "_get_wireguard_interfaces", new_callable=AsyncMock, return_value=()):
-                            with patch.object(cache, "_get_firewall_state", new_callable=AsyncMock, return_value=FirewallState()):
+                            with patch.object(
+                                cache, "_get_firewall_state", new_callable=AsyncMock, return_value=FirewallState()
+                            ):
                                 with patch.object(cache, "_get_listeners", new_callable=AsyncMock, return_value=()):
                                     await cache._refresh_network_state()
 

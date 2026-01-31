@@ -446,7 +446,7 @@ def get_prior_art(
             successful_actions = []
             if include_actions and not is_cloud:
                 try:
-                    actions = get_actions(inc.incident_id, conn=conn)
+                    actions = get_actions(inc.incident_id)
                     for action in actions:
                         if action.success and action.command:
                             successful_actions.append(
@@ -777,7 +777,6 @@ def compute_dynamic_outcome_weight(
             domain=incident.domain,
             entities=entities,
             incident=incident,
-            conn=conn,
         )
 
         # Compute weighted combination
@@ -930,7 +929,7 @@ def _merge_and_rank(
             IncidentSearchResult(
                 incident=incident,
                 score=final_score,
-                match_type=match_type,  # type: ignore
+                match_type=match_type,
                 precondition_match_ratio=precond_ratio,
                 outcome_weight=outcome_weight,
                 source="local",
@@ -1010,9 +1009,9 @@ def get_status(
         cursor = conn.cursor()
 
         # Counts
-        total = get_incident_count(conn)
-        actions = get_action_count(conn)
-        snapshots = get_snapshot_count(conn)
+        total = get_incident_count()
+        actions = get_action_count()
+        snapshots = get_snapshot_count()
 
         # Embedded count
         cursor.execute("SELECT COUNT(*) AS cnt FROM incident_embeddings")

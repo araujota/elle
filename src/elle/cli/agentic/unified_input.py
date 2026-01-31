@@ -102,11 +102,7 @@ class SystemFingerprint(BaseModel):
 
         if hasattr(snapshot, "disk") and snapshot.disk:
             # Average disk usage across mounts
-            usages = [
-                getattr(d, "used_pct", 0.0)
-                for d in snapshot.disk
-                if hasattr(d, "used_pct")
-            ]
+            usages = [getattr(d, "used_pct", 0.0) for d in snapshot.disk if hasattr(d, "used_pct")]
             if usages:
                 disk_pressure = min(1.0, max(usages) / 100.0)
 

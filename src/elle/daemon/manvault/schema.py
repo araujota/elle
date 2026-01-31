@@ -98,7 +98,7 @@ INDEXES = [
 # ---------------------------------------------------------------------------
 
 
-def _migrate_to_v1(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+def _migrate_to_v1(conn: psycopg.Connection) -> None:
     """Create the initial manvault schema."""
     conn.execute(DOCS_TABLE)
     conn.execute(CHUNKS_TABLE)
@@ -116,7 +116,7 @@ register_migration(PG_SCHEMA, 1, _migrate_to_v1)
 # ---------------------------------------------------------------------------
 
 
-def ensure_schema(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+def ensure_schema(conn: psycopg.Connection) -> None:
     """Ensure the manvault schema is up to date.
 
     Args:
@@ -127,7 +127,7 @@ def ensure_schema(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
     run_migrations(conn, PG_SCHEMA)
 
 
-def drop_all_tables(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+def drop_all_tables(conn: psycopg.Connection) -> None:
     """Drop all Man Vault tables.
 
     WARNING: This destroys all data. Use only for testing.

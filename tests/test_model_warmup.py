@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-import subprocess
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -14,10 +12,10 @@ from elle.rag.model_warmup import (
     get_warmup_service,
 )
 
-
 # ---------------------------------------------------------------------------
 # Dataclasses
 # ---------------------------------------------------------------------------
+
 
 class TestDataclasses:
     def test_model_status(self):
@@ -34,6 +32,7 @@ class TestDataclasses:
 # ---------------------------------------------------------------------------
 # ModelWarmupService
 # ---------------------------------------------------------------------------
+
 
 class TestModelWarmupService:
     def test_init(self):
@@ -136,9 +135,13 @@ class TestModelWarmupService:
     @pytest.mark.asyncio
     async def test_is_model_loaded_true(self):
         svc = ModelWarmupService()
-        with patch.object(svc, "get_running_models", return_value=[
-            ModelStatus(name="qwen2.5:7b-instruct-q8_0", loaded=True),
-        ]):
+        with patch.object(
+            svc,
+            "get_running_models",
+            return_value=[
+                ModelStatus(name="qwen2.5:7b-instruct-q8_0", loaded=True),
+            ],
+        ):
             assert await svc.is_model_loaded("qwen2.5:7b-instruct-q8_0") is True
 
     @pytest.mark.asyncio
@@ -222,9 +225,7 @@ class TestModelWarmupService:
     @pytest.mark.asyncio
     async def test_warm_llm(self):
         svc = ModelWarmupService(llm_model="testmodel")
-        with patch.object(svc, "_warm_model", return_value=WarmupResult(
-            success=True, model="testmodel", message="ok"
-        )):
+        with patch.object(svc, "_warm_model", return_value=WarmupResult(success=True, model="testmodel", message="ok")):
             result = await svc.warm_llm()
             assert result.success is True
             assert result.model == "testmodel"
@@ -276,7 +277,7 @@ class TestModelWarmupService:
             # Falls through to rocm-smi check
             with patch("elle.rag.model_warmup.subprocess.run", side_effect=FileNotFoundError("no rocm")):
                 # Falls through to /proc/meminfo
-                vram = svc.get_available_vram_gb()
+                svc.get_available_vram_gb()
                 # Might be None on macOS
                 # Just check it doesn't crash
 
@@ -284,6 +285,7 @@ class TestModelWarmupService:
         svc = ModelWarmupService()
 
         call_count = [0]
+
         def fake_run(*args, **kwargs):
             call_count[0] += 1
             if call_count[0] == 1:
@@ -303,13 +305,19 @@ class TestModelWarmupService:
         def fake_run(*args, **kwargs):
             raise FileNotFoundError("no gpu")
 
-        with patch("elle.rag.model_warmup.subprocess.run", side_effect=fake_run), \
-             patch("builtins.open", MagicMock()) as mock_open:
-            mock_open.return_value.__enter__ = MagicMock(return_value=iter([
-                "MemTotal:       16000000 kB\n",
-                "MemFree:         8000000 kB\n",
-                "MemAvailable:   12000000 kB\n",
-            ]))
+        with (
+            patch("elle.rag.model_warmup.subprocess.run", side_effect=fake_run),
+            patch("builtins.open", MagicMock()) as mock_open,
+        ):
+            mock_open.return_value.__enter__ = MagicMock(
+                return_value=iter(
+                    [
+                        "MemTotal:       16000000 kB\n",
+                        "MemFree:         8000000 kB\n",
+                        "MemAvailable:   12000000 kB\n",
+                    ]
+                )
+            )
             mock_open.return_value.__exit__ = MagicMock(return_value=False)
             vram = svc.get_available_vram_gb()
             assert vram is not None
@@ -321,8 +329,10 @@ class TestModelWarmupService:
         def fake_run(*args, **kwargs):
             raise FileNotFoundError("no gpu")
 
-        with patch("elle.rag.model_warmup.subprocess.run", side_effect=fake_run), \
-             patch("builtins.open", side_effect=FileNotFoundError("no proc")):
+        with (
+            patch("elle.rag.model_warmup.subprocess.run", side_effect=fake_run),
+            patch("builtins.open", side_effect=FileNotFoundError("no proc")),
+        ):
             vram = svc.get_available_vram_gb()
             assert vram is None
 
@@ -331,9 +341,11 @@ class TestModelWarmupService:
 # Module singleton
 # ---------------------------------------------------------------------------
 
+
 class TestSingleton:
     def test_get_warmup_service(self):
         import elle.rag.model_warmup as mod
+
         old = mod._warmup_service
         mod._warmup_service = None
         try:

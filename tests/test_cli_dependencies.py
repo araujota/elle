@@ -1,14 +1,12 @@
-from __future__ import annotations
-
 """Tests for cli/dependencies.py - dependency registry and health checking."""
 
-import pytest
-from datetime import datetime, timedelta
-from pathlib import Path
+from __future__ import annotations
+
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
-
+import pytest
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -18,6 +16,7 @@ import httpx
 class TestDependencyStatus:
     def test_values(self):
         from elle.cli.dependencies import DependencyStatus
+
         assert DependencyStatus.AVAILABLE.value == "available"
         assert DependencyStatus.UNAVAILABLE.value == "unavailable"
         assert DependencyStatus.DEGRADED.value == "degraded"
@@ -26,6 +25,7 @@ class TestDependencyStatus:
 class TestDegradedMode:
     def test_values(self):
         from elle.cli.dependencies import DegradedMode
+
         assert DegradedMode.FULL.value == "full"
         assert DegradedMode.NO_LLM.value == "no_llm"
         assert DegradedMode.NO_DAEMON.value == "no_daemon"
@@ -40,6 +40,7 @@ class TestDegradedMode:
 class TestDependencyCheckResult:
     def test_creation(self):
         from elle.cli.dependencies import DependencyCheckResult, DependencyStatus
+
         result = DependencyCheckResult(
             name="test",
             status=DependencyStatus.AVAILABLE,
@@ -51,6 +52,7 @@ class TestDependencyCheckResult:
 
     def test_is_degraded_true(self):
         from elle.cli.dependencies import DependencyCheckResult, DependencyStatus
+
         result = DependencyCheckResult(
             name="test",
             status=DependencyStatus.DEGRADED,
@@ -60,6 +62,7 @@ class TestDependencyCheckResult:
 
     def test_is_degraded_false(self):
         from elle.cli.dependencies import DependencyCheckResult, DependencyStatus
+
         result = DependencyCheckResult(
             name="test",
             status=DependencyStatus.AVAILABLE,
@@ -69,6 +72,7 @@ class TestDependencyCheckResult:
 
     def test_default_fields(self):
         from elle.cli.dependencies import DependencyCheckResult, DependencyStatus
+
         result = DependencyCheckResult(
             name="test",
             status=DependencyStatus.UNAVAILABLE,
@@ -87,7 +91,8 @@ class TestDependencyCheckResult:
 
 class TestSystemCapabilities:
     def test_defaults(self):
-        from elle.cli.dependencies import SystemCapabilities, DegradedMode
+        from elle.cli.dependencies import DegradedMode, SystemCapabilities
+
         caps = SystemCapabilities()
         assert caps.mode == DegradedMode.FULL
         assert caps.llm_available is True
@@ -95,31 +100,37 @@ class TestSystemCapabilities:
 
     def test_can_classify_with_llm(self):
         from elle.cli.dependencies import SystemCapabilities
+
         caps = SystemCapabilities(llm_available=True)
         assert caps.can_classify_with_llm is True
 
     def test_cannot_classify_without_llm(self):
         from elle.cli.dependencies import SystemCapabilities
+
         caps = SystemCapabilities(llm_available=False)
         assert caps.can_classify_with_llm is False
 
     def test_can_generate_plans(self):
         from elle.cli.dependencies import SystemCapabilities
+
         caps = SystemCapabilities(llm_available=True)
         assert caps.can_generate_plans is True
 
     def test_can_run_agentic_loop(self):
         from elle.cli.dependencies import SystemCapabilities
+
         caps = SystemCapabilities(llm_available=False)
         assert caps.can_run_agentic_loop is False
 
     def test_can_record_incidents(self):
         from elle.cli.dependencies import SystemCapabilities
+
         caps = SystemCapabilities(incident_db_available=True)
         assert caps.can_record_incidents is True
 
     def test_cannot_record_incidents(self):
         from elle.cli.dependencies import SystemCapabilities
+
         caps = SystemCapabilities(incident_db_available=False)
         assert caps.can_record_incidents is False
 
@@ -132,17 +143,20 @@ class TestSystemCapabilities:
 class TestOllamaChecker:
     def test_name(self):
         from elle.cli.dependencies import OllamaChecker
+
         checker = OllamaChecker()
         assert checker.name == "ollama"
 
     def test_fallback_message(self):
         from elle.cli.dependencies import OllamaChecker
+
         checker = OllamaChecker()
         assert "Ollama" in checker.fallback_message
 
     @pytest.mark.asyncio
     async def test_check_success(self):
-        from elle.cli.dependencies import OllamaChecker, DependencyStatus
+        from elle.cli.dependencies import DependencyStatus, OllamaChecker
+
         checker = OllamaChecker()
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -161,7 +175,8 @@ class TestOllamaChecker:
 
     @pytest.mark.asyncio
     async def test_check_bad_status(self):
-        from elle.cli.dependencies import OllamaChecker, DependencyStatus
+        from elle.cli.dependencies import DependencyStatus, OllamaChecker
+
         checker = OllamaChecker()
         mock_response = MagicMock()
         mock_response.status_code = 500
@@ -178,7 +193,8 @@ class TestOllamaChecker:
 
     @pytest.mark.asyncio
     async def test_check_connect_error(self):
-        from elle.cli.dependencies import OllamaChecker, DependencyStatus
+        from elle.cli.dependencies import OllamaChecker
+
         checker = OllamaChecker()
 
         mock_client = AsyncMock()
@@ -193,7 +209,8 @@ class TestOllamaChecker:
 
     @pytest.mark.asyncio
     async def test_check_timeout(self):
-        from elle.cli.dependencies import OllamaChecker, DependencyStatus
+        from elle.cli.dependencies import DependencyStatus, OllamaChecker
+
         checker = OllamaChecker()
 
         mock_client = AsyncMock()
@@ -209,6 +226,7 @@ class TestOllamaChecker:
     @pytest.mark.asyncio
     async def test_check_generic_exception(self):
         from elle.cli.dependencies import OllamaChecker
+
         checker = OllamaChecker()
 
         mock_client = AsyncMock()
@@ -229,17 +247,20 @@ class TestOllamaChecker:
 class TestDaemonChecker:
     def test_name(self):
         from elle.cli.dependencies import DaemonChecker
+
         checker = DaemonChecker()
         assert checker.name == "daemon"
 
     def test_fallback_message(self):
         from elle.cli.dependencies import DaemonChecker
+
         checker = DaemonChecker()
         assert "daemon" in checker.fallback_message.lower()
 
     @pytest.mark.asyncio
     async def test_check_success(self):
         from elle.cli.dependencies import DaemonChecker, DependencyStatus
+
         checker = DaemonChecker()
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -258,6 +279,7 @@ class TestDaemonChecker:
     @pytest.mark.asyncio
     async def test_check_connect_error(self):
         from elle.cli.dependencies import DaemonChecker
+
         checker = DaemonChecker()
 
         mock_client = AsyncMock()
@@ -272,6 +294,7 @@ class TestDaemonChecker:
     @pytest.mark.asyncio
     async def test_check_generic_exception(self):
         from elle.cli.dependencies import DaemonChecker
+
         checker = DaemonChecker()
 
         mock_client = AsyncMock()
@@ -292,17 +315,20 @@ class TestDaemonChecker:
 class TestDatabaseChecker:
     def test_name(self):
         from elle.cli.dependencies import DatabaseChecker
+
         checker = DatabaseChecker(db_path="/tmp/test.db", db_name="test")
         assert checker.name == "database_test"
 
     def test_fallback_message(self):
         from elle.cli.dependencies import DatabaseChecker
+
         checker = DatabaseChecker(db_path="/tmp/test.db", db_name="mydb")
         assert "mydb" in checker.fallback_message
 
     @pytest.mark.asyncio
     async def test_check_file_not_exists(self, tmp_path):
         from elle.cli.dependencies import DatabaseChecker
+
         checker = DatabaseChecker(db_path=tmp_path / "nonexistent.db", db_name="test")
         result = await checker.check()
         assert result.available is False
@@ -311,6 +337,7 @@ class TestDatabaseChecker:
     @pytest.mark.asyncio
     async def test_check_path_is_directory(self, tmp_path):
         from elle.cli.dependencies import DatabaseChecker
+
         checker = DatabaseChecker(db_path=tmp_path, db_name="test")
         result = await checker.check()
         assert result.available is False
@@ -319,6 +346,7 @@ class TestDatabaseChecker:
     @pytest.mark.asyncio
     async def test_check_valid_database(self, deps_conn):
         from elle.cli.dependencies import DatabaseChecker, DependencyStatus
+
         checker = DatabaseChecker(conn=deps_conn, db_name="test")
         result = await checker.check()
         assert result.available is True
@@ -333,15 +361,18 @@ class TestDatabaseChecker:
 class TestDependencyRegistry:
     def test_register_and_check_unknown(self):
         from elle.cli.dependencies import DependencyRegistry
+
         registry = DependencyRegistry()
         # Check unregistered dependency
         import asyncio
+
         result = asyncio.get_event_loop().run_until_complete(registry.check("unknown"))
         assert result.available is False
         assert "No checker registered" in result.message
 
     def test_register_and_unregister(self):
         from elle.cli.dependencies import DependencyRegistry
+
         registry = DependencyRegistry()
         mock_checker = MagicMock()
         mock_checker.name = "test_dep"
@@ -352,7 +383,8 @@ class TestDependencyRegistry:
 
     @pytest.mark.asyncio
     async def test_check_caches_result(self):
-        from elle.cli.dependencies import DependencyRegistry, DependencyCheckResult, DependencyStatus
+        from elle.cli.dependencies import DependencyCheckResult, DependencyRegistry, DependencyStatus
+
         registry = DependencyRegistry(cache_ttl_seconds=60)
 
         mock_checker = AsyncMock()
@@ -374,7 +406,8 @@ class TestDependencyRegistry:
 
     @pytest.mark.asyncio
     async def test_check_force_bypasses_cache(self):
-        from elle.cli.dependencies import DependencyRegistry, DependencyCheckResult, DependencyStatus
+        from elle.cli.dependencies import DependencyCheckResult, DependencyRegistry, DependencyStatus
+
         registry = DependencyRegistry(cache_ttl_seconds=60)
 
         mock_checker = AsyncMock()
@@ -394,13 +427,15 @@ class TestDependencyRegistry:
     @pytest.mark.asyncio
     async def test_check_all_empty(self):
         from elle.cli.dependencies import DependencyRegistry
+
         registry = DependencyRegistry()
         results = await registry.check_all()
         assert results == []
 
     @pytest.mark.asyncio
     async def test_check_all_with_checkers(self):
-        from elle.cli.dependencies import DependencyRegistry, DependencyCheckResult, DependencyStatus
+        from elle.cli.dependencies import DependencyCheckResult, DependencyRegistry, DependencyStatus
+
         registry = DependencyRegistry()
 
         for name in ["dep_a", "dep_b"]:
@@ -418,7 +453,8 @@ class TestDependencyRegistry:
 
     @pytest.mark.asyncio
     async def test_require_available(self):
-        from elle.cli.dependencies import DependencyRegistry, DependencyCheckResult, DependencyStatus
+        from elle.cli.dependencies import DependencyCheckResult, DependencyRegistry, DependencyStatus
+
         registry = DependencyRegistry()
         mock_checker = AsyncMock()
         mock_checker.name = "req_dep"
@@ -432,7 +468,8 @@ class TestDependencyRegistry:
 
     @pytest.mark.asyncio
     async def test_require_unavailable(self):
-        from elle.cli.dependencies import DependencyRegistry, DependencyCheckResult, DependencyStatus
+        from elle.cli.dependencies import DependencyCheckResult, DependencyRegistry, DependencyStatus
+
         registry = DependencyRegistry()
         mock_checker = AsyncMock()
         mock_checker.name = "req_dep"
@@ -446,6 +483,7 @@ class TestDependencyRegistry:
 
     def test_get_fallback_message_registered(self):
         from elle.cli.dependencies import DependencyRegistry
+
         registry = DependencyRegistry()
         mock_checker = MagicMock()
         mock_checker.name = "fb_dep"
@@ -455,12 +493,14 @@ class TestDependencyRegistry:
 
     def test_get_fallback_message_unregistered(self):
         from elle.cli.dependencies import DependencyRegistry
+
         registry = DependencyRegistry()
         msg = registry.get_fallback_message("unknown")
         assert "unknown" in msg
 
     def test_clear_cache(self):
         from elle.cli.dependencies import DependencyRegistry
+
         registry = DependencyRegistry()
         registry._cache["test"] = (datetime.utcnow(), MagicMock())
         registry.clear_cache()
@@ -476,12 +516,13 @@ class TestDependencyRegistry:
 class TestCheckStartupDependencies:
     async def test_all_available(self):
         from elle.cli.dependencies import (
-            check_startup_dependencies,
+            DegradedMode,
             DependencyCheckResult,
             DependencyStatus,
-            DegradedMode,
+            check_startup_dependencies,
             reset_dependency_registry,
         )
+
         reset_dependency_registry()
 
         results = [
@@ -500,12 +541,13 @@ class TestCheckStartupDependencies:
 
     async def test_no_llm(self):
         from elle.cli.dependencies import (
-            check_startup_dependencies,
+            DegradedMode,
             DependencyCheckResult,
             DependencyStatus,
-            DegradedMode,
+            check_startup_dependencies,
             reset_dependency_registry,
         )
+
         reset_dependency_registry()
 
         results = [
@@ -527,17 +569,22 @@ class TestCheckStartupDependencies:
 
     async def test_offline_mode(self):
         from elle.cli.dependencies import (
-            check_startup_dependencies,
+            DegradedMode,
             DependencyCheckResult,
             DependencyStatus,
-            DegradedMode,
+            check_startup_dependencies,
             reset_dependency_registry,
         )
+
         reset_dependency_registry()
 
         results = [
-            DependencyCheckResult(name="ollama", status=DependencyStatus.UNAVAILABLE, available=False, fallback_message="x"),
-            DependencyCheckResult(name="daemon", status=DependencyStatus.UNAVAILABLE, available=False, fallback_message="y"),
+            DependencyCheckResult(
+                name="ollama", status=DependencyStatus.UNAVAILABLE, available=False, fallback_message="x"
+            ),
+            DependencyCheckResult(
+                name="daemon", status=DependencyStatus.UNAVAILABLE, available=False, fallback_message="y"
+            ),
         ]
 
         with patch("elle.cli.dependencies.get_dependency_registry") as mock_reg:
@@ -554,6 +601,7 @@ class TestCheckStartupDependencies:
 class TestRegistrySingleton:
     def test_get_dependency_registry_returns_same_instance(self):
         from elle.cli.dependencies import get_dependency_registry, reset_dependency_registry
+
         reset_dependency_registry()
         r1 = get_dependency_registry()
         r2 = get_dependency_registry()
@@ -562,6 +610,7 @@ class TestRegistrySingleton:
 
     def test_reset_clears_registry(self):
         from elle.cli.dependencies import get_dependency_registry, reset_dependency_registry
+
         r1 = get_dependency_registry()
         reset_dependency_registry()
         r2 = get_dependency_registry()

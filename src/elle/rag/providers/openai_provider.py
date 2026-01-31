@@ -146,11 +146,13 @@ class OpenAIProvider(LLMProvider):
                 except json.JSONDecodeError:
                     args = {}
 
-                tool_calls.append({
-                    "id": tc.get("id", ""),
-                    "name": func.get("name", ""),
-                    "arguments": args,
-                })
+                tool_calls.append(
+                    {
+                        "id": tc.get("id", ""),
+                        "name": func.get("name", ""),
+                        "arguments": args,
+                    }
+                )
 
             return ProviderResponse(
                 content=message.get("content", "") or "",
@@ -231,11 +233,13 @@ class OpenAIProvider(LLMProvider):
                 for tc in delta.get("tool_calls", []):
                     func = tc.get("function", {})
                     args_str = func.get("arguments", "")
-                    tool_calls.append({
-                        "id": tc.get("id", ""),
-                        "name": func.get("name", ""),
-                        "arguments_fragment": args_str,
-                    })
+                    tool_calls.append(
+                        {
+                            "id": tc.get("id", ""),
+                            "name": func.get("name", ""),
+                            "arguments_fragment": args_str,
+                        }
+                    )
 
                 duration_ms = (time.time() - start_time) * 1000
 

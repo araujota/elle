@@ -24,7 +24,7 @@ import psycopg
 logger = logging.getLogger(__name__)
 
 # Registry: schema_name -> sorted list of (version, callable)
-_migrations: dict[str, list[tuple[int, Callable[[psycopg.Connection], None]]]] = {}  # type: ignore[type-arg]
+_migrations: dict[str, list[tuple[int, Callable[[psycopg.Connection], None]]]] = {}
 
 # Current target version per schema (set by register_migration calls)
 _target_versions: dict[str, int] = {}
@@ -33,7 +33,7 @@ _target_versions: dict[str, int] = {}
 def register_migration(
     schema: str,
     version: int,
-    fn: Callable[[psycopg.Connection], None],  # type: ignore[type-arg]
+    fn: Callable[[psycopg.Connection], None],
 ) -> None:
     """Register a migration function for a schema.
 
@@ -54,7 +54,7 @@ def register_migration(
         _target_versions[schema] = version
 
 
-def get_schema_version(conn: psycopg.Connection, schema: str) -> int:  # type: ignore[type-arg]
+def get_schema_version(conn: psycopg.Connection, schema: str) -> int:
     """Read the current version from the schema's ``_meta`` table.
 
     Args:
@@ -65,9 +65,7 @@ def get_schema_version(conn: psycopg.Connection, schema: str) -> int:  # type: i
         Current version, or 0 if the meta table does not exist.
     """
     try:
-        row = conn.execute(
-            "SELECT value FROM _meta WHERE key = 'schema_version'"
-        ).fetchone()
+        row = conn.execute("SELECT value FROM _meta WHERE key = 'schema_version'").fetchone()
         if row:
             return int(row["value"])
     except psycopg.errors.UndefinedTable:
@@ -77,7 +75,7 @@ def get_schema_version(conn: psycopg.Connection, schema: str) -> int:  # type: i
     return 0
 
 
-def _ensure_meta_table(conn: psycopg.Connection, schema: str) -> None:  # type: ignore[type-arg]
+def _ensure_meta_table(conn: psycopg.Connection, schema: str) -> None:
     """Create the ``_meta`` table if it does not exist.
 
     Args:
@@ -92,7 +90,7 @@ def _ensure_meta_table(conn: psycopg.Connection, schema: str) -> None:  # type: 
     """)
 
 
-def run_migrations(conn: psycopg.Connection, schema: str) -> int:  # type: ignore[type-arg]
+def run_migrations(conn: psycopg.Connection, schema: str) -> int:
     """Apply all pending migrations for *schema*.
 
     Args:
@@ -109,11 +107,7 @@ def run_migrations(conn: psycopg.Connection, schema: str) -> int:  # type: ignor
     if current >= target:
         return current
 
-    pending = [
-        (v, fn)
-        for (v, fn) in _migrations.get(schema, [])
-        if v > current
-    ]
+    pending = [(v, fn) for (v, fn) in _migrations.get(schema, []) if v > current]
 
     for version, fn in pending:
         logger.info("Migrating %s: v%d -> v%d", schema, current, version)
@@ -133,7 +127,7 @@ def run_migrations(conn: psycopg.Connection, schema: str) -> int:  # type: ignor
     return current
 
 
-def run_all_migrations(conn: psycopg.Connection) -> dict[str, int]:  # type: ignore[type-arg]
+def run_all_migrations(conn: psycopg.Connection) -> dict[str, int]:
     """Run migrations for every registered schema.
 
     Temporarily switches ``search_path`` for each schema.

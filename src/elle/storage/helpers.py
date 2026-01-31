@@ -92,5 +92,3 @@ def utcnow() -> datetime:
         Current UTC datetime with tzinfo set.
     """
     return datetime.now(timezone.utc)
-
-

@@ -874,9 +874,7 @@ class TestApplyOps:
         try:
             engine.load("/etc/hosts", "Hosts.lns")
 
-            ops = (
-                AugeasOp(kind="set", path="/files/etc/hosts/1/ipaddr", value="10.0.0.1"),
-            )
+            ops = (AugeasOp(kind="set", path="/files/etc/hosts/1/ipaddr", value="10.0.0.1"),)
             engine.apply_ops(ops)
 
             assert engine.get("/files/etc/hosts/1/ipaddr") == "10.0.0.1"

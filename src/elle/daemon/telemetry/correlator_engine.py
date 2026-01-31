@@ -40,9 +40,7 @@ class CorrelationSignature:
         self.required_metrics = required_metrics
         self.recommended_action = recommended_action
 
-    def check(
-        self, metrics: dict[str, float], events: dict[str, int]
-    ) -> CorrelationAlert | None:
+    def check(self, metrics: dict[str, float], events: dict[str, int]) -> CorrelationAlert | None:
         """Check if this signature matches. Override in subclasses."""
         raise NotImplementedError
 
@@ -64,8 +62,15 @@ class MemoryExhaustionCascade(CorrelationSignature):
         svc_fail = events.get("service_failures", 0)
         if mem > 85 and swap > 50 and (oom > 0 or svc_fail > 0):
             return CorrelationAlert(
-                signature=self.name, severity=self.severity, description=self.description,
-                contributing_metrics={"mem.used_pct": mem, "swap.used_pct": swap, "oom_count": float(oom), "service_failures": float(svc_fail)},
+                signature=self.name,
+                severity=self.severity,
+                description=self.description,
+                contributing_metrics={
+                    "mem.used_pct": mem,
+                    "swap.used_pct": swap,
+                    "oom_count": float(oom),
+                    "service_failures": float(svc_fail),
+                },
                 recommended_action=self.recommended_action,
             )
         return None
@@ -87,7 +92,9 @@ class DiskIOStall(CorrelationSignature):
         cpu = metrics.get("cpu.load_1m", 0)
         if disk_max > 80 and io_lat > 100 and cpu > 2.0:
             return CorrelationAlert(
-                signature=self.name, severity=self.severity, description=self.description,
+                signature=self.name,
+                severity=self.severity,
+                description=self.description,
                 contributing_metrics={"disk_max_pct": disk_max, "io.latency_ms": io_lat, "cpu.load_1m": cpu},
                 recommended_action=self.recommended_action,
             )
@@ -110,8 +117,14 @@ class NetworkSaturation(CorrelationSignature):
         tw = metrics.get("net.tcp_time_wait", 0)
         if retrans > 0.02 and (dns_p95 > 500 or tw > 5000):
             return CorrelationAlert(
-                signature=self.name, severity=self.severity, description=self.description,
-                contributing_metrics={"net.tcp_retransmit_rate": retrans, "dns.p95_ms": dns_p95, "net.tcp_time_wait": tw},
+                signature=self.name,
+                severity=self.severity,
+                description=self.description,
+                contributing_metrics={
+                    "net.tcp_retransmit_rate": retrans,
+                    "dns.p95_ms": dns_p95,
+                    "net.tcp_time_wait": tw,
+                },
                 recommended_action=self.recommended_action,
             )
         return None
@@ -133,7 +146,9 @@ class ThermalThrottling(CorrelationSignature):
         load = metrics.get("cpu.load_1m", 0)
         if temp > 80 and freq < 0.8 and load > 1.0:
             return CorrelationAlert(
-                signature=self.name, severity=self.severity, description=self.description,
+                signature=self.name,
+                severity=self.severity,
+                description=self.description,
                 contributing_metrics={"thermal.max_temp_c": temp, "thermal.freq_ratio": freq, "cpu.load_1m": load},
                 recommended_action=self.recommended_action,
             )
@@ -156,7 +171,9 @@ class ContainerStorm(CorrelationSignature):
         mem = metrics.get("mem.used_pct", 0)
         if docker_exit > 3 and (cpu > 3.0 or mem > 85):
             return CorrelationAlert(
-                signature=self.name, severity=self.severity, description=self.description,
+                signature=self.name,
+                severity=self.severity,
+                description=self.description,
                 contributing_metrics={"docker_exited": float(docker_exit), "cpu.load_1m": cpu, "mem.used_pct": mem},
                 recommended_action=self.recommended_action,
             )
@@ -178,7 +195,9 @@ class DNSDegradation(CorrelationSignature):
         svc_fail = events.get("service_failures", 0)
         if dns_p95 > 200 and svc_fail > 0:
             return CorrelationAlert(
-                signature=self.name, severity=self.severity, description=self.description,
+                signature=self.name,
+                severity=self.severity,
+                description=self.description,
                 contributing_metrics={"dns.p95_ms": dns_p95, "service_failures": float(svc_fail)},
                 recommended_action=self.recommended_action,
             )
@@ -200,7 +219,9 @@ class AuthBruteForce(CorrelationSignature):
         established = metrics.get("net.tcp_established", 0)
         if auth_fail > 10 and established > 0:
             return CorrelationAlert(
-                signature=self.name, severity=self.severity, description=self.description,
+                signature=self.name,
+                severity=self.severity,
+                description=self.description,
                 contributing_metrics={"auth_failures": float(auth_fail), "net.tcp_established": established},
                 recommended_action=self.recommended_action,
             )
@@ -224,8 +245,15 @@ class SwapThrashing(CorrelationSignature):
         swap_stddev = metrics.get("swap.stddev_1h", 0)
         if swap_stddev > 10 and io_util > 70:
             return CorrelationAlert(
-                signature=self.name, severity=self.severity, description=self.description,
-                contributing_metrics={"swap.used_pct": swap, "swap.stddev_1h": swap_stddev, "io.util_pct": io_util, "cpu.load_1m": cpu},
+                signature=self.name,
+                severity=self.severity,
+                description=self.description,
+                contributing_metrics={
+                    "swap.used_pct": swap,
+                    "swap.stddev_1h": swap_stddev,
+                    "io.util_pct": io_util,
+                    "cpu.load_1m": cpu,
+                },
                 recommended_action=self.recommended_action,
             )
         return None
@@ -246,7 +274,9 @@ class CertificateCascade(CorrelationSignature):
         svc_fail = events.get("service_failures", 0)
         if cert_days < 7 and svc_fail > 0:
             return CorrelationAlert(
-                signature=self.name, severity=self.severity, description=self.description,
+                signature=self.name,
+                severity=self.severity,
+                description=self.description,
                 contributing_metrics={"cert.days_until_expiry_min": cert_days, "service_failures": float(svc_fail)},
                 recommended_action=self.recommended_action,
             )
@@ -268,7 +298,9 @@ class InodeExhaustion(CorrelationSignature):
         disk = max(metrics.get("disk./.used_pct", 0), metrics.get("disk./var.used_pct", 0))
         if inode > 90 and disk < 80:
             return CorrelationAlert(
-                signature=self.name, severity=self.severity, description=self.description,
+                signature=self.name,
+                severity=self.severity,
+                description=self.description,
                 contributing_metrics={"inode_max_pct": inode, "disk_max_pct": disk},
                 recommended_action=self.recommended_action,
             )
@@ -290,7 +322,9 @@ class ZombieAccumulation(CorrelationSignature):
         total = metrics.get("proc.total_count", 0)
         if zombies > 10 and total > 500:
             return CorrelationAlert(
-                signature=self.name, severity=self.severity, description=self.description,
+                signature=self.name,
+                severity=self.severity,
+                description=self.description,
                 contributing_metrics={"proc.zombie_count": zombies, "proc.total_count": total},
                 recommended_action=self.recommended_action,
             )
@@ -312,7 +346,9 @@ class CgroupOOMPressure(CorrelationSignature):
         oom = events.get("oom_count", 0)
         if cgroup_mem > 90 and oom > 0:
             return CorrelationAlert(
-                signature=self.name, severity=self.severity, description=self.description,
+                signature=self.name,
+                severity=self.severity,
+                description=self.description,
                 contributing_metrics={"cgroup.max_mem_pct": cgroup_mem, "oom_count": float(oom)},
                 recommended_action=self.recommended_action,
             )
@@ -338,9 +374,7 @@ class CorrelationEngine:
             CgroupOOMPressure(),
         ]
 
-    def evaluate(
-        self, metrics: dict[str, float], events: dict[str, int]
-    ) -> list[CorrelationAlert]:
+    def evaluate(self, metrics: dict[str, float], events: dict[str, int]) -> list[CorrelationAlert]:
         """Evaluate all signatures and return active alerts."""
         alerts = []
         for sig in self.signatures:

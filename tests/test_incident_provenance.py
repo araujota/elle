@@ -431,9 +431,7 @@ class TestSchemaVersion:
         assert row is not None
 
         # Check config_states table
-        row = test_db.execute(
-            "SELECT 1 FROM information_schema.tables WHERE table_name = 'config_states'"
-        ).fetchone()
+        row = test_db.execute("SELECT 1 FROM information_schema.tables WHERE table_name = 'config_states'").fetchone()
         assert row is not None
 
     def test_fresh_schema_has_all_tables(self, test_db):
@@ -441,8 +439,7 @@ class TestSchemaVersion:
         init_incident_schema(test_db)
 
         rows = test_db.execute(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_schema = 'incidents'"
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'incidents'"
         ).fetchall()
         tables = {row["table_name"] for row in rows}
 

@@ -1,11 +1,12 @@
 """Tests for control surface snapshot collection and models."""
 
-from datetime import datetime, timezone
 import json
 
 import pytest
 
 from elle.daemon.incidents.control_surface import (
+    KEY_SYSCTLS,
+    KNOWN_CONFIG_ROOTS,
     ConfigFileSurface,
     ControlSurfaceSnapshot,
     HardwareIdentitySurface,
@@ -17,8 +18,6 @@ from elle.daemon.incidents.control_surface import (
     SchedulerSurface,
     SystemdServiceSurface,
     collect_control_surface,
-    KNOWN_CONFIG_ROOTS,
-    KEY_SYSCTLS,
 )
 
 

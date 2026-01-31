@@ -216,11 +216,13 @@ class TestSynthesizeRules:
     @pytest.mark.asyncio
     async def test_service_status_format(self) -> None:
         s = ResponseSynthesizer(use_llm=False)
-        evidence = [_make_evidence(
-            capability="service.status",
-            args={"service": "nginx"},
-            output_text="ActiveState=active\nSubState=running\nMainPID=1234\nDescription=Nginx web server",
-        )]
+        evidence = [
+            _make_evidence(
+                capability="service.status",
+                args={"service": "nginx"},
+                output_text="ActiveState=active\nSubState=running\nMainPID=1234\nDescription=Nginx web server",
+            )
+        ]
         result = _make_execution_result(evidence)
         response = await s.synthesize("is nginx running?", result)
         assert "nginx" in response.answer
@@ -229,11 +231,13 @@ class TestSynthesizeRules:
     @pytest.mark.asyncio
     async def test_package_installed(self) -> None:
         s = ResponseSynthesizer(use_llm=False)
-        evidence = [_make_evidence(
-            capability="package.info",
-            args={"package": "curl"},
-            output_text="install ok installed 7.81.0",
-        )]
+        evidence = [
+            _make_evidence(
+                capability="package.info",
+                args={"package": "curl"},
+                output_text="install ok installed 7.81.0",
+            )
+        ]
         result = _make_execution_result(evidence)
         response = await s.synthesize("is curl installed?", result)
         assert "curl" in response.answer
@@ -242,11 +246,13 @@ class TestSynthesizeRules:
     @pytest.mark.asyncio
     async def test_package_not_installed(self) -> None:
         s = ResponseSynthesizer(use_llm=False)
-        evidence = [_make_evidence(
-            capability="package.info",
-            args={"package": "foo"},
-            output_text="deinstall ok not-installed",
-        )]
+        evidence = [
+            _make_evidence(
+                capability="package.info",
+                args={"package": "foo"},
+                output_text="deinstall ok not-installed",
+            )
+        ]
         result = _make_execution_result(evidence)
         response = await s.synthesize("is foo installed?", result)
         assert "not installed" in response.answer
@@ -254,11 +260,13 @@ class TestSynthesizeRules:
     @pytest.mark.asyncio
     async def test_package_apt_cache(self) -> None:
         s = ResponseSynthesizer(use_llm=False)
-        evidence = [_make_evidence(
-            capability="package.info",
-            args={"package": "vim"},
-            output_text="Package: vim\nVersion: 9.0\nDescription: Vi IMproved",
-        )]
+        evidence = [
+            _make_evidence(
+                capability="package.info",
+                args={"package": "vim"},
+                output_text="Package: vim\nVersion: 9.0\nDescription: Vi IMproved",
+            )
+        ]
         result = _make_execution_result(evidence)
         response = await s.synthesize("what version of vim?", result)
         assert "vim" in response.answer
@@ -267,11 +275,13 @@ class TestSynthesizeRules:
     @pytest.mark.asyncio
     async def test_docker_list(self) -> None:
         s = ResponseSynthesizer(use_llm=False)
-        evidence = [_make_evidence(
-            capability="docker.list",
-            args={},
-            output_text="NAME  STATUS  IMAGE\napp   Up      myimage",
-        )]
+        evidence = [
+            _make_evidence(
+                capability="docker.list",
+                args={},
+                output_text="NAME  STATUS  IMAGE\napp   Up      myimage",
+            )
+        ]
         result = _make_execution_result(evidence)
         response = await s.synthesize("list containers", result)
         assert "Docker containers" in response.answer
@@ -279,11 +289,13 @@ class TestSynthesizeRules:
     @pytest.mark.asyncio
     async def test_network_listeners(self) -> None:
         s = ResponseSynthesizer(use_llm=False)
-        evidence = [_make_evidence(
-            capability="network.listeners",
-            args={},
-            output_text="tcp  LISTEN  0.0.0.0:80",
-        )]
+        evidence = [
+            _make_evidence(
+                capability="network.listeners",
+                args={},
+                output_text="tcp  LISTEN  0.0.0.0:80",
+            )
+        ]
         result = _make_execution_result(evidence)
         response = await s.synthesize("listening ports", result)
         assert "Listening ports" in response.answer
@@ -291,11 +303,13 @@ class TestSynthesizeRules:
     @pytest.mark.asyncio
     async def test_system_resources(self) -> None:
         s = ResponseSynthesizer(use_llm=False)
-        evidence = [_make_evidence(
-            capability="system.resources",
-            args={},
-            output_text="Mem: 16G total",
-        )]
+        evidence = [
+            _make_evidence(
+                capability="system.resources",
+                args={},
+                output_text="Mem: 16G total",
+            )
+        ]
         result = _make_execution_result(evidence)
         response = await s.synthesize("memory usage", result)
         assert "System resources" in response.answer
@@ -303,11 +317,13 @@ class TestSynthesizeRules:
     @pytest.mark.asyncio
     async def test_generic_output(self) -> None:
         s = ResponseSynthesizer(use_llm=False)
-        evidence = [_make_evidence(
-            capability="file.read",
-            args={"path": "/etc/hosts"},
-            output_text="127.0.0.1 localhost",
-        )]
+        evidence = [
+            _make_evidence(
+                capability="file.read",
+                args={"path": "/etc/hosts"},
+                output_text="127.0.0.1 localhost",
+            )
+        ]
         result = _make_execution_result(evidence)
         response = await s.synthesize("show /etc/hosts", result)
         assert "127.0.0.1" in response.answer
@@ -316,11 +332,13 @@ class TestSynthesizeRules:
     async def test_truncation_long_output(self) -> None:
         s = ResponseSynthesizer(use_llm=False)
         long_output = "x" * 2000
-        evidence = [_make_evidence(
-            capability="file.read",
-            args={},
-            output_text=long_output,
-        )]
+        evidence = [
+            _make_evidence(
+                capability="file.read",
+                args={},
+                output_text=long_output,
+            )
+        ]
         result = _make_execution_result(evidence)
         response = await s.synthesize("read big file", result)
         assert response.answer.endswith("...")

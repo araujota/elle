@@ -472,15 +472,9 @@ class AutonomyStore:
                 successful_executions=row["successful_executions"],
                 failed_executions=row["failed_executions"],
                 consecutive_successes=row["consecutive_successes"],
-                last_executed_at=(
-                    datetime.fromisoformat(row["last_executed_at"]) if row["last_executed_at"] else None
-                ),
-                last_success_at=(
-                    datetime.fromisoformat(row["last_success_at"]) if row["last_success_at"] else None
-                ),
-                last_failure_at=(
-                    datetime.fromisoformat(row["last_failure_at"]) if row["last_failure_at"] else None
-                ),
+                last_executed_at=(datetime.fromisoformat(row["last_executed_at"]) if row["last_executed_at"] else None),
+                last_success_at=(datetime.fromisoformat(row["last_success_at"]) if row["last_success_at"] else None),
+                last_failure_at=(datetime.fromisoformat(row["last_failure_at"]) if row["last_failure_at"] else None),
             )
 
     def record_execution(self, capability_name: str, success: bool) -> ExecutionStats:
@@ -737,9 +731,7 @@ class AutonomyEngine:
             return False
 
         # Need enough consecutive successes after any failure
-        return not (
-            stats.failed_executions > 0 and stats.consecutive_successes < config.cooldown_after_failure
-        )
+        return not (stats.failed_executions > 0 and stats.consecutive_successes < config.cooldown_after_failure)
 
 
 # =============================================================================

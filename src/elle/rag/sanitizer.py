@@ -31,9 +31,7 @@ INJECTION_PATTERNS = (
 )
 
 # Compiled patterns for efficiency
-_COMPILED_PATTERNS = tuple(
-    re.compile(p, re.IGNORECASE) for p in INJECTION_PATTERNS
-)
+_COMPILED_PATTERNS = tuple(re.compile(p, re.IGNORECASE) for p in INJECTION_PATTERNS)
 
 
 def sanitize_for_prompt(text: str, context: str = "input") -> str:
@@ -54,19 +52,12 @@ def sanitize_for_prompt(text: str, context: str = "input") -> str:
     # Check for injection patterns
     for pattern in _COMPILED_PATTERNS:
         if pattern.search(text):
-            logger.warning(
-                f"Potential prompt injection detected in {context}: "
-                f"matched pattern {pattern.pattern!r}"
-            )
+            logger.warning(f"Potential prompt injection detected in {context}: matched pattern {pattern.pattern!r}")
             # Replace the match with [FILTERED]
             text = pattern.sub("[FILTERED]", text)
 
     # Remove control characters (except newline, tab)
-    text = "".join(
-        c if c in "\n\t" or (32 <= ord(c) < 127) or ord(c) > 127
-        else ""
-        for c in text
-    )
+    text = "".join(c if c in "\n\t" or (32 <= ord(c) < 127) or ord(c) > 127 else "" for c in text)
 
     # Truncate extremely long inputs
     max_len = 10000

@@ -72,11 +72,11 @@ def create_incident_draft(
             incident_id=incident_id,
             created_at=now,
             updated_at=now,
-            domain=domain,  # type: ignore[arg-type]
-            severity=severity,  # type: ignore[arg-type]
+            domain=domain,
+            severity=severity,
             status="open",
             title=title,
-            trigger_source=trigger_source,  # type: ignore[arg-type]
+            trigger_source=trigger_source,
             trigger_command=trigger_command,
         )
 
@@ -168,6 +168,7 @@ def update_incident(
     Returns:
         Updated IncidentReport, or None if not found.
     """
+
     def _do_update(c: psycopg.Connection) -> IncidentReport | None:
         # Build update statement dynamically
         updates = ["updated_at = %s"]
@@ -272,9 +273,7 @@ def _get_incident_with_conn(
     Returns:
         IncidentReport if found, None otherwise.
     """
-    row = conn.execute(
-        "SELECT * FROM incidents WHERE id = %s", (incident_id,)
-    ).fetchone()
+    row = conn.execute("SELECT * FROM incidents WHERE id = %s", (incident_id,)).fetchone()
 
     if not row:
         return None
@@ -333,13 +332,11 @@ def delete_incident(
         True if deleted, False if not found.
     """
     with get_conn(schema=PG_SCHEMA) as conn:
-        result = conn.execute(
-            "DELETE FROM incidents WHERE id = %s", (incident_id,)
-        )
+        result = conn.execute("DELETE FROM incidents WHERE id = %s", (incident_id,))
         return result.rowcount > 0
 
 
-def _row_to_incident(row: dict) -> IncidentReport:
+def _row_to_incident(row: dict[str, Any]) -> IncidentReport:
     """Convert a database row to an IncidentReport."""
     preconditions_data = json_loads(row["preconditions_json"])
     preconditions = tuple(
@@ -414,7 +411,7 @@ def get_prepared_plan(
         if not row:
             return None
 
-        plan_json = row.get("prepared_plan_json")
+        plan_json = row["prepared_plan_json"]
         if not plan_json:
             return None
 
@@ -469,7 +466,7 @@ def append_action(
         action = IncidentAction(
             incident_id=incident_id,
             step_index=step_index,
-            kind=kind,  # type: ignore[arg-type]
+            kind=kind,
             command=command,
             payload=payload or {},
             exit_code=exit_code,
@@ -549,7 +546,7 @@ def get_actions(
         return [_row_to_action(row) for row in rows]
 
 
-def _row_to_action(row: dict) -> IncidentAction:
+def _row_to_action(row: dict[str, Any]) -> IncidentAction:
     """Convert a database row to an IncidentAction."""
     created_at = row["created_at"]
     if isinstance(created_at, str):
@@ -620,7 +617,7 @@ def attach_snapshot(
         snapshot_record = IncidentSnapshot(
             id=inserted["id"] if inserted else None,
             incident_id=incident_id,
-            which=which,  # type: ignore[arg-type]
+            which=which,
             snapshot=snapshot,
             created_at=now,
         )
@@ -681,7 +678,7 @@ def get_snapshots(
         return result
 
 
-def _row_to_snapshot(row: dict) -> IncidentSnapshot:
+def _row_to_snapshot(row: dict[str, Any]) -> IncidentSnapshot:
     """Convert a database row to an IncidentSnapshot."""
     snapshot_data = json_loads(row["snapshot_json"])
 
@@ -840,9 +837,7 @@ def get_all_embeddings() -> dict[str, list[float]]:
         Dict mapping incident_id to embedding vector.
     """
     with get_conn(schema=PG_SCHEMA) as conn:
-        rows = conn.execute(
-            "SELECT incident_id, embedding FROM incident_embeddings"
-        ).fetchall()
+        rows = conn.execute("SELECT incident_id, embedding FROM incident_embeddings").fetchall()
 
         result: dict[str, list[float]] = {}
         for row in rows:
@@ -943,7 +938,7 @@ def finalize_outcome(
             try:
                 from elle.daemon.incidents.efficacy_tracker import record_outcome
 
-                record_outcome(updated_incident, outcome, conn=conn)
+                record_outcome(updated_incident, outcome)
             except Exception:
                 # Don't fail finalization if efficacy tracking fails
                 pass
@@ -1062,7 +1057,7 @@ def get_decision_record(
         return _row_to_decision_record(row)
 
 
-def _row_to_decision_record(row: dict) -> DecisionRecord:
+def _row_to_decision_record(row: dict[str, Any]) -> DecisionRecord:
     """Convert a database row to a DecisionRecord."""
     # Parse confidence
     confidence_data = json_loads(row["confidence_json"])
@@ -1211,7 +1206,7 @@ def get_config_states(
         return [_row_to_config_state(row) for row in rows]
 
 
-def _row_to_config_state(row: dict) -> ConfigFileState:
+def _row_to_config_state(row: dict[str, Any]) -> ConfigFileState:
     """Convert a database row to a ConfigFileState."""
     mtime = None
     if row["mtime"]:
@@ -1320,6 +1315,7 @@ def get_telemetry_snapshot(
     Returns:
         TelemetrySnapshot if found, None otherwise.
     """
+
     def _do_get(c: psycopg.Connection) -> TelemetrySnapshotModel | None:
         row = c.execute(
             """
@@ -1438,10 +1434,10 @@ def _parse_telemetry_snapshot(data: dict[str, Any]) -> TelemetrySnapshotModel | 
         services = tuple(ServiceRuntimeSnapshot(**s) for s in data.get("services", []))
 
         # Parse collected_at
-        collected_at = datetime.now(timezone.utc)
+        collected_at: datetime = datetime.now(timezone.utc)
         if "collected_at" in data:
             if isinstance(data["collected_at"], str):
-                collected_at = parse_datetime(data["collected_at"])
+                collected_at = parse_datetime(data["collected_at"]) or collected_at
             elif isinstance(data["collected_at"], datetime):
                 collected_at = data["collected_at"]
 
@@ -1578,6 +1574,7 @@ def get_surface_hashes(
     Returns:
         Dict of surface hashes if found, None otherwise.
     """
+
     def _do_get(c: psycopg.Connection) -> dict[str, str] | None:
         row = c.execute(
             """
@@ -1654,10 +1651,10 @@ def _parse_control_surface_snapshot(data: dict[str, Any]) -> ControlSurfaceSnaps
         hardware = HardwareIdentitySurface(**hardware_data)
 
         # Parse collected_at
-        collected_at = datetime.now(timezone.utc)
+        collected_at: datetime = datetime.now(timezone.utc)
         if "collected_at" in data:
             if isinstance(data["collected_at"], str):
-                collected_at = parse_datetime(data["collected_at"])
+                collected_at = parse_datetime(data["collected_at"]) or collected_at
             elif isinstance(data["collected_at"], datetime):
                 collected_at = data["collected_at"]
 

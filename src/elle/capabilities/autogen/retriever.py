@@ -47,17 +47,13 @@ class CapabilitySearchResult(BaseModel):
     domain: str = Field(description="Capability domain (service, file, docker, etc.)")
     description: str = Field(description="Human-readable description")
     risk_level: str = Field(description="Risk level (none, low, medium, high, critical)")
-    match_type: Literal["exact", "lexical", "semantic", "hybrid"] = Field(
-        description="How the match was found"
-    )
+    match_type: Literal["exact", "lexical", "semantic", "hybrid"] = Field(description="How the match was found")
     score: float = Field(ge=0.0, le=1.0, description="Combined relevance score")
     trust_weight: float = Field(ge=0.0, le=1.0, description="Trust weight from trust level")
     success_rate: float = Field(ge=0.0, le=1.0, description="Historical success rate")
     is_approved: bool = Field(description="Whether capability is approved for use")
     is_enabled: bool = Field(description="Whether capability is enabled")
-    ranking_explanation: str | None = Field(
-        default=None, description="Why this result ranked where it did"
-    )
+    ranking_explanation: str | None = Field(default=None, description="Why this result ranked where it did")
 
     # For use by the LLM
     source_command: str | None = Field(default=None, description="Source command")
@@ -69,7 +65,7 @@ class CapabilitySearchResult(BaseModel):
 # =============================================================================
 
 
-def _migrate_to_v2(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+def _migrate_to_v2(conn: psycopg.Connection) -> None:
     """Add tsvector FTS column, GIN index, and embedding/history tables."""
     # --- tsvector column + GIN index for lexical search ---
     conn.execute("""
@@ -270,10 +266,7 @@ class CapabilityRetriever:
 
             # Apply ranking factors
             final_score = (
-                rrf_score
-                * result.trust_weight
-                * result.success_rate
-                * self._domain_boost(query, result.domain)
+                rrf_score * result.trust_weight * result.success_rate * self._domain_boost(query, result.domain)
             )
             final_scores[name] = final_score
 
@@ -481,7 +474,7 @@ class CapabilityRetriever:
             domain=spec.get("domain", "unknown"),
             description=spec.get("description", ""),
             risk_level=spec.get("risk", "medium"),
-            match_type=match_type,  # type: ignore
+            match_type=match_type,
             score=score,
             trust_weight=trust_weight,
             success_rate=success_rate,

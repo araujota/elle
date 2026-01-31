@@ -114,23 +114,19 @@ class CloudSubmissionQueue:
 
             # Check queue size
             cursor.execute(
-                "SELECT COUNT(*) AS cnt FROM cloud_submission_queue "
-                "WHERE status IN ('pending', 'in_flight')"
+                "SELECT COUNT(*) AS cnt FROM cloud_submission_queue WHERE status IN ('pending', 'in_flight')"
             )
             row = cursor.fetchone()
             current_size = row["cnt"] if row else 0
 
             if current_size >= self._max_size:
                 logger.warning(
-                    f"Cloud submission queue full ({current_size}/{self._max_size}), "
-                    f"rejecting incident {incident_id}"
+                    f"Cloud submission queue full ({current_size}/{self._max_size}), rejecting incident {incident_id}"
                 )
                 return False
 
             now = datetime.now(timezone.utc).isoformat()
-            next_retry = (
-                datetime.now(timezone.utc) + timedelta(seconds=self._initial_delay_sec)
-            ).isoformat()
+            next_retry = (datetime.now(timezone.utc) + timedelta(seconds=self._initial_delay_sec)).isoformat()
 
             try:
                 cursor.execute(
@@ -150,15 +146,10 @@ class CloudSubmissionQueue:
                 )
 
                 if cursor.rowcount > 0:
-                    logger.info(
-                        f"Enqueued incident {incident_id} for cloud retry "
-                        f"(hash={original_hash[:12]}...)"
-                    )
+                    logger.info(f"Enqueued incident {incident_id} for cloud retry (hash={original_hash[:12]}...)")
                     return True
                 else:
-                    logger.debug(
-                        f"Incident {incident_id} already in queue (dedup)"
-                    )
+                    logger.debug(f"Incident {incident_id} already in queue (dedup)")
                     return False
 
             except psycopg.Error as e:
@@ -194,21 +185,23 @@ class CloudSubmissionQueue:
 
             entries = []
             for row in cursor.fetchall():
-                entries.append(QueueEntry(
-                    id=row["id"],
-                    incident_id=row["incident_id"],
-                    payload_json=row["payload_json"],
-                    original_hash=row["original_hash"],
-                    status=row["status"],
-                    retry_count=row["retry_count"],
-                    max_retries=row["max_retries"],
-                    next_retry_at=row["next_retry_at"],
-                    last_error=row["last_error"],
-                    enqueued_at=row["enqueued_at"],
-                    last_attempted_at=row["last_attempted_at"],
-                    completed_at=row["completed_at"],
-                    cloud_id=row["cloud_id"],
-                ))
+                entries.append(
+                    QueueEntry(
+                        id=row["id"],
+                        incident_id=row["incident_id"],
+                        payload_json=row["payload_json"],
+                        original_hash=row["original_hash"],
+                        status=row["status"],
+                        retry_count=row["retry_count"],
+                        max_retries=row["max_retries"],
+                        next_retry_at=row["next_retry_at"],
+                        last_error=row["last_error"],
+                        enqueued_at=row["enqueued_at"],
+                        last_attempted_at=row["last_attempted_at"],
+                        completed_at=row["completed_at"],
+                        cloud_id=row["cloud_id"],
+                    )
+                )
 
             return entries
 
@@ -269,18 +262,15 @@ class CloudSubmissionQueue:
                     (retry_count, error, now, now, entry_id),
                 )
                 logger.warning(
-                    f"Cloud submission queue entry {entry_id} permanently failed "
-                    f"after {retry_count} retries: {error}"
+                    f"Cloud submission queue entry {entry_id} permanently failed after {retry_count} retries: {error}"
                 )
             else:
                 # Compute next backoff
                 delay = min(
-                    self._initial_delay_sec * (self._backoff_factor ** retry_count),
+                    self._initial_delay_sec * (self._backoff_factor**retry_count),
                     self._max_delay_sec,
                 )
-                next_retry = (
-                    datetime.now(timezone.utc) + timedelta(seconds=delay)
-                ).isoformat()
+                next_retry = (datetime.now(timezone.utc) + timedelta(seconds=delay)).isoformat()
 
                 cursor.execute(
                     """UPDATE cloud_submission_queue
@@ -291,8 +281,7 @@ class CloudSubmissionQueue:
                     (retry_count, next_retry, error, now, entry_id),
                 )
                 logger.debug(
-                    f"Cloud submission entry {entry_id} retry {retry_count}/{max_retries}, "
-                    f"next attempt in {delay:.0f}s"
+                    f"Cloud submission entry {entry_id} retry {retry_count}/{max_retries}, next attempt in {delay:.0f}s"
                 )
 
     def recover_in_flight(self) -> int:
@@ -325,9 +314,7 @@ class CloudSubmissionQueue:
         Returns:
             Number of entries deleted.
         """
-        cutoff = (
-            datetime.now(timezone.utc) - timedelta(hours=hours)
-        ).isoformat()
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
 
         with get_conn(schema=PG_SCHEMA) as conn:
             cursor = conn.cursor()
@@ -348,47 +335,37 @@ class CloudSubmissionQueue:
             cursor = conn.cursor()
 
             # Counts by status
-            cursor.execute(
-                "SELECT status, COUNT(*) AS cnt FROM cloud_submission_queue GROUP BY status"
-            )
+            cursor.execute("SELECT status, COUNT(*) AS cnt FROM cloud_submission_queue GROUP BY status")
             counts: dict[str, int] = {}
             for row in cursor.fetchall():
                 counts[row["status"]] = row["cnt"]
 
             # Total retries
-            cursor.execute(
-                "SELECT COALESCE(SUM(retry_count), 0) AS total FROM cloud_submission_queue"
-            )
-            row = cursor.fetchone()
-            total_retries = row["total"] if row else 0
+            cursor.execute("SELECT COALESCE(SUM(retry_count), 0) AS total FROM cloud_submission_queue")
+            retry_row = cursor.fetchone()
+            total_retries = retry_row["total"] if retry_row else 0
 
             # Oldest pending age
             oldest_pending_age: float | None = None
-            cursor.execute(
-                "SELECT MIN(enqueued_at) AS oldest FROM cloud_submission_queue WHERE status = 'pending'"
-            )
-            row = cursor.fetchone()
-            if row and row["oldest"]:
+            cursor.execute("SELECT MIN(enqueued_at) AS oldest FROM cloud_submission_queue WHERE status = 'pending'")
+            oldest_row = cursor.fetchone()
+            if oldest_row and oldest_row["oldest"]:
                 try:
-                    enqueued_val = row["oldest"]
+                    enqueued_val = oldest_row["oldest"]
                     if isinstance(enqueued_val, str):
                         enqueued = datetime.fromisoformat(enqueued_val)
                     else:
                         enqueued = enqueued_val
                     if enqueued.tzinfo is None:
                         enqueued = enqueued.replace(tzinfo=timezone.utc)
-                    oldest_pending_age = (
-                        datetime.now(timezone.utc) - enqueued
-                    ).total_seconds()
+                    oldest_pending_age = (datetime.now(timezone.utc) - enqueued).total_seconds()
                 except (ValueError, TypeError):
                     pass
 
             # Total queue size
-            cursor.execute(
-                "SELECT COUNT(*) AS cnt FROM cloud_submission_queue"
-            )
-            row = cursor.fetchone()
-            queue_size = row["cnt"] if row else 0
+            cursor.execute("SELECT COUNT(*) AS cnt FROM cloud_submission_queue")
+            size_row = cursor.fetchone()
+            queue_size = size_row["cnt"] if size_row else 0
 
             return QueueMetrics(
                 pending_count=counts.get("pending", 0),
@@ -415,10 +392,7 @@ def get_cloud_queue() -> CloudSubmissionQueue:
         RuntimeError: If queue has not been configured.
     """
     if _cloud_queue is None:
-        raise RuntimeError(
-            "Cloud submission queue not configured. "
-            "Call configure_cloud_queue() first."
-        )
+        raise RuntimeError("Cloud submission queue not configured. Call configure_cloud_queue() first.")
     return _cloud_queue
 
 

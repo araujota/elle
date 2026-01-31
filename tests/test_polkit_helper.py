@@ -1,35 +1,33 @@
 from __future__ import annotations
 
-import os
-import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
-from pathlib import Path
 import subprocess as sp
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from elle.security.polkit_helper import (
     PolkitAction,
-    PolkitResult,
     PolkitHelper,
+    PolkitResult,
+    add_user_to_group_sync,
+    create_group_sync,
+    enable_service_sync,
     get_helper,
-    write_privileged,
-    run_validator,
+    install_polkit_rules_sync,
     is_authorized,
     run_privileged_sync,
-    write_privileged_sync,
-    create_group_sync,
-    add_user_to_group_sync,
+    run_validator,
     start_service_sync,
-    enable_service_sync,
-    install_polkit_rules_sync,
+    write_privileged,
+    write_privileged_sync,
 )
-
 
 # ---------------------------------------------------------------------------
 # PolkitAction constants
 # ---------------------------------------------------------------------------
 
-class TestPolkitAction:
 
+class TestPolkitAction:
     def test_action_ids_exist(self):
         assert PolkitAction.EDIT_SYSTEM_CONFIG.startswith("com.elle")
         assert PolkitAction.MANAGE_SERVICES.startswith("com.elle")
@@ -41,8 +39,8 @@ class TestPolkitAction:
 # PolkitResult model
 # ---------------------------------------------------------------------------
 
-class TestPolkitResult:
 
+class TestPolkitResult:
     def test_defaults(self):
         r = PolkitResult(success=True)
         assert r.authorized is True
@@ -55,8 +53,8 @@ class TestPolkitResult:
 # PolkitHelper._run_pkexec
 # ---------------------------------------------------------------------------
 
-class TestRunPkexec:
 
+class TestRunPkexec:
     @pytest.mark.asyncio
     async def test_success(self):
         helper = PolkitHelper()
@@ -147,8 +145,8 @@ class TestRunPkexec:
 # write_privileged
 # ---------------------------------------------------------------------------
 
-class TestWritePrivileged:
 
+class TestWritePrivileged:
     @pytest.mark.asyncio
     async def test_write_success(self, tmp_path):
         helper = PolkitHelper()
@@ -206,8 +204,8 @@ class TestWritePrivileged:
 # run_validator
 # ---------------------------------------------------------------------------
 
-class TestRunValidator:
 
+class TestRunValidator:
     @pytest.mark.asyncio
     async def test_success(self):
         helper = PolkitHelper()
@@ -222,8 +220,10 @@ class TestRunValidator:
     @pytest.mark.asyncio
     async def test_permission_error_escalates(self):
         helper = PolkitHelper()
-        with patch("elle.security.polkit_helper.subprocess.run", side_effect=PermissionError), \
-             patch.object(helper, "_run_pkexec", new_callable=AsyncMock) as mock_pkexec:
+        with (
+            patch("elle.security.polkit_helper.subprocess.run", side_effect=PermissionError),
+            patch.object(helper, "_run_pkexec", new_callable=AsyncMock) as mock_pkexec,
+        ):
             mock_pkexec.return_value = PolkitResult(success=True)
             result = await helper.run_validator(["restricted-cmd"])
         assert result.success is True
@@ -249,8 +249,8 @@ class TestRunValidator:
 # read_privileged / delete_privileged / create_directory / create_backup / restore_backup
 # ---------------------------------------------------------------------------
 
-class TestHelperOperations:
 
+class TestHelperOperations:
     @pytest.mark.asyncio
     async def test_read_privileged(self):
         helper = PolkitHelper()
@@ -278,8 +278,10 @@ class TestHelperOperations:
     @pytest.mark.asyncio
     async def test_create_backup(self):
         helper = PolkitHelper()
-        with patch.object(helper, "_run_pkexec", new_callable=AsyncMock) as mock, \
-             patch.object(helper, "create_directory", new_callable=AsyncMock) as mock_mkdir:
+        with (
+            patch.object(helper, "_run_pkexec", new_callable=AsyncMock) as mock,
+            patch.object(helper, "create_directory", new_callable=AsyncMock) as mock_mkdir,
+        ):
             mock.return_value = PolkitResult(success=True)
             mock_mkdir.return_value = PolkitResult(success=True)
             result = await helper.create_backup("/etc/test", "/backup/test.bak")
@@ -306,8 +308,8 @@ class TestHelperOperations:
 # check_authorization
 # ---------------------------------------------------------------------------
 
-class TestCheckAuthorization:
 
+class TestCheckAuthorization:
     def test_root(self):
         helper = PolkitHelper()
         with patch("elle.security.polkit_helper.os.geteuid", return_value=0):
@@ -315,15 +317,19 @@ class TestCheckAuthorization:
 
     def test_pkexec_available(self):
         helper = PolkitHelper()
-        with patch("elle.security.polkit_helper.os.geteuid", return_value=1000), \
-             patch("elle.security.polkit_helper.subprocess.run") as mock_run:
+        with (
+            patch("elle.security.polkit_helper.os.geteuid", return_value=1000),
+            patch("elle.security.polkit_helper.subprocess.run") as mock_run,
+        ):
             mock_run.return_value = MagicMock(returncode=0)
             assert helper.check_authorization("action.id") is True
 
     def test_pkexec_not_available(self):
         helper = PolkitHelper()
-        with patch("elle.security.polkit_helper.os.geteuid", return_value=1000), \
-             patch("elle.security.polkit_helper.subprocess.run", side_effect=FileNotFoundError):
+        with (
+            patch("elle.security.polkit_helper.os.geteuid", return_value=1000),
+            patch("elle.security.polkit_helper.subprocess.run", side_effect=FileNotFoundError),
+        ):
             assert helper.check_authorization("action.id") is False
 
 
@@ -331,8 +337,8 @@ class TestCheckAuthorization:
 # Setup operations
 # ---------------------------------------------------------------------------
 
-class TestSetupOperations:
 
+class TestSetupOperations:
     @pytest.mark.asyncio
     async def test_create_group_exists(self):
         helper = PolkitHelper()
@@ -348,8 +354,10 @@ class TestSetupOperations:
         helper = PolkitHelper()
         mock_grp = MagicMock()
         mock_grp.getgrnam.side_effect = KeyError("not found")
-        with patch.dict("sys.modules", {"grp": mock_grp}), \
-             patch.object(helper, "_run_pkexec", new_callable=AsyncMock) as mock_pkexec:
+        with (
+            patch.dict("sys.modules", {"grp": mock_grp}),
+            patch.object(helper, "_run_pkexec", new_callable=AsyncMock) as mock_pkexec,
+        ):
             mock_pkexec.return_value = PolkitResult(success=True)
             result = await helper.create_group("elle")
         assert result.success is True
@@ -399,10 +407,11 @@ class TestSetupOperations:
 # Module-level convenience functions
 # ---------------------------------------------------------------------------
 
-class TestModuleConvenience:
 
+class TestModuleConvenience:
     def test_get_helper_singleton(self):
         import elle.security.polkit_helper as mod
+
         mod._helper = None
         h1 = get_helper()
         h2 = get_helper()
@@ -439,8 +448,8 @@ class TestModuleConvenience:
 # Synchronous functions
 # ---------------------------------------------------------------------------
 
-class TestSyncFunctions:
 
+class TestSyncFunctions:
     def test_run_privileged_sync_success(self):
         mock_result = MagicMock()
         mock_result.returncode = 0
@@ -522,8 +531,10 @@ class TestSyncFunctions:
     def test_create_group_sync_new(self):
         mock_grp = MagicMock()
         mock_grp.getgrnam.side_effect = KeyError
-        with patch.dict("sys.modules", {"grp": mock_grp}), \
-             patch("elle.security.polkit_helper.run_privileged_sync") as mock_run:
+        with (
+            patch.dict("sys.modules", {"grp": mock_grp}),
+            patch("elle.security.polkit_helper.run_privileged_sync") as mock_run,
+        ):
             mock_run.return_value = PolkitResult(success=True)
             result = create_group_sync("elle")
         assert result.success is True

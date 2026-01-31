@@ -94,9 +94,7 @@ class ModelSelector:
         # Run the selected method
         return self._run_forecast(method, data, current, avg_1h, avg_6h)
 
-    def _select_method(
-        self, metric: str, data: list[float], n: int
-    ) -> ForecastMethod:
+    def _select_method(self, metric: str, data: list[float], n: int) -> ForecastMethod:
         """Select the best method for this metric's data."""
 
         if n >= 576:
@@ -132,9 +130,7 @@ class ModelSelector:
         self._cache_result(metric, "linear", None)
         return "linear"
 
-    def _cache_result(
-        self, metric: str, method: ForecastMethod, mape: float | None
-    ) -> None:
+    def _cache_result(self, metric: str, method: ForecastMethod, mape: float | None) -> None:
         """Cache model selection result."""
         self._cache[metric] = CachedModel(
             method=method,

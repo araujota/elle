@@ -1,8 +1,7 @@
-from __future__ import annotations
-
 """Tests for elle.cli.ui.diff -- Diff display formatting."""
 
-import pytest
+from __future__ import annotations
+
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
@@ -19,10 +18,10 @@ from elle.cli.ui.diff import (
     render_snapshot_diff,
 )
 
-
 # ---------------------------------------------------------------------------
 # render_diff
 # ---------------------------------------------------------------------------
+
 
 class TestRenderDiff:
     def test_basic(self):
@@ -43,6 +42,7 @@ class TestRenderDiff:
 # render_diff_panel
 # ---------------------------------------------------------------------------
 
+
 class TestRenderDiffPanel:
     def test_basic(self):
         diff_text = "--- a\n+++ b\n@@ -1 +1 @@\n-old\n+new"
@@ -61,6 +61,7 @@ class TestRenderDiffPanel:
 # ---------------------------------------------------------------------------
 # render_inline_diff
 # ---------------------------------------------------------------------------
+
 
 class TestRenderInlineDiff:
     def test_no_changes(self):
@@ -102,6 +103,7 @@ class TestRenderInlineDiff:
 # ---------------------------------------------------------------------------
 # render_side_by_side_diff
 # ---------------------------------------------------------------------------
+
 
 class TestRenderSideBySideDiff:
     def test_equal_content(self):
@@ -147,6 +149,7 @@ class TestRenderSideBySideDiff:
 # render_change_summary
 # ---------------------------------------------------------------------------
 
+
 class TestRenderChangeSummary:
     def test_additions_only(self):
         result = render_change_summary(3, 0, 0)
@@ -176,6 +179,7 @@ class TestRenderChangeSummary:
 # ---------------------------------------------------------------------------
 # render_config_change
 # ---------------------------------------------------------------------------
+
 
 class TestRenderConfigChange:
     def test_set_operation(self):
@@ -211,6 +215,7 @@ class TestRenderConfigChange:
 # render_config_changes
 # ---------------------------------------------------------------------------
 
+
 class TestRenderConfigChanges:
     def test_basic(self):
         changes = [
@@ -229,6 +234,7 @@ class TestRenderConfigChanges:
 # ---------------------------------------------------------------------------
 # render_snapshot_diff
 # ---------------------------------------------------------------------------
+
 
 class TestRenderSnapshotDiff:
     def test_numeric_increase(self):

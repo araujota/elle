@@ -32,7 +32,7 @@ def get_system_prompt(
     host = hostname or "localhost"
     os_str = os_info or "Ubuntu 24.04 LTS"
 
-    return f'''You are ELLE, an intelligent Linux system assistant. You help users understand, diagnose, and manage their Ubuntu system through natural conversation.
+    return f"""You are ELLE, an intelligent Linux system assistant. You help users understand, diagnose, and manage their Ubuntu system through natural conversation.
 
 ## Current Context
 - Hostname: {host}
@@ -108,7 +108,7 @@ When you can't help:
 - Use technical terms correctly
 - Format output for readability (code blocks, lists)
 - Maintain a helpful, professional tone
-'''
+"""
 
 
 def get_initial_context_prompt(user_input: str) -> str:
@@ -123,7 +123,7 @@ def get_initial_context_prompt(user_input: str) -> str:
     Returns:
         Prompt for initial context generation.
     """
-    return f'''Based on the following user input, identify what information would be helpful to retrieve.
+    return f"""Based on the following user input, identify what information would be helpful to retrieve.
 
 User input: {user_input}
 
@@ -136,7 +136,7 @@ Respond in JSON format:
   "man_vault_query": "query for documentation or null",
   "incident_query": "query for past incidents or null",
   "info_aspects": ["list of system info aspects to check: resources, services, containers, etc."]
-}}'''
+}}"""
 
 
 def format_tool_observation(tool_name: str, result_output: str, success: bool) -> str:
@@ -151,8 +151,8 @@ def format_tool_observation(tool_name: str, result_output: str, success: bool) -
         Formatted observation string.
     """
     status = "SUCCESS" if success else "FAILED"
-    return f'''[Tool: {tool_name}] [{status}]
-{result_output}'''
+    return f"""[Tool: {tool_name}] [{status}]
+{result_output}"""
 
 
 def get_continuation_prompt() -> str:
@@ -161,10 +161,10 @@ def get_continuation_prompt() -> str:
     Returns:
         Continuation prompt string.
     """
-    return '''Based on the tool results above, continue your response. You may:
+    return """Based on the tool results above, continue your response. You may:
 1. Call additional tools if you need more information
 2. Provide your final response if you have enough information
-3. Explain what you found and suggest next steps'''
+3. Explain what you found and suggest next steps"""
 
 
 # =============================================================================
@@ -181,7 +181,7 @@ def get_diagnostic_prompt(symptom: str) -> str:
     Returns:
         Diagnostic-focused prompt.
     """
-    return f'''The user is experiencing: {symptom}
+    return f"""The user is experiencing: {symptom}
 
 To diagnose this issue:
 1. First, search_incidents for similar past problems and their solutions
@@ -189,7 +189,7 @@ To diagnose this issue:
 3. Look for relevant error messages or logs
 4. Check documentation for proper configuration
 
-Think step by step and gather evidence before suggesting solutions.'''
+Think step by step and gather evidence before suggesting solutions."""
 
 
 def get_task_prompt(task: str) -> str:
@@ -201,7 +201,7 @@ def get_task_prompt(task: str) -> str:
     Returns:
         Task-focused prompt.
     """
-    return f'''The user wants to: {task}
+    return f"""The user wants to: {task}
 
 Before performing this task:
 1. Use list_capabilities to find the right capability for this operation
@@ -209,7 +209,7 @@ Before performing this task:
 3. Use get_system_info to verify preconditions
 4. Search documentation for correct syntax/options
 
-Then explain your plan and use execute_capability for the actual operation.'''
+Then explain your plan and use execute_capability for the actual operation."""
 
 
 def get_explanation_prompt(topic: str) -> str:
@@ -221,7 +221,7 @@ def get_explanation_prompt(topic: str) -> str:
     Returns:
         Explanation-focused prompt.
     """
-    return f'''The user wants to understand: {topic}
+    return f"""The user wants to understand: {topic}
 
 To provide a good explanation:
 1. Search search_man_vault for official documentation
@@ -229,4 +229,4 @@ To provide a good explanation:
 3. Include practical examples where helpful
 4. Cite the documentation source
 
-Focus on being educational and accurate.'''
+Focus on being educational and accurate."""

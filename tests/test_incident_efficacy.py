@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-import pytest
-
 from elle.daemon.incidents.efficacy import (
     DECAY_HALF_LIFE_DAYS,
     PRIOR_SUCCESS_RATE,

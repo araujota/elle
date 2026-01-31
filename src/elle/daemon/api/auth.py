@@ -22,12 +22,12 @@ import secrets
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Literal, cast
 
+import psycopg
+
 # Request must be imported at runtime for FastAPI dependency injection
 # Import unconditionally - if FastAPI isn't installed, these modules won't be used anyway
 from fastapi import Request
 from pydantic import BaseModel, ConfigDict, Field
-
-import psycopg
 
 from elle.daemon.api.openai_models import ExecutionMode
 from elle.storage.engine import get_conn
@@ -46,7 +46,7 @@ PG_SCHEMA = "api"
 # =============================================================================
 
 
-def _migrate_v1(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+def _migrate_v1(conn: psycopg.Connection) -> None:
     """Create initial API auth tables."""
     conn.execute("""
         CREATE TABLE IF NOT EXISTS api_keys (

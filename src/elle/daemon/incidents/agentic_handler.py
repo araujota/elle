@@ -255,24 +255,15 @@ class IncidentAgenticHandler:
             severity = incident_info.get("severity", "info")
             title = incident_info.get("title", "Unknown")
 
-            logger.debug(
-                f"New incident detected: {incident_id[:8]} - {title} (severity: {severity})"
-            )
+            logger.debug(f"New incident detected: {incident_id[:8]} - {title} (severity: {severity})")
 
             # Decide whether to auto-handle
-            should_auto_handle = (
-                self.auto_remediate
-                and severity in ("critical", "error")
-            )
+            should_auto_handle = self.auto_remediate and severity in ("critical", "error")
 
             if should_auto_handle:
-                logger.info(
-                    f"Auto-handling critical incident: {incident_id[:8]} - {title}"
-                )
+                logger.info(f"Auto-handling critical incident: {incident_id[:8]} - {title}")
                 # Run in background to not block the correlator
-                asyncio.create_task(
-                    self.handle_incident(incident_id, auto_triggered=True)
-                )
+                asyncio.create_task(self.handle_incident(incident_id, auto_triggered=True))
             else:
                 # Just log and notify
                 logger.debug(f"Incident logged (no auto-handle): {incident_id[:8]}")

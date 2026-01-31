@@ -524,7 +524,7 @@ CRITICAL_THRESHOLDS = {
 
 # Time-based urgency thresholds (hours)
 # These determine when to trigger based on time-to-threshold
-TIME_TO_WARNING_HOURS = 24.0   # Prepare plan when <24h to warning threshold
+TIME_TO_WARNING_HOURS = 24.0  # Prepare plan when <24h to warning threshold
 TIME_TO_CRITICAL_HOURS = 4.0  # Act immediately when <4h to critical threshold
 
 # Legacy alias for backwards compatibility

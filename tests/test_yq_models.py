@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 import pytest
 from pydantic import ValidationError
@@ -21,7 +21,6 @@ from elle.ops.yq.models import (
     YQStatus,
     YQUnavailableError,
 )
-
 
 # =============================================================================
 # Fixtures
@@ -125,7 +124,7 @@ class TestYQOperation:
 
     def test_in_place_enabled(self) -> None:
         """Test enabling in-place modification."""
-        op = YQOperation(kind="transform", filter='.x = 1', in_place=True)
+        op = YQOperation(kind="transform", filter=".x = 1", in_place=True)
         assert op.in_place is True
 
     def test_json_output_mode(self) -> None:
@@ -142,7 +141,7 @@ class TestYQOperation:
         """Test setting all optional flags."""
         op = YQOperation(
             kind="transform",
-            filter='.x = 1',
+            filter=".x = 1",
             in_place=True,
             yaml_output=False,
             preserve_comments=False,
@@ -179,7 +178,7 @@ class TestYQOperation:
         """Test JSON serialization and deserialization."""
         op = YQOperation(
             kind="transform",
-            filter='.x = 1',
+            filter=".x = 1",
             in_place=True,
             yaml_output=False,
         )
@@ -535,7 +534,7 @@ class TestYQEditRequest:
         """Test dry_run flag."""
         req = YQEditRequest(
             file_path="/tmp/test.yml",
-            filter='.x = 1',
+            filter=".x = 1",
             description="test",
             dry_run=True,
         )
@@ -545,7 +544,7 @@ class TestYQEditRequest:
         """Test linking to an incident."""
         req = YQEditRequest(
             file_path="/tmp/test.yml",
-            filter='.x = 1',
+            filter=".x = 1",
             description="test",
             incident_id="inc-abc-123",
         )
@@ -555,7 +554,7 @@ class TestYQEditRequest:
         """Test disabling comment preservation."""
         req = YQEditRequest(
             file_path="/tmp/test.yml",
-            filter='.x = 1',
+            filter=".x = 1",
             description="test",
             preserve_comments=False,
         )
@@ -604,7 +603,7 @@ class TestYQEditRequest:
         """Test JSON serialization and deserialization."""
         req = YQEditRequest(
             file_path="/tmp/test.yml",
-            filter='.x = 1',
+            filter=".x = 1",
             description="set x",
             dry_run=True,
             preserve_comments=False,

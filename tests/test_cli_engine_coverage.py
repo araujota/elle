@@ -5,13 +5,13 @@ _handle_shell_command, _handle_fix, _handle_clarification, _handle_incidents,
 _handle_status, _handle_history, _handle_events, _handle_config, policy,
 _extract_shell_command, formatting helpers, module-level helpers, and more.
 """
+
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from types import ModuleType
 from typing import Any
-from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -25,25 +25,25 @@ from elle.cli.engine import (
     is_daemon_available,
     is_llm_available,
 )
-from elle.cli.terminal.intent import Intent, IntentResult
 from elle.cli.subprocess_runner import SubprocessResult
+from elle.cli.terminal.intent import Intent, IntentResult
 from elle.common.session import Session
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_session(**kwargs: Any) -> Session:
     """Build a real Session object for testing."""
     return Session(
         cwd=kwargs.get("cwd", Path("/tmp")),
-        last_cmd=kwargs.get("last_cmd", None),
-        last_stdout=kwargs.get("last_stdout", None),
-        last_stderr=kwargs.get("last_stderr", None),
-        last_exit=kwargs.get("last_exit", None),
+        last_cmd=kwargs.get("last_cmd"),
+        last_stdout=kwargs.get("last_stdout"),
+        last_stderr=kwargs.get("last_stderr"),
+        last_exit=kwargs.get("last_exit"),
         history=tuple(kwargs.get("history", ())),
-        last_syscall_trace=kwargs.get("last_syscall_trace", None),
+        last_syscall_trace=kwargs.get("last_syscall_trace"),
     )
 
 
@@ -71,6 +71,7 @@ def _make_classifier(intent_result: IntentResult) -> MagicMock:
 # Engine instantiation
 # ---------------------------------------------------------------------------
 
+
 class TestEngineInit:
     def test_lazy_classifier(self) -> None:
         engine = Engine()
@@ -83,6 +84,7 @@ class TestEngineInit:
 
     def test_get_engine_singleton(self) -> None:
         import elle.cli.engine as mod
+
         old = mod._engine
         try:
             mod._engine = None
@@ -96,6 +98,7 @@ class TestEngineInit:
 # ---------------------------------------------------------------------------
 # Empty / whitespace input
 # ---------------------------------------------------------------------------
+
 
 class TestEmptyInput:
     def test_empty_string(self) -> None:
@@ -117,6 +120,7 @@ class TestEmptyInput:
 # Meta commands
 # ---------------------------------------------------------------------------
 
+
 class TestMetaCommands:
     @pytest.fixture
     def _engine_meta(self):
@@ -126,6 +130,7 @@ class TestMetaCommands:
             engine = Engine(classifier=clf)
             session = _make_session()
             return engine.process(cmd, session)
+
         return _make
 
     def test_exit(self, _engine_meta) -> None:
@@ -174,6 +179,7 @@ class TestMetaCommands:
 # Clarification
 # ---------------------------------------------------------------------------
 
+
 class TestClarification:
     def test_clarification_needed(self) -> None:
         ir = _intent(
@@ -193,6 +199,7 @@ class TestClarification:
 # ---------------------------------------------------------------------------
 # Shell passthrough
 # ---------------------------------------------------------------------------
+
 
 class TestShellPassthrough:
     def _run(self, user_input: str, sub_result: SubprocessResult | None = None):
@@ -283,6 +290,7 @@ class TestShellPassthrough:
 # Navigation commands
 # ---------------------------------------------------------------------------
 
+
 class TestNavigation:
     def _run_nav(self, user_input: str, **session_kw: Any):
         ir = _intent(Intent.NAVIGATION)
@@ -351,6 +359,7 @@ class TestNavigation:
 # Fix command
 # ---------------------------------------------------------------------------
 
+
 class TestFix:
     def test_fix_no_previous_command(self) -> None:
         ir = _intent(Intent.FIXIT)
@@ -373,6 +382,7 @@ class TestFix:
 # Explain command
 # ---------------------------------------------------------------------------
 
+
 class TestExplainCommand:
     def test_no_previous_cmd(self) -> None:
         ir = _intent(Intent.EXPLAIN_COMMAND)
@@ -394,6 +404,7 @@ class TestExplainCommand:
 # ---------------------------------------------------------------------------
 # Daemon command routing
 # ---------------------------------------------------------------------------
+
 
 class TestDaemonCommand:
     def test_daemon_command_routing(self) -> None:
@@ -426,6 +437,7 @@ class TestDaemonCommand:
 # Agent command routing
 # ---------------------------------------------------------------------------
 
+
 class TestAgentCommand:
     def test_agent_command_routing(self) -> None:
         ir = _intent(Intent.AGENT)
@@ -441,6 +453,7 @@ class TestAgentCommand:
 # ---------------------------------------------------------------------------
 # Learn package routing
 # ---------------------------------------------------------------------------
+
 
 class TestLearnPackage:
     def test_learn_package_exception(self) -> None:
@@ -458,6 +471,7 @@ class TestLearnPackage:
 # Capabilities routing
 # ---------------------------------------------------------------------------
 
+
 class TestCapabilities:
     def test_capabilities_exception(self) -> None:
         ir = _intent(Intent.CAPABILITIES)
@@ -473,6 +487,7 @@ class TestCapabilities:
 # Autonomy config routing
 # ---------------------------------------------------------------------------
 
+
 class TestAutonomyConfig:
     def test_autonomy_exception(self) -> None:
         ir = _intent(Intent.AUTONOMY_CONFIG)
@@ -487,6 +502,7 @@ class TestAutonomyConfig:
 # ---------------------------------------------------------------------------
 # System question / task via agentic loop
 # ---------------------------------------------------------------------------
+
 
 class TestAgenticLoop:
     def test_system_question_agentic_disabled(self) -> None:
@@ -532,9 +548,11 @@ class TestAgenticLoop:
 # Policy evaluation
 # ---------------------------------------------------------------------------
 
+
 class TestPolicy:
     def test_policy_module_not_available(self) -> None:
         import elle.cli.engine as mod
+
         old = mod._policy_module
         try:
             # Set to False to simulate a prior import failure
@@ -547,6 +565,7 @@ class TestPolicy:
 
     def test_policy_module_none_triggers_import(self) -> None:
         import elle.cli.engine as mod
+
         old = mod._policy_module
         try:
             mod._policy_module = None
@@ -558,6 +577,7 @@ class TestPolicy:
 
     def test_policy_module_already_loaded(self) -> None:
         import elle.cli.engine as mod
+
         old = mod._policy_module
         try:
             # Already loaded as a module
@@ -570,6 +590,7 @@ class TestPolicy:
 
     def test_policy_module_false_cached(self) -> None:
         import elle.cli.engine as mod
+
         old = mod._policy_module
         try:
             # Cached as False (import previously failed)
@@ -642,6 +663,7 @@ class TestPolicy:
 # Formatting helpers
 # ---------------------------------------------------------------------------
 
+
 class TestFormattingHelpers:
     def test_format_command_output_both(self) -> None:
         engine = Engine(classifier=MagicMock())
@@ -690,6 +712,7 @@ class TestFormattingHelpers:
 # Extract shell command
 # ---------------------------------------------------------------------------
 
+
 class TestExtractShellCommand:
     def test_plain(self) -> None:
         engine = Engine(classifier=MagicMock())
@@ -712,6 +735,7 @@ class TestExtractShellCommand:
 # Intent to operation type mapping
 # ---------------------------------------------------------------------------
 
+
 class TestIntentToOperationType:
     def test_known_intents(self) -> None:
         engine = Engine(classifier=MagicMock())
@@ -730,6 +754,7 @@ class TestIntentToOperationType:
 # ---------------------------------------------------------------------------
 # is_incident_command / is_reboot_command helpers
 # ---------------------------------------------------------------------------
+
 
 class TestCommandMatchers:
     def test_incident_commands(self) -> None:
@@ -752,9 +777,11 @@ class TestCommandMatchers:
 # Module-level capability helpers
 # ---------------------------------------------------------------------------
 
+
 class TestModuleLevelHelpers:
     def test_get_system_capabilities_none(self) -> None:
         import elle.cli.engine as mod
+
         old = mod._system_capabilities
         try:
             mod._system_capabilities = None
@@ -764,6 +791,7 @@ class TestModuleLevelHelpers:
 
     def test_is_llm_available_not_checked(self) -> None:
         import elle.cli.engine as mod
+
         old = mod._system_capabilities
         try:
             mod._system_capabilities = None
@@ -773,6 +801,7 @@ class TestModuleLevelHelpers:
 
     def test_is_llm_available_checked(self) -> None:
         import elle.cli.engine as mod
+
         old = mod._system_capabilities
         try:
             cap = MagicMock()
@@ -784,6 +813,7 @@ class TestModuleLevelHelpers:
 
     def test_is_daemon_available_not_checked(self) -> None:
         import elle.cli.engine as mod
+
         old = mod._system_capabilities
         try:
             mod._system_capabilities = None
@@ -793,6 +823,7 @@ class TestModuleLevelHelpers:
 
     def test_is_daemon_available_checked(self) -> None:
         import elle.cli.engine as mod
+
         old = mod._system_capabilities
         try:
             cap = MagicMock()
@@ -807,11 +838,12 @@ class TestModuleLevelHelpers:
 # initialize_engine
 # ---------------------------------------------------------------------------
 
+
 class TestInitializeEngine:
     @pytest.mark.asyncio
     async def test_initialize_success(self) -> None:
-        from elle.cli.engine import initialize_engine
         import elle.cli.engine as mod
+        from elle.cli.engine import initialize_engine
 
         old = mod._system_capabilities
         try:
@@ -827,8 +859,8 @@ class TestInitializeEngine:
 
     @pytest.mark.asyncio
     async def test_initialize_failure(self) -> None:
-        from elle.cli.engine import initialize_engine
         import elle.cli.engine as mod
+        from elle.cli.engine import initialize_engine
 
         old = mod._system_capabilities
         try:
@@ -844,6 +876,7 @@ class TestInitializeEngine:
 # ---------------------------------------------------------------------------
 # Status handling (daemon vs session fallback)
 # ---------------------------------------------------------------------------
+
 
 class TestHandleStatus:
     def test_daemon_status_success(self) -> None:
@@ -884,6 +917,7 @@ class TestHandleStatus:
 # Config handler
 # ---------------------------------------------------------------------------
 
+
 class TestHandleConfig:
     def test_config_success(self) -> None:
         engine = Engine(classifier=MagicMock())
@@ -915,6 +949,7 @@ class TestHandleConfig:
 # ---------------------------------------------------------------------------
 # Events handler
 # ---------------------------------------------------------------------------
+
 
 class TestHandleEvents:
     def test_events_no_events(self) -> None:
@@ -961,6 +996,7 @@ class TestHandleEvents:
 # Trace command  (/trace prefix)
 # ---------------------------------------------------------------------------
 
+
 class TestTraceCommand:
     def test_trace_prefix_routes_correctly(self) -> None:
         ir = _intent(Intent.SHELL_PASSTHROUGH)
@@ -980,6 +1016,7 @@ class TestTraceCommand:
 # ---------------------------------------------------------------------------
 # _handle_daemon_command (arg extraction)
 # ---------------------------------------------------------------------------
+
 
 class TestHandleDaemonCommandArgExtraction:
     def test_slash_daemon_prefix(self) -> None:
@@ -1007,6 +1044,7 @@ class TestHandleDaemonCommandArgExtraction:
 # _handle_agent_command (arg extraction)
 # ---------------------------------------------------------------------------
 
+
 class TestHandleAgentCommandArgExtraction:
     def test_slash_agent_prefix(self) -> None:
         engine = Engine(classifier=MagicMock())
@@ -1032,6 +1070,7 @@ class TestHandleAgentCommandArgExtraction:
 # ---------------------------------------------------------------------------
 # Fallback case in _route_intent (default branch)
 # ---------------------------------------------------------------------------
+
 
 class TestRouteIntentFallback:
     def test_unknown_intent_falls_to_shell(self) -> None:
@@ -1062,6 +1101,7 @@ class TestRouteIntentFallback:
 # EngineResult model
 # ---------------------------------------------------------------------------
 
+
 class TestEngineResult:
     def test_defaults(self) -> None:
         session = _make_session()
@@ -1085,6 +1125,7 @@ class TestEngineResult:
 # Mobile / Reactive navigation (error paths)
 # ---------------------------------------------------------------------------
 
+
 class TestMobileAndReactive:
     def test_mobile_exception(self) -> None:
         engine = Engine(classifier=MagicMock())
@@ -1104,6 +1145,7 @@ class TestMobileAndReactive:
 # ---------------------------------------------------------------------------
 # Reboot navigation
 # ---------------------------------------------------------------------------
+
 
 class TestReboot:
     def test_reboot_exception(self) -> None:
@@ -1126,6 +1168,7 @@ class TestReboot:
 # ---------------------------------------------------------------------------
 # Navigation: /preflight
 # ---------------------------------------------------------------------------
+
 
 class TestPreflight:
     def test_preflight_routes_via_navigation(self) -> None:
@@ -1151,10 +1194,13 @@ class TestPreflight:
     def test_preflight_import_error(self) -> None:
         engine = Engine(classifier=MagicMock())
         session = _make_session()
-        with patch.dict("sys.modules", {
-            "elle.ops.preflight": None,
-            "elle.ops.preflight.risk_classifier": None,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.ops.preflight": None,
+                "elle.ops.preflight.risk_classifier": None,
+            },
+        ):
             result = engine._handle_preflight_command("/preflight nginx", session)
         assert result.success is False
 
@@ -1162,6 +1208,7 @@ class TestPreflight:
 # ---------------------------------------------------------------------------
 # Navigation: incidents
 # ---------------------------------------------------------------------------
+
 
 class TestIncidentNavigation:
     def test_list_incidents_empty(self) -> None:
@@ -1288,6 +1335,7 @@ class TestIncidentNavigation:
 # Navigation: man commands
 # ---------------------------------------------------------------------------
 
+
 class TestManCommands:
     def test_man_help(self) -> None:
         engine = Engine(classifier=MagicMock())
@@ -1406,6 +1454,7 @@ class TestManCommands:
 # Sponsor text
 # ---------------------------------------------------------------------------
 
+
 class TestSponsorText:
     def test_sponsor_text_browser_fails(self) -> None:
         engine = Engine(classifier=MagicMock())
@@ -1426,6 +1475,7 @@ class TestSponsorText:
 # Help / about texts
 # ---------------------------------------------------------------------------
 
+
 class TestHelpAbout:
     def test_help_text(self) -> None:
         engine = Engine(classifier=MagicMock())
@@ -1444,6 +1494,7 @@ class TestHelpAbout:
 # ---------------------------------------------------------------------------
 # System question (legacy path)
 # ---------------------------------------------------------------------------
+
 
 class TestSystemQuestionLegacy:
     def test_llm_not_available(self) -> None:
@@ -1523,6 +1574,7 @@ class TestSystemQuestionLegacy:
 # Format unified agentic response
 # ---------------------------------------------------------------------------
 
+
 class TestFormatUnifiedAgenticResponse:
     def _make_resp(self, **overrides: Any) -> MagicMock:
         """Create a mock agentic response with controlled attributes."""
@@ -1597,6 +1649,7 @@ class TestFormatUnifiedAgenticResponse:
 # _handle_system_question (combined path)
 # ---------------------------------------------------------------------------
 
+
 class TestHandleSystemQuestion:
     def test_question_via_unified(self) -> None:
         engine = Engine(classifier=MagicMock())
@@ -1644,6 +1697,7 @@ class TestHandleSystemQuestion:
 # _handle_system_task (combined path)
 # ---------------------------------------------------------------------------
 
+
 class TestHandleSystemTask:
     def test_task_via_unified(self) -> None:
         engine = Engine(classifier=MagicMock())
@@ -1690,6 +1744,7 @@ class TestHandleSystemTask:
 # _try_unified_agentic_handling
 # ---------------------------------------------------------------------------
 
+
 class TestTryUnifiedAgenticHandling:
     def test_handler_not_available(self) -> None:
         engine = Engine(classifier=MagicMock())
@@ -1714,6 +1769,7 @@ class TestTryUnifiedAgenticHandling:
 # _try_agentic_handling (legacy wrapper)
 # ---------------------------------------------------------------------------
 
+
 class TestTryAgenticHandling:
     def test_delegates_to_unified(self) -> None:
         engine = Engine(classifier=MagicMock())
@@ -1732,18 +1788,22 @@ class TestTryAgenticHandling:
 # _handle_via_agentic_loop exception path
 # ---------------------------------------------------------------------------
 
+
 class TestHandleViaAgenticLoop:
     def test_agentic_loop_exception(self) -> None:
         engine = Engine(classifier=MagicMock())
         session = _make_session()
         ir = _intent(Intent.SYSTEM_QUESTION)
-        with patch(
-            "elle.cli.agentic.loop.is_agentic_loop_enabled",
-            return_value=True,
-        ), patch(
-            "elle.cli.agentic.loop.run_agentic_loop",
-            new_callable=AsyncMock,
-            side_effect=RuntimeError("loop fail"),
+        with (
+            patch(
+                "elle.cli.agentic.loop.is_agentic_loop_enabled",
+                return_value=True,
+            ),
+            patch(
+                "elle.cli.agentic.loop.run_agentic_loop",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("loop fail"),
+            ),
         ):
             result = engine._handle_via_agentic_loop("test", ir, session)
         assert result.success is False
@@ -1753,6 +1813,7 @@ class TestHandleViaAgenticLoop:
 # ---------------------------------------------------------------------------
 # Learn package entity extraction
 # ---------------------------------------------------------------------------
+
 
 class TestLearnPackageExtraction:
     def test_learn_with_prefix(self) -> None:
@@ -1783,6 +1844,7 @@ class TestLearnPackageExtraction:
 # ---------------------------------------------------------------------------
 # Capabilities and autonomy (success paths)
 # ---------------------------------------------------------------------------
+
 
 class TestCapabilitiesSuccess:
     def test_capabilities_success(self) -> None:
@@ -1815,6 +1877,7 @@ class TestCapabilitiesSuccess:
 # ---------------------------------------------------------------------------
 # Mobile / reactive success paths
 # ---------------------------------------------------------------------------
+
 
 class TestMobileReactiveSuccess:
     def test_mobile_success(self) -> None:

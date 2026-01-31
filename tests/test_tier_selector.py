@@ -1,8 +1,7 @@
-from __future__ import annotations
-
 """Tests for tier_selector.py and tier_registry.py."""
 
-from pathlib import Path
+from __future__ import annotations
+
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -10,19 +9,8 @@ import pytest
 from elle.ops.editing.models import (
     EditOperation,
     NoApplicableTierError,
-    TierApplicability,
-    TierNumber,
 )
 from elle.ops.editing.tier_registry import (
-    TIER0_DROPIN_PATTERNS,
-    TIER1_AUGEAS_PATTERNS,
-    TIER2_JSON_PATTERNS,
-    TIER2_TOML_PATTERNS,
-    TIER2_YAML_PATTERNS,
-    TIER3_INI_PATTERNS,
-    TIER3_XML_PATTERNS,
-    TIER4_MARKDOWN_PATTERNS,
-    TIER4_RST_PATTERNS,
     TIER_REGISTRY,
     detect_tier_from_path,
     get_file_extension,
@@ -33,10 +21,10 @@ from elle.ops.editing.tier_registry import (
 )
 from elle.ops.editing.tier_selector import TierSelector
 
-
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
+
 
 def _op(kind: str = "set", **kw) -> EditOperation:
     return EditOperation(kind=kind, **kw)
@@ -500,6 +488,7 @@ class TestTierSelector:
         # to create TierApplicability(tier=99), but the Pydantic model
         # enforces TierNumber = Literal[0..5], so it raises a ValidationError.
         from pydantic import ValidationError
+
         with pytest.raises(ValidationError):
             selector._check_tier_applicability(99, "/tmp/file.txt", _op(kind="set"))  # type: ignore
 
@@ -525,8 +514,10 @@ class TestTierSelector:
 
     def test_get_tier_tool_2_yaml_ruamel(self):
         selector = self._make_selector()
+
         def tool_check(t):
             return t == "ruamel.yaml"
+
         with patch.object(selector, "_check_tool_available", side_effect=tool_check):
             assert selector._get_tier_tool(2, "file.yaml") == "ruamel.yaml"
 
@@ -636,8 +627,10 @@ class TestTierSelector:
 
     def test_check_tier2_yaml_with_ruamel(self):
         selector = self._make_selector()
+
         def tool_check(t):
             return t == "ruamel.yaml"
+
         with patch.object(selector, "_check_tool_available", side_effect=tool_check):
             result = selector._check_tier2("file.yaml", _op(kind="set"))
         assert result.applicable is True

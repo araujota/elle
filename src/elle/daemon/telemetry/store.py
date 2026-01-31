@@ -20,7 +20,6 @@ from elle.storage.helpers import json_dumps, json_loads, parse_datetime, seriali
 PG_SCHEMA = "telemetry"
 
 
-
 # =============================================================================
 # Event CRUD
 # =============================================================================
@@ -28,7 +27,7 @@ PG_SCHEMA = "telemetry"
 
 def insert_event(
     event: TelemetryEvent,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> int:
     """Insert a single event.
 
@@ -40,7 +39,7 @@ def insert_event(
         The inserted row ID.
     """
 
-    def _run(c: psycopg.Connection) -> int:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> int:
         cursor = c.cursor()
         cursor.execute(
             """
@@ -74,7 +73,7 @@ def insert_event(
 
 def insert_events_batch(
     events: list[TelemetryEvent],
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> int:
     """Insert multiple events in a batch.
 
@@ -90,7 +89,7 @@ def insert_events_batch(
     if not events:
         return 0
 
-    def _run(c: psycopg.Connection) -> int:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> int:
         cursor = c.cursor()
         inserted = 0
         for event in events:
@@ -126,7 +125,7 @@ def insert_events_batch(
 
 def get_event(
     event_id: str,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> TelemetryEvent | None:
     """Get an event by its event_id.
 
@@ -138,7 +137,7 @@ def get_event(
         TelemetryEvent if found, None otherwise.
     """
 
-    def _run(c: psycopg.Connection) -> TelemetryEvent | None:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> TelemetryEvent | None:
         cursor = c.cursor()
         cursor.execute("SELECT * FROM events WHERE event_id = %s", (event_id,))
         row = cursor.fetchone()
@@ -157,7 +156,7 @@ def get_event(
 
 def get_event_by_id(
     row_id: int,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> TelemetryEvent | None:
     """Get an event by its database row ID.
 
@@ -169,7 +168,7 @@ def get_event_by_id(
         TelemetryEvent if found, None otherwise.
     """
 
-    def _run(c: psycopg.Connection) -> TelemetryEvent | None:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> TelemetryEvent | None:
         cursor = c.cursor()
         cursor.execute("SELECT * FROM events WHERE id = %s", (row_id,))
         row = cursor.fetchone()
@@ -195,7 +194,7 @@ def query_events(
     source: str | None = None,
     limit: int = 100,
     offset: int = 0,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> list[TelemetryEvent]:
     """Query events with filters.
 
@@ -214,7 +213,7 @@ def query_events(
         List of matching TelemetryEvents.
     """
 
-    def _run(c: psycopg.Connection) -> list[TelemetryEvent]:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> list[TelemetryEvent]:
         query = "SELECT * FROM events WHERE 1=1"
         params: list[Any] = []
 
@@ -255,7 +254,7 @@ def query_events(
 def search_events(
     query_text: str,
     limit: int = 100,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> list[TelemetryEvent]:
     """Full-text search events by message.
 
@@ -270,7 +269,7 @@ def search_events(
         List of matching TelemetryEvents.
     """
 
-    def _run(c: psycopg.Connection) -> list[TelemetryEvent]:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> list[TelemetryEvent]:
         cursor = c.cursor()
         # Use ILIKE for simple substring matching (compatible fallback)
         # For FTS, the schema migration should create a tsvector column + GIN index
@@ -297,7 +296,7 @@ def count_events(
     since: datetime | None = None,
     category: str | None = None,
     severity: str | None = None,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> int:
     """Count events matching filters.
 
@@ -311,7 +310,7 @@ def count_events(
         Number of matching events.
     """
 
-    def _run(c: psycopg.Connection) -> int:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> int:
         query = "SELECT COUNT(*) AS cnt FROM events WHERE 1=1"
         params: list[Any] = []
 
@@ -339,7 +338,7 @@ def count_events(
 
 def count_events_by_category(
     since: datetime | None = None,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> dict[str, int]:
     """Count events grouped by category.
 
@@ -351,7 +350,7 @@ def count_events_by_category(
         Dict mapping category to count.
     """
 
-    def _run(c: psycopg.Connection) -> dict[str, int]:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> dict[str, int]:
         query = "SELECT category, COUNT(*) AS cnt FROM events"
         params: list[Any] = []
 
@@ -375,7 +374,7 @@ def count_events_by_category(
 
 def get_recent_fingerprints(
     window_sec: int = 60,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> set[str]:
     """Get fingerprints of recent events for deduplication.
 
@@ -387,7 +386,7 @@ def get_recent_fingerprints(
         Set of fingerprints.
     """
 
-    def _run(c: psycopg.Connection) -> set[str]:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> set[str]:
         since = datetime.now(timezone.utc) - timedelta(seconds=window_sec)
         cursor = c.cursor()
         cursor.execute(
@@ -409,7 +408,7 @@ def get_recent_fingerprints(
 
 def delete_old_events(
     older_than_days: int = 30,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> int:
     """Delete events older than specified days.
 
@@ -421,7 +420,7 @@ def delete_old_events(
         Number of deleted events.
     """
 
-    def _run(c: psycopg.Connection) -> int:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> int:
         cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
         cursor = c.cursor()
         cursor.execute(
@@ -437,7 +436,7 @@ def delete_old_events(
         return _run(c)
 
 
-def _row_to_event(row: dict) -> TelemetryEvent:
+def _row_to_event(row: dict[str, Any]) -> TelemetryEvent:
     """Convert a database row to TelemetryEvent."""
     ts = row["ts"]
     if isinstance(ts, str):
@@ -463,7 +462,7 @@ def _row_to_event(row: dict) -> TelemetryEvent:
 
 def insert_probe_result(
     result: ProbeResult,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> int:
     """Insert a probe result.
 
@@ -475,7 +474,7 @@ def insert_probe_result(
         The inserted row ID.
     """
 
-    def _run(c: psycopg.Connection) -> int:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> int:
         cursor = c.cursor()
         cursor.execute(
             """
@@ -504,7 +503,7 @@ def insert_probe_result(
 
 def get_latest_probe_result(
     probe_name: str,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> ProbeResult | None:
     """Get the most recent result for a probe.
 
@@ -516,7 +515,7 @@ def get_latest_probe_result(
         Latest ProbeResult if found, None otherwise.
     """
 
-    def _run(c: psycopg.Connection) -> ProbeResult | None:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> ProbeResult | None:
         cursor = c.cursor()
         cursor.execute(
             """
@@ -553,7 +552,7 @@ def get_latest_probe_result(
 
 def delete_old_probe_results(
     older_than_days: int = 7,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> int:
     """Delete probe results older than specified days.
 
@@ -565,7 +564,7 @@ def delete_old_probe_results(
         Number of deleted results.
     """
 
-    def _run(c: psycopg.Connection) -> int:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> int:
         cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
         cursor = c.cursor()
         cursor.execute(

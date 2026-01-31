@@ -28,12 +28,12 @@ from elle.daemon.telemetry.models import DaemonStatus, TelemetryEvent
 from elle.daemon.telemetry.queue import TelemetryQueue, create_queues
 from elle.daemon.telemetry.state_cache import StateCache
 from elle.daemon.telemetry.store import insert_events_batch
-from elle.storage.config import PostgresConfig
-from elle.storage.engine import close_pools, configure_pool
 from elle.daemon.telemetry.telemetryd_watcher import (
     TelemetrydWatcher,
     is_telemetryd_available,
 )
+from elle.storage.config import PostgresConfig
+from elle.storage.engine import close_pools, configure_pool
 
 logger = logging.getLogger(__name__)
 

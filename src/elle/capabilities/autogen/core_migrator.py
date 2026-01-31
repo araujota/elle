@@ -149,10 +149,7 @@ class CoreCapabilityExtractor:
 
         imports = extract_imports(self.source)
         helpers = find_helper_functions(self.source)
-        helper_code = "\n\n".join(
-            extract_function_source(self.source, h) or ""
-            for h in helpers
-        )
+        helper_code = "\n\n".join(extract_function_source(self.source, h) or "" for h in helpers)
 
         tree = ast.parse(self.source)
         capability_classes = []
@@ -203,28 +200,28 @@ class CoreCapabilityExtractor:
             logger.warning(f"Could not extract source for {class_name}")
             return None
 
-        capability_class_code = f'''{imports}
+        capability_class_code = f"""{imports}
 
 # Helper functions
 {helper_code}
 
 # Capability class
 {class_source}
-'''
+"""
 
-        input_model_code = f'''from __future__ import annotations
+        input_model_code = f"""from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
 {input_models_code}
-'''
+"""
 
-        output_model_code = f'''from __future__ import annotations
+        output_model_code = f"""from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
 {output_models_code}
-'''
+"""
 
         try:
             module = __import__(
@@ -353,10 +350,7 @@ class CoreCapabilityMigrator:
             logger.error(f"Core directory not found: {core_dir}")
             return {"error": f"Core directory not found: {core_dir}"}
 
-        module_files = [
-            f for f in core_dir.glob("*.py")
-            if f.name != "__init__.py"
-        ]
+        module_files = [f for f in core_dir.glob("*.py") if f.name != "__init__.py"]
 
         logger.info(f"Found {len(module_files)} core capability modules")
 
@@ -546,9 +540,7 @@ def verify_migration(store: AutogenStore | None = None) -> dict[str, Any]:
     }
 
     with get_conn(schema="autogen") as conn:
-        cursor = conn.execute(
-            "SELECT * FROM generated_capabilities WHERE trust_level = 'core'"
-        )
+        cursor = conn.execute("SELECT * FROM generated_capabilities WHERE trust_level = 'core'")
         rows = cursor.fetchall()
 
     results["total_core"] = len(rows)
@@ -563,37 +555,47 @@ def verify_migration(store: AutogenStore | None = None) -> dict[str, Any]:
                 if source_path:
                     current_hash = compute_file_hash(Path(source_path))
                     if current_hash != stored.man_page_hash:
-                        results["hash_mismatches"].append({
-                            "name": cap_name,
-                            "stored_hash": stored.man_page_hash[:8],
-                            "current_hash": current_hash[:8],
-                        })
+                        results["hash_mismatches"].append(
+                            {
+                                "name": cap_name,
+                                "stored_hash": stored.man_page_hash[:8],
+                                "current_hash": current_hash[:8],
+                            }
+                        )
 
                 # Try to load and instantiate
                 cap_class = load_capability_from_stored(stored)
                 if cap_class:
                     instance = cap_class()
                     spec = instance.spec
-                    results["verified"].append({
-                        "name": cap_name,
-                        "spec_name": spec.name,
-                        "domain": spec.domain,
-                    })
+                    results["verified"].append(
+                        {
+                            "name": cap_name,
+                            "spec_name": spec.name,
+                            "domain": spec.domain,
+                        }
+                    )
                 else:
-                    results["failed"].append({
-                        "name": cap_name,
-                        "error": "Failed to compile",
-                    })
+                    results["failed"].append(
+                        {
+                            "name": cap_name,
+                            "error": "Failed to compile",
+                        }
+                    )
             else:
-                results["failed"].append({
-                    "name": cap_name,
-                    "error": "Not found in store",
-                })
+                results["failed"].append(
+                    {
+                        "name": cap_name,
+                        "error": "Not found in store",
+                    }
+                )
         except Exception as e:
-            results["failed"].append({
-                "name": cap_name,
-                "error": str(e),
-            })
+            results["failed"].append(
+                {
+                    "name": cap_name,
+                    "error": str(e),
+                }
+            )
 
     return results
 
@@ -607,9 +609,7 @@ def main() -> int:
     """Run the migration."""
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Migrate/sync core capabilities to autogen.db"
-    )
+    parser = argparse.ArgumentParser(description="Migrate/sync core capabilities to autogen.db")
     parser.add_argument(
         "--dry-run",
         action="store_true",

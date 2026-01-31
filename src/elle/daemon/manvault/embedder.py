@@ -154,7 +154,7 @@ class ManVaultEmbedder:
     def embed_chunk(
         self,
         chunk: ManChunk,
-        conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+        conn: psycopg.Connection | None = None,
     ) -> bool:
         """Embed a single chunk and store the result.
 
@@ -177,12 +177,12 @@ class ManVaultEmbedder:
 
     def _embed_chunk_impl(
         self,
-        conn: psycopg.Connection,  # type: ignore[type-arg]
+        conn: psycopg.Connection,
         chunk: ManChunk,
     ) -> bool:
         try:
             # Check if already embedded
-            existing = get_embedding(conn, chunk.id)  # type: ignore[arg-type]
+            existing = get_embedding(conn, chunk.id)
             if existing:
                 return True
 
@@ -190,7 +190,7 @@ class ManVaultEmbedder:
             embedding = self.embed_text(chunk.text)
 
             # Store embedding
-            upsert_embedding(conn, chunk.id, embedding, self.model)  # type: ignore[arg-type]
+            upsert_embedding(conn, chunk.id, embedding, self.model)
             return True
 
         except OllamaError as e:
@@ -200,7 +200,7 @@ class ManVaultEmbedder:
     def embed_document(
         self,
         doc_id: int,
-        conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+        conn: psycopg.Connection | None = None,
     ) -> int:
         """Embed all chunks for a document.
 
@@ -219,7 +219,7 @@ class ManVaultEmbedder:
 
     def _embed_document_impl(
         self,
-        conn: psycopg.Connection,  # type: ignore[type-arg]
+        conn: psycopg.Connection,
         doc_id: int,
     ) -> int:
         # Get chunks for document
@@ -255,7 +255,7 @@ class ManVaultEmbedder:
 
     def embed_all_pending(
         self,
-        conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+        conn: psycopg.Connection | None = None,
         batch_size: int = DEFAULT_BATCH_SIZE,
         limit: int = 0,
         progress_callback: Callable[[int, int], None] | None = None,
@@ -279,7 +279,7 @@ class ManVaultEmbedder:
 
     def _embed_all_pending_impl(
         self,
-        conn: psycopg.Connection,  # type: ignore[type-arg]
+        conn: psycopg.Connection,
         batch_size: int,
         limit: int,
         progress_callback: Callable[[int, int], None] | None,

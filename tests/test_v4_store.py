@@ -1,10 +1,16 @@
 """Tests for V4 store operations (telemetry and control surface snapshots)."""
 
-import json
-from datetime import datetime, timezone
-
 import pytest
 
+from elle.daemon.incidents.control_surface import (
+    ControlSurfaceSnapshot,
+    HardwareIdentitySurface,
+    KernelPolicySurface,
+    NetworkControlSurface,
+    PackageSurface,
+    PrivilegeSurface,
+    SchedulerSurface,
+)
 from elle.daemon.incidents.store import (
     attach_control_surface_snapshot,
     attach_telemetry_snapshot,
@@ -22,15 +28,6 @@ from elle.daemon.incidents.telemetry_snapshot import (
     MemoryPressure,
     NetworkLiveness,
     TelemetrySnapshot,
-)
-from elle.daemon.incidents.control_surface import (
-    ControlSurfaceSnapshot,
-    HardwareIdentitySurface,
-    KernelPolicySurface,
-    NetworkControlSurface,
-    PackageSurface,
-    PrivilegeSurface,
-    SchedulerSurface,
 )
 
 

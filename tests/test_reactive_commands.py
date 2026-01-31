@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Tests for the ELLE reactive function commands."""
+
+from __future__ import annotations
 
 import asyncio
 from datetime import datetime
@@ -14,7 +14,6 @@ from elle.cli.reactive_commands import (
     handle_reactive_command,
     is_reactive_command,
 )
-
 
 # =============================================================================
 # Fixtures
@@ -917,9 +916,7 @@ class TestReactCreate:
 
         mock_compiler = MagicMock()
         mock_compiler.compile = mock_compile
-        mock_compiler.suggest_improvements.return_value = [
-            "Add a max_frequency policy to prevent too frequent runs"
-        ]
+        mock_compiler.suggest_improvements.return_value = ["Add a max_frequency policy to prevent too frequent runs"]
 
         with (
             patch("elle.reactive.compiler.get_compiler", return_value=mock_compiler),

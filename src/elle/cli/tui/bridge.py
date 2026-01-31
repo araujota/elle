@@ -101,9 +101,10 @@ class EngineBridge:
 
             from elle.cli.terminal.classifier import get_classifier
             from elle.cli.terminal.intent import Intent
+            from elle.common.session import Session
 
             classifier = get_classifier()
-            result = classifier.classify(command)
+            result = classifier.classify(command, Session())
             return result.intent in (Intent.SYSTEM_QUESTION, Intent.SYSTEM_TASK)
         except Exception:
             return False

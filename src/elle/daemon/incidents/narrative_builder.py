@@ -43,13 +43,12 @@ CREATE INDEX IF NOT EXISTS idx_narratives_incident ON narratives(incident_id)
 """
 
 
-def _ensure_narrative_schema(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+def _ensure_narrative_schema(conn: psycopg.Connection) -> None:
     """Ensure narrative tables exist."""
     cursor = conn.cursor()
     cursor.execute(NARRATIVES_TABLE)
     cursor.execute(NARRATIVES_INDEX)
     conn.commit()
-
 
 
 class NarrativeBuilder:

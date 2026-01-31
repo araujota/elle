@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import ast
 import hashlib
-import json
 import textwrap
 from contextlib import contextmanager
 from pathlib import Path
@@ -25,7 +23,6 @@ from elle.capabilities.autogen.core_migrator import (
     sync_core_capabilities_if_needed,
     verify_migration,
 )
-
 
 # =========================================================================
 # Fixtures
@@ -210,7 +207,7 @@ class TestGetStoredHashForModule:
              capability_class_code, source_command, man_page_hash, generated_at,
              trust_level, approved, enabled)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-            ('id1', 'test.cap', '{}', '', '', '', 'testmod', 'hash123', '2024-01-01', 'core', True, True),
+            ("id1", "test.cap", "{}", "", "", "", "testmod", "hash123", "2024-01-01", "core", True, True),
         )
 
         result = get_stored_hash_for_module(mock_store, "testmod")
@@ -338,17 +335,14 @@ class TestCoreCapabilityMigrator:
     def test_migrate_all_no_core_dir(self) -> None:
         with patch("elle.capabilities.autogen.core_migrator.get_store") as mock_get:
             mock_get.return_value = MagicMock()
-            migrator = CoreCapabilityMigrator(store=mock_get.return_value)
+            CoreCapabilityMigrator(store=mock_get.return_value)
 
             with patch("elle.capabilities.autogen.core_migrator.Path") as MockPath:
                 mock_core_dir = MagicMock()
                 mock_core_dir.exists.return_value = False
                 MockPath.return_value.parent.parent.__truediv__ = MagicMock(return_value=mock_core_dir)
                 # Directly test with a path that doesn't exist
-                migrator_path_patch = patch.object(
-                    CoreCapabilityMigrator, "migrate_all",
-                    lambda self: {"error": "Core directory not found"}
-                )
+                patch.object(CoreCapabilityMigrator, "migrate_all", lambda self: {"error": "Core directory not found"})
                 result = {"error": "Core directory not found"}
                 assert "error" in result
 
@@ -585,9 +579,7 @@ class TestMigrateModule:
         mock_store = MagicMock()
         migrator = CoreCapabilityMigrator(store=mock_store)
 
-        with patch.object(
-            CoreCapabilityExtractor, "extract_all", side_effect=RuntimeError("parse error")
-        ):
+        with patch.object(CoreCapabilityExtractor, "extract_all", side_effect=RuntimeError("parse error")):
             mock_path = MagicMock()
             mock_path.name = "bad_module.py"
             mock_path.stem = "bad_module"
@@ -677,9 +669,12 @@ class TestVerifyMigration:
         mock_loader_module = MagicMock()
         mock_loader_module.load_capability_from_stored.return_value = None
 
-        with patch.dict("sys.modules", {
-            "elle.capabilities.autogen.loader": mock_loader_module,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.capabilities.autogen.loader": mock_loader_module,
+            },
+        ):
             result = verify_migration(mock_store)
             assert len(result["failed"]) == 1
             assert result["failed"][0]["error"] == "Failed to compile"
@@ -728,9 +723,7 @@ class TestMainCLI:
                 "total_core": 1,
                 "verified": [{"name": "test.cap", "spec_name": "test.cap", "domain": "test"}],
                 "failed": [],
-                "hash_mismatches": [
-                    {"name": "test.cap", "stored_hash": "abc12345", "current_hash": "def67890"}
-                ],
+                "hash_mismatches": [{"name": "test.cap", "stored_hash": "abc12345", "current_hash": "def67890"}],
             }
             exit_code = main()
             assert exit_code == 0

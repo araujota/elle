@@ -2,17 +2,15 @@
 
 import time
 
-import pytest
-
 from elle.daemon.incidents.surface_cache import (
+    CONFIG_TTL,
+    HARDWARE_TTL,
+    KERNEL_POLICY_TTL,
+    SERVICE_TTL,
     CacheEntry,
     SurfaceCache,
     clear_surface_cache,
     get_surface_cache,
-    HARDWARE_TTL,
-    KERNEL_POLICY_TTL,
-    SERVICE_TTL,
-    CONFIG_TTL,
 )
 
 
@@ -84,7 +82,7 @@ class TestSurfaceCache:
         """Service should be cached after first call."""
         cache = SurfaceCache()
         # Use a service that likely doesn't exist
-        svc1 = cache.get_service("nonexistent.service")
+        cache.get_service("nonexistent.service")
         stats = cache.stats()
         # Should cache the negative result
         assert stats["services_cached"] == 1
@@ -101,7 +99,7 @@ class TestSurfaceCache:
     def test_get_config_caches(self) -> None:
         """Config should be cached after first call."""
         cache = SurfaceCache()
-        cfg1 = cache.get_config("/etc/hosts")
+        cache.get_config("/etc/hosts")
         stats = cache.stats()
         # Should cache (even if None on some systems)
         assert stats["configs_cached"] == 1
@@ -166,7 +164,7 @@ class TestCacheTTLConstants:
 
     def test_hardware_ttl_is_infinite(self) -> None:
         """HARDWARE_TTL should be infinite."""
-        assert HARDWARE_TTL == float("inf")
+        assert float("inf") == HARDWARE_TTL
 
     def test_kernel_policy_ttl(self) -> None:
         """KERNEL_POLICY_TTL should be 1 hour."""

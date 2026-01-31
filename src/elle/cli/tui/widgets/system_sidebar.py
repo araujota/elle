@@ -8,6 +8,7 @@ on a timer.
 from __future__ import annotations
 
 from rich.text import Text
+from textual.app import ComposeResult
 from textual.containers import Container, VerticalScroll
 from textual.reactive import reactive
 from textual.widgets import Static
@@ -53,9 +54,9 @@ class SystemSidebar(Container):
     }
     """
 
-    visible: reactive[bool] = reactive(False)
+    visible: reactive[bool] = reactive(False)  # type: ignore[override]
 
-    def compose(self):  # type: ignore[override]
+    def compose(self) -> ComposeResult:
         """Compose sidebar sections."""
         with VerticalScroll():
             yield _SidebarSection(self._render_header(), id="sidebar-header")
@@ -119,7 +120,6 @@ class SystemSidebar(Container):
         text.append(f"{Icons.DOMAIN_SERVICE} Services\n", style=f"bold {Colors.ACCENT_DIM}")
 
         try:
-
             # Check daemon status
             api_port = 8377
             import httpx

@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS hardware_profiles (
 # ---------------------------------------------------------------------------
 
 
-def _migrate_to_v1(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+def _migrate_to_v1(conn: psycopg.Connection) -> None:
     """Create the initial telemetry schema."""
     conn.execute(EVENTS_TABLE)
     for idx in EVENTS_INDEXES:
@@ -133,7 +133,7 @@ register_migration(PG_SCHEMA, 1, _migrate_to_v1)
 # ---------------------------------------------------------------------------
 
 
-def ensure_schema(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+def ensure_schema(conn: psycopg.Connection) -> None:
     """Ensure the telemetry schema is up to date.
 
     Args:
@@ -145,7 +145,7 @@ def ensure_schema(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
     run_migrations(conn, PG_SCHEMA)
 
 
-def get_table_stats(conn: psycopg.Connection) -> dict[str, int]:  # type: ignore[type-arg]
+def get_table_stats(conn: psycopg.Connection) -> dict[str, int]:
     """Get row counts for telemetry tables.
 
     Args:

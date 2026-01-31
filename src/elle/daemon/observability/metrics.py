@@ -257,22 +257,20 @@ async def _get_incident_statistics() -> dict[str, Any]:
 
             # Total incidents
             cursor.execute("SELECT COUNT(*) AS cnt FROM incidents")
-            stats["total_incidents"] = cursor.fetchone()["cnt"] or 0
+            total_row = cursor.fetchone()
+            stats["total_incidents"] = total_row["cnt"] if total_row else 0
 
             # Open incidents
             cursor.execute("SELECT COUNT(*) AS cnt FROM incidents WHERE status = 'open'")
-            stats["open_incidents"] = cursor.fetchone()["cnt"] or 0
+            open_row = cursor.fetchone()
+            stats["open_incidents"] = open_row["cnt"] if open_row else 0
 
             # By domain
-            cursor.execute(
-                "SELECT domain, COUNT(*) AS cnt FROM incidents GROUP BY domain"
-            )
+            cursor.execute("SELECT domain, COUNT(*) AS cnt FROM incidents GROUP BY domain")
             stats["incidents_by_domain"] = {row["domain"]: row["cnt"] for row in cursor.fetchall()}
 
             # By outcome
-            cursor.execute(
-                "SELECT outcome, COUNT(*) AS cnt FROM incidents GROUP BY outcome"
-            )
+            cursor.execute("SELECT outcome, COUNT(*) AS cnt FROM incidents GROUP BY outcome")
             stats["incidents_by_outcome"] = {row["outcome"]: row["cnt"] for row in cursor.fetchall()}
 
             # MTTR overall (for resolved incidents with time_to_resolve_sec)
@@ -337,16 +335,14 @@ async def _get_event_statistics() -> dict[str, Any]:
 
             # By severity (last 24h)
             cursor.execute(
-                "SELECT severity, COUNT(*) AS cnt FROM events "
-                "WHERE ts >= %s GROUP BY severity",
+                "SELECT severity, COUNT(*) AS cnt FROM events WHERE ts >= %s GROUP BY severity",
                 (day_ago,),
             )
             stats["events_by_severity"] = {row["severity"]: row["cnt"] for row in cursor.fetchall()}
 
             # By source (last 24h)
             cursor.execute(
-                "SELECT source, COUNT(*) AS cnt FROM events "
-                "WHERE ts >= %s GROUP BY source",
+                "SELECT source, COUNT(*) AS cnt FROM events WHERE ts >= %s GROUP BY source",
                 (day_ago,),
             )
             stats["events_by_source"] = {row["source"]: row["cnt"] for row in cursor.fetchall()}
@@ -372,8 +368,7 @@ async def _get_efficacy_statistics() -> dict[str, Any]:
 
             # Success rates from solution_approach_efficacy
             cursor.execute(
-                "SELECT approach_signature, success_rate FROM solution_approach_efficacy "
-                "WHERE total_uses > 0"
+                "SELECT approach_signature, success_rate FROM solution_approach_efficacy WHERE total_uses > 0"
             )
             stats["capability_success_rates"] = {
                 row["approach_signature"]: float(row["success_rate"]) for row in cursor.fetchall()
@@ -382,8 +377,7 @@ async def _get_efficacy_statistics() -> dict[str, Any]:
             # Recent executions (from incident_actions in last hour)
             hour_ago = (datetime.utcnow() - timedelta(hours=1)).isoformat()
             cursor.execute(
-                "SELECT COUNT(*) AS cnt FROM incident_actions "
-                "WHERE created_at >= %s AND kind = 'capability'",
+                "SELECT COUNT(*) AS cnt FROM incident_actions WHERE created_at >= %s AND kind = 'capability'",
                 (hour_ago,),
             )
             row = cursor.fetchone()
@@ -411,15 +405,13 @@ async def _get_forecast_statistics() -> dict[str, Any]:
 
             # Count forecast incidents by urgency (open only)
             cursor.execute(
-                "SELECT COUNT(*) AS cnt FROM incidents "
-                "WHERE forecast_urgency = 'prepare' AND status = 'open'"
+                "SELECT COUNT(*) AS cnt FROM incidents WHERE forecast_urgency = 'prepare' AND status = 'open'"
             )
             row = cursor.fetchone()
             stats["active_warnings"] = row["cnt"] if row else 0
 
             cursor.execute(
-                "SELECT COUNT(*) AS cnt FROM incidents "
-                "WHERE forecast_urgency = 'act_now' AND status = 'open'"
+                "SELECT COUNT(*) AS cnt FROM incidents WHERE forecast_urgency = 'act_now' AND status = 'open'"
             )
             row = cursor.fetchone()
             stats["active_criticals"] = row["cnt"] if row else 0

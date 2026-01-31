@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
-from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from elle.daemon.manvault.indexer import (
     _extract_name,
@@ -22,12 +18,12 @@ from elle.daemon.manvault.indexer import (
     render_manpage,
     seed_core_commands,
 )
-from elle.daemon.manvault.models import ManDiscoveryItem, ManDoc
-
+from elle.daemon.manvault.models import ManDiscoveryItem
 
 # ---------------------------------------------------------------------------
 # _extract_name
 # ---------------------------------------------------------------------------
+
 
 class TestExtractName:
     def test_simple(self):
@@ -55,6 +51,7 @@ class TestExtractName:
 # ---------------------------------------------------------------------------
 # normalize_text
 # ---------------------------------------------------------------------------
+
 
 class TestNormalizeText:
     def test_backspace_removal(self):
@@ -85,6 +82,7 @@ class TestNormalizeText:
 # compute_hash
 # ---------------------------------------------------------------------------
 
+
 class TestComputeHash:
     def test_deterministic(self):
         h1 = compute_hash("hello")
@@ -105,6 +103,7 @@ class TestComputeHash:
 # ---------------------------------------------------------------------------
 # _split_into_sections
 # ---------------------------------------------------------------------------
+
 
 class TestSplitIntoSections:
     def test_no_headings(self):
@@ -131,6 +130,7 @@ class TestSplitIntoSections:
 # _split_section
 # ---------------------------------------------------------------------------
 
+
 class TestSplitSection:
     def test_small_text(self):
         text = "Just a small paragraph."
@@ -151,6 +151,7 @@ class TestSplitSection:
 # ---------------------------------------------------------------------------
 # chunk_document
 # ---------------------------------------------------------------------------
+
 
 class TestChunkDocument:
     def test_empty_sections(self):
@@ -175,6 +176,7 @@ class TestChunkDocument:
 # ---------------------------------------------------------------------------
 # render_manpage
 # ---------------------------------------------------------------------------
+
 
 class TestRenderManpage:
     @patch("elle.daemon.manvault.indexer.subprocess.Popen")
@@ -211,6 +213,7 @@ class TestRenderManpage:
     @patch("elle.daemon.manvault.indexer.subprocess.Popen")
     def test_render_timeout(self, mock_popen):
         import subprocess as real_sub
+
         mock_man = MagicMock()
         mock_man.stdout = MagicMock()
         mock_man.kill = MagicMock()
@@ -249,6 +252,7 @@ class TestRenderManpage:
 # discover_man_pages
 # ---------------------------------------------------------------------------
 
+
 class TestDiscoverManPages:
     def test_discover_from_temp(self, tmp_path):
         man1_dir = tmp_path / "man1"
@@ -279,6 +283,7 @@ class TestDiscoverManPages:
 # index_page (with mocked render)
 # ---------------------------------------------------------------------------
 
+
 class TestIndexPage:
     @patch("elle.daemon.manvault.indexer.render_manpage")
     def test_index_page_success(self, mock_render, manvault_conn):
@@ -306,6 +311,7 @@ class TestIndexPage:
 # ---------------------------------------------------------------------------
 # index_all
 # ---------------------------------------------------------------------------
+
 
 class TestIndexAll:
     @patch("elle.daemon.manvault.indexer.discover_man_pages")
@@ -336,6 +342,7 @@ class TestIndexAll:
 # index_incremental
 # ---------------------------------------------------------------------------
 
+
 class TestIndexIncremental:
     @patch("elle.daemon.manvault.indexer.discover_man_pages")
     @patch("elle.daemon.manvault.indexer.render_manpage")
@@ -356,6 +363,7 @@ class TestIndexIncremental:
 # ---------------------------------------------------------------------------
 # seed_core_commands / get_seeded_count / is_core_seeded
 # ---------------------------------------------------------------------------
+
 
 class TestCoreSeed:
     @patch("elle.daemon.manvault.indexer.render_manpage")

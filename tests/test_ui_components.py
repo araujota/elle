@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Tests for elle.cli.ui.components -- Reusable UI component widgets."""
+
+from __future__ import annotations
 
 from datetime import datetime, timedelta
 
@@ -42,10 +42,10 @@ from elle.cli.ui.components import (
     tip,
 )
 
-
 # ---------------------------------------------------------------------------
 # Badges
 # ---------------------------------------------------------------------------
+
 
 class TestBadge:
     def test_basic_badge(self):
@@ -118,6 +118,7 @@ class TestPrivilegeBadge:
 # Key/Value Display
 # ---------------------------------------------------------------------------
 
+
 class TestKeyValue:
     def test_basic(self):
         result = key_value("Name", "Value")
@@ -139,6 +140,7 @@ class TestKeyValueTable:
 # ---------------------------------------------------------------------------
 # Lists
 # ---------------------------------------------------------------------------
+
 
 class TestBulletedList:
     def test_single_item(self):
@@ -186,33 +188,34 @@ class TestOptionList:
 # Time Formatting
 # ---------------------------------------------------------------------------
 
+
 class TestTimeAgo:
     def test_just_now(self):
         assert time_ago(datetime.now()) == "just now"
 
     def test_minutes(self):
         dt = datetime.now() - timedelta(minutes=5)
-        assert "5m ago" == time_ago(dt)
+        assert time_ago(dt) == "5m ago"
 
     def test_hours(self):
         dt = datetime.now() - timedelta(hours=3)
-        assert "3h ago" == time_ago(dt)
+        assert time_ago(dt) == "3h ago"
 
     def test_days(self):
         dt = datetime.now() - timedelta(days=2)
-        assert "2d ago" == time_ago(dt)
+        assert time_ago(dt) == "2d ago"
 
     def test_weeks(self):
         dt = datetime.now() - timedelta(weeks=2)
-        assert "2w ago" == time_ago(dt)
+        assert time_ago(dt) == "2w ago"
 
     def test_months(self):
         dt = datetime.now() - timedelta(days=60)
-        assert "2mo ago" == time_ago(dt)
+        assert time_ago(dt) == "2mo ago"
 
     def test_years(self):
         dt = datetime.now() - timedelta(days=400)
-        assert "1y ago" == time_ago(dt)
+        assert time_ago(dt) == "1y ago"
 
 
 class TestFormatDuration:
@@ -235,6 +238,7 @@ class TestFormatDuration:
 # ---------------------------------------------------------------------------
 # Confidence / Percentage Bars
 # ---------------------------------------------------------------------------
+
 
 class TestConfidenceBar:
     def test_high_confidence(self):
@@ -273,6 +277,7 @@ class TestPercentageBar:
 # Section Headers
 # ---------------------------------------------------------------------------
 
+
 class TestSectionHeader:
     def test_basic(self):
         result = section_header("Title")
@@ -298,6 +303,7 @@ class TestSectionRule:
 # ---------------------------------------------------------------------------
 # Code / Command Display
 # ---------------------------------------------------------------------------
+
 
 class TestCodeInline:
     def test_basic(self):
@@ -329,6 +335,7 @@ class TestPathDisplay:
 # ---------------------------------------------------------------------------
 # Compound Components
 # ---------------------------------------------------------------------------
+
 
 class TestConfirmationPrompt:
     def test_default_false(self):
@@ -372,6 +379,7 @@ class TestEmptyState:
 # Docker Environment Variable Components
 # ---------------------------------------------------------------------------
 
+
 class TestEnvVarLine:
     def test_basic(self):
         result = env_var_line("MY_VAR")
@@ -410,18 +418,22 @@ class TestEnvVarPanel:
 
 class TestEnvVarSummaryTable:
     def test_basic(self):
-        result = env_var_summary_table([
-            ("DB_HOST", "localhost", False, False),
-            ("DB_PASS", "secret", True, True),
-        ])
+        result = env_var_summary_table(
+            [
+                ("DB_HOST", "localhost", False, False),
+                ("DB_PASS", "secret", True, True),
+            ]
+        )
         assert isinstance(result, Table)
 
 
 class TestEnvVarSummaryPanel:
     def test_basic(self):
-        result = env_var_summary_panel([
-            ("KEY", "value", False, False),
-        ])
+        result = env_var_summary_panel(
+            [
+                ("KEY", "value", False, False),
+            ]
+        )
         assert isinstance(result, Panel)
 
 

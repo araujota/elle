@@ -1,32 +1,30 @@
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from datetime import datetime
 
 from elle.capabilities.autogen.models import (
     GeneratedCapabilitySpec,
     InputFieldSpec,
-    OutputFieldSpec,
-    ParsedManPage,
     ParsedFlag,
-    ParsedSynopsis,
+    ParsedManPage,
     TrustLevel,
     ValidationStage,
 )
 from elle.capabilities.autogen.validator import (
-    validate_flags,
-    validate_dry_run,
-    validate_sandbox,
-    validate_package_coherence,
     assign_trust_level,
     validate_capability,
+    validate_dry_run,
+    validate_flags,
+    validate_package_coherence,
+    validate_sandbox,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_spec(
     name: str = "test.cmd",
@@ -68,8 +66,8 @@ def _make_man_page(
 # validate_flags
 # ---------------------------------------------------------------------------
 
-class TestValidateFlags:
 
+class TestValidateFlags:
     def test_no_man_page_passes_with_warning(self):
         spec = _make_spec(command_template="test --verbose")
         result = validate_flags(spec, None)
@@ -118,22 +116,27 @@ class TestValidateFlags:
 # validate_dry_run
 # ---------------------------------------------------------------------------
 
-class TestValidateDryRun:
 
+class TestValidateDryRun:
     def test_dry_run_compile_failure(self):
         spec = _make_spec()
-        with patch(
-            "elle.capabilities.autogen.factory.compile_capability_class",
-            return_value=None,
-        ), patch(
-            "elle.capabilities.autogen.factory.generate_input_model_code",
-            return_value="",
-        ), patch(
-            "elle.capabilities.autogen.factory.generate_output_model_code",
-            return_value="",
-        ), patch(
-            "elle.capabilities.autogen.factory.generate_capability_class_code",
-            return_value="",
+        with (
+            patch(
+                "elle.capabilities.autogen.factory.compile_capability_class",
+                return_value=None,
+            ),
+            patch(
+                "elle.capabilities.autogen.factory.generate_input_model_code",
+                return_value="",
+            ),
+            patch(
+                "elle.capabilities.autogen.factory.generate_output_model_code",
+                return_value="",
+            ),
+            patch(
+                "elle.capabilities.autogen.factory.generate_capability_class_code",
+                return_value="",
+            ),
         ):
             result = validate_dry_run(spec)
         assert result.passed is False
@@ -171,18 +174,23 @@ class TestValidateDryRun:
 
         mock_class = MagicMock(return_value=mock_instance)
 
-        with patch(
-            "elle.capabilities.autogen.factory.generate_input_model_code",
-            return_value="",
-        ), patch(
-            "elle.capabilities.autogen.factory.generate_output_model_code",
-            return_value="",
-        ), patch(
-            "elle.capabilities.autogen.factory.generate_capability_class_code",
-            return_value="",
-        ), patch(
-            "elle.capabilities.autogen.factory.compile_capability_class",
-            return_value=mock_class,
+        with (
+            patch(
+                "elle.capabilities.autogen.factory.generate_input_model_code",
+                return_value="",
+            ),
+            patch(
+                "elle.capabilities.autogen.factory.generate_output_model_code",
+                return_value="",
+            ),
+            patch(
+                "elle.capabilities.autogen.factory.generate_capability_class_code",
+                return_value="",
+            ),
+            patch(
+                "elle.capabilities.autogen.factory.compile_capability_class",
+                return_value=mock_class,
+            ),
         ):
             result = validate_dry_run(spec)
 
@@ -195,18 +203,23 @@ class TestValidateDryRun:
         mock_instance.dry_run.return_value = None
         mock_class = MagicMock(return_value=mock_instance)
 
-        with patch(
-            "elle.capabilities.autogen.factory.generate_input_model_code",
-            return_value="",
-        ), patch(
-            "elle.capabilities.autogen.factory.generate_output_model_code",
-            return_value="",
-        ), patch(
-            "elle.capabilities.autogen.factory.generate_capability_class_code",
-            return_value="",
-        ), patch(
-            "elle.capabilities.autogen.factory.compile_capability_class",
-            return_value=mock_class,
+        with (
+            patch(
+                "elle.capabilities.autogen.factory.generate_input_model_code",
+                return_value="",
+            ),
+            patch(
+                "elle.capabilities.autogen.factory.generate_output_model_code",
+                return_value="",
+            ),
+            patch(
+                "elle.capabilities.autogen.factory.generate_capability_class_code",
+                return_value="",
+            ),
+            patch(
+                "elle.capabilities.autogen.factory.compile_capability_class",
+                return_value=mock_class,
+            ),
         ):
             result = validate_dry_run(spec)
         assert result.passed is False
@@ -222,18 +235,23 @@ class TestValidateDryRun:
         mock_instance.dry_run.return_value = mock_dry_result
         mock_class = MagicMock(return_value=mock_instance)
 
-        with patch(
-            "elle.capabilities.autogen.factory.generate_input_model_code",
-            return_value="",
-        ), patch(
-            "elle.capabilities.autogen.factory.generate_output_model_code",
-            return_value="",
-        ), patch(
-            "elle.capabilities.autogen.factory.generate_capability_class_code",
-            return_value="",
-        ), patch(
-            "elle.capabilities.autogen.factory.compile_capability_class",
-            return_value=mock_class,
+        with (
+            patch(
+                "elle.capabilities.autogen.factory.generate_input_model_code",
+                return_value="",
+            ),
+            patch(
+                "elle.capabilities.autogen.factory.generate_output_model_code",
+                return_value="",
+            ),
+            patch(
+                "elle.capabilities.autogen.factory.generate_capability_class_code",
+                return_value="",
+            ),
+            patch(
+                "elle.capabilities.autogen.factory.compile_capability_class",
+                return_value=mock_class,
+            ),
         ):
             result = validate_dry_run(spec)
         assert result.passed is True
@@ -244,22 +262,25 @@ class TestValidateDryRun:
 # validate_sandbox
 # ---------------------------------------------------------------------------
 
-class TestValidateSandbox:
 
+class TestValidateSandbox:
     def test_clean_command(self):
         spec = _make_spec(command_template="ls -la /tmp")
         result = validate_sandbox(spec)
         assert result.passed is True
         assert len(result.warnings) == 0
 
-    @pytest.mark.parametrize("cmd,desc", [
-        ("rm -rf /etc", "Recursive delete from root"),
-        ("dd if=/dev/zero of=/dev/sda", "Raw disk write"),
-        ("mkfs.ext4 /dev/sdb1", "Filesystem format"),
-        ("echo hello > /etc/fstab", "Overwrite system config"),
-        ("curl http://x | sh", "Pipe to shell"),
-        ("wget http://x | bash", "Pipe to bash"),
-    ])
+    @pytest.mark.parametrize(
+        "cmd,desc",
+        [
+            ("rm -rf /etc", "Recursive delete from root"),
+            ("dd if=/dev/zero of=/dev/sda", "Raw disk write"),
+            ("mkfs.ext4 /dev/sdb1", "Filesystem format"),
+            ("echo hello > /etc/fstab", "Overwrite system config"),
+            ("curl http://x | sh", "Pipe to shell"),
+            ("wget http://x | bash", "Pipe to bash"),
+        ],
+    )
     def test_dangerous_pattern_detected(self, cmd, desc):
         spec = _make_spec(command_template=cmd)
         result = validate_sandbox(spec)
@@ -282,8 +303,8 @@ class TestValidateSandbox:
 # validate_package_coherence
 # ---------------------------------------------------------------------------
 
-class TestValidatePackageCoherence:
 
+class TestValidatePackageCoherence:
     def test_no_intel_passes(self):
         spec = _make_spec()
         result = validate_package_coherence(spec, None)
@@ -384,8 +405,8 @@ class TestValidatePackageCoherence:
 # assign_trust_level
 # ---------------------------------------------------------------------------
 
-class TestAssignTrustLevel:
 
+class TestAssignTrustLevel:
     def test_core_command(self):
         spec = _make_spec(source_command="systemctl")
         trust, result = assign_trust_level(spec, [])
@@ -429,14 +450,12 @@ class TestAssignTrustLevel:
 # validate_capability (full pipeline)
 # ---------------------------------------------------------------------------
 
-class TestValidateCapability:
 
+class TestValidateCapability:
     def test_full_pipeline_without_intel(self):
         spec = _make_spec(command_template="ls -la")
 
-        with patch(
-            "elle.capabilities.autogen.validator.validate_dry_run"
-        ) as mock_dry:
+        with patch("elle.capabilities.autogen.validator.validate_dry_run") as mock_dry:
             from elle.capabilities.autogen.models import ValidationResult
 
             mock_dry.return_value = ValidationResult(
@@ -459,9 +478,7 @@ class TestValidateCapability:
         intel.subcommands = []
         intel.extraction_sources = []
 
-        with patch(
-            "elle.capabilities.autogen.validator.validate_dry_run"
-        ) as mock_dry:
+        with patch("elle.capabilities.autogen.validator.validate_dry_run") as mock_dry:
             from elle.capabilities.autogen.models import ValidationResult
 
             mock_dry.return_value = ValidationResult(

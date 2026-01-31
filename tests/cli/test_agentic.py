@@ -148,4 +148,3 @@ class TestModels:
 
         with pytest.raises(Exception):
             call.capability = "other"  # type: ignore
-

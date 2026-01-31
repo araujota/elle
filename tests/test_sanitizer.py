@@ -1,7 +1,5 @@
 """Tests for prompt injection sanitization."""
 
-import pytest
-
 from elle.rag.sanitizer import sanitize_command, sanitize_for_prompt
 
 

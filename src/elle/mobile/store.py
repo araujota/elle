@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from typing import Any
 
 import psycopg
 
@@ -36,7 +37,7 @@ PG_SCHEMA = "mobile"
 # =============================================================================
 
 
-def _migrate_v1(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+def _migrate_v1(conn: psycopg.Connection) -> None:
     """Create initial mobile gateway tables."""
     conn.execute("""
         CREATE TABLE IF NOT EXISTS devices (
@@ -272,7 +273,7 @@ class MobileStore:
             row = cursor.fetchone()
             return int(row["cnt"]) if row else 0
 
-    def _row_to_device(self, row: dict) -> PairedDevice:
+    def _row_to_device(self, row: dict[str, Any]) -> PairedDevice:
         """Convert a database row to a PairedDevice."""
         paired_at = row["paired_at"]
         if isinstance(paired_at, str):
@@ -389,7 +390,7 @@ class MobileStore:
             cursor = conn.execute("DELETE FROM elevations WHERE expires_at <= %s", (now,))
             return cursor.rowcount
 
-    def _row_to_elevation(self, row: dict) -> Elevation:
+    def _row_to_elevation(self, row: dict[str, Any]) -> Elevation:
         """Convert a database row to an Elevation."""
         expires_at = row["expires_at"]
         if isinstance(expires_at, str):
@@ -477,7 +478,7 @@ class MobileStore:
             cursor = conn.execute("DELETE FROM pairing_tokens WHERE expires_at <= %s", (now,))
             return cursor.rowcount
 
-    def _row_to_token(self, row: dict) -> PairingToken:
+    def _row_to_token(self, row: dict[str, Any]) -> PairingToken:
         """Convert a database row to a PairingToken."""
         expires_at = row["expires_at"]
         if isinstance(expires_at, str):

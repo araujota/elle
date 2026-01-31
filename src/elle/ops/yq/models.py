@@ -28,9 +28,7 @@ class YQOperation(BaseModel):
     kind: Literal["query", "transform", "validate"] = Field(
         description="Type of operation: query (read), transform (modify), validate (check)"
     )
-    filter: str = Field(
-        description="yq/jq filter expression, e.g., '.key', '.services[].image'"
-    )
+    filter: str = Field(description="yq/jq filter expression, e.g., '.key', '.services[].image'")
     in_place: bool = Field(
         default=False,
         description="If True, modify file in place (-i flag)",

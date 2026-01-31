@@ -25,7 +25,6 @@ from elle.ops.editing.models import (
     ValidationResult,
 )
 
-
 # =============================================================================
 # TierInfo
 # =============================================================================
@@ -435,9 +434,7 @@ class TestTierEditResult:
         assert result.validation.passed is False
 
     def test_with_escalation_trail(self) -> None:
-        trail = (
-            TierEscalation(tier=0, tier_name="Native Override", reason="not applicable"),
-        )
+        trail = (TierEscalation(tier=0, tier_name="Native Override", reason="not applicable"),)
         result = TierEditResult(
             success=True,
             file_path="/etc/config",
@@ -615,8 +612,12 @@ class TestEditingStackStatus:
     def test_create(self) -> None:
         tier0 = TierInfo(number=0, name="Native Override", tools=("systemd",), use_case="units")
         tier1 = TierInfo(
-            number=1, name="Augeas", tools=("augeas",), use_case="lenses",
-            available=False, missing_dependencies=("augeas-tools",),
+            number=1,
+            name="Augeas",
+            tools=("augeas",),
+            use_case="lenses",
+            available=False,
+            missing_dependencies=("augeas-tools",),
         )
         status = EditingStackStatus(
             tiers=(tier0, tier1),

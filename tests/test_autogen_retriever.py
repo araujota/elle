@@ -13,7 +13,6 @@ from elle.capabilities.autogen.retriever import (
     search_capabilities,
 )
 
-
 # =========================================================================
 # Fixtures
 # =========================================================================
@@ -39,25 +38,27 @@ def _make_rows() -> list[dict]:
             "risk": "low",
             "keywords": [domain, name.split(".")[1]],
         }
-        rows.append({
-            "id": f"id-{i}",
-            "capability_name": name,
-            "spec_json": spec,  # JSONB returns dict
-            "input_model_code": "",
-            "output_model_code": "",
-            "capability_class_code": "",
-            "source_command": name.split(".")[0],
-            "man_page_hash": "hash",
-            "generated_at": "2024-01-01T00:00:00+00:00",
-            "trust_level": trust,
-            "approved": approved,
-            "enabled": True,
-            "validation_json": None,
-            "source_package": None,
-            "package_version": None,
-            "binary_path": None,
-            "search_tsv": None,
-        })
+        rows.append(
+            {
+                "id": f"id-{i}",
+                "capability_name": name,
+                "spec_json": spec,  # JSONB returns dict
+                "input_model_code": "",
+                "output_model_code": "",
+                "capability_class_code": "",
+                "source_command": name.split(".")[0],
+                "man_page_hash": "hash",
+                "generated_at": "2024-01-01T00:00:00+00:00",
+                "trust_level": trust,
+                "approved": approved,
+                "enabled": True,
+                "validation_json": None,
+                "source_package": None,
+                "package_version": None,
+                "binary_path": None,
+                "search_tsv": None,
+            }
+        )
     return rows
 
 
@@ -215,8 +216,10 @@ class TestRetrieverInit:
     def test_embedder_lazy_load(self) -> None:
         r = CapabilityRetriever()
         r._embedder = None
-        with patch("elle.capabilities.autogen.retriever.CapabilityRetriever.embedder",
-                    new_callable=lambda: property(lambda self: None)):
+        with patch(
+            "elle.capabilities.autogen.retriever.CapabilityRetriever.embedder",
+            new_callable=lambda: property(lambda self: None),
+        ):
             assert r.embedder is None
 
 
@@ -356,7 +359,8 @@ class TestHelperMethods:
     def test_get_embedding_no_embedder(self, retriever: CapabilityRetriever) -> None:
         retriever._embedder = None
         with patch.object(
-            type(retriever), "embedder",
+            type(retriever),
+            "embedder",
             new_callable=lambda: property(lambda self: None),
         ):
             assert retriever._get_embedding("test") is None
@@ -397,10 +401,13 @@ class TestSuccessRate:
             class _Conn:
                 def execute(self, sql, params=None):  # noqa: ANN001, ANN201, ARG002
                     return _FakeCursor(single={"successes": 8, "total": 10})
+
                 def commit(self):  # noqa: ANN201
                     pass
+
                 def rollback(self):  # noqa: ANN201
                     pass
+
             yield _Conn()
 
         with patch("elle.capabilities.autogen.retriever.get_conn", _fake_conn):
@@ -446,7 +453,8 @@ class TestUpdateEmbedding:
             mock_store.return_value.get.return_value = mock_stored
             retriever._embedder = None
             with patch.object(
-                type(retriever), "embedder",
+                type(retriever),
+                "embedder",
                 new_callable=lambda: property(lambda self: None),
             ):
                 result = retriever.update_embedding("service.restart")
@@ -454,12 +462,14 @@ class TestUpdateEmbedding:
 
     def test_update_success(self, retriever: CapabilityRetriever, fake_rows: list[dict]) -> None:
         mock_stored = MagicMock()
-        mock_stored.spec_json = json.dumps({
-            "description": "Restart a service",
-            "summary": "Restart",
-            "keywords": ["restart"],
-            "domain": "service",
-        })
+        mock_stored.spec_json = json.dumps(
+            {
+                "description": "Restart a service",
+                "summary": "Restart",
+                "keywords": ["restart"],
+                "domain": "service",
+            }
+        )
 
         mock_embedder = MagicMock()
         mock_embedder.embed.return_value = [0.1] * 768

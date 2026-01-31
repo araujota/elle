@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -17,11 +17,9 @@ from elle.reactive.engine import (
     reset_engine,
 )
 from elle.reactive.models import (
-    ActionResult,
     ActionSpec,
     Condition,
     EventTrigger,
-    ExecutionRecord,
     ForecastTrigger,
     PolicySpec,
     RateLimitState,
@@ -31,10 +29,10 @@ from elle.reactive.models import (
     Trigger,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _mock_event(**overrides: Any) -> MagicMock:
     """Create a mock TelemetryEvent."""
@@ -117,6 +115,7 @@ def _make_func(
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def _reset():
     reset_engine()
@@ -127,6 +126,7 @@ def _reset():
 # ---------------------------------------------------------------------------
 # _parse_interval
 # ---------------------------------------------------------------------------
+
 
 class TestParseInterval:
     def test_seconds(self):
@@ -152,6 +152,7 @@ class TestParseInterval:
 # _regex_match
 # ---------------------------------------------------------------------------
 
+
 class TestRegexMatch:
     def test_match(self):
         assert _regex_match("err", "error occurred") is True
@@ -169,6 +170,7 @@ class TestRegexMatch:
 # ---------------------------------------------------------------------------
 # _metric_matches_pattern
 # ---------------------------------------------------------------------------
+
 
 class TestMetricMatchesPattern:
     def test_wildcard(self):
@@ -190,6 +192,7 @@ class TestMetricMatchesPattern:
 # ---------------------------------------------------------------------------
 # _event_to_dict / _forecast_to_dict
 # ---------------------------------------------------------------------------
+
 
 class TestEventToDict:
     def test_none(self):
@@ -218,6 +221,7 @@ class TestForecastToDict:
 # Event matching
 # ---------------------------------------------------------------------------
 
+
 class TestEventMatchesTrigger:
     def test_non_event_trigger(self):
         engine = ReactiveEngine()
@@ -233,9 +237,10 @@ class TestEventMatchesTrigger:
     def test_source_and_category_match(self):
         engine = ReactiveEngine()
         func = _make_func()
-        assert engine._event_matches_trigger(
-            _mock_event(source="journal", category="disk", severity="warning"), func
-        ) is True
+        assert (
+            engine._event_matches_trigger(_mock_event(source="journal", category="disk", severity="warning"), func)
+            is True
+        )
 
     def test_wrong_source(self):
         engine = ReactiveEngine()
@@ -292,6 +297,7 @@ class TestEventMatchesTrigger:
 # Forecast matching
 # ---------------------------------------------------------------------------
 
+
 class TestForecastMatchesTrigger:
     def test_non_forecast_trigger(self):
         engine = ReactiveEngine()
@@ -307,7 +313,8 @@ class TestForecastMatchesTrigger:
     def test_urgency_mismatch(self):
         engine = ReactiveEngine()
         func = _make_func(
-            trigger_type="forecast", trigger_event=None,
+            trigger_type="forecast",
+            trigger_event=None,
             trigger_forecast=ForecastTrigger(urgency="act_now"),
         )
         assert engine._forecast_matches_trigger(_mock_forecast(urgency="prepare"), func) is False
@@ -315,7 +322,8 @@ class TestForecastMatchesTrigger:
     def test_confidence_too_low(self):
         engine = ReactiveEngine()
         func = _make_func(
-            trigger_type="forecast", trigger_event=None,
+            trigger_type="forecast",
+            trigger_event=None,
             trigger_forecast=ForecastTrigger(urgency="prepare", min_confidence=0.9),
         )
         assert engine._forecast_matches_trigger(_mock_forecast(confidence=0.5), func) is False
@@ -323,7 +331,8 @@ class TestForecastMatchesTrigger:
     def test_metric_pattern_match(self):
         engine = ReactiveEngine()
         func = _make_func(
-            trigger_type="forecast", trigger_event=None,
+            trigger_type="forecast",
+            trigger_event=None,
             trigger_forecast=ForecastTrigger(urgency="prepare", metric="disk.*"),
         )
         assert engine._forecast_matches_trigger(_mock_forecast(), func) is True
@@ -331,7 +340,8 @@ class TestForecastMatchesTrigger:
     def test_metric_pattern_no_match(self):
         engine = ReactiveEngine()
         func = _make_func(
-            trigger_type="forecast", trigger_event=None,
+            trigger_type="forecast",
+            trigger_event=None,
             trigger_forecast=ForecastTrigger(urgency="prepare", metric="cpu.*"),
         )
         assert engine._forecast_matches_trigger(_mock_forecast(metric="disk./.used_pct"), func) is False
@@ -340,6 +350,7 @@ class TestForecastMatchesTrigger:
 # ---------------------------------------------------------------------------
 # Rate limits
 # ---------------------------------------------------------------------------
+
 
 class TestCheckRateLimit:
     @patch("elle.reactive.engine.get_rate_limit_state")
@@ -362,8 +373,10 @@ class TestCheckRateLimit:
         engine = ReactiveEngine()
         func = _make_func(policy=PolicySpec(max_frequency="1h"))
         mock_state.return_value = RateLimitState(
-            function_id=func.id, last_execution=datetime.utcnow() - timedelta(minutes=10),
-            daily_executions=0, daily_reset_date="2000-01-01",
+            function_id=func.id,
+            last_execution=datetime.utcnow() - timedelta(minutes=10),
+            daily_executions=0,
+            daily_reset_date="2000-01-01",
         )
         assert engine._check_rate_limit(func) is False
 
@@ -372,8 +385,10 @@ class TestCheckRateLimit:
         engine = ReactiveEngine()
         func = _make_func(policy=PolicySpec(max_frequency="5m"))
         mock_state.return_value = RateLimitState(
-            function_id=func.id, last_execution=datetime.utcnow() - timedelta(hours=1),
-            daily_executions=0, daily_reset_date="2000-01-01",
+            function_id=func.id,
+            last_execution=datetime.utcnow() - timedelta(hours=1),
+            daily_executions=0,
+            daily_reset_date="2000-01-01",
         )
         assert engine._check_rate_limit(func) is True
 
@@ -381,6 +396,7 @@ class TestCheckRateLimit:
 # ---------------------------------------------------------------------------
 # Allowed hours
 # ---------------------------------------------------------------------------
+
 
 class TestCheckAllowedHours:
     def test_no_restriction(self):
@@ -416,6 +432,7 @@ class TestCheckAllowedHours:
 # process_event
 # ---------------------------------------------------------------------------
 
+
 class TestProcessEvent:
     @patch("elle.reactive.engine.list_enabled_with_event_trigger", return_value=[])
     async def test_no_matches(self, _):
@@ -438,6 +455,7 @@ class TestProcessEvent:
 # process_forecast
 # ---------------------------------------------------------------------------
 
+
 class TestProcessForecast:
     async def test_none_urgency_skipped(self):
         engine = ReactiveEngine(executor=MagicMock())
@@ -453,7 +471,8 @@ class TestProcessForecast:
     async def test_exception_records_failure(self, mock_list, mock_rec):
         engine = ReactiveEngine(executor=MagicMock())
         func = _make_func(
-            trigger_type="forecast", trigger_event=None,
+            trigger_type="forecast",
+            trigger_event=None,
             trigger_forecast=ForecastTrigger(urgency="prepare"),
         )
         mock_list.return_value = [func]
@@ -466,6 +485,7 @@ class TestProcessForecast:
 # ---------------------------------------------------------------------------
 # dry_run
 # ---------------------------------------------------------------------------
+
 
 class TestDryRun:
     async def test_no_condition(self):
@@ -486,6 +506,7 @@ class TestDryRun:
 # Singleton
 # ---------------------------------------------------------------------------
 
+
 class TestSingleton:
     def test_same_instance(self):
         assert get_engine() is get_engine()
@@ -499,6 +520,7 @@ class TestSingleton:
 # ---------------------------------------------------------------------------
 # Executor property
 # ---------------------------------------------------------------------------
+
 
 class TestExecutorProperty:
     def test_lazy_init(self):

@@ -25,7 +25,6 @@ from elle.ops.xmlstarlet.models import (
     XMLXPathError,
 )
 
-
 # =============================================================================
 # XMLOperation
 # =============================================================================
@@ -471,9 +470,7 @@ class TestXMLEditResult:
     """Tests for XMLEditResult model."""
 
     def test_success(self) -> None:
-        changes = (
-            XMLChange(xpath="//port", old_value="80", new_value="8080", operation="update"),
-        )
+        changes = (XMLChange(xpath="//port", old_value="80", new_value="8080", operation="update"),)
         result = XMLEditResult(
             success=True,
             file_path="/etc/config.xml",
@@ -641,9 +638,7 @@ class TestXMLStarletStatus:
         assert status.path is None
 
     def test_serialization_roundtrip(self) -> None:
-        status = XMLStarletStatus(
-            available=True, version="1.6.1", path="/usr/bin/xmlstarlet"
-        )
+        status = XMLStarletStatus(available=True, version="1.6.1", path="/usr/bin/xmlstarlet")
         data = status.model_dump()
         restored = XMLStarletStatus.model_validate(data)
         assert restored == status

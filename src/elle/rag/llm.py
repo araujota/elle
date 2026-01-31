@@ -37,7 +37,10 @@ import json
 import logging
 import time
 from collections.abc import Callable
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from elle.rag.providers.base import LLMProvider
 
 import httpx
 from pydantic import BaseModel, ConfigDict
@@ -422,7 +425,7 @@ class LLMJSONError(LLMError):
 # =============================================================================
 
 
-def _create_provider(config: LLMConfig) -> Any:
+def _create_provider(config: LLMConfig) -> LLMProvider:
     """Create the appropriate LLM provider based on config.
 
     Returns:
@@ -1125,10 +1128,12 @@ class LLMSession:
 
         # Add system message if provided
         if system_prompt:
-            self._messages.append({
-                "role": "system",
-                "content": system_prompt,
-            })
+            self._messages.append(
+                {
+                    "role": "system",
+                    "content": system_prompt,
+                }
+            )
 
     async def __aenter__(self) -> LLMSession:
         return self
@@ -1156,10 +1161,12 @@ class LLMSession:
         Args:
             content: Message content.
         """
-        self._messages.append({
-            "role": "user",
-            "content": content,
-        })
+        self._messages.append(
+            {
+                "role": "user",
+                "content": content,
+            }
+        )
 
     def add_assistant_message(
         self,
@@ -1201,11 +1208,13 @@ class LLMSession:
             tool_call_id: ID of the tool call this is a result for.
             result: Result from the tool execution.
         """
-        self._messages.append({
-            "role": "tool",
-            "content": result,
-            "tool_call_id": tool_call_id,
-        })
+        self._messages.append(
+            {
+                "role": "tool",
+                "content": result,
+                "tool_call_id": tool_call_id,
+            }
+        )
 
     async def chat(
         self,
@@ -1260,13 +1269,9 @@ class LLMSession:
 
         except httpx.ConnectError as e:
             self.llm._available = False
-            raise LLMUnavailableError(
-                "Cannot connect to LLM provider. Is it running?"
-            ) from e
+            raise LLMUnavailableError("Cannot connect to LLM provider. Is it running?") from e
         except httpx.TimeoutException as e:
-            raise LLMTimeoutError(
-                f"Session chat timed out after {effective_timeout}s"
-            ) from e
+            raise LLMTimeoutError(f"Session chat timed out after {effective_timeout}s") from e
         except httpx.HTTPStatusError as e:
             raise LLMError(
                 f"LLM chat API error: {e.response.text}",
@@ -1298,11 +1303,13 @@ class LLMSession:
         # Parse tool calls from provider response
         tool_calls: list[ToolCall] = []
         for tc in result.tool_calls:
-            tool_calls.append(ToolCall(
-                id=tc.get("id", ""),
-                name=tc.get("name", ""),
-                arguments=tc.get("arguments", {}),
-            ))
+            tool_calls.append(
+                ToolCall(
+                    id=tc.get("id", ""),
+                    name=tc.get("name", ""),
+                    arguments=tc.get("arguments", {}),
+                )
+            )
 
         content = result.content
 
@@ -1350,9 +1357,7 @@ class LLMSession:
             # Check for stalled stream
             current_time = time.time()
             if current_time - last_chunk_time > chunk_timeout:
-                logger.warning(
-                    f"Stream stalled for {chunk_timeout}s, possible truncation"
-                )
+                logger.warning(f"Stream stalled for {chunk_timeout}s, possible truncation")
                 break
             last_chunk_time = current_time
 
@@ -1365,11 +1370,13 @@ class LLMSession:
                 tc_name = tc.get("name", "")
                 tc_args = tc.get("arguments", {})
                 if tc_name:
-                    tool_calls.append(ToolCall(
-                        id=tc.get("id", ""),
-                        name=tc_name,
-                        arguments=tc_args if isinstance(tc_args, dict) else {},
-                    ))
+                    tool_calls.append(
+                        ToolCall(
+                            id=tc.get("id", ""),
+                            name=tc_name,
+                            arguments=tc_args if isinstance(tc_args, dict) else {},
+                        )
+                    )
 
             if chunk.done:
                 stream_done = True
@@ -1380,15 +1387,11 @@ class LLMSession:
         duration_ms = (time.time() - start_time) * 1000
 
         if not stream_done:
-            logger.warning(
-                "Stream ended without completion signal - response may be truncated"
-            )
+            logger.warning("Stream ended without completion signal - response may be truncated")
 
         min_response_length = 10
         if len(collected_content.strip()) < min_response_length and not tool_calls:
-            logger.warning(
-                f"Response too short ({len(collected_content)} chars) - possible truncation"
-            )
+            logger.warning(f"Response too short ({len(collected_content)} chars) - possible truncation")
 
         # Add assistant message to history
         self.add_assistant_message(collected_content, tool_calls if tool_calls else None)

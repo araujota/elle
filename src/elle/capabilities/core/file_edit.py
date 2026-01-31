@@ -264,8 +264,7 @@ class FileEditCapability(BaseCapability[FileEditInput, FileEditOutput]):
                 return DryRunResult(
                     is_valid=False,
                     validation_errors=(
-                        "Tier 5 (Text Patching) requires justification. "
-                        "Set tier5_justification in the input.",
+                        "Tier 5 (Text Patching) requires justification. Set tier5_justification in the input.",
                     ),
                     would_execute=(),
                     would_modify=(input.file_path,),
@@ -281,8 +280,7 @@ class FileEditCapability(BaseCapability[FileEditInput, FileEditOutput]):
                 is_valid=preview.is_valid,
                 validation_errors=(),
                 would_execute=(
-                    f"Tier {selection.tier} ({selection.tier_name}): "
-                    f"{selection.tool_used or 'default tool'}",
+                    f"Tier {selection.tier} ({selection.tier_name}): {selection.tool_used or 'default tool'}",
                 ),
                 would_modify=(input.file_path,),
                 diff=preview.diff,

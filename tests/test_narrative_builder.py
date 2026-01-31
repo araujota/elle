@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -27,7 +26,6 @@ from elle.daemon.incidents.narrative_builder import (
     get_narrative,
     get_narratives_for_incident,
 )
-
 
 # =============================================================================
 # Fixtures
@@ -264,16 +262,12 @@ class TestBuildTimeline:
         # Correlated uses the bidirectional arrow
         assert "\u2194" in timeline[0]  # ↔ character
 
-    def test_timeline_multiple_links(
-        self, builder: NarrativeBuilder, multi_link_chain: CausalChain
-    ) -> None:
+    def test_timeline_multiple_links(self, builder: NarrativeBuilder, multi_link_chain: CausalChain) -> None:
         """Test timeline with multiple links."""
         timeline = builder._build_timeline(multi_link_chain)
         assert len(timeline) == 3
 
-    def test_timeline_empty_chain(
-        self, builder: NarrativeBuilder, empty_chain: CausalChain
-    ) -> None:
+    def test_timeline_empty_chain(self, builder: NarrativeBuilder, empty_chain: CausalChain) -> None:
         """Test timeline from an empty chain."""
         timeline = builder._build_timeline(empty_chain)
         assert timeline == []
@@ -306,9 +300,7 @@ class TestRuleBasedSummary:
         assert len(summary) > 0
         assert "PostgreSQL WAL write failed" in summary
 
-    def test_summary_multi_link(
-        self, builder: NarrativeBuilder, multi_link_chain: CausalChain
-    ) -> None:
+    def test_summary_multi_link(self, builder: NarrativeBuilder, multi_link_chain: CausalChain) -> None:
         """Test summary for a multi-link chain mentions the chain length."""
         timeline = builder._build_timeline(multi_link_chain)
         summary = builder._generate_summary_rule_based(multi_link_chain, timeline)
@@ -316,9 +308,7 @@ class TestRuleBasedSummary:
         assert "3 related events" in summary
         assert "HTTP 502 errors" in summary
 
-    def test_summary_empty_chain(
-        self, builder: NarrativeBuilder, empty_chain: CausalChain
-    ) -> None:
+    def test_summary_empty_chain(self, builder: NarrativeBuilder, empty_chain: CausalChain) -> None:
         """Test summary for an empty chain."""
         timeline = builder._build_timeline(empty_chain)
         summary = builder._generate_summary_rule_based(empty_chain, timeline)
@@ -353,9 +343,7 @@ class TestRuleBasedExplanation:
         assert "directly triggered" in explanation
         assert "85%" in explanation  # Overall confidence
 
-    def test_explanation_multi_link(
-        self, builder: NarrativeBuilder, multi_link_chain: CausalChain
-    ) -> None:
+    def test_explanation_multi_link(self, builder: NarrativeBuilder, multi_link_chain: CausalChain) -> None:
         """Test explanation for a multi-link chain."""
         timeline = builder._build_timeline(multi_link_chain)
         explanation = builder._generate_explanation_rule_based(multi_link_chain, timeline)
@@ -365,9 +353,7 @@ class TestRuleBasedExplanation:
         assert "3." in explanation
         assert "73%" in explanation  # Overall confidence
 
-    def test_explanation_empty_chain(
-        self, builder: NarrativeBuilder, empty_chain: CausalChain
-    ) -> None:
+    def test_explanation_empty_chain(self, builder: NarrativeBuilder, empty_chain: CausalChain) -> None:
         """Test explanation for an empty chain."""
         timeline = builder._build_timeline(empty_chain)
         explanation = builder._generate_explanation_rule_based(empty_chain, timeline)
@@ -440,9 +426,7 @@ class TestExtractKeywords:
 
     def test_extract_keywords_from_text(self, builder: NarrativeBuilder) -> None:
         """Test extracting keywords from raw text."""
-        keywords = builder._extract_keywords_from_text(
-            "The mysql service failed due to disk exhausted and memory OOM"
-        )
+        keywords = builder._extract_keywords_from_text("The mysql service failed due to disk exhausted and memory OOM")
         assert "mysql" in keywords
         assert "failed" in keywords
         assert "disk" in keywords
@@ -589,8 +573,7 @@ class TestLLMGeneration:
     def test_parse_llm_response_no_structure(self, builder: NarrativeBuilder) -> None:
         """Test parsing an unstructured LLM response."""
         response = (
-            "The system experienced disk issues.\n\n"
-            "This led to PostgreSQL failures and eventually HTTP 502 errors."
+            "The system experienced disk issues.\n\nThis led to PostgreSQL failures and eventually HTTP 502 errors."
         )
         summary, explanation = builder._parse_llm_response(response)
 
@@ -612,9 +595,7 @@ class TestLLMGeneration:
         assert explanation == ""
 
     @patch("elle.daemon.incidents.narrative_builder.NarrativeBuilder._generate_with_llm")
-    def test_generate_with_llm_called(
-        self, mock_llm: MagicMock, builder_with_llm: NarrativeBuilder
-    ) -> None:
+    def test_generate_with_llm_called(self, mock_llm: MagicMock, builder_with_llm: NarrativeBuilder) -> None:
         """Test that LLM generation is called when use_llm=True."""
         mock_llm.return_value = ("LLM summary", "LLM explanation", "test-model")
 
@@ -635,9 +616,7 @@ class TestLLMGeneration:
         mock_rag_llm.get_llm = MagicMock(side_effect=ImportError("no LLM"))
 
         with patch.dict("sys.modules", {"elle.rag.llm": mock_rag_llm}):
-            summary, explanation, model = builder_with_llm._generate_with_llm(
-                _make_chain(), ["timeline entry"]
-            )
+            summary, explanation, model = builder_with_llm._generate_with_llm(_make_chain(), ["timeline entry"])
         assert model == "fallback"
         assert len(summary) > 0
 
@@ -650,9 +629,7 @@ class TestLLMGeneration:
         mock_rag_llm.get_llm = MagicMock(return_value=mock_llm_obj)
 
         with patch.dict("sys.modules", {"elle.rag.llm": mock_rag_llm}):
-            summary, explanation, model = builder_with_llm._generate_with_llm(
-                _make_chain(), ["timeline entry"]
-            )
+            summary, explanation, model = builder_with_llm._generate_with_llm(_make_chain(), ["timeline entry"])
 
         assert model == "unavailable"
         assert len(summary) > 0
@@ -678,9 +655,7 @@ class TestBuildNarrative:
         assert isinstance(narrative.generated_at, datetime)
         assert narrative.chain.chain_id == chain.chain_id
 
-    def test_build_narrative_multi_link(
-        self, builder: NarrativeBuilder, multi_link_chain: CausalChain
-    ) -> None:
+    def test_build_narrative_multi_link(self, builder: NarrativeBuilder, multi_link_chain: CausalChain) -> None:
         """Test building narrative from a multi-link chain."""
         narrative = builder.build_narrative(multi_link_chain)
 
@@ -688,9 +663,7 @@ class TestBuildNarrative:
         assert "HTTP 502 errors" in narrative.summary
         assert len(narrative.keywords) > 0
 
-    def test_build_narrative_empty_chain(
-        self, builder: NarrativeBuilder, empty_chain: CausalChain
-    ) -> None:
+    def test_build_narrative_empty_chain(self, builder: NarrativeBuilder, empty_chain: CausalChain) -> None:
         """Test building narrative from an empty chain."""
         narrative = builder.build_narrative(empty_chain)
 
@@ -698,9 +671,7 @@ class TestBuildNarrative:
         assert "Insufficient data" in narrative.explanation
         assert narrative.timeline == ()
 
-    def test_build_narrative_stores_to_db(
-        self, builder: NarrativeBuilder, in_memory_db
-    ) -> None:
+    def test_build_narrative_stores_to_db(self, builder: NarrativeBuilder, in_memory_db) -> None:
         """Test that narrative is stored when connection is provided."""
         chain = _make_chain(chain_id="chain-store-test")
         narrative = builder.build_narrative(
@@ -761,9 +732,7 @@ class TestNarrativeStorage:
         _ensure_narrative_schema(in_memory_db)
         # Should not raise
 
-    def test_store_and_retrieve_narrative(
-        self, builder: NarrativeBuilder, in_memory_db
-    ) -> None:
+    def test_store_and_retrieve_narrative(self, builder: NarrativeBuilder, in_memory_db) -> None:
         """Test round-trip storage and retrieval of a narrative."""
         chain = _make_chain(chain_id="chain-roundtrip-001")
         original = builder.build_narrative(
@@ -773,11 +742,14 @@ class TestNarrativeStorage:
         )
 
         # Retrieve
-        with patch(
-            "elle.daemon.incidents.narrative_builder.get_connection",
-            return_value=in_memory_db,
-        ), patch(
-            "elle.daemon.incidents.narrative_builder.ensure_schema",
+        with (
+            patch(
+                "elle.daemon.incidents.narrative_builder.get_connection",
+                return_value=in_memory_db,
+            ),
+            patch(
+                "elle.daemon.incidents.narrative_builder.ensure_schema",
+            ),
         ):
             retrieved = get_narrative("chain-roundtrip-001", conn=in_memory_db)
 
@@ -788,18 +760,19 @@ class TestNarrativeStorage:
 
     def test_get_narrative_not_found(self, in_memory_db) -> None:
         """Test retrieving a narrative that does not exist."""
-        with patch(
-            "elle.daemon.incidents.narrative_builder.get_connection",
-            return_value=in_memory_db,
-        ), patch(
-            "elle.daemon.incidents.narrative_builder.ensure_schema",
+        with (
+            patch(
+                "elle.daemon.incidents.narrative_builder.get_connection",
+                return_value=in_memory_db,
+            ),
+            patch(
+                "elle.daemon.incidents.narrative_builder.ensure_schema",
+            ),
         ):
             result = get_narrative("nonexistent-chain", conn=in_memory_db)
         assert result is None
 
-    def test_store_narrative_replaces_on_duplicate(
-        self, builder: NarrativeBuilder, in_memory_db
-    ) -> None:
+    def test_store_narrative_replaces_on_duplicate(self, builder: NarrativeBuilder, in_memory_db) -> None:
         """Test that storing with same chain_id replaces the previous entry."""
         chain = _make_chain(chain_id="chain-dup-001")
         builder.build_narrative(chain, conn=in_memory_db)
@@ -818,9 +791,7 @@ class TestNarrativeStorage:
         count = cursor.fetchone()[0]
         assert count == 1
 
-    def test_get_narratives_for_incident(
-        self, builder: NarrativeBuilder, in_memory_db
-    ) -> None:
+    def test_get_narratives_for_incident(self, builder: NarrativeBuilder, in_memory_db) -> None:
         """Test retrieving all narratives for an incident."""
         chain1 = _make_chain(chain_id="chain-inc-001")
         chain2 = _make_chain(chain_id="chain-inc-002")
@@ -828,11 +799,14 @@ class TestNarrativeStorage:
         builder.build_narrative(chain1, incident_id="INC-MULTI", conn=in_memory_db)
         builder.build_narrative(chain2, incident_id="INC-MULTI", conn=in_memory_db)
 
-        with patch(
-            "elle.daemon.incidents.narrative_builder.get_connection",
-            return_value=in_memory_db,
-        ), patch(
-            "elle.daemon.incidents.narrative_builder.ensure_schema",
+        with (
+            patch(
+                "elle.daemon.incidents.narrative_builder.get_connection",
+                return_value=in_memory_db,
+            ),
+            patch(
+                "elle.daemon.incidents.narrative_builder.ensure_schema",
+            ),
         ):
             narratives = get_narratives_for_incident("INC-MULTI", conn=in_memory_db)
 
@@ -840,11 +814,14 @@ class TestNarrativeStorage:
 
     def test_get_narratives_for_incident_none(self, in_memory_db) -> None:
         """Test retrieving narratives for an incident with none."""
-        with patch(
-            "elle.daemon.incidents.narrative_builder.get_connection",
-            return_value=in_memory_db,
-        ), patch(
-            "elle.daemon.incidents.narrative_builder.ensure_schema",
+        with (
+            patch(
+                "elle.daemon.incidents.narrative_builder.get_connection",
+                return_value=in_memory_db,
+            ),
+            patch(
+                "elle.daemon.incidents.narrative_builder.ensure_schema",
+            ),
         ):
             narratives = get_narratives_for_incident("INC-EMPTY", conn=in_memory_db)
         assert narratives == []

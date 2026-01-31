@@ -135,9 +135,7 @@ class XMLStarletEngine:
         """
         self._xmlstarlet_path = _find_xmlstarlet()
         if self._xmlstarlet_path is None:
-            raise XMLStarletUnavailableError(
-                "xmlstarlet is not installed. Install with: sudo apt install xmlstarlet"
-            )
+            raise XMLStarletUnavailableError("xmlstarlet is not installed. Install with: sudo apt install xmlstarlet")
         logger.debug(f"Initialized XMLStarletEngine with xmlstarlet at {self._xmlstarlet_path}")
 
     def __enter__(self) -> XMLStarletEngine:

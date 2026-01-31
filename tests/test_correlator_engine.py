@@ -21,7 +21,6 @@ from elle.daemon.telemetry.correlator_engine import (
     ZombieAccumulation,
 )
 
-
 # ===========================================================================
 # CorrelationAlert model
 # ===========================================================================

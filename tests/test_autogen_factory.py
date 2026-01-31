@@ -1,28 +1,26 @@
 from __future__ import annotations
 
 import pytest
-from unittest.mock import patch, MagicMock
 
+from elle.capabilities.autogen.factory import (
+    compile_capability_class,
+    create_capability_from_spec,
+    generate_capability_class_code,
+    generate_input_model_code,
+    generate_output_model_code,
+    normalize_type,
+    sanitize_identifier,
+)
 from elle.capabilities.autogen.models import (
     GeneratedCapabilitySpec,
     InputFieldSpec,
     OutputFieldSpec,
 )
-from elle.capabilities.autogen.factory import (
-    normalize_type,
-    sanitize_identifier,
-    generate_input_model_code,
-    generate_output_model_code,
-    generate_capability_class_code,
-    compile_capability_class,
-    create_capability_from_spec,
-    TYPE_MAP,
-)
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_spec(
     name: str = "pkg.action",
@@ -53,25 +51,28 @@ def _make_spec(
 # normalize_type
 # ---------------------------------------------------------------------------
 
-class TestNormalizeType:
 
-    @pytest.mark.parametrize("raw,expected", [
-        ("str", "str"),
-        ("string", "str"),
-        ("int", "int"),
-        ("integer", "int"),
-        ("float", "float"),
-        ("bool", "bool"),
-        ("boolean", "bool"),
-        ("path", "Path"),
-        ("Path", "Path"),
-        ("list", "list"),
-        ("list[str]", "list[str]"),
-        ("list[int]", "list[int]"),
-        ("Optional[str]", "str | None"),
-        ("Optional[int]", "int | None"),
-        ("unknown_type", "unknown_type"),
-    ])
+class TestNormalizeType:
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("str", "str"),
+            ("string", "str"),
+            ("int", "int"),
+            ("integer", "int"),
+            ("float", "float"),
+            ("bool", "bool"),
+            ("boolean", "bool"),
+            ("path", "Path"),
+            ("Path", "Path"),
+            ("list", "list"),
+            ("list[str]", "list[str]"),
+            ("list[int]", "list[int]"),
+            ("Optional[str]", "str | None"),
+            ("Optional[int]", "int | None"),
+            ("unknown_type", "unknown_type"),
+        ],
+    )
     def test_type_mapping(self, raw, expected):
         assert normalize_type(raw) == expected
 
@@ -80,8 +81,8 @@ class TestNormalizeType:
 # sanitize_identifier
 # ---------------------------------------------------------------------------
 
-class TestSanitizeIdentifier:
 
+class TestSanitizeIdentifier:
     def test_valid_identifier(self):
         assert sanitize_identifier("my_var") == "my_var"
 
@@ -93,10 +94,32 @@ class TestSanitizeIdentifier:
         assert result.startswith("_")
 
     def test_python_keywords(self):
-        for kw in ["class", "def", "return", "import", "from", "if", "else",
-                    "for", "while", "try", "except", "with", "as", "pass",
-                    "break", "continue", "and", "or", "not", "in", "is",
-                    "None", "True", "False"]:
+        for kw in [
+            "class",
+            "def",
+            "return",
+            "import",
+            "from",
+            "if",
+            "else",
+            "for",
+            "while",
+            "try",
+            "except",
+            "with",
+            "as",
+            "pass",
+            "break",
+            "continue",
+            "and",
+            "or",
+            "not",
+            "in",
+            "is",
+            "None",
+            "True",
+            "False",
+        ]:
             result = sanitize_identifier(kw)
             assert result == kw + "_"
 
@@ -108,8 +131,8 @@ class TestSanitizeIdentifier:
 # generate_input_model_code
 # ---------------------------------------------------------------------------
 
-class TestGenerateInputModelCode:
 
+class TestGenerateInputModelCode:
     def test_no_fields(self):
         spec = _make_spec()
         code = generate_input_model_code(spec)
@@ -202,8 +225,8 @@ class TestGenerateInputModelCode:
 # generate_output_model_code
 # ---------------------------------------------------------------------------
 
-class TestGenerateOutputModelCode:
 
+class TestGenerateOutputModelCode:
     def test_default_fields(self):
         spec = _make_spec()
         code = generate_output_model_code(spec)
@@ -226,8 +249,8 @@ class TestGenerateOutputModelCode:
 # generate_capability_class_code
 # ---------------------------------------------------------------------------
 
-class TestGenerateCapabilityClassCode:
 
+class TestGenerateCapabilityClassCode:
     def test_basic_class_generation(self):
         spec = _make_spec()
         code = generate_capability_class_code(spec)
@@ -258,8 +281,8 @@ class TestGenerateCapabilityClassCode:
 # compile_capability_class
 # ---------------------------------------------------------------------------
 
-class TestCompileCapabilityClass:
 
+class TestCompileCapabilityClass:
     def test_compile_success(self):
         spec = _make_spec(name="echo.default", command_template="echo hello")
         input_code = generate_input_model_code(spec)
@@ -279,8 +302,8 @@ class TestCompileCapabilityClass:
 # create_capability_from_spec
 # ---------------------------------------------------------------------------
 
-class TestCreateCapabilityFromSpec:
 
+class TestCreateCapabilityFromSpec:
     def test_returns_three_code_strings(self):
         spec = _make_spec()
         input_code, output_code, cap_code = create_capability_from_spec(spec)

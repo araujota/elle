@@ -225,9 +225,7 @@ class IncidentDiffer:
         outcome_improved = outcome_rank.get(incident2.outcome, 0) > outcome_rank.get(incident1.outcome, 0)
 
         # Fingerprint similarity
-        fingerprint_similarity = IncidentDiffer._compare_fingerprints(
-            incident1.fingerprint, incident2.fingerprint
-        )
+        fingerprint_similarity = IncidentDiffer._compare_fingerprints(incident1.fingerprint, incident2.fingerprint)
 
         # Entities
         entities1 = set(incident1.fingerprint.entities)
@@ -282,16 +280,8 @@ class IncidentDiffer:
         approach1 = dr1.chosen_approach if dr1 else inc1.decision.get("approach", "")
         approach2 = dr2.chosen_approach if dr2 else inc2.decision.get("approach", "")
 
-        confidence1 = (
-            dr1.confidence.total_confidence()
-            if dr1 and hasattr(dr1.confidence, "total_confidence")
-            else 0.0
-        )
-        confidence2 = (
-            dr2.confidence.total_confidence()
-            if dr2 and hasattr(dr2.confidence, "total_confidence")
-            else 0.0
-        )
+        confidence1 = dr1.confidence.total_confidence() if dr1 and hasattr(dr1.confidence, "total_confidence") else 0.0
+        confidence2 = dr2.confidence.total_confidence() if dr2 and hasattr(dr2.confidence, "total_confidence") else 0.0
 
         # Compare provenance sources
         sources1: set[str] = set()

@@ -1,9 +1,8 @@
-from __future__ import annotations
-
 """Tests for the ELLE package learning commands."""
 
+from __future__ import annotations
+
 import asyncio
-import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -14,7 +13,6 @@ from elle.cli.package_learn_commands import (
     _get_help,
     handle_learn_command,
 )
-
 
 # =============================================================================
 # Helpers

@@ -241,8 +241,7 @@ class SetupScreen(ModalScreen[bool]):
             lines.append(f"  Host:  [{Colors.ACCENT}]{host}[/{Colors.ACCENT}]")
             lines.append(f"  Model: [{Colors.ACCENT}]{model}[/{Colors.ACCENT}]")
             lines.append(
-                f"\n  [{Colors.MUTED}]Set the API key via the ELLE_LLM_API_KEY "
-                f"environment variable.[/{Colors.MUTED}]"
+                f"\n  [{Colors.MUTED}]Set the API key via the ELLE_LLM_API_KEY environment variable.[/{Colors.MUTED}]"
             )
             lines.append(
                 f"  [{Colors.MUTED}]Local Ollama will be used as fallback "
@@ -250,8 +249,7 @@ class SetupScreen(ModalScreen[bool]):
             )
         else:
             lines.append(
-                f"\n  [{Colors.MUTED}]Ensure Ollama is installed and running "
-                f"with a supported model.[/{Colors.MUTED}]"
+                f"\n  [{Colors.MUTED}]Ensure Ollama is installed and running with a supported model.[/{Colors.MUTED}]"
             )
 
         return "\n".join(lines)
@@ -273,7 +271,9 @@ class SetupScreen(ModalScreen[bool]):
             lines.append(f"  {marker} [{Colors.ACCENT}]{info['name']}[/{Colors.ACCENT}]")
             lines.append(f"    [{Colors.MUTED}]{info['description']}[/{Colors.MUTED}]\n")
 
-        lines.append(f"\n  Preview config changes: [{Colors.ACCENT}]{'yes' if self.prefs.require_preview_for_configs else 'no'}[/{Colors.ACCENT}]")
+        lines.append(
+            f"\n  Preview config changes: [{Colors.ACCENT}]{'yes' if self.prefs.require_preview_for_configs else 'no'}[/{Colors.ACCENT}]"
+        )
         return "\n".join(lines)
 
     def _step_telemetry(self) -> str:

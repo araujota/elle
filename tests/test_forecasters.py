@@ -13,10 +13,10 @@ from elle.daemon.telemetry.forecasters import (
     SeasonalDecomposer,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _linear_data(n: int, slope: float = 1.0, intercept: float = 50.0) -> list[float]:
     """Generate n points along a straight line."""
@@ -31,10 +31,7 @@ def _seasonal_data(
     offset: float = 50.0,
 ) -> list[float]:
     """Generate n points with a linear trend plus sinusoidal seasonality."""
-    return [
-        offset + trend * i + amplitude * math.sin(2 * math.pi * i / period)
-        for i in range(n)
-    ]
+    return [offset + trend * i + amplitude * math.sin(2 * math.pi * i / period) for i in range(n)]
 
 
 def _constant_data(n: int, value: float = 42.0) -> list[float]:
@@ -52,40 +49,30 @@ class TestLinearForecaster:
 
     def test_steady_state(self):
         """When avg_1h == avg_6h the rate is zero; prediction equals current."""
-        predicted, rate = LinearForecaster.forecast(
-            current=60.0, avg_1h=60.0, avg_6h=60.0, hours_ahead=24.0
-        )
+        predicted, rate = LinearForecaster.forecast(current=60.0, avg_1h=60.0, avg_6h=60.0, hours_ahead=24.0)
         assert rate == pytest.approx(0.0)
         assert predicted == pytest.approx(60.0)
 
     def test_rising_trend(self):
         """Positive rate when avg_1h > avg_6h."""
-        predicted, rate = LinearForecaster.forecast(
-            current=50.0, avg_1h=55.0, avg_6h=50.0, hours_ahead=24.0
-        )
+        predicted, rate = LinearForecaster.forecast(current=50.0, avg_1h=55.0, avg_6h=50.0, hours_ahead=24.0)
         assert rate == pytest.approx(1.0)  # (55-50)/5
         assert predicted == pytest.approx(50.0 + 1.0 * 24.0)
 
     def test_falling_trend(self):
         """Negative rate when avg_1h < avg_6h."""
-        predicted, rate = LinearForecaster.forecast(
-            current=50.0, avg_1h=45.0, avg_6h=50.0, hours_ahead=24.0
-        )
+        predicted, rate = LinearForecaster.forecast(current=50.0, avg_1h=45.0, avg_6h=50.0, hours_ahead=24.0)
         assert rate == pytest.approx(-1.0)
         assert predicted == pytest.approx(50.0 - 24.0)
 
     def test_zero_hours_ahead(self):
         """Prediction with zero lookahead equals current regardless of rate."""
-        predicted, rate = LinearForecaster.forecast(
-            current=80.0, avg_1h=90.0, avg_6h=80.0, hours_ahead=0.0
-        )
+        predicted, rate = LinearForecaster.forecast(current=80.0, avg_1h=90.0, avg_6h=80.0, hours_ahead=0.0)
         assert predicted == pytest.approx(80.0)
 
     def test_custom_hours_ahead(self):
         """Verify formula with non-default hours_ahead."""
-        predicted, rate = LinearForecaster.forecast(
-            current=100.0, avg_1h=110.0, avg_6h=100.0, hours_ahead=10.0
-        )
+        predicted, rate = LinearForecaster.forecast(current=100.0, avg_1h=110.0, avg_6h=100.0, hours_ahead=10.0)
         assert rate == pytest.approx(2.0)
         assert predicted == pytest.approx(100.0 + 2.0 * 10.0)
 

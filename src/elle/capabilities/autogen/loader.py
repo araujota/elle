@@ -119,6 +119,7 @@ def _compile_core_capability(stored: StoredCapability) -> type | None:
     except Exception as e:
         logger.error(f"Failed to compile core capability {stored.capability_name}: {e}")
         import traceback
+
         logger.debug(traceback.format_exc())
         return None
 

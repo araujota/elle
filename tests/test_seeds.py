@@ -15,7 +15,6 @@ from elle.daemon.incidents.seeds import (
     seed_incident_patterns,
 )
 
-
 # =============================================================================
 # IncidentPatternSeed Model
 # =============================================================================
@@ -135,9 +134,7 @@ class TestSeedPatterns:
     def test_domains_are_known(self) -> None:
         known_domains = {"db", "service", "net", "docker", "pkg", "auth", "disk", "shell"}
         for pattern in SEED_PATTERNS:
-            assert pattern.domain in known_domains, (
-                f"{pattern.fingerprint} has unknown domain: {pattern.domain}"
-            )
+            assert pattern.domain in known_domains, f"{pattern.fingerprint} has unknown domain: {pattern.domain}"
 
     def test_severities_are_known(self) -> None:
         known_severities = {"info", "warning", "error", "critical"}
@@ -440,9 +437,7 @@ class TestSeedIncidentPatterns:
         assert count == 0
 
     @pytest.mark.asyncio()
-    async def test_create_seed_incident_called_with_correct_args(
-        self, mock_store: MagicMock
-    ) -> None:
+    async def test_create_seed_incident_called_with_correct_args(self, mock_store: MagicMock) -> None:
         await seed_incident_patterns(mock_store)
         # Check the first call has correct keyword arguments
         first_call = mock_store.create_seed_incident.call_args_list[0]

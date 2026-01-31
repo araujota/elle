@@ -1,10 +1,8 @@
-from __future__ import annotations
-
 """Tests for elle.cli.planner.renderer -- Plan rendering/display."""
 
-from datetime import datetime
+from __future__ import annotations
 
-import pytest
+from datetime import datetime
 
 from elle.cli.planner.models import (
     CheckResult,
@@ -36,10 +34,10 @@ from elle.cli.planner.renderer import (
 )
 from elle.cli.terminal.renderer import Colors
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_step(command="echo hello", risk="low", privileged=False, can_fail=False):
     return PlanStep(
@@ -89,9 +87,15 @@ def _make_check_result(passed=True, command="echo check"):
     )
 
 
-def _make_plan_result(plan=None, outcome=PlanOutcome.CANCELLED, step_results=(),
-                      check_results=(), rollback_results=(), incident_id=None,
-                      verification=None):
+def _make_plan_result(
+    plan=None,
+    outcome=PlanOutcome.CANCELLED,
+    step_results=(),
+    check_results=(),
+    rollback_results=(),
+    incident_id=None,
+    verification=None,
+):
     context = PlanContext(request=TaskRequest(request="test"))
     return PlanResult(
         context=context,
@@ -108,6 +112,7 @@ def _make_plan_result(plan=None, outcome=PlanOutcome.CANCELLED, step_results=(),
 # ---------------------------------------------------------------------------
 # risk_color / risk_badge
 # ---------------------------------------------------------------------------
+
 
 class TestRiskColor:
     def test_low(self):
@@ -143,6 +148,7 @@ class TestRiskBadge:
 # _strip_ansi
 # ---------------------------------------------------------------------------
 
+
 class TestStripAnsi:
     def test_no_ansi(self):
         assert _strip_ansi("hello world") == "hello world"
@@ -157,6 +163,7 @@ class TestStripAnsi:
 # ---------------------------------------------------------------------------
 # render_box
 # ---------------------------------------------------------------------------
+
 
 class TestRenderBox:
     def test_basic_box(self):
@@ -185,6 +192,7 @@ class TestRenderBox:
 # ---------------------------------------------------------------------------
 # render_plan
 # ---------------------------------------------------------------------------
+
 
 class TestRenderPlan:
     def test_basic_plan(self):
@@ -248,6 +256,7 @@ class TestRenderPlan:
 # render_confirmation_prompt
 # ---------------------------------------------------------------------------
 
+
 class TestRenderConfirmationPrompt:
     def test_auto_approve(self):
         plan = _make_plan()
@@ -275,6 +284,7 @@ class TestRenderConfirmationPrompt:
 # render_step_progress
 # ---------------------------------------------------------------------------
 
+
 class TestRenderStepProgress:
     def test_basic(self):
         result = render_step_progress(0, 3, "echo hello")
@@ -285,6 +295,7 @@ class TestRenderStepProgress:
 # ---------------------------------------------------------------------------
 # render_step_result
 # ---------------------------------------------------------------------------
+
 
 class TestRenderStepResult:
     def test_success(self):
@@ -308,6 +319,7 @@ class TestRenderStepResult:
 # render_check_result
 # ---------------------------------------------------------------------------
 
+
 class TestRenderCheckResult:
     def test_pass(self):
         cr = _make_check_result(passed=True)
@@ -323,6 +335,7 @@ class TestRenderCheckResult:
 # ---------------------------------------------------------------------------
 # render_execution_summary
 # ---------------------------------------------------------------------------
+
 
 class TestRenderExecutionSummary:
     def test_success(self):
@@ -392,6 +405,7 @@ class TestRenderExecutionSummary:
 # ---------------------------------------------------------------------------
 # render_plan_result
 # ---------------------------------------------------------------------------
+
 
 class TestRenderPlanResult:
     def test_no_plan(self):

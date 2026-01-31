@@ -322,7 +322,7 @@ INDEXES = [
 # ---------------------------------------------------------------------------
 
 
-def _migrate_to_v6(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+def _migrate_to_v6(conn: psycopg.Connection) -> None:
     """Create the full incidents schema at v6."""
     # Tables
     conn.execute(INCIDENTS_TABLE)
@@ -358,7 +358,7 @@ register_migration(PG_SCHEMA, 6, _migrate_to_v6)
 # ---------------------------------------------------------------------------
 
 
-def ensure_schema(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+def ensure_schema(conn: psycopg.Connection) -> None:
     """Ensure the incidents schema is up to date.
 
     Args:
@@ -369,7 +369,7 @@ def ensure_schema(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
     run_migrations(conn, PG_SCHEMA)
 
 
-def drop_all_tables(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+def drop_all_tables(conn: psycopg.Connection) -> None:
     """Drop all Incident Vault tables.
 
     WARNING: This destroys all data. Use only for testing.

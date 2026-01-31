@@ -6,13 +6,13 @@ get_firewall_state, get_listeners, refresh_state, trigger_manvault_reindex,
 get_manvault_status, search_manvault, search_incidents, fallback methods,
 _read_session_token, get_daemon_client, and response models.
 """
+
 from __future__ import annotations
 
-import asyncio
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -29,7 +29,6 @@ from elle.cli.daemon_client import (
     _read_session_token,
     get_daemon_client,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -349,9 +348,7 @@ class TestGetNetworkState:
         client = DaemonClient()
         mock_http = AsyncMock()
         json_data = {
-            "interfaces": [
-                {"name": "eth0", "state": "UP", "addresses": ["10.0.0.1"], "mac": "aa:bb", "mtu": 1500}
-            ],
+            "interfaces": [{"name": "eth0", "state": "UP", "addresses": ["10.0.0.1"], "mac": "aa:bb", "mtu": 1500}],
             "default_gateway": "10.0.0.1",
             "default_interface": "eth0",
             "dns_servers": ["8.8.8.8"],
@@ -453,11 +450,7 @@ class TestGetListeners:
     async def test_success(self) -> None:
         client = DaemonClient()
         mock_http = AsyncMock()
-        json_data = {
-            "listeners": [
-                {"port": 80, "proto": "tcp", "address": "0.0.0.0", "pid": 123, "process": "nginx"}
-            ]
-        }
+        json_data = {"listeners": [{"port": 80, "proto": "tcp", "address": "0.0.0.0", "pid": 123, "process": "nginx"}]}
         mock_http.get = AsyncMock(return_value=_mock_response(200, json_data))
         client._client = mock_http
         listeners = await client.get_listeners()
@@ -527,9 +520,7 @@ class TestTriggerReindex:
     async def test_success(self) -> None:
         client = DaemonClient()
         mock_http = AsyncMock()
-        mock_http.post = AsyncMock(
-            return_value=_mock_response(200, {"message": "Reindex started"})
-        )
+        mock_http.post = AsyncMock(return_value=_mock_response(200, {"message": "Reindex started"}))
         client._client = mock_http
         ok, msg = await client.trigger_manvault_reindex()
         assert ok is True
@@ -566,9 +557,7 @@ class TestGetManvaultStatus:
     async def test_success(self) -> None:
         client = DaemonClient()
         mock_http = AsyncMock()
-        mock_http.get = AsyncMock(
-            return_value=_mock_response(200, {"total_docs": 100})
-        )
+        mock_http.get = AsyncMock(return_value=_mock_response(200, {"total_docs": 100}))
         client._client = mock_http
         status = await client.get_manvault_status()
         assert status["total_docs"] == 100
@@ -602,9 +591,7 @@ class TestSearchManvault:
     async def test_success(self) -> None:
         client = DaemonClient()
         mock_http = AsyncMock()
-        mock_http.get = AsyncMock(
-            return_value=_mock_response(200, {"results": [{"title": "test"}]})
-        )
+        mock_http.get = AsyncMock(return_value=_mock_response(200, {"results": [{"title": "test"}]}))
         client._client = mock_http
         results = await client.search_manvault("test query")
         assert len(results) == 1
@@ -638,9 +625,7 @@ class TestSearchIncidents:
     async def test_success(self) -> None:
         client = DaemonClient()
         mock_http = AsyncMock()
-        mock_http.get = AsyncMock(
-            return_value=_mock_response(200, {"results": [{"id": "inc1"}]})
-        )
+        mock_http.get = AsyncMock(return_value=_mock_response(200, {"results": [{"id": "inc1"}]}))
         client._client = mock_http
         results = await client.search_incidents("error", domain="network")
         assert len(results) == 1
@@ -649,9 +634,7 @@ class TestSearchIncidents:
     async def test_no_domain(self) -> None:
         client = DaemonClient()
         mock_http = AsyncMock()
-        mock_http.get = AsyncMock(
-            return_value=_mock_response(200, {"results": []})
-        )
+        mock_http.get = AsyncMock(return_value=_mock_response(200, {"results": []}))
         client._client = mock_http
         results = await client.search_incidents("query")
         assert results == []
@@ -715,14 +698,16 @@ class TestDockerFallback:
 
         client = DaemonClient()
 
-        container_json = json.dumps({
-            "ID": "abc123456789",
-            "Names": "web",
-            "Image": "nginx",
-            "Status": "Up",
-            "State": "running",
-            "Ports": "80/tcp",
-        })
+        container_json = json.dumps(
+            {
+                "ID": "abc123456789",
+                "Names": "web",
+                "Image": "nginx",
+                "Status": "Up",
+                "State": "running",
+                "Ports": "80/tcp",
+            }
+        )
 
         call_count = 0
 

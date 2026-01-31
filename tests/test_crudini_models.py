@@ -25,7 +25,6 @@ from elle.ops.crudini.models import (
     INISection,
 )
 
-
 # =============================================================================
 # CrudiniOperation
 # =============================================================================
@@ -363,9 +362,7 @@ class TestCrudiniEditResult:
     """Tests for CrudiniEditResult model."""
 
     def test_success_result(self) -> None:
-        changes = (
-            CrudiniChange(section="db", parameter="host", old_value="old", new_value="new"),
-        )
+        changes = (CrudiniChange(section="db", parameter="host", old_value="old", new_value="new"),)
         result = CrudiniEditResult(
             success=True,
             file_path="/etc/myapp.conf",
@@ -591,9 +588,7 @@ class TestCrudiniErrors:
         assert "host" in str(err)
 
     def test_parameter_error_with_details(self) -> None:
-        err = CrudiniParameterError(
-            section="db", parameter="host", details="type mismatch"
-        )
+        err = CrudiniParameterError(section="db", parameter="host", details="type mismatch")
         assert err.details == "type mismatch"
         assert "type mismatch" in str(err)
 
@@ -604,9 +599,7 @@ class TestCrudiniErrors:
         assert "/etc/broken.conf" in str(err)
 
     def test_parse_error_with_details(self) -> None:
-        err = CrudiniParseError(
-            file_path="/etc/bad.conf", details="unexpected token at line 5"
-        )
+        err = CrudiniParseError(file_path="/etc/bad.conf", details="unexpected token at line 5")
         assert err.details == "unexpected token at line 5"
         assert "unexpected token" in str(err)
 

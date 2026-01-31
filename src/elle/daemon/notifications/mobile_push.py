@@ -488,7 +488,6 @@ class MobilePushNotifier:
         )
         return await self.push(event)
 
-
     async def push_forecast_warning(
         self,
         incident_id: str,

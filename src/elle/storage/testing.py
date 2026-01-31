@@ -74,10 +74,7 @@ def create_test_db(config: PostgresConfig | None = None) -> str:
 
     # Build conninfo for the new database
     if cfg.host:
-        test_conninfo = (
-            f"host={cfg.host} port={cfg.port} "
-            f"dbname={db_name} user={cfg.user}"
-        )
+        test_conninfo = f"host={cfg.host} port={cfg.port} dbname={db_name} user={cfg.user}"
     else:
         test_conninfo = f"dbname={db_name}"
 

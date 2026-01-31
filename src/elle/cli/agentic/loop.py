@@ -106,8 +106,7 @@ class AgenticLoopResult(BaseModel):
 
     # Tool usage
     tool_calls: tuple[ToolCallRecord, ...] = Field(
-        default_factory=tuple,
-        description="All tool calls made during the loop"
+        default_factory=tuple, description="All tool calls made during the loop"
     )
 
     # Token usage
@@ -338,6 +337,7 @@ class AgenticLoop:
         """Lazy-load LLM instance."""
         if self._llm is None:
             from elle.rag.llm import get_llm
+
             self._llm = get_llm()
         return self._llm
 
@@ -346,6 +346,7 @@ class AgenticLoop:
         """Lazy-load retrieval pipeline."""
         if self._retrieval_pipeline is None:
             from elle.cli.agentic.retrieval_pipeline import get_retrieval_pipeline
+
             self._retrieval_pipeline = get_retrieval_pipeline()
         return self._retrieval_pipeline
 
@@ -354,6 +355,7 @@ class AgenticLoop:
         """Lazy-load audit recorder."""
         if self._audit_recorder is None:
             from elle.cli.agentic.audit import get_audit_recorder
+
             self._audit_recorder = get_audit_recorder()
         return self._audit_recorder
 
@@ -556,12 +558,14 @@ class AgenticLoop:
         # Note: This is a soft check - we skip in test environments
         # to allow mocked LLM sessions to work
         import os
+
         skip_dependency_check = os.environ.get("ELLE_SKIP_DEPENDENCY_CHECK", "").lower() in ("1", "true")
         pytest_running = "pytest" in os.environ.get("_", "") or "PYTEST_CURRENT_TEST" in os.environ
 
         if not skip_dependency_check and not pytest_running:
             try:
                 from elle.cli.dependencies import get_dependency_registry
+
                 registry = get_dependency_registry()
 
                 # Run the check (non-blocking with cached result)
@@ -650,17 +654,13 @@ class AgenticLoop:
                 # 6. Tool call loop with verification and health monitoring
                 while response.has_tool_calls and iterations < self.max_iterations:
                     iterations += 1
-                    logger.debug(
-                        f"Iteration {iterations}: {len(response.tool_calls)} tool calls"
-                    )
+                    logger.debug(f"Iteration {iterations}: {len(response.tool_calls)} tool calls")
 
                     # Check iteration limit and notify user if approaching
                     if iterations >= self.max_iterations - 2 and stream_callback:
                         remaining = self.max_iterations - iterations
                         if remaining > 0:
-                            stream_callback(
-                                f"\n[Note: {remaining} iteration(s) remaining before automatic stop]\n"
-                            )
+                            stream_callback(f"\n[Note: {remaining} iteration(s) remaining before automatic stop]\n")
 
                     # Check max duration (5 minutes default)
                     elapsed_seconds = time.time() - start_time
@@ -675,9 +675,7 @@ class AgenticLoop:
 
                     # Execute all tool calls
                     for tool_call in response.tool_calls:
-                        logger.debug(
-                            f"Executing tool: {tool_call.name} with args {tool_call.arguments}"
-                        )
+                        logger.debug(f"Executing tool: {tool_call.name} with args {tool_call.arguments}")
 
                         if progress_callback:
                             progress_callback("act", f"Executing {tool_call.name}...", iterations)
@@ -695,9 +693,7 @@ class AgenticLoop:
                         if self.enable_verification and tool_call.name in MUTATING_TOOLS:
                             if progress_callback:
                                 progress_callback("verify", "Verifying outcome...", iterations)
-                            verified, verification_result = await self._verify_outcome(
-                                tool_call, result, execution_id
-                            )
+                            verified, verification_result = await self._verify_outcome(tool_call, result, execution_id)
                             if verification_result:
                                 verification_evidence = (
                                     f"\n\n[VERIFICATION] {'PASSED' if verified else 'FAILED'}: "
@@ -1040,39 +1036,27 @@ class AgenticLoop:
         try:
             # Service domain verification
             if domain == "service":
-                return await self._verify_service(
-                    verification_id, tool_call_id, capability_name, capability_args
-                )
+                return await self._verify_service(verification_id, tool_call_id, capability_name, capability_args)
 
             # File domain verification
             elif domain == "file":
-                return await self._verify_file(
-                    verification_id, tool_call_id, capability_name, capability_args
-                )
+                return await self._verify_file(verification_id, tool_call_id, capability_name, capability_args)
 
             # Docker domain verification
             elif domain == "docker":
-                return await self._verify_docker(
-                    verification_id, tool_call_id, capability_name, capability_args
-                )
+                return await self._verify_docker(verification_id, tool_call_id, capability_name, capability_args)
 
             # Package domain verification
             elif domain == "package":
-                return await self._verify_package(
-                    verification_id, tool_call_id, capability_name, capability_args
-                )
+                return await self._verify_package(verification_id, tool_call_id, capability_name, capability_args)
 
             # Config domain verification
             elif domain == "config":
-                return await self._verify_config(
-                    verification_id, tool_call_id, capability_name, capability_args
-                )
+                return await self._verify_config(verification_id, tool_call_id, capability_name, capability_args)
 
             # Network domain verification
             elif domain == "network":
-                return await self._verify_network(
-                    verification_id, tool_call_id, capability_name, capability_args
-                )
+                return await self._verify_network(verification_id, tool_call_id, capability_name, capability_args)
 
             # Default: trust the result if operation succeeded
             else:
@@ -1082,7 +1066,7 @@ class AgenticLoop:
                     passed=result.success,
                     method="result_trust",
                     evidence=f"No specific verification for {domain} domain. "
-                             f"Trusting capability result: success={result.success}",
+                    f"Trusting capability result: success={result.success}",
                 )
 
         except Exception as e:
@@ -1168,7 +1152,9 @@ class AgenticLoop:
             )
             passed = verify_result.success
             method = "stat_check"
-            evidence = f"File write verification: {verify_result.output[:500]}" if passed else f"File not found: {file_path}"
+            evidence = (
+                f"File write verification: {verify_result.output[:500]}" if passed else f"File not found: {file_path}"
+            )
 
         elif operation == "delete":
             # Verify file no longer exists
@@ -1366,7 +1352,9 @@ class AgenticLoop:
             elif config_path.endswith((".yaml", ".yml")):
                 syntax_check = await self.tools.execute(
                     "shell_command",
-                    {"command": f"python3 -c \"import yaml; yaml.safe_load(open('{config_path}'))\" 2>&1 && echo 'VALID'"},
+                    {
+                        "command": f"python3 -c \"import yaml; yaml.safe_load(open('{config_path}'))\" 2>&1 && echo 'VALID'"
+                    },
                 )
                 if syntax_check.success and "VALID" in syntax_check.output:
                     evidence += " | YAML syntax: valid"
@@ -1411,7 +1399,9 @@ class AgenticLoop:
             # Verify port is open in firewall
             verify_result = await self.tools.execute(
                 "shell_command",
-                {"command": f"ufw status 2>/dev/null | grep -E '{port}|ALLOW' || iptables -L -n 2>/dev/null | head -20"},
+                {
+                    "command": f"ufw status 2>/dev/null | grep -E '{port}|ALLOW' || iptables -L -n 2>/dev/null | head -20"
+                },
             )
             passed = verify_result.success
             evidence = f"Firewall status: {verify_result.output[:300]}"

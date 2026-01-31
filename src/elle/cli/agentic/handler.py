@@ -233,8 +233,9 @@ class UnifiedAgenticHandler:
                             for e in evidence
                         ),
                     ),
-                ) if evidence else (),
-                rationale="Accumulated from agentic loop",
+                )
+                if evidence
+                else (),
                 estimated_duration_ms=total_ms,
             ),
             evidence=evidence,

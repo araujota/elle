@@ -14,10 +14,10 @@ from elle.daemon.telemetry.model_selector import (
     ModelSelector,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _linear_data(n: int, slope: float = 0.5, intercept: float = 50.0) -> list[float]:
     """Generate n points along a straight line."""
@@ -27,10 +27,8 @@ def _linear_data(n: int, slope: float = 0.5, intercept: float = 50.0) -> list[fl
 def _seasonal_data(n: int, period: int = 288) -> list[float]:
     """Generate seasonal data with trend."""
     import math as _math
-    return [
-        50.0 + 0.01 * i + 10.0 * _math.sin(2 * _math.pi * i / period)
-        for i in range(n)
-    ]
+
+    return [50.0 + 0.01 * i + 10.0 * _math.sin(2 * _math.pi * i / period) for i in range(n)]
 
 
 def _constant_data(n: int, value: float = 42.0) -> list[float]:
@@ -204,9 +202,7 @@ class TestModelSelector:
 
         # Manually set cached_at to the past
         old_time = time.time() - selector.CACHE_TTL - 10
-        selector._cache["test_metric"] = CachedModel(
-            method="linear", mape=None, cached_at=old_time
-        )
+        selector._cache["test_metric"] = CachedModel(method="linear", mape=None, cached_at=old_time)
 
         # Next call should re-evaluate (cache expired)
         with patch.object(selector, "_select_method", wraps=selector._select_method) as mock_select:
@@ -217,9 +213,7 @@ class TestModelSelector:
 
     def test_run_forecast_linear(self, selector: ModelSelector):
         """_run_forecast with 'linear' method."""
-        result = selector._run_forecast(
-            "linear", _linear_data(10), current=55.0, avg_1h=54.0, avg_6h=52.0
-        )
+        result = selector._run_forecast("linear", _linear_data(10), current=55.0, avg_1h=54.0, avg_6h=52.0)
         assert result.method == "linear"
         assert math.isfinite(result.predicted_24h)
         assert math.isfinite(result.predicted_7d)
@@ -227,27 +221,21 @@ class TestModelSelector:
     def test_run_forecast_ar1(self, selector: ModelSelector):
         """_run_forecast with 'ar1' method and enough data."""
         data = _linear_data(200, slope=0.1, intercept=50.0)
-        result = selector._run_forecast(
-            "ar1", data, current=data[-1], avg_1h=data[-1], avg_6h=data[-1] - 1
-        )
+        result = selector._run_forecast("ar1", data, current=data[-1], avg_1h=data[-1], avg_6h=data[-1] - 1)
         assert result.method == "ar1"
         assert math.isfinite(result.predicted_24h)
 
     def test_run_forecast_ar1_fallback(self, selector: ModelSelector):
         """_run_forecast with 'ar1' falls back to linear if data is insufficient."""
         data = _linear_data(10)
-        result = selector._run_forecast(
-            "ar1", data, current=55.0, avg_1h=54.0, avg_6h=52.0
-        )
+        result = selector._run_forecast("ar1", data, current=55.0, avg_1h=54.0, avg_6h=52.0)
         # Should fall back to linear
         assert result.method == "linear"
 
     def test_run_forecast_holt_winters(self, selector: ModelSelector):
         """_run_forecast with 'holt_winters' and enough seasonal data."""
         data = _seasonal_data(600)
-        result = selector._run_forecast(
-            "holt_winters", data, current=data[-1], avg_1h=data[-1], avg_6h=data[-1]
-        )
+        result = selector._run_forecast("holt_winters", data, current=data[-1], avg_1h=data[-1], avg_6h=data[-1])
         assert result.method == "holt_winters"
         assert math.isfinite(result.predicted_24h)
         assert result.seasonal_detected is True
@@ -255,26 +243,20 @@ class TestModelSelector:
     def test_run_forecast_holt_winters_fallback(self, selector: ModelSelector):
         """_run_forecast with 'holt_winters' falls back on insufficient data."""
         data = _linear_data(10)
-        result = selector._run_forecast(
-            "holt_winters", data, current=55.0, avg_1h=54.0, avg_6h=52.0
-        )
+        result = selector._run_forecast("holt_winters", data, current=55.0, avg_1h=54.0, avg_6h=52.0)
         assert result.method == "linear"
 
     def test_run_forecast_seasonal(self, selector: ModelSelector):
         """_run_forecast with 'seasonal' method and enough data."""
         data = _seasonal_data(600)
-        result = selector._run_forecast(
-            "seasonal", data, current=data[-1], avg_1h=data[-1], avg_6h=data[-1]
-        )
+        result = selector._run_forecast("seasonal", data, current=data[-1], avg_1h=data[-1], avg_6h=data[-1])
         assert result.method == "seasonal"
         assert math.isfinite(result.predicted_24h)
 
     def test_run_forecast_seasonal_fallback(self, selector: ModelSelector):
         """_run_forecast with 'seasonal' falls back on insufficient data."""
         data = _linear_data(10)
-        result = selector._run_forecast(
-            "seasonal", data, current=55.0, avg_1h=54.0, avg_6h=52.0
-        )
+        result = selector._run_forecast("seasonal", data, current=55.0, avg_1h=54.0, avg_6h=52.0)
         assert result.method == "linear"
 
     # --- Trend direction ---

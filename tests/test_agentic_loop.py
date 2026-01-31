@@ -8,26 +8,10 @@ Tests the new ReAct-style tool-calling loop:
 
 from __future__ import annotations
 
-import asyncio
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from elle.cli.agentic.tools import (
-    ExecuteCapabilityInput,
-    GetSystemInfoInput,
-    ListCapabilitiesInput,
-    SearchIncidentsInput,
-    SearchManVaultInput,
-    ShellCommandInput,
-    SystemInfoAspect,
-    ToolRegistry,
-    ToolResult,
-    ToolSpec,
-    get_tool_registry,
-    reset_tool_registry,
-)
 from elle.cli.agentic.loop import (
     AgenticLoop,
     AgenticLoopResult,
@@ -42,7 +26,18 @@ from elle.cli.agentic.prompts import (
     format_tool_observation,
     get_system_prompt,
 )
-
+from elle.cli.agentic.tools import (
+    ExecuteCapabilityInput,
+    GetSystemInfoInput,
+    SearchIncidentsInput,
+    SearchManVaultInput,
+    ShellCommandInput,
+    SystemInfoAspect,
+    ToolRegistry,
+    ToolResult,
+    get_tool_registry,
+    reset_tool_registry,
+)
 
 # =============================================================================
 # Fixtures
@@ -391,6 +386,7 @@ class TestAgenticLoopExecution:
 
             # Mock response without tool calls
             from elle.rag.llm import ToolCallResponse
+
             mock_response = ToolCallResponse(
                 content="Here is my response",
                 tool_calls=(),
@@ -476,9 +472,7 @@ class TestAgenticLoopExecution:
             # Always return tool calls (would loop forever without limit)
             tool_call_response = ToolCallResponse(
                 content="",
-                tool_calls=(
-                    ToolCall(id="call_1", name="shell_command", arguments={"command": "ls"}),
-                ),
+                tool_calls=(ToolCall(id="call_1", name="shell_command", arguments={"command": "ls"}),),
                 done=False,
                 model="test-model",
             )
@@ -516,6 +510,7 @@ class TestAgenticLoopExecution:
             mock_session.__aexit__.return_value = None
 
             from elle.rag.llm import ToolCallResponse
+
             mock_response = ToolCallResponse(
                 content="Streamed response",
                 tool_calls=(),
@@ -544,6 +539,7 @@ class TestEnvironmentConfig:
     def test_is_agentic_loop_enabled_false_by_default(self):
         """Agentic loop should be disabled by default."""
         import os
+
         old_val = os.environ.pop("ELLE_AGENTIC_LOOP", None)
         try:
             assert not is_agentic_loop_enabled()
@@ -554,6 +550,7 @@ class TestEnvironmentConfig:
     def test_is_agentic_loop_enabled_true(self):
         """Agentic loop should be enabled when env var is set."""
         import os
+
         old_val = os.environ.get("ELLE_AGENTIC_LOOP")
         try:
             for val in ["1", "true", "yes", "TRUE", "Yes"]:
@@ -699,9 +696,7 @@ class TestVerificationStrategies:
                 output="Active: active (running)",
             )
 
-            result = await loop._verify_service(
-                "ver-123", "call-456", "service.start", {"service": "nginx"}
-            )
+            result = await loop._verify_service("ver-123", "call-456", "service.start", {"service": "nginx"})
 
             assert result.passed is True
             assert result.method == "systemctl_status"
@@ -719,9 +714,7 @@ class TestVerificationStrategies:
                 output="Active: inactive (dead)",
             )
 
-            result = await loop._verify_service(
-                "ver-123", "call-456", "service.stop", {"service": "nginx"}
-            )
+            result = await loop._verify_service("ver-123", "call-456", "service.stop", {"service": "nginx"})
 
             assert result.passed is True
             assert "inactive" in result.evidence.lower()
@@ -738,9 +731,7 @@ class TestVerificationStrategies:
                 output="  File: /etc/hosts\n  Size: 158",
             )
 
-            result = await loop._verify_file(
-                "ver-123", "call-456", "file.write", {"path": "/etc/hosts"}
-            )
+            result = await loop._verify_file("ver-123", "call-456", "file.write", {"path": "/etc/hosts"})
 
             assert result.passed is True
             assert result.method == "stat_check"
@@ -757,9 +748,7 @@ class TestVerificationStrategies:
                 output="File successfully deleted",
             )
 
-            result = await loop._verify_file(
-                "ver-123", "call-456", "file.delete", {"path": "/tmp/test.txt"}
-            )
+            result = await loop._verify_file("ver-123", "call-456", "file.delete", {"path": "/tmp/test.txt"})
 
             assert result.passed is True
             assert result.method == "existence_check"
@@ -776,9 +765,7 @@ class TestVerificationStrategies:
                 output="true",
             )
 
-            result = await loop._verify_docker(
-                "ver-123", "call-456", "docker.start", {"container": "myapp"}
-            )
+            result = await loop._verify_docker("ver-123", "call-456", "docker.start", {"container": "myapp"})
 
             assert result.passed is True
             assert result.method == "docker_inspect"
@@ -795,9 +782,7 @@ class TestVerificationStrategies:
                 output="false",
             )
 
-            result = await loop._verify_docker(
-                "ver-123", "call-456", "docker.stop", {"container": "myapp"}
-            )
+            result = await loop._verify_docker("ver-123", "call-456", "docker.stop", {"container": "myapp"})
 
             assert result.passed is True
             assert result.method == "docker_inspect"
@@ -814,9 +799,7 @@ class TestVerificationStrategies:
                 output="Status: install ok installed\nVersion: 1.2.3",
             )
 
-            result = await loop._verify_package(
-                "ver-123", "call-456", "package.install", {"package": "nginx"}
-            )
+            result = await loop._verify_package("ver-123", "call-456", "package.install", {"package": "nginx"})
 
             assert result.passed is True
             assert result.method == "dpkg_status"
@@ -845,9 +828,7 @@ class TestVerificationStrategies:
                 )
 
         with patch.object(loop.tools, "execute", side_effect=mock_execute_side_effect):
-            result = await loop._verify_config(
-                "ver-123", "call-456", "config.edit", {"path": "/etc/app/config.json"}
-            )
+            result = await loop._verify_config("ver-123", "call-456", "config.edit", {"path": "/etc/app/config.json"})
 
             assert result.passed is True
             assert "JSON syntax: valid" in result.evidence

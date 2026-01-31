@@ -1,26 +1,27 @@
 from __future__ import annotations
 
 import json
-import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+from elle.capabilities.autogen.generator import (
+    DEFAULT_OUTPUT_FIELDS,
+    CapabilityGenerator,
+    generate_basic_spec,
+    generate_capability_spec,
+    get_generator,
+)
 from elle.capabilities.autogen.models import (
     GeneratedCapabilitySpec,
     ParsedManPage,
     ParsedSynopsis,
 )
-from elle.capabilities.autogen.generator import (
-    CapabilityGenerator,
-    generate_basic_spec,
-    get_generator,
-    generate_capability_spec,
-    DEFAULT_OUTPUT_FIELDS,
-)
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_man_page(
     name: str = "testcmd",
@@ -40,8 +41,8 @@ def _make_man_page(
 # CapabilityGenerator
 # ---------------------------------------------------------------------------
 
-class TestCapabilityGenerator:
 
+class TestCapabilityGenerator:
     def test_init_defaults(self):
         gen = CapabilityGenerator()
         assert gen.model == "llama3.2"
@@ -64,9 +65,7 @@ class TestCapabilityGenerator:
             "command_template": "testcmd list",
             "input_fields": [],
         }
-        with patch.object(
-            gen, "_call_llm", new_callable=AsyncMock, return_value=json.dumps(response_data)
-        ):
+        with patch.object(gen, "_call_llm", new_callable=AsyncMock, return_value=json.dumps(response_data)):
             spec = await gen.generate(_make_man_page(), subcommand="list")
         assert spec is not None
         assert spec.name == "testcmd.list"
@@ -81,9 +80,7 @@ class TestCapabilityGenerator:
     @pytest.mark.asyncio
     async def test_generate_exception(self):
         gen = CapabilityGenerator()
-        with patch.object(
-            gen, "_call_llm", new_callable=AsyncMock, side_effect=RuntimeError("fail")
-        ):
+        with patch.object(gen, "_call_llm", new_callable=AsyncMock, side_effect=RuntimeError("fail")):
             spec = await gen.generate(_make_man_page())
         assert spec is None
 
@@ -96,9 +93,7 @@ class TestCapabilityGenerator:
             "domain": "file",
             "command_template": "testcmd",
         }
-        with patch.object(
-            gen, "_call_llm", new_callable=AsyncMock, return_value=json.dumps(response_data)
-        ):
+        with patch.object(gen, "_call_llm", new_callable=AsyncMock, return_value=json.dumps(response_data)):
             spec = await gen.generate(_make_man_page())
         assert spec is not None
 
@@ -107,8 +102,8 @@ class TestCapabilityGenerator:
 # _call_llm
 # ---------------------------------------------------------------------------
 
-class TestCallLLM:
 
+class TestCallLLM:
     @pytest.mark.asyncio
     async def test_call_llm_via_elle_rag(self):
         gen = CapabilityGenerator()
@@ -116,9 +111,12 @@ class TestCallLLM:
         mock_llm.generate_json.return_value = {"key": "value"}
         mock_config = MagicMock()
 
-        with patch.dict("sys.modules", {
-            "elle.rag.llm": MagicMock(LLM=MagicMock(return_value=mock_llm), LLMConfig=mock_config),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.rag.llm": MagicMock(LLM=MagicMock(return_value=mock_llm), LLMConfig=mock_config),
+            },
+        ):
             result = await gen._call_llm("system", "user")
         assert result is not None
         assert "key" in result
@@ -170,8 +168,8 @@ class TestCallLLM:
 # _parse_response
 # ---------------------------------------------------------------------------
 
-class TestParseResponse:
 
+class TestParseResponse:
     def test_valid_json(self):
         gen = CapabilityGenerator()
         man = _make_man_page()
@@ -180,12 +178,8 @@ class TestParseResponse:
             "description": "list things",
             "domain": "file",
             "command_template": "testcmd list",
-            "input_fields": [
-                {"name": "path", "field_type": "str", "description": "Path", "required": True}
-            ],
-            "output_fields": [
-                {"name": "extra", "field_type": "str", "description": "extra field"}
-            ],
+            "input_fields": [{"name": "path", "field_type": "str", "description": "Path", "required": True}],
+            "output_fields": [{"name": "extra", "field_type": "str", "description": "extra field"}],
             "verify_command": "testcmd check",
             "confidence_score": 0.9,
         }
@@ -248,26 +242,32 @@ class TestParseResponse:
 # generate_basic_spec
 # ---------------------------------------------------------------------------
 
-class TestGenerateBasicSpec:
 
-    @pytest.mark.parametrize("cmd,expected_domain", [
-        ("systemctl", "service"),
-        ("docker", "docker"),
-        ("ip", "network"),
-        ("apt", "package"),
-        ("useradd", "auth"),
-        ("someutil", "file"),
-    ])
+class TestGenerateBasicSpec:
+    @pytest.mark.parametrize(
+        "cmd,expected_domain",
+        [
+            ("systemctl", "service"),
+            ("docker", "docker"),
+            ("ip", "network"),
+            ("apt", "package"),
+            ("useradd", "auth"),
+            ("someutil", "file"),
+        ],
+    )
     def test_domain_inference(self, cmd, expected_domain):
         man = _make_man_page(name=cmd)
         spec = generate_basic_spec(man)
         assert spec.domain == expected_domain
 
-    @pytest.mark.parametrize("cmd,expected_risk", [
-        ("cat", "none"),
-        ("rm", "critical"),
-        ("testutil", "medium"),
-    ])
+    @pytest.mark.parametrize(
+        "cmd,expected_risk",
+        [
+            ("cat", "none"),
+            ("rm", "critical"),
+            ("testutil", "medium"),
+        ],
+    )
     def test_risk_inference(self, cmd, expected_risk):
         man = _make_man_page(name=cmd)
         spec = generate_basic_spec(man)
@@ -299,10 +299,11 @@ class TestGenerateBasicSpec:
 # get_generator / generate_capability_spec
 # ---------------------------------------------------------------------------
 
-class TestModuleFunctions:
 
+class TestModuleFunctions:
     def test_get_generator_singleton(self):
         import elle.capabilities.autogen.generator as mod
+
         mod._generator = None
         g1 = get_generator()
         g2 = get_generator()

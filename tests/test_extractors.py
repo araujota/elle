@@ -8,7 +8,6 @@ import pytest
 
 from elle.capabilities.autogen.intelligence.extractors import (
     ALL_EXTRACTORS,
-    BaseExtractor,
     BashCompletionExtractor,
     DpkgMetadataExtractor,
     FileManifestExtractor,
@@ -20,9 +19,7 @@ from elle.capabilities.autogen.intelligence.extractors import (
 )
 from elle.capabilities.autogen.intelligence.models import (
     FileManifest,
-    SystemdUnitInfo,
 )
-
 
 # =========================================================================
 # get_extractors tests
@@ -300,11 +297,9 @@ _arguments \\
     '--help[Show help message]' \\
     '--verbose[Enable verbosity]:level' \\
 """)
-        manifest = FileManifest(completions=(str(comp_file),))
+        FileManifest(completions=(str(comp_file),))
         # The zsh extractor checks for "zsh" in the filename
-        result = extractor.extract("pkg", manifest=FileManifest(
-            completions=(str(comp_file),)
-        ))
+        result = extractor.extract("pkg", manifest=FileManifest(completions=(str(comp_file),)))
         # Files must have "zsh" or start with "_" in name to be picked
         # Since the filter checks "zsh" in filename or starts with "_"
         # The filename "_pkg" starts with "_"

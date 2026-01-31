@@ -75,7 +75,7 @@ def _with_retry(
         except Exception as e:
             last_error = str(e)
             if attempt < max_retries:
-                delay = base_delay * (2 ** attempt)
+                delay = base_delay * (2**attempt)
                 logger.debug(f"Recording attempt {attempt + 1} failed, retrying in {delay}s: {e}")
                 time.sleep(delay)
             else:
@@ -234,8 +234,7 @@ def record_execution_to_incident(
             )
 
         logger.info(
-            f"Recorded execution {execution_id} to incident {incident_id}: "
-            f"{len(tool_calls)} actions, success={success}"
+            f"Recorded execution {execution_id} to incident {incident_id}: {len(tool_calls)} actions, success={success}"
         )
 
         return incident_id
@@ -362,6 +361,7 @@ def _build_provenance(retrieval_context: Any | None, tool_calls: list[dict[str, 
     except Exception as e:
         logger.debug(f"Failed to build provenance: {e}")
         from elle.daemon.incidents.models import Provenance
+
         return Provenance(primary_source="llm_only")
 
 
@@ -420,6 +420,7 @@ def _calculate_confidence(
     except Exception as e:
         logger.debug(f"Failed to calculate confidence: {e}")
         from elle.daemon.incidents.models import ConfidenceBreakdown
+
         return ConfidenceBreakdown(overall=0.5, from_llm=0.5)
 
 
@@ -559,6 +560,7 @@ def record_arm_action(
             },
         )
     """
+
     def _do_record() -> str:
         from elle.daemon.incidents.store import (
             append_action,

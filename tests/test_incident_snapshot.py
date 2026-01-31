@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, mock_open, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
@@ -21,14 +20,14 @@ from elle.daemon.incidents.snapshot import (
     _get_conntrack_stats,
     _get_cpu_load,
     _get_disk_info,
+    _get_dns_latency,
     _get_docker_containers,
     _get_docker_exited,
     _get_docker_image_versions,
     _get_docker_running,
-    _get_dns_latency,
     _get_hostname,
-    _get_io_stats,
     _get_inode_usage,
+    _get_io_stats,
     _get_kernel_modules,
     _get_kernel_version,
     _get_mem_available,
@@ -58,7 +57,6 @@ from elle.daemon.incidents.snapshot import (
     diff_snapshots,
     extract_fingerprint,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -109,19 +107,13 @@ def full_snapshot() -> SystemSnapshot:
         ),
         docker_running=5,
         docker_exited=2,
-        docker_containers=(
-            {"name": "web", "state": "running", "image": "nginx:latest"},
-        ),
+        docker_containers=({"name": "web", "state": "running", "image": "nginx:latest"},),
         temps=(
             {"sensor": "coretemp/Core 0", "celsius": 65},
             {"sensor": "coretemp/Core 1", "celsius": 70},
         ),
-        smart=(
-            {"dev": "/dev/nvme0n1", "health": "PASSED", "pct_used": 10, "media_errors": 0},
-        ),
-        packages=(
-            PackageState(name="openssl", version="3.0.2-0ubuntu1", source="apt", is_bedrock=True),
-        ),
+        smart=({"dev": "/dev/nvme0n1", "health": "PASSED", "pct_used": 10, "media_errors": 0},),
+        packages=(PackageState(name="openssl", version="3.0.2-0ubuntu1", source="apt", is_bedrock=True),),
         gpu_available=True,
         gpu_count=1,
         gpu_max_memory_pct=60.0,
@@ -556,10 +548,10 @@ class TestGPUFingerprintExtraction:
             gpu_ecc_errors_1h=0,
         )
 
-        assert hasattr(fingerprint, 'gpu_mem_pressure')
-        assert hasattr(fingerprint, 'gpu_util_pressure')
-        assert hasattr(fingerprint, 'gpu_thermal_pressure')
-        assert hasattr(fingerprint, 'gpu_ecc_errors_1h')
+        assert hasattr(fingerprint, "gpu_mem_pressure")
+        assert hasattr(fingerprint, "gpu_util_pressure")
+        assert hasattr(fingerprint, "gpu_thermal_pressure")
+        assert hasattr(fingerprint, "gpu_ecc_errors_1h")
         assert fingerprint.gpu_mem_pressure == 0.8
         assert fingerprint.gpu_util_pressure == 0.9
         assert fingerprint.gpu_thermal_pressure == 0.7
@@ -628,23 +620,29 @@ class TestGetOsInfo:
     def test_os_info_from_os_release(self):
         """Return formatted OS info from /etc/os-release."""
         fake_content = 'NAME="Ubuntu"\nVERSION_ID="24.04"\n'
-        with patch.object(Path, "exists", return_value=True), \
-             patch.object(Path, "read_text", return_value=fake_content):
+        with (
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "read_text", return_value=fake_content),
+        ):
             result = _get_os_info()
         assert result == "Ubuntu 24.04"
 
     def test_os_info_fallback_on_missing_file(self):
         """Fall back to platform.platform() when /etc/os-release is missing."""
-        with patch.object(Path, "exists", return_value=False), \
-             patch("elle.daemon.incidents.snapshot.platform") as mock_platform:
+        with (
+            patch.object(Path, "exists", return_value=False),
+            patch("elle.daemon.incidents.snapshot.platform") as mock_platform,
+        ):
             mock_platform.platform.return_value = "Linux-6.8.0"
             result = _get_os_info()
         assert result == "Linux-6.8.0"
 
     def test_os_info_fallback_on_read_error(self):
         """Fall back gracefully when file read raises an exception."""
-        with patch.object(Path, "exists", side_effect=OSError("denied")), \
-             patch("elle.daemon.incidents.snapshot.platform") as mock_platform:
+        with (
+            patch.object(Path, "exists", side_effect=OSError("denied")),
+            patch("elle.daemon.incidents.snapshot.platform") as mock_platform,
+        ):
             mock_platform.platform.return_value = "Linux-fallback"
             result = _get_os_info()
         assert result == "Linux-fallback"
@@ -811,9 +809,7 @@ class TestGetDiskInfo:
     def test_disk_info_normal(self):
         """Parse disk info from df output."""
         df_output = (
-            "Mounted on  Use% Avail Source\n"
-            "/           75%  120G  /dev/sda1\n"
-            "/home       90%  20G   /dev/sda2\n"
+            "Mounted on  Use% Avail Source\n/           75%  120G  /dev/sda1\n/home       90%  20G   /dev/sda2\n"
         )
         mock_result = MagicMock()
         mock_result.returncode = 0
@@ -1077,9 +1073,7 @@ class TestGetKernelModules:
     def test_kernel_modules_normal(self):
         """Parse loaded modules from lsmod output."""
         lsmod_output = (
-            "Module                  Size  Used by\n"
-            "nvidia               1234567  0\n"
-            "snd_hda_intel          56789  2\n"
+            "Module                  Size  Used by\nnvidia               1234567  0\nsnd_hda_intel          56789  2\n"
         )
         mock_result = MagicMock()
         mock_result.returncode = 0
@@ -1167,7 +1161,9 @@ class TestGetPackageVersion:
 
     def test_package_version_on_error(self):
         """Return None when dpkg-query fails."""
-        with patch("elle.daemon.incidents.snapshot.subprocess.run", side_effect=subprocess.TimeoutExpired("dpkg-query", 2)):
+        with patch(
+            "elle.daemon.incidents.snapshot.subprocess.run", side_effect=subprocess.TimeoutExpired("dpkg-query", 2)
+        ):
             result = _get_package_version("openssl")
         assert result is None
 
@@ -1246,6 +1242,7 @@ class TestCollectPackageState:
 
     def test_collect_includes_bedrock_packages(self):
         """Always collect bedrock packages when installed."""
+
         def fake_version(name):
             if name == "openssl":
                 return "3.0.2"
@@ -1273,11 +1270,13 @@ class TestCollectPackageState:
 
     def test_collect_with_pip(self):
         """Include pip packages when flag is set."""
-        with patch("elle.daemon.incidents.snapshot._get_package_version", return_value=None), \
-             patch(
-                 "elle.daemon.incidents.snapshot._get_pip_packages",
-                 return_value=[PackageState(name="pip:requests", version="2.31.0", source="pip", is_bedrock=False)],
-             ):
+        with (
+            patch("elle.daemon.incidents.snapshot._get_package_version", return_value=None),
+            patch(
+                "elle.daemon.incidents.snapshot._get_pip_packages",
+                return_value=[PackageState(name="pip:requests", version="2.31.0", source="pip", is_bedrock=False)],
+            ),
+        ):
             result = collect_package_state(include_pip=True)
         names = [p.name for p in result]
         assert "pip:requests" in names
@@ -1335,8 +1334,10 @@ class TestGetConntrackStats:
 
     def test_conntrack_stats_normal(self):
         """Compute conntrack utilization from proc files."""
-        with patch.object(Path, "exists", return_value=True), \
-             patch.object(Path, "read_text", side_effect=["5000", "10000"]):
+        with (
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "read_text", side_effect=["5000", "10000"]),
+        ):
             result = _get_conntrack_stats()
         assert result["count"] == 5000
         assert result["max"] == 10000
@@ -1517,10 +1518,12 @@ class TestGetCgroupPressure:
         mock_mem_max.exists.return_value = True
         mock_mem_max.read_text.return_value = "1073741824"  # 1GB
 
-        mock_entry.__truediv__ = MagicMock(side_effect=lambda name: {
-            "memory.current": mock_mem_current,
-            "memory.max": mock_mem_max,
-        }.get(name, MagicMock()))
+        mock_entry.__truediv__ = MagicMock(
+            side_effect=lambda name: {
+                "memory.current": mock_mem_current,
+                "memory.max": mock_mem_max,
+            }.get(name, MagicMock())
+        )
 
         mock_base.iterdir.return_value = [mock_entry]
 
@@ -1541,11 +1544,12 @@ class TestGetPsiPressure:
     def test_psi_pressure_normal(self):
         """Parse PSI avg10 values from /proc/pressure files."""
         psi_cpu = "some avg10=1.50 avg60=0.80 avg300=0.50 total=12345\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n"
-        psi_mem = "some avg10=5.00 avg60=2.00 avg300=1.00 total=67890\nfull avg10=0.50 avg60=0.20 avg300=0.10 total=1234\n"
-        psi_io = "some avg10=3.00 avg60=1.50 avg300=0.75 total=54321\nfull avg10=0.25 avg60=0.10 avg300=0.05 total=567\n"
-
-        call_count = {"n": 0}
-        original_path = Path
+        psi_mem = (
+            "some avg10=5.00 avg60=2.00 avg300=1.00 total=67890\nfull avg10=0.50 avg60=0.20 avg300=0.10 total=1234\n"
+        )
+        psi_io = (
+            "some avg10=3.00 avg60=1.50 avg300=0.75 total=54321\nfull avg10=0.25 avg60=0.10 avg300=0.05 total=567\n"
+        )
 
         def mock_path_init(path_str):
             p = MagicMock()
@@ -1607,14 +1611,8 @@ class TestGetRecentAptHistory:
         # Use a date far enough in the future to be within 24 hours of utcnow()
         now = datetime.utcnow()
         date_str = now.strftime("%Y-%m-%d  %H:%M:%S")
-        content = (
-            f"Start-Date: {date_str}\n"
-            f"Commandline: apt install nginx\n"
-            f"Install: nginx (1.18.0)\n"
-            f"\n"
-        )
-        with patch.object(Path, "exists", return_value=True), \
-             patch.object(Path, "read_text", return_value=content):
+        content = f"Start-Date: {date_str}\nCommandline: apt install nginx\nInstall: nginx (1.18.0)\n\n"
+        with patch.object(Path, "exists", return_value=True), patch.object(Path, "read_text", return_value=content):
             result = _get_recent_apt_history()
         assert len(result) == 1
         assert result[0]["action"] == "install"
@@ -1738,7 +1736,11 @@ class TestCollectSnapshotMocked:
         with stack:
             collect_snapshot(domain="docker")
         mocks["elle.daemon.incidents.snapshot.collect_package_state"].assert_called_once_with(
-            None, None, None, "docker", False,
+            None,
+            None,
+            None,
+            "docker",
+            False,
         )
 
 
@@ -1753,9 +1755,13 @@ class TestExtractFingerprintExtended:
     def test_fingerprint_zero_mem_total(self):
         """Handle zero mem_total without division by zero."""
         snapshot = SystemSnapshot(
-            os="Ubuntu", kernel="6.8", uptime_sec=100,
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=100,
             cpu_load=(0.5, 0.5, 0.5),
-            mem_total_mb=0, mem_free_mb=0, mem_available_mb=0,
+            mem_total_mb=0,
+            mem_free_mb=0,
+            mem_available_mb=0,
         )
         stack, _ = _apply_patches()
         with stack:
@@ -1765,9 +1771,13 @@ class TestExtractFingerprintExtended:
     def test_fingerprint_empty_cpu_load(self):
         """Handle zero cpu_load values."""
         snapshot = SystemSnapshot(
-            os="Ubuntu", kernel="6.8", uptime_sec=100,
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=100,
             cpu_load=(0.0, 0.0, 0.0),
-            mem_total_mb=8192, mem_free_mb=4096, mem_available_mb=6144,
+            mem_total_mb=8192,
+            mem_free_mb=4096,
+            mem_available_mb=6144,
         )
         stack, _ = _apply_patches()
         with stack:
@@ -1806,11 +1816,15 @@ class TestExtractFingerprintExtended:
 
     def test_fingerprint_conntrack_pressure(self, base_snapshot):
         """Compute conntrack pressure from utilization."""
-        stack, _ = _apply_patches({
-            "elle.daemon.incidents.snapshot._get_conntrack_stats": {
-                "count": 7500, "max": 10000, "utilization": 75.0,
-            },
-        })
+        stack, _ = _apply_patches(
+            {
+                "elle.daemon.incidents.snapshot._get_conntrack_stats": {
+                    "count": 7500,
+                    "max": 10000,
+                    "utilization": 75.0,
+                },
+            }
+        )
         with stack:
             fingerprint = extract_fingerprint(base_snapshot)
         assert fingerprint.conntrack_pressure == pytest.approx(0.75, abs=0.01)
@@ -1835,20 +1849,26 @@ class TestExtractFingerprintExtended:
 
     def test_fingerprint_dns_p95_ms(self, base_snapshot):
         """Pick dns p95 latency from probed response."""
-        stack, _ = _apply_patches({
-            "elle.daemon.incidents.snapshot._get_dns_latency": {"p50": 1.0, "p95": 12.5, "p99": 50.0},
-        })
+        stack, _ = _apply_patches(
+            {
+                "elle.daemon.incidents.snapshot._get_dns_latency": {"p50": 1.0, "p95": 12.5, "p99": 50.0},
+            }
+        )
         with stack:
             fingerprint = extract_fingerprint(base_snapshot)
         assert fingerprint.dns_p95_ms == 12.5
 
     def test_fingerprint_psi_values(self, base_snapshot):
         """Normalize PSI values to 0-1 range."""
-        stack, _ = _apply_patches({
-            "elle.daemon.incidents.snapshot._get_psi_pressure": {
-                "cpu_avg10": 25.0, "mem_avg10": 50.0, "io_avg10": 0.0,
-            },
-        })
+        stack, _ = _apply_patches(
+            {
+                "elle.daemon.incidents.snapshot._get_psi_pressure": {
+                    "cpu_avg10": 25.0,
+                    "mem_avg10": 50.0,
+                    "io_avg10": 0.0,
+                },
+            }
+        )
         with stack:
             fingerprint = extract_fingerprint(base_snapshot)
         assert fingerprint.psi_cpu_avg10 == pytest.approx(0.25, abs=0.01)

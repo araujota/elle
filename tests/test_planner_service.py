@@ -1,16 +1,12 @@
-from __future__ import annotations
-
 """Tests for elle.cli.planner.service -- Plan execution service."""
 
-import logging
+from __future__ import annotations
+
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from elle.cli.planner.models import (
-    CheckResult,
     CommandPlan,
     DockerState,
     NetworkState,
@@ -18,7 +14,6 @@ from elle.cli.planner.models import (
     PlanOutcome,
     PlanResult,
     PlanStep,
-    PlanVerification,
     RollbackStep,
     StepResult,
     TaskRequest,
@@ -30,10 +25,10 @@ from elle.cli.planner.service import (
     reset_planner_service,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_session():
     """Create a mock Session."""
@@ -93,6 +88,7 @@ def _make_step_result(success=True, step_index=0, command="echo hello"):
 # PlannerService.__init__
 # ---------------------------------------------------------------------------
 
+
 class TestPlannerServiceInit:
     def test_defaults(self):
         svc = PlannerService()
@@ -118,6 +114,7 @@ class TestPlannerServiceInit:
 # capability_executor and preflight_validator properties
 # ---------------------------------------------------------------------------
 
+
 class TestLazyProperties:
     def test_capability_executor_disabled(self):
         svc = PlannerService(use_capabilities=False)
@@ -131,6 +128,7 @@ class TestLazyProperties:
 # ---------------------------------------------------------------------------
 # _is_docker_task / _is_network_task
 # ---------------------------------------------------------------------------
+
 
 class TestTaskDetection:
     def test_docker_by_keyword(self):
@@ -163,6 +161,7 @@ class TestTaskDetection:
 # ---------------------------------------------------------------------------
 # _parse_plan_response
 # ---------------------------------------------------------------------------
+
 
 class TestParsePlanResponse:
     def test_basic_response(self):
@@ -211,6 +210,7 @@ class TestParsePlanResponse:
 # _parse_package_list
 # ---------------------------------------------------------------------------
 
+
 class TestParsePackageList:
     def test_basic(self):
         svc = PlannerService()
@@ -238,6 +238,7 @@ class TestParsePackageList:
 # ---------------------------------------------------------------------------
 # _extract_package_operations
 # ---------------------------------------------------------------------------
+
 
 class TestExtractPackageOperations:
     def test_apt_install(self):
@@ -278,6 +279,7 @@ class TestExtractPackageOperations:
 # _record_action_safe
 # ---------------------------------------------------------------------------
 
+
 class TestRecordActionSafe:
     def test_no_incident_id(self):
         svc = PlannerService()
@@ -303,6 +305,7 @@ class TestRecordActionSafe:
 # ---------------------------------------------------------------------------
 # generate_plan
 # ---------------------------------------------------------------------------
+
 
 class TestGeneratePlan:
     @patch("elle.cli.planner.service.get_llm")
@@ -345,6 +348,7 @@ class TestGeneratePlan:
 # build_context
 # ---------------------------------------------------------------------------
 
+
 class TestBuildContext:
     @patch("elle.cli.planner.service.PlannerService._search_man_vault", return_value=())
     @patch("elle.cli.planner.service.PlannerService._search_prior_plans", return_value=())
@@ -359,7 +363,7 @@ class TestBuildContext:
     def test_no_vaults(self, mock_prior, mock_man):
         svc = PlannerService(use_man_vault=False, use_incident_vault=False)
         session = _make_session()
-        ctx = svc.build_context("test", session)
+        svc.build_context("test", session)
         mock_man.assert_not_called()
         mock_prior.assert_not_called()
 
@@ -370,7 +374,7 @@ class TestBuildContext:
         mock_docker.return_value = DockerState()
         svc = PlannerService()
         session = _make_session()
-        ctx = svc.build_context("restart docker container", session)
+        svc.build_context("restart docker container", session)
         mock_docker.assert_called_once()
 
     @patch("elle.cli.planner.service.PlannerService._search_man_vault", return_value=())
@@ -380,7 +384,7 @@ class TestBuildContext:
         mock_net.return_value = NetworkState()
         svc = PlannerService()
         session = _make_session()
-        ctx = svc.build_context("configure firewall", session)
+        svc.build_context("configure firewall", session)
         mock_net.assert_called_once()
 
     @patch("elle.cli.planner.service.PlannerService._search_man_vault", return_value=())
@@ -395,6 +399,7 @@ class TestBuildContext:
 # ---------------------------------------------------------------------------
 # execute_plan
 # ---------------------------------------------------------------------------
+
 
 class TestExecutePlan:
     @patch("elle.cli.planner.service.run_safe")
@@ -485,6 +490,7 @@ class TestExecutePlan:
 # rollback_plan
 # ---------------------------------------------------------------------------
 
+
 class TestRollbackPlan:
     @patch("elle.cli.planner.service.run_safe")
     @patch("elle.cli.planner.service.PlannerService._record_action_safe")
@@ -522,6 +528,7 @@ class TestRollbackPlan:
 # finalize
 # ---------------------------------------------------------------------------
 
+
 class TestFinalize:
     def test_finalize_no_incident(self):
         svc = PlannerService(use_incident_vault=False)
@@ -533,7 +540,7 @@ class TestFinalize:
     def test_finalize_with_incident(self, mock_finalize):
         svc = PlannerService(use_incident_vault=True)
         pr = _make_plan_result(incident_id="inc-123")
-        result = svc.finalize(pr)
+        svc.finalize(pr)
         mock_finalize.assert_called_once_with(pr)
 
     @patch("elle.cli.planner.service.PlannerService._finalize_incident", side_effect=Exception("fail"))
@@ -548,6 +555,7 @@ class TestFinalize:
 # ---------------------------------------------------------------------------
 # run_preflight_for_plan
 # ---------------------------------------------------------------------------
+
 
 class TestRunPreflightForPlan:
     def test_no_validator(self):
@@ -569,6 +577,7 @@ class TestRunPreflightForPlan:
 # ---------------------------------------------------------------------------
 # run_planning_pipeline
 # ---------------------------------------------------------------------------
+
 
 class TestRunPlanningPipeline:
     @patch("elle.cli.planner.service.get_llm")
@@ -606,6 +615,7 @@ class TestRunPlanningPipeline:
 # ---------------------------------------------------------------------------
 # get_planner_service / reset_planner_service
 # ---------------------------------------------------------------------------
+
 
 class TestServiceSingleton:
     def test_get_returns_instance(self):

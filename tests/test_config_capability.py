@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -13,13 +13,10 @@ from elle.capabilities.core.config import (
     ConfigOperation,
     ConfigPreviewCapability,
     ConfigPreviewInput,
-    ConfigPreviewOutput,
     ConfigRollbackCapability,
     ConfigRollbackInput,
-    ConfigRollbackOutput,
 )
-from elle.capabilities.models import CapabilityResult, DryRunResult
-
+from elle.capabilities.models import CapabilityResult
 
 # =========================================================================
 # ConfigOperation model tests
@@ -52,9 +49,7 @@ class TestConfigEditCapability:
     def edit_input(self) -> ConfigEditInput:
         return ConfigEditInput(
             file_path="/etc/test.conf",
-            operations=(
-                ConfigOperation(kind="set", path="section/key", value="new_value"),
-            ),
+            operations=(ConfigOperation(kind="set", path="section/key", value="new_value"),),
             description="test edit",
         )
 
@@ -70,9 +65,7 @@ class TestConfigEditCapability:
     def test_spec_trust_level(self, cap: ConfigEditCapability) -> None:
         assert cap.spec.trust_level == "core"
 
-    def test_dry_run_augeas_not_available(
-        self, cap: ConfigEditCapability, edit_input: ConfigEditInput
-    ) -> None:
+    def test_dry_run_augeas_not_available(self, cap: ConfigEditCapability, edit_input: ConfigEditInput) -> None:
         with patch.dict("sys.modules", {"elle.ops.augeas.controller": None, "elle.ops.augeas.models": None}):
             result = cap.dry_run(edit_input)
             assert result.is_valid is False
@@ -89,10 +82,13 @@ class TestConfigEditCapability:
         mock_augeas_module.get_controller.return_value = mock_controller
         mock_models_module = MagicMock()
 
-        with patch.dict("sys.modules", {
-            "elle.ops.augeas.controller": mock_augeas_module,
-            "elle.ops.augeas.models": mock_models_module,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.ops.augeas.controller": mock_augeas_module,
+                "elle.ops.augeas.models": mock_models_module,
+            },
+        ):
             result = cap.dry_run(edit_input)
             assert result.is_valid is True
             assert result.diff == "--- a\n+++ b\n-old\n+new"
@@ -102,10 +98,13 @@ class TestConfigEditCapability:
         mock_augeas_module.get_controller.side_effect = RuntimeError("boom")
         mock_models_module = MagicMock()
 
-        with patch.dict("sys.modules", {
-            "elle.ops.augeas.controller": mock_augeas_module,
-            "elle.ops.augeas.models": mock_models_module,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.ops.augeas.controller": mock_augeas_module,
+                "elle.ops.augeas.models": mock_models_module,
+            },
+        ):
             result = cap.dry_run(edit_input)
             assert result.is_valid is False
 
@@ -120,10 +119,13 @@ class TestConfigEditCapability:
         mock_augeas_module.get_controller.side_effect = RuntimeError("controller error")
         mock_models_module = MagicMock()
 
-        with patch.dict("sys.modules", {
-            "elle.ops.augeas.controller": mock_augeas_module,
-            "elle.ops.augeas.models": mock_models_module,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.ops.augeas.controller": mock_augeas_module,
+                "elle.ops.augeas.models": mock_models_module,
+            },
+        ):
             result = cap.run(edit_input)
             assert result.success is False
             assert "controller error" in (result.error or "")
@@ -137,14 +139,10 @@ class TestConfigEditCapability:
         result = cap.verify(inp)
         assert result.passed is False
 
-    def test_verify_file_exists_import_error(
-        self, cap: ConfigEditCapability, tmp_path: Path
-    ) -> None:
+    def test_verify_file_exists_import_error(self, cap: ConfigEditCapability, tmp_path: Path) -> None:
         f = tmp_path / "test.conf"
         f.write_text("key=val")
-        inp = ConfigEditInput(
-            file_path=str(f), operations=(), description=""
-        )
+        inp = ConfigEditInput(file_path=str(f), operations=(), description="")
         with patch.dict("sys.modules", {"elle.ops.augeas.validators": None}):
             result = cap.verify(inp)
             assert result.passed is True
@@ -192,9 +190,7 @@ class TestConfigPreviewCapability:
     def preview_input(self) -> ConfigPreviewInput:
         return ConfigPreviewInput(
             file_path="/etc/test.conf",
-            operations=(
-                ConfigOperation(kind="set", path="section/key", value="val"),
-            ),
+            operations=(ConfigOperation(kind="set", path="section/key", value="val"),),
         )
 
     def test_spec_name(self, cap: ConfigPreviewCapability) -> None:
@@ -206,31 +202,28 @@ class TestConfigPreviewCapability:
     def test_spec_idempotent(self, cap: ConfigPreviewCapability) -> None:
         assert cap.spec.idempotent is True
 
-    def test_dry_run_always_valid(
-        self, cap: ConfigPreviewCapability, preview_input: ConfigPreviewInput
-    ) -> None:
+    def test_dry_run_always_valid(self, cap: ConfigPreviewCapability, preview_input: ConfigPreviewInput) -> None:
         result = cap.dry_run(preview_input)
         assert result.is_valid is True
         assert result.requires_confirmation is False
 
-    def test_run_import_error(
-        self, cap: ConfigPreviewCapability, preview_input: ConfigPreviewInput
-    ) -> None:
+    def test_run_import_error(self, cap: ConfigPreviewCapability, preview_input: ConfigPreviewInput) -> None:
         with patch.dict("sys.modules", {"elle.ops.augeas.controller": None, "elle.ops.augeas.models": None}):
             result = cap.run(preview_input)
             assert result.success is False
 
-    def test_run_exception(
-        self, cap: ConfigPreviewCapability, preview_input: ConfigPreviewInput
-    ) -> None:
+    def test_run_exception(self, cap: ConfigPreviewCapability, preview_input: ConfigPreviewInput) -> None:
         mock_augeas_module = MagicMock()
         mock_augeas_module.get_controller.side_effect = RuntimeError("preview error")
         mock_models_module = MagicMock()
 
-        with patch.dict("sys.modules", {
-            "elle.ops.augeas.controller": mock_augeas_module,
-            "elle.ops.augeas.models": mock_models_module,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.ops.augeas.controller": mock_augeas_module,
+                "elle.ops.augeas.models": mock_models_module,
+            },
+        ):
             result = cap.run(preview_input)
             assert result.success is False
             assert "preview error" in (result.error or "")
@@ -262,23 +255,17 @@ class TestConfigRollbackCapability:
     def test_spec_requires_privilege(self, cap: ConfigRollbackCapability) -> None:
         assert cap.spec.requires_privilege is True
 
-    def test_dry_run_import_error(
-        self, cap: ConfigRollbackCapability, rollback_input: ConfigRollbackInput
-    ) -> None:
+    def test_dry_run_import_error(self, cap: ConfigRollbackCapability, rollback_input: ConfigRollbackInput) -> None:
         with patch.dict("sys.modules", {"elle.daemon.incidents.config_tracker": None}):
             result = cap.dry_run(rollback_input)
             assert result.is_valid is False
 
-    def test_run_import_error(
-        self, cap: ConfigRollbackCapability, rollback_input: ConfigRollbackInput
-    ) -> None:
+    def test_run_import_error(self, cap: ConfigRollbackCapability, rollback_input: ConfigRollbackInput) -> None:
         with patch.dict("sys.modules", {"elle.daemon.incidents.config_tracker": None}):
             result = cap.run(rollback_input)
             assert result.success is False
 
-    def test_verify_file_missing(
-        self, cap: ConfigRollbackCapability, rollback_input: ConfigRollbackInput
-    ) -> None:
+    def test_verify_file_missing(self, cap: ConfigRollbackCapability, rollback_input: ConfigRollbackInput) -> None:
         inp = ConfigRollbackInput(
             incident_id="inc-123",
             path="/tmp/nonexistent_rollback_xyz.conf",
@@ -286,9 +273,7 @@ class TestConfigRollbackCapability:
         result = cap.verify(inp)
         assert result.passed is False
 
-    def test_verify_file_exists(
-        self, cap: ConfigRollbackCapability, tmp_path: Path
-    ) -> None:
+    def test_verify_file_exists(self, cap: ConfigRollbackCapability, tmp_path: Path) -> None:
         f = tmp_path / "config.conf"
         f.write_text("restored")
         inp = ConfigRollbackInput(incident_id="inc-123", path=str(f))

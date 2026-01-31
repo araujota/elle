@@ -226,10 +226,7 @@ class TelemetrydWatcher:
             self._health_task = None
 
         await self._disconnect()
-        logger.info(
-            f"Telemetryd watcher stopped (events: {self._total_events}, "
-            f"restarts: {self._restart_count})"
-        )
+        logger.info(f"Telemetryd watcher stopped (events: {self._total_events}, restarts: {self._restart_count})")
 
     async def _health_check_loop(self) -> None:
         """Monitor telemetryd health and attempt recovery if needed.
@@ -276,10 +273,7 @@ class TelemetrydWatcher:
         if self._last_event_time:
             stale_seconds = (datetime.now(timezone.utc) - self._last_event_time).total_seconds()
             if stale_seconds > STALE_THRESHOLD:
-                logger.debug(
-                    f"Health check: no events for {stale_seconds:.1f}s "
-                    f"(threshold: {STALE_THRESHOLD}s)"
-                )
+                logger.debug(f"Health check: no events for {stale_seconds:.1f}s (threshold: {STALE_THRESHOLD}s)")
                 # Try sending a ping to confirm connection is alive
                 if not await self._send_ping():
                     return False
@@ -320,16 +314,12 @@ class TelemetrydWatcher:
         if self._last_restart_time:
             elapsed = (datetime.now(timezone.utc) - self._last_restart_time).total_seconds()
             if elapsed > RESTART_COOLDOWN:
-                logger.info(
-                    f"Restart cooldown passed ({elapsed:.0f}s), resetting counter"
-                )
+                logger.info(f"Restart cooldown passed ({elapsed:.0f}s), resetting counter")
                 self._restart_count = 0
 
         # Check max restarts
         if self._restart_count >= MAX_RESTART_ATTEMPTS:
-            logger.error(
-                f"Max telemetryd restart attempts ({MAX_RESTART_ATTEMPTS}) reached"
-            )
+            logger.error(f"Max telemetryd restart attempts ({MAX_RESTART_ATTEMPTS}) reached")
             await self._create_health_incident(
                 "Telemetryd unrecoverable",
                 f"Failed to recover telemetryd after {MAX_RESTART_ATTEMPTS} attempts",
@@ -338,9 +328,7 @@ class TelemetrydWatcher:
 
         self._restart_count += 1
         self._last_restart_time = datetime.now(timezone.utc)
-        logger.info(
-            f"Recovery attempt {self._restart_count}/{MAX_RESTART_ATTEMPTS}"
-        )
+        logger.info(f"Recovery attempt {self._restart_count}/{MAX_RESTART_ATTEMPTS}")
 
         # Disconnect current connection
         await self._disconnect()
@@ -359,9 +347,7 @@ class TelemetrydWatcher:
             if proc.returncode == 0:
                 logger.info("Successfully restarted elled-telemetryd service")
             else:
-                logger.warning(
-                    f"systemctl restart failed with code {proc.returncode}"
-                )
+                logger.warning(f"systemctl restart failed with code {proc.returncode}")
 
         except TimeoutError:
             logger.warning("systemctl restart timed out")

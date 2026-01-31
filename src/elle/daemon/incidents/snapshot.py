@@ -707,7 +707,7 @@ def extract_fingerprint(
         gpu_mem_pressure=gpu_mem_pressure,
         gpu_util_pressure=gpu_util_pressure,
         gpu_thermal_pressure=gpu_thermal_pressure,
-        gpu_ecc_errors_1h=snapshot.gpu_ecc_errors if hasattr(snapshot, 'gpu_ecc_errors') else 0,
+        gpu_ecc_errors_1h=snapshot.gpu_ecc_errors if hasattr(snapshot, "gpu_ecc_errors") else 0,
         # New monitoring sprint fields
         inode_pressure=min(1.0, inode_pressure),
         io_latency_pressure=min(1.0, io_latency_pressure),
@@ -824,12 +824,14 @@ def _get_inode_usage() -> list[dict[str, Any]]:
                 free = stat.f_ffree
                 if total > 0:
                     used_pct = ((total - free) / total) * 100
-                    inodes.append({
-                        "mount": mount,
-                        "total": total,
-                        "free": free,
-                        "used_pct": round(used_pct, 2),
-                    })
+                    inodes.append(
+                        {
+                            "mount": mount,
+                            "total": total,
+                            "free": free,
+                            "used_pct": round(used_pct, 2),
+                        }
+                    )
             except (OSError, FileNotFoundError):
                 pass
     except Exception:
@@ -849,17 +851,19 @@ def _get_io_stats() -> list[dict[str, Any]]:
                     # Skip partitions (ending in digit) and device-mapper
                     if dev[-1].isdigit() or dev.startswith("dm-") or dev.startswith("loop"):
                         continue
-                    stats.append({
-                        "dev": dev,
-                        "rd_ios": int(parts[3]),
-                        "rd_sectors": int(parts[5]),
-                        "rd_ticks": int(parts[6]),
-                        "wr_ios": int(parts[7]),
-                        "wr_sectors": int(parts[9]),
-                        "wr_ticks": int(parts[10]),
-                        "ios_in_progress": int(parts[11]),
-                        "io_ticks": int(parts[12]),
-                    })
+                    stats.append(
+                        {
+                            "dev": dev,
+                            "rd_ios": int(parts[3]),
+                            "rd_sectors": int(parts[5]),
+                            "rd_ticks": int(parts[6]),
+                            "wr_ios": int(parts[7]),
+                            "wr_sectors": int(parts[9]),
+                            "wr_ticks": int(parts[10]),
+                            "ios_in_progress": int(parts[11]),
+                            "io_ticks": int(parts[12]),
+                        }
+                    )
     except (OSError, FileNotFoundError):
         pass
     return stats
@@ -966,8 +970,12 @@ def _get_cert_expiry() -> list[dict[str, Any]]:
         try:
             result = subprocess.run(
                 [
-                    "openssl", "s_client", "-connect", endpoint,
-                    "-servername", endpoint.split(":")[0],
+                    "openssl",
+                    "s_client",
+                    "-connect",
+                    endpoint,
+                    "-servername",
+                    endpoint.split(":")[0],
                 ],
                 input=b"",
                 capture_output=True,
@@ -986,13 +994,15 @@ def _get_cert_expiry() -> list[dict[str, Any]]:
                     date_str = x509_result.stdout.strip().replace("notAfter=", "")
                     try:
                         from email.utils import parsedate_to_datetime
+
                         expiry = parsedate_to_datetime(date_str)
-                        days = (expiry - datetime.utcnow().replace(
-                            tzinfo=expiry.tzinfo)).days
-                        results.append({
-                            "endpoint": endpoint,
-                            "days_until_expiry": days,
-                        })
+                        days = (expiry - datetime.utcnow().replace(tzinfo=expiry.tzinfo)).days
+                        results.append(
+                            {
+                                "endpoint": endpoint,
+                                "days_until_expiry": days,
+                            }
+                        )
                     except Exception:
                         pass
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
@@ -1006,6 +1016,7 @@ def _get_dns_latency() -> dict[str, float]:
     try:
         import json as json_mod
         import socket as sock_mod
+
         s = sock_mod.socket(sock_mod.AF_UNIX, sock_mod.SOCK_STREAM)
         s.settimeout(2.0)
         s.connect("/run/elle/probed.sock")
@@ -1046,20 +1057,24 @@ def _get_cgroup_pressure() -> list[dict[str, Any]]:
                         max_val = int(max_str)
                         if max_val > 0:
                             pct = round((current / max_val) * 100, 2)
-                            cgroups.append({
-                                "name": entry.name,
-                                "mem_current_mb": current // (1024 * 1024),
-                                "mem_max_mb": max_val // (1024 * 1024),
-                                "mem_pct": pct,
-                            })
+                            cgroups.append(
+                                {
+                                    "name": entry.name,
+                                    "mem_current_mb": current // (1024 * 1024),
+                                    "mem_max_mb": max_val // (1024 * 1024),
+                                    "mem_pct": pct,
+                                }
+                            )
                     except (ValueError, OSError):
                         pass
     except Exception:
         pass
+
     # Sort by memory percentage descending, return top 10
     def _cgroup_sort_key(x: dict[str, Any]) -> float:
         val = x.get("mem_pct", 0)
         return float(val) if isinstance(val, (int, float)) else 0.0
+
     cgroups.sort(key=_cgroup_sort_key, reverse=True)
     return cgroups[:10]
 
@@ -1095,9 +1110,19 @@ def _get_security_events() -> int:
     try:
         result = subprocess.run(
             [
-                "journalctl", "-q", "--since", "1 hour ago",
-                "-t", "sshd", "-t", "sudo", "-t", "polkitd",
-                "--no-pager", "-o", "cat",
+                "journalctl",
+                "-q",
+                "--since",
+                "1 hour ago",
+                "-t",
+                "sshd",
+                "-t",
+                "sudo",
+                "-t",
+                "polkitd",
+                "--no-pager",
+                "-o",
+                "cat",
             ],
             capture_output=True,
             text=True,

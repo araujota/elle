@@ -436,15 +436,9 @@ class AuditRecorder:
             with get_conn(schema=self._schema) as conn:
                 # Serialize complex objects
                 trigger_json = record.trigger.model_dump_json()
-                retrieval_json = json.dumps([
-                    ctx.model_dump() for ctx in record.retrieval_contexts
-                ], default=str)
-                tool_calls_json = json.dumps([
-                    tc.model_dump() for tc in record.tool_calls
-                ], default=str)
-                verifications_json = json.dumps([
-                    v.model_dump() for v in record.verifications
-                ], default=str)
+                retrieval_json = json.dumps([ctx.model_dump() for ctx in record.retrieval_contexts], default=str)
+                tool_calls_json = json.dumps([tc.model_dump() for tc in record.tool_calls], default=str)
+                verifications_json = json.dumps([v.model_dump() for v in record.verifications], default=str)
                 provenance_json = record.provenance.model_dump_json()
 
                 conn.execute(
@@ -589,12 +583,8 @@ class AuditRecorder:
                 trigger=trigger,
                 linked_incident_id=row["linked_incident_id"],
                 retrieval_contexts=(),  # Skip deserializing complex objects for listing
-                tool_calls=tuple(
-                    ToolCallRecord.model_validate(tc) for tc in tool_calls_data
-                ),
-                verifications=tuple(
-                    VerificationResult.model_validate(v) for v in verifications_data
-                ),
+                tool_calls=tuple(ToolCallRecord.model_validate(tc) for tc in tool_calls_data),
+                verifications=tuple(VerificationResult.model_validate(v) for v in verifications_data),
                 final_response=row["final_response"],
                 success=bool(row["success"]),
                 error=row["error"],

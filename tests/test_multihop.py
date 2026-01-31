@@ -10,24 +10,21 @@ from elle.daemon.incidents.models import (
     IncidentReport,
     IncidentSearchResult,
 )
-from elle.daemon.incidents.narrative import (
-    CausalChain,
-    CausalLink,
-    MultiHopConfig,
-    MultiHopResult,
-    SearchHop,
-)
 from elle.daemon.incidents.multihop import (
     MultiHopSearch,
     _parse_datetime,
     keyword_rerank,
     temporal_rerank,
 )
-
+from elle.daemon.incidents.narrative import (
+    MultiHopConfig,
+    MultiHopResult,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_incident(
     incident_id: str = "inc-1",
@@ -65,6 +62,7 @@ def _make_search_result(
 # _parse_datetime
 # ===========================================================================
 
+
 class TestParseDateTime:
     def test_parses_iso_format(self):
         result = _parse_datetime("2024-01-15T10:30:00")
@@ -80,6 +78,7 @@ class TestParseDateTime:
 # ===========================================================================
 # MultiHopConfig
 # ===========================================================================
+
 
 class TestMultiHopConfig:
     def test_default_values(self):
@@ -100,6 +99,7 @@ class TestMultiHopConfig:
 # MultiHopSearch.__init__
 # ===========================================================================
 
+
 class TestMultiHopSearchInit:
     def test_default_config(self):
         search = MultiHopSearch()
@@ -114,6 +114,7 @@ class TestMultiHopSearchInit:
 # ===========================================================================
 # _get_event_time
 # ===========================================================================
+
 
 class TestGetEventTime:
     def test_datetime_ts(self):
@@ -146,6 +147,7 @@ class TestGetEventTime:
 # _get_entities
 # ===========================================================================
 
+
 class TestGetEntities:
     def test_incident_entities(self):
         search = MultiHopSearch()
@@ -173,6 +175,7 @@ class TestGetEntities:
 # _get_domain
 # ===========================================================================
 
+
 class TestGetDomain:
     def test_incident_domain(self):
         search = MultiHopSearch()
@@ -199,6 +202,7 @@ class TestGetDomain:
 # ===========================================================================
 # _get_item_summary
 # ===========================================================================
+
 
 class TestGetItemSummary:
     def test_incident_summary(self):
@@ -228,6 +232,7 @@ class TestGetItemSummary:
 # ===========================================================================
 # _extract_keywords
 # ===========================================================================
+
 
 class TestExtractKeywords:
     def test_extracts_from_incidents(self):
@@ -260,6 +265,7 @@ class TestExtractKeywords:
 # ===========================================================================
 # _infer_relationship
 # ===========================================================================
+
 
 class TestInferRelationship:
     def test_very_close_timing_triggered(self):
@@ -295,6 +301,7 @@ class TestInferRelationship:
 # ===========================================================================
 # _calculate_link_confidence
 # ===========================================================================
+
 
 class TestCalculateLinkConfidence:
     def test_close_timing_boost(self):
@@ -343,6 +350,7 @@ class TestCalculateLinkConfidence:
 # ===========================================================================
 # _build_chains
 # ===========================================================================
+
 
 class TestBuildChains:
     def test_empty_inputs_returns_empty(self):
@@ -400,7 +408,13 @@ class TestBuildChains:
         search = MultiHopSearch()
         now = datetime.utcnow()
         events = {
-            "evt-1": {"event_id": "evt-1", "ts": now - timedelta(minutes=2), "entity": "eth0", "message": "link down", "category": "net"},
+            "evt-1": {
+                "event_id": "evt-1",
+                "ts": now - timedelta(minutes=2),
+                "entity": "eth0",
+                "message": "link down",
+                "category": "net",
+            },
             "evt-2": {"event_id": "evt-2", "ts": now, "entity": "eth0", "message": "DNS failure", "category": "net"},
         }
         chains = search._build_chains({}, events, None)
@@ -421,6 +435,7 @@ class TestBuildChains:
 # ===========================================================================
 # keyword_rerank
 # ===========================================================================
+
 
 class TestKeywordRerank:
     def test_empty_keywords_no_change(self):
@@ -460,6 +475,7 @@ class TestKeywordRerank:
 # ===========================================================================
 # temporal_rerank
 # ===========================================================================
+
 
 class TestTemporalRerank:
     def test_close_time_scores_higher(self):
@@ -505,6 +521,7 @@ class TestTemporalRerank:
 # ===========================================================================
 # MultiHopSearch.search  (integration with mocked dependencies)
 # ===========================================================================
+
 
 class TestMultiHopSearchIntegration:
     @patch("elle.daemon.incidents.multihop.get_conn")

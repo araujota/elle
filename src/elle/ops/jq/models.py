@@ -27,9 +27,7 @@ class JQOperation(BaseModel):
     kind: Literal["query", "transform", "validate"] = Field(
         description="Type of operation: query (read), transform (modify), validate (check)"
     )
-    filter: str = Field(
-        description="jq filter expression, e.g., '.key', '.[] | select(.active)', '.key = \"value\"'"
-    )
+    filter: str = Field(description="jq filter expression, e.g., '.key', '.[] | select(.active)', '.key = \"value\"'")
     raw_output: bool = Field(
         default=False,
         description="If True, output raw strings without JSON encoding (-r flag)",

@@ -1,10 +1,9 @@
-from __future__ import annotations
-
 """Tests for editing tiers 0-5."""
+
+from __future__ import annotations
 
 import json
 import os
-import subprocess
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -13,15 +12,13 @@ import pytest
 from elle.ops.editing.models import (
     EditOperation,
     FileEditPreview,
-    TierApplicability,
-    TierEditResult,
     ValidationResult,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _op(kind: str = "set", **kw) -> EditOperation:
     """Shortcut to create an EditOperation."""
@@ -61,6 +58,7 @@ class TestTier0DropIn:
 
     def _make_tier(self):
         from elle.ops.editing.tiers.tier0_dropin import Tier0DropIn
+
         return Tier0DropIn()
 
     # --- can_handle ---------------------------------------------------------
@@ -103,7 +101,9 @@ class TestTier0DropIn:
         mock_result.stdout = "OK"
         mock_result.stderr = ""
         with patch("subprocess.run", return_value=mock_result):
-            result = tier.validate_syntax("[Service]\nRestart=always\n", Path("/etc/systemd/system/foo.service.d/override.conf"))
+            result = tier.validate_syntax(
+                "[Service]\nRestart=always\n", Path("/etc/systemd/system/foo.service.d/override.conf")
+            )
         assert result.passed is True
         assert result.method == "systemd-analyze verify"
 
@@ -280,7 +280,9 @@ class TestTier0DropIn:
         diff_mod = _stub_diff_module()
         with (
             patch("elle.ops.editing.tiers.tier0_dropin.is_dropin_candidate", return_value=(True, dropin_dir)),
-            patch.object(tier, "validate_syntax", return_value=ValidationResult(passed=False, method="test", errors=("err",))),
+            patch.object(
+                tier, "validate_syntax", return_value=ValidationResult(passed=False, method="test", errors=("err",))
+            ),
             patch.dict("sys.modules", {"elle.ops.augeas.diff": diff_mod}),
         ):
             result = await tier.apply(Path("/etc/sudoers"), op, skip_backup=True)
@@ -326,6 +328,7 @@ class TestTier1Augeas:
 
     def _make_tier(self):
         from elle.ops.editing.tiers.tier1_augeas import Tier1Augeas
+
         return Tier1Augeas()
 
     # --- _is_available ------------------------------------------------------
@@ -558,7 +561,9 @@ class TestTier1Augeas:
         aug_mod = MagicMock()
         aug_mod.AugeasOp = MagicMock()
         with patch.dict("sys.modules", {"elle.ops.augeas": aug_mod}):
-            ops = tier._convert_to_augeas_ops(_op(kind="add", path="/Service", value="Restart=always", key="Restart", position="before"))
+            ops = tier._convert_to_augeas_ops(
+                _op(kind="add", path="/Service", value="Restart=always", key="Restart", position="before")
+            )
         assert len(ops) == 2
 
     def test_convert_unknown_op(self):
@@ -580,6 +585,7 @@ class TestTier2Structured:
 
     def _make_tier(self):
         from elle.ops.editing.tiers.tier2_structured import Tier2Structured
+
         return Tier2Structured()
 
     # --- _detect_format ----------------------------------------------------
@@ -699,7 +705,7 @@ class TestTier2Structured:
     def test_apply_dict_set_json_value(self):
         tier = self._make_tier()
         data = {}
-        op = _op(kind="set", path="a", value='[1, 2, 3]')
+        op = _op(kind="set", path="a", value="[1, 2, 3]")
         result = tier._apply_dict_edit(data, op)
         assert result["a"] == [1, 2, 3]
 
@@ -799,10 +805,13 @@ class TestTier2Structured:
         backup_mod = _stub_backup_module()
         with (
             patch.object(tier, "_is_jq_available", return_value=False),
-            patch.dict("sys.modules", {
-                "elle.ops.augeas.diff": diff_mod,
-                "elle.ops.augeas.backup": backup_mod,
-            }),
+            patch.dict(
+                "sys.modules",
+                {
+                    "elle.ops.augeas.diff": diff_mod,
+                    "elle.ops.augeas.backup": backup_mod,
+                },
+            ),
         ):
             result = await tier.apply(f, op, skip_backup=True)
         assert result.success is True
@@ -815,10 +824,13 @@ class TestTier2Structured:
         op = _op(kind="set", path=".a", value="2")
         diff_mod = _stub_diff_module()
         backup_mod = _stub_backup_module()
-        with patch.dict("sys.modules", {
-            "elle.ops.augeas.diff": diff_mod,
-            "elle.ops.augeas.backup": backup_mod,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.ops.augeas.diff": diff_mod,
+                "elle.ops.augeas.backup": backup_mod,
+            },
+        ):
             result = await tier.apply(f, op)
         assert result.success is False
 
@@ -829,10 +841,13 @@ class TestTier2Structured:
         op = _op(kind="set", path=".a", value="2")
         diff_mod = _stub_diff_module()
         backup_mod = _stub_backup_module()
-        with patch.dict("sys.modules", {
-            "elle.ops.augeas.diff": diff_mod,
-            "elle.ops.augeas.backup": backup_mod,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.ops.augeas.diff": diff_mod,
+                "elle.ops.augeas.backup": backup_mod,
+            },
+        ):
             result = await tier.apply(f, op)
         assert result.success is False
 
@@ -847,10 +862,13 @@ class TestTier2Structured:
         with (
             patch.object(tier, "_is_jq_available", return_value=False),
             patch("pathlib.Path.write_text", side_effect=PermissionError),
-            patch.dict("sys.modules", {
-                "elle.ops.augeas.diff": diff_mod,
-                "elle.ops.augeas.backup": backup_mod,
-            }),
+            patch.dict(
+                "sys.modules",
+                {
+                    "elle.ops.augeas.diff": diff_mod,
+                    "elle.ops.augeas.backup": backup_mod,
+                },
+            ),
         ):
             result = await tier.apply(f, op, skip_backup=True)
         assert result.success is False
@@ -867,10 +885,13 @@ class TestTier2Structured:
         backup_mod.backup_file = MagicMock(side_effect=RuntimeError("no backup"))
         with (
             patch.object(tier, "_is_jq_available", return_value=False),
-            patch.dict("sys.modules", {
-                "elle.ops.augeas.diff": diff_mod,
-                "elle.ops.augeas.backup": backup_mod,
-            }),
+            patch.dict(
+                "sys.modules",
+                {
+                    "elle.ops.augeas.diff": diff_mod,
+                    "elle.ops.augeas.backup": backup_mod,
+                },
+            ),
         ):
             result = await tier.apply(f, op, skip_backup=False)
         assert result.success is False
@@ -887,6 +908,7 @@ class TestTier3Format:
 
     def _make_tier(self):
         from elle.ops.editing.tiers.tier3_format import Tier3Format
+
         return Tier3Format()
 
     # --- _detect_format ----------------------------------------------------
@@ -1037,10 +1059,13 @@ class TestTier3Format:
         backup_mod = _stub_backup_module()
         with (
             patch.object(tier, "_is_crudini_available", return_value=False),
-            patch.dict("sys.modules", {
-                "elle.ops.augeas.diff": diff_mod,
-                "elle.ops.augeas.backup": backup_mod,
-            }),
+            patch.dict(
+                "sys.modules",
+                {
+                    "elle.ops.augeas.diff": diff_mod,
+                    "elle.ops.augeas.backup": backup_mod,
+                },
+            ),
         ):
             result = await tier.apply(f, op, skip_backup=True)
         assert result.success is True
@@ -1053,10 +1078,13 @@ class TestTier3Format:
         op = _op(kind="set")
         diff_mod = _stub_diff_module()
         backup_mod = _stub_backup_module()
-        with patch.dict("sys.modules", {
-            "elle.ops.augeas.diff": diff_mod,
-            "elle.ops.augeas.backup": backup_mod,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.ops.augeas.diff": diff_mod,
+                "elle.ops.augeas.backup": backup_mod,
+            },
+        ):
             result = await tier.apply(f, op)
         assert result.success is False
 
@@ -1067,10 +1095,13 @@ class TestTier3Format:
         op = _op(kind="set", section="s", key="k", value="v")
         diff_mod = _stub_diff_module()
         backup_mod = _stub_backup_module()
-        with patch.dict("sys.modules", {
-            "elle.ops.augeas.diff": diff_mod,
-            "elle.ops.augeas.backup": backup_mod,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.ops.augeas.diff": diff_mod,
+                "elle.ops.augeas.backup": backup_mod,
+            },
+        ):
             result = await tier.apply(f, op)
         assert result.success is False
 
@@ -1085,6 +1116,7 @@ class TestTier4Document:
 
     def _make_tier(self):
         from elle.ops.editing.tiers.tier4_document import Tier4Document
+
         return Tier4Document()
 
     # --- _detect_format ---------------------------------------------------
@@ -1255,10 +1287,13 @@ class TestTier4Document:
         op = _op(kind="append", value="new content")
         diff_mod = _stub_diff_module()
         backup_mod = _stub_backup_module()
-        with patch.dict("sys.modules", {
-            "elle.ops.augeas.diff": diff_mod,
-            "elle.ops.augeas.backup": backup_mod,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.ops.augeas.diff": diff_mod,
+                "elle.ops.augeas.backup": backup_mod,
+            },
+        ):
             result = await tier.apply(f, op, skip_backup=True)
         assert result.success is True
 
@@ -1270,10 +1305,13 @@ class TestTier4Document:
         op = _op(kind="set")
         diff_mod = _stub_diff_module()
         backup_mod = _stub_backup_module()
-        with patch.dict("sys.modules", {
-            "elle.ops.augeas.diff": diff_mod,
-            "elle.ops.augeas.backup": backup_mod,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.ops.augeas.diff": diff_mod,
+                "elle.ops.augeas.backup": backup_mod,
+            },
+        ):
             result = await tier.apply(f, op)
         assert result.success is False
 
@@ -1284,10 +1322,13 @@ class TestTier4Document:
         op = _op(kind="set", path="x", value="y")
         diff_mod = _stub_diff_module()
         backup_mod = _stub_backup_module()
-        with patch.dict("sys.modules", {
-            "elle.ops.augeas.diff": diff_mod,
-            "elle.ops.augeas.backup": backup_mod,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.ops.augeas.diff": diff_mod,
+                "elle.ops.augeas.backup": backup_mod,
+            },
+        ):
             result = await tier.apply(f, op)
         assert result.success is False
 
@@ -1301,10 +1342,13 @@ class TestTier4Document:
         backup_mod = _stub_backup_module()
         with (
             patch("pathlib.Path.write_text", side_effect=PermissionError),
-            patch.dict("sys.modules", {
-                "elle.ops.augeas.diff": diff_mod,
-                "elle.ops.augeas.backup": backup_mod,
-            }),
+            patch.dict(
+                "sys.modules",
+                {
+                    "elle.ops.augeas.diff": diff_mod,
+                    "elle.ops.augeas.backup": backup_mod,
+                },
+            ),
         ):
             result = await tier.apply(f, op, skip_backup=True)
         assert result.success is False
@@ -1329,6 +1373,7 @@ class TestTier5Patch:
 
     def _make_tier(self):
         from elle.ops.editing.tiers.tier5_patch import Tier5Patch
+
         return Tier5Patch()
 
     # --- can_handle -------------------------------------------------------
@@ -1567,10 +1612,13 @@ class TestTier5Patch:
         op = _op(kind="set", value="x")
         diff_mod = _stub_diff_module()
         backup_mod = _stub_backup_module()
-        with patch.dict("sys.modules", {
-            "elle.ops.augeas.diff": diff_mod,
-            "elle.ops.augeas.backup": backup_mod,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.ops.augeas.diff": diff_mod,
+                "elle.ops.augeas.backup": backup_mod,
+            },
+        ):
             result = await tier.apply(f, op)
         assert result.success is False
 
@@ -1582,10 +1630,13 @@ class TestTier5Patch:
         op = _op(kind="set", anchor_pattern="NOTFOUND", value="x")
         diff_mod = _stub_diff_module()
         backup_mod = _stub_backup_module()
-        with patch.dict("sys.modules", {
-            "elle.ops.augeas.diff": diff_mod,
-            "elle.ops.augeas.backup": backup_mod,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.ops.augeas.diff": diff_mod,
+                "elle.ops.augeas.backup": backup_mod,
+            },
+        ):
             result = await tier.apply(f, op, skip_backup=True)
         assert result.success is False
         assert "Anchor pattern not found" in result.error
@@ -1598,10 +1649,13 @@ class TestTier5Patch:
         op = _op(kind="replace", anchor_pattern="hello", value="goodbye")
         diff_mod = _stub_diff_module()
         backup_mod = _stub_backup_module()
-        with patch.dict("sys.modules", {
-            "elle.ops.augeas.diff": diff_mod,
-            "elle.ops.augeas.backup": backup_mod,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.ops.augeas.diff": diff_mod,
+                "elle.ops.augeas.backup": backup_mod,
+            },
+        ):
             result = await tier.apply(f, op, skip_backup=True)
         assert result.success is True
 
@@ -1615,10 +1669,13 @@ class TestTier5Patch:
         backup_mod = _stub_backup_module()
         with (
             patch("pathlib.Path.write_text", side_effect=PermissionError),
-            patch.dict("sys.modules", {
-                "elle.ops.augeas.diff": diff_mod,
-                "elle.ops.augeas.backup": backup_mod,
-            }),
+            patch.dict(
+                "sys.modules",
+                {
+                    "elle.ops.augeas.diff": diff_mod,
+                    "elle.ops.augeas.backup": backup_mod,
+                },
+            ),
         ):
             result = await tier.apply(f, op, skip_backup=True)
         assert result.success is False
@@ -1633,10 +1690,13 @@ class TestTier5Patch:
         diff_mod = _stub_diff_module()
         backup_mod = MagicMock()
         backup_mod.backup_file = MagicMock(side_effect=RuntimeError("bk fail"))
-        with patch.dict("sys.modules", {
-            "elle.ops.augeas.diff": diff_mod,
-            "elle.ops.augeas.backup": backup_mod,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.ops.augeas.diff": diff_mod,
+                "elle.ops.augeas.backup": backup_mod,
+            },
+        ):
             result = await tier.apply(f, op, skip_backup=False)
         assert result.success is False
         assert "Backup failed" in result.error

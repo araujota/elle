@@ -11,10 +11,8 @@ from elle.ops.crudini.models import (
     CrudiniEditRequest,
     CrudiniOperation,
     CrudiniRequest,
-    CrudiniResult,
     CrudiniUnavailableError,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -34,9 +32,7 @@ workers = 4
 
 def _make_completed(stdout: str = "", stderr: str = "", rc: int = 0):
     """Build a fake subprocess.CompletedProcess."""
-    return subprocess.CompletedProcess(
-        args=["crudini"], returncode=rc, stdout=stdout, stderr=stderr
-    )
+    return subprocess.CompletedProcess(args=["crudini"], returncode=rc, stdout=stdout, stderr=stderr)
 
 
 # ---------------------------------------------------------------------------
@@ -345,9 +341,9 @@ class TestCrudiniFileContent:
         # Third call: get_section(server) -> "port='8080'\n"
         call_count = 0
         responses = [
-            _make_completed(stdout="database\nserver\n"),     # list_sections
-            _make_completed(stdout="host='localhost'\n"),      # get_section database
-            _make_completed(stdout="port='8080'\n"),           # get_section server
+            _make_completed(stdout="database\nserver\n"),  # list_sections
+            _make_completed(stdout="host='localhost'\n"),  # get_section database
+            _make_completed(stdout="port='8080'\n"),  # get_section server
         ]
 
         def _side_effect(*args, **kwargs):
@@ -630,9 +626,7 @@ class TestCrudiniProcess:
         """process() dispatches set operations."""
         request = CrudiniRequest(
             file_path="/etc/app.conf",
-            operation=CrudiniOperation(
-                kind="set", section="database", parameter="host", value="db.local"
-            ),
+            operation=CrudiniOperation(kind="set", section="database", parameter="host", value="db.local"),
         )
         with patch(
             "elle.ops.crudini.engine.subprocess.run",
@@ -670,9 +664,7 @@ class TestCrudiniProcess:
         """process() dispatches merge operations."""
         request = CrudiniRequest(
             file_path="/etc/app.conf",
-            operation=CrudiniOperation(
-                kind="merge", section="new", value="[new]\nfoo = bar\n"
-            ),
+            operation=CrudiniOperation(kind="merge", section="new", value="[new]\nfoo = bar\n"),
         )
         with patch(
             "elle.ops.crudini.engine.subprocess.run",
@@ -760,11 +752,7 @@ class TestCrudiniDryRun:
 
         request = CrudiniEditRequest(
             file_path=str(ini_file),
-            operations=(
-                CrudiniOperation(
-                    kind="set", section="database", parameter="host", value="newhost"
-                ),
-            ),
+            operations=(CrudiniOperation(kind="set", section="database", parameter="host", value="newhost"),),
             description="test dry run",
             dry_run=True,
             skip_backup=True,
@@ -805,11 +793,7 @@ class TestCrudiniBackup:
 
         request = CrudiniEditRequest(
             file_path=str(ini_file),
-            operations=(
-                CrudiniOperation(
-                    kind="set", section="database", parameter="host", value="newhost"
-                ),
-            ),
+            operations=(CrudiniOperation(kind="set", section="database", parameter="host", value="newhost"),),
             description="test backup failure",
             dry_run=False,
             skip_backup=False,
@@ -831,11 +815,7 @@ class TestCrudiniBackup:
 
         request = CrudiniEditRequest(
             file_path=str(ini_file),
-            operations=(
-                CrudiniOperation(
-                    kind="set", section="database", parameter="host", value="newhost"
-                ),
-            ),
+            operations=(CrudiniOperation(kind="set", section="database", parameter="host", value="newhost"),),
             description="test skip backup",
             dry_run=False,
             skip_backup=True,

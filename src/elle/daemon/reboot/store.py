@@ -50,7 +50,7 @@ def create_intent(
     grub_default_saved: str | None = None,
     grub_state: GRUBState | None = None,
     verifications: list[PendingVerification] | None = None,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> RebootIntent:
     """Create a new reboot intent.
 
@@ -79,7 +79,7 @@ def create_intent(
     intent_id = str(uuid.uuid4())
     now = datetime.utcnow()
 
-    def _run(c: psycopg.Connection) -> RebootIntent:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> RebootIntent:
         cursor = c.cursor()
         cursor.execute(
             """
@@ -132,7 +132,9 @@ def create_intent(
                     required=v.required,
                 )
 
-        return _get_intent_inner(c, intent_id)  # type: ignore
+        result = _get_intent_inner(c, intent_id)
+        assert result is not None, f"Failed to fetch just-created intent {intent_id}"
+        return result
 
     if conn is not None:
         return _run(conn)
@@ -143,7 +145,7 @@ def create_intent(
 
 def get_intent(
     intent_id: str,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> RebootIntent | None:
     """Get a reboot intent by ID.
 
@@ -162,7 +164,7 @@ def get_intent(
 
 
 def _get_intent_inner(
-    c: psycopg.Connection,  # type: ignore[type-arg]
+    c: psycopg.Connection,
     intent_id: str,
 ) -> RebootIntent | None:
     """Internal helper to fetch an intent within an existing connection."""
@@ -180,7 +182,7 @@ def _get_intent_inner(
 def get_intents_by_status(
     status: RebootIntentStatus,
     limit: int = 100,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> list[RebootIntent]:
     """Get reboot intents by status.
 
@@ -193,7 +195,7 @@ def get_intents_by_status(
         List of RebootIntents with the specified status.
     """
 
-    def _run(c: psycopg.Connection) -> list[RebootIntent]:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> list[RebootIntent]:
         cursor = c.cursor()
         cursor.execute(
             """
@@ -220,7 +222,7 @@ def get_intents_by_status(
 
 
 def get_active_intent(
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> RebootIntent | None:
     """Get the currently active reboot intent.
 
@@ -233,7 +235,7 @@ def get_active_intent(
         Active RebootIntent if exists, None otherwise.
     """
 
-    def _run(c: psycopg.Connection) -> RebootIntent | None:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> RebootIntent | None:
         cursor = c.cursor()
         cursor.execute(
             """
@@ -263,7 +265,7 @@ def list_intents(
     outcome: RebootOutcome | None = None,
     limit: int = 100,
     offset: int = 0,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> list[RebootIntent]:
     """List reboot intents with optional filtering.
 
@@ -278,7 +280,7 @@ def list_intents(
         List of RebootIntents.
     """
 
-    def _run(c: psycopg.Connection) -> list[RebootIntent]:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> list[RebootIntent]:
         query = "SELECT * FROM reboot_intents WHERE 1=1"
         params: list[Any] = []
 
@@ -312,7 +314,7 @@ def list_intents(
 def list_recent_intents(
     days: int = 7,
     limit: int = 10,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> list[RebootIntentSummary]:
     """List recent reboot intent summaries.
 
@@ -325,7 +327,7 @@ def list_recent_intents(
         List of RebootIntentSummary objects.
     """
 
-    def _run(c: psycopg.Connection) -> list[RebootIntentSummary]:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> list[RebootIntentSummary]:
         cursor = c.cursor()
         cursor.execute(
             """
@@ -343,7 +345,9 @@ def list_recent_intents(
             result.append(
                 RebootIntentSummary(
                     id=row["id"],
-                    created_at=parse_datetime(row["created_at"]) if isinstance(row["created_at"], str) else row["created_at"],
+                    created_at=parse_datetime(row["created_at"])
+                    if isinstance(row["created_at"], str)
+                    else row["created_at"],
                     goal=row["goal"],
                     reason=row["reason"],
                     status=row["status"],
@@ -369,7 +373,7 @@ def update_intent_status(
     new_boot_id: str | None = None,
     post_snapshot_json: dict[str, Any] | None = None,
     verification_attempts: int | None = None,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> RebootIntent | None:
     """Update a reboot intent's status.
 
@@ -390,7 +394,7 @@ def update_intent_status(
         Updated RebootIntent, or None if not found.
     """
 
-    def _run(c: psycopg.Connection) -> RebootIntent | None:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> RebootIntent | None:
         now = datetime.utcnow()
 
         updates = ["updated_at = %s", "status = %s"]
@@ -440,7 +444,7 @@ def update_intent_status(
 def mark_rebooting(
     intent_id: str,
     boot_id: str,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> RebootIntent | None:
     """Mark an intent as rebooting.
 
@@ -455,7 +459,7 @@ def mark_rebooting(
         Updated RebootIntent.
     """
 
-    def _run(c: psycopg.Connection) -> RebootIntent | None:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> RebootIntent | None:
         now = datetime.utcnow()
 
         cursor = c.cursor()
@@ -482,7 +486,7 @@ def mark_rebooting(
 
 def cancel_intent(
     intent_id: str,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> RebootIntent | None:
     """Cancel a pending reboot intent.
 
@@ -496,7 +500,7 @@ def cancel_intent(
         Updated RebootIntent, or None if not found/not cancellable.
     """
 
-    def _run(c: psycopg.Connection) -> RebootIntent | None:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> RebootIntent | None:
         now = datetime.utcnow()
 
         cursor = c.cursor()
@@ -523,7 +527,7 @@ def cancel_intent(
 
 def delete_intent(
     intent_id: str,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> bool:
     """Delete a reboot intent.
 
@@ -538,7 +542,7 @@ def delete_intent(
         True if deleted, False if not found.
     """
 
-    def _run(c: psycopg.Connection) -> bool:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> bool:
         cursor = c.cursor()
         cursor.execute("DELETE FROM reboot_intents WHERE id = %s", (intent_id,))
         return cursor.rowcount > 0
@@ -551,7 +555,7 @@ def delete_intent(
 
 
 def _row_to_intent(
-    row: dict,
+    row: dict[str, Any],
     verifications: list[PendingVerification],
 ) -> RebootIntent:
     """Convert a database row to a RebootIntent."""
@@ -612,7 +616,7 @@ def _row_to_intent(
 
 
 def _add_verification_inner(
-    c: psycopg.Connection,  # type: ignore[type-arg]
+    c: psycopg.Connection,
     intent_id: str,
     step_index: int,
     check_type: str,
@@ -650,7 +654,7 @@ def _add_verification_inner(
         id=new_id,
         reboot_intent_id=intent_id,
         step_index=step_index,
-        check_type=check_type,  # type: ignore
+        check_type=check_type,
         check_command=check_command,
         expected_exit_code=expected_exit_code,
         expected_output_contains=expected_output_contains,
@@ -666,7 +670,7 @@ def add_verification(
     expected_exit_code: int = 0,
     expected_output_contains: str | None = None,
     required: bool = True,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> PendingVerification:
     """Add a verification check to a reboot intent.
 
@@ -685,19 +689,31 @@ def add_verification(
     """
     if conn is not None:
         return _add_verification_inner(
-            conn, intent_id, step_index, check_type, check_command,
-            expected_exit_code, expected_output_contains, required,
+            conn,
+            intent_id,
+            step_index,
+            check_type,
+            check_command,
+            expected_exit_code,
+            expected_output_contains,
+            required,
         )
 
     with get_conn(schema=PG_SCHEMA) as c:
         return _add_verification_inner(
-            c, intent_id, step_index, check_type, check_command,
-            expected_exit_code, expected_output_contains, required,
+            c,
+            intent_id,
+            step_index,
+            check_type,
+            check_command,
+            expected_exit_code,
+            expected_output_contains,
+            required,
         )
 
 
 def _get_verifications_inner(
-    c: psycopg.Connection,  # type: ignore[type-arg]
+    c: psycopg.Connection,
     intent_id: str,
 ) -> list[PendingVerification]:
     """Internal helper to get verifications within an existing connection."""
@@ -716,7 +732,7 @@ def _get_verifications_inner(
 
 def get_verifications(
     intent_id: str,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> list[PendingVerification]:
     """Get all verification checks for an intent.
 
@@ -740,7 +756,7 @@ def update_verification_result(
     stdout: str | None = None,
     stderr: str | None = None,
     passed: bool = False,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> PendingVerification | None:
     """Update a verification check with results.
 
@@ -756,7 +772,7 @@ def update_verification_result(
         Updated PendingVerification, or None if not found.
     """
 
-    def _run(c: psycopg.Connection) -> PendingVerification | None:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> PendingVerification | None:
         now = datetime.utcnow()
 
         cursor = c.cursor()
@@ -797,7 +813,7 @@ def update_verification_result(
 
 def reset_verifications(
     intent_id: str,
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> int:
     """Reset all verifications for an intent (clear results).
 
@@ -811,7 +827,7 @@ def reset_verifications(
         Number of verifications reset.
     """
 
-    def _run(c: psycopg.Connection) -> int:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> int:
         cursor = c.cursor()
         cursor.execute(
             """
@@ -831,7 +847,7 @@ def reset_verifications(
         return _run(c)
 
 
-def _row_to_verification(row: dict) -> PendingVerification:
+def _row_to_verification(row: dict[str, Any]) -> PendingVerification:
     """Convert a database row to a PendingVerification."""
     executed_at = row["executed_at"]
     if isinstance(executed_at, str):
@@ -860,7 +876,7 @@ def _row_to_verification(row: dict) -> PendingVerification:
 
 
 def get_reboot_status(
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> RebootStatus:
     """Get status report for the Reboot module.
 
@@ -871,7 +887,7 @@ def get_reboot_status(
         RebootStatus with counts and active operations.
     """
 
-    def _run(c: psycopg.Connection) -> RebootStatus:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> RebootStatus:
         cursor = c.cursor()
 
         # Get counts by status
@@ -964,7 +980,7 @@ def get_reboot_status(
 
 
 def _get_active_intent_inner(
-    c: psycopg.Connection,  # type: ignore[type-arg]
+    c: psycopg.Connection,
 ) -> RebootIntent | None:
     """Internal helper for get_active_intent within an existing connection."""
     cursor = c.cursor()
@@ -986,7 +1002,7 @@ def _get_active_intent_inner(
 
 
 def _list_recent_intents_inner(
-    c: psycopg.Connection,  # type: ignore[type-arg]
+    c: psycopg.Connection,
     days: int = 7,
     limit: int = 10,
 ) -> list[RebootIntentSummary]:
@@ -1024,7 +1040,7 @@ def _list_recent_intents_inner(
 
 
 def get_intent_count(
-    conn: psycopg.Connection | None = None,  # type: ignore[type-arg]
+    conn: psycopg.Connection | None = None,
 ) -> int:
     """Get total number of reboot intents.
 
@@ -1035,7 +1051,7 @@ def get_intent_count(
         Total intent count.
     """
 
-    def _run(c: psycopg.Connection) -> int:  # type: ignore[type-arg]
+    def _run(c: psycopg.Connection) -> int:
         cursor = c.cursor()
         cursor.execute("SELECT COUNT(*) AS cnt FROM reboot_intents")
         row = cursor.fetchone()

@@ -2,24 +2,24 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-from elle.daemon.manvault.models import ManVaultStatus
-
 
 # ---------------------------------------------------------------------------
 # ManVaultService tests
 # ---------------------------------------------------------------------------
 
+
 class TestManVaultService:
     def _make_service(self):
-        with patch("elle.daemon.manvault.service.get_connection") as mock_conn, \
-             patch("elle.daemon.manvault.service.ensure_schema"):
+        with (
+            patch("elle.daemon.manvault.service.get_connection") as mock_conn,
+            patch("elle.daemon.manvault.service.ensure_schema"),
+        ):
             mock_conn.return_value = MagicMock()
             from elle.daemon.manvault.service import ManVaultService
+
             return ManVaultService()
 
     def test_init(self):
@@ -38,9 +38,11 @@ class TestManVaultService:
     @pytest.mark.asyncio
     async def test_start_and_stop(self):
         svc = self._make_service()
-        with patch("elle.daemon.manvault.service.get_connection") as mock_conn, \
-             patch("elle.daemon.manvault.service.ensure_schema"), \
-             patch("elle.daemon.manvault.service.is_core_seeded", return_value=True):
+        with (
+            patch("elle.daemon.manvault.service.get_connection") as mock_conn,
+            patch("elle.daemon.manvault.service.ensure_schema"),
+            patch("elle.daemon.manvault.service.is_core_seeded", return_value=True),
+        ):
             mock_c = MagicMock()
             mock_c.close = MagicMock()
             mock_conn.return_value = mock_c
@@ -69,11 +71,13 @@ class TestManVaultService:
         async def fake_periodic_tasks():
             return None
 
-        with patch("elle.daemon.manvault.service.get_connection") as mock_conn, \
-             patch("elle.daemon.manvault.service.ensure_schema"), \
-             patch("elle.daemon.manvault.service.is_core_seeded", return_value=False), \
-             patch.object(svc, "_do_core_seed", side_effect=fake_seed), \
-             patch.object(svc, "_run_periodic_tasks", side_effect=fake_periodic_tasks):
+        with (
+            patch("elle.daemon.manvault.service.get_connection") as mock_conn,
+            patch("elle.daemon.manvault.service.ensure_schema"),
+            patch("elle.daemon.manvault.service.is_core_seeded", return_value=False),
+            patch.object(svc, "_do_core_seed", side_effect=fake_seed),
+            patch.object(svc, "_run_periodic_tasks", side_effect=fake_periodic_tasks),
+        ):
             mock_c = MagicMock()
             mock_c.close = MagicMock()
             mock_conn.return_value = mock_c
@@ -140,6 +144,7 @@ class TestManVaultService:
     async def test_do_embedding_unavailable(self):
         svc = self._make_service()
         from elle.rag.ollama_client import OllamaUnavailableError
+
         mock_embedder = MagicMock()
         mock_embedder.embed_all_pending.side_effect = OllamaUnavailableError("nope")
         svc._embedder = mock_embedder
@@ -172,8 +177,10 @@ class TestManVaultService:
 
     def test_needs_initial_index_empty(self):
         svc = self._make_service()
-        with patch("elle.daemon.manvault.service.get_connection") as mock_conn, \
-             patch("elle.daemon.manvault.service.count_docs", return_value=0):
+        with (
+            patch("elle.daemon.manvault.service.get_connection") as mock_conn,
+            patch("elle.daemon.manvault.service.count_docs", return_value=0),
+        ):
             mock_c = MagicMock()
             mock_c.close = MagicMock()
             mock_conn.return_value = mock_c
@@ -181,8 +188,10 @@ class TestManVaultService:
 
     def test_needs_initial_index_has_docs(self):
         svc = self._make_service()
-        with patch("elle.daemon.manvault.service.get_connection") as mock_conn, \
-             patch("elle.daemon.manvault.service.count_docs", return_value=100):
+        with (
+            patch("elle.daemon.manvault.service.get_connection") as mock_conn,
+            patch("elle.daemon.manvault.service.count_docs", return_value=100),
+        ):
             mock_c = MagicMock()
             mock_c.close = MagicMock()
             mock_conn.return_value = mock_c
@@ -190,8 +199,10 @@ class TestManVaultService:
 
     def test_needs_incremental_no_meta(self):
         svc = self._make_service()
-        with patch("elle.daemon.manvault.service.get_connection") as mock_conn, \
-             patch("elle.daemon.manvault.service.get_meta", return_value=None):
+        with (
+            patch("elle.daemon.manvault.service.get_connection") as mock_conn,
+            patch("elle.daemon.manvault.service.get_meta", return_value=None),
+        ):
             mock_c = MagicMock()
             mock_c.close = MagicMock()
             mock_conn.return_value = mock_c
@@ -200,8 +211,10 @@ class TestManVaultService:
     def test_needs_incremental_recent(self):
         svc = self._make_service()
         recent = datetime.now().isoformat()
-        with patch("elle.daemon.manvault.service.get_connection") as mock_conn, \
-             patch("elle.daemon.manvault.service.get_meta", return_value=recent):
+        with (
+            patch("elle.daemon.manvault.service.get_connection") as mock_conn,
+            patch("elle.daemon.manvault.service.get_meta", return_value=recent),
+        ):
             mock_c = MagicMock()
             mock_c.close = MagicMock()
             mock_conn.return_value = mock_c
@@ -210,8 +223,10 @@ class TestManVaultService:
     def test_needs_incremental_old(self):
         svc = self._make_service()
         old = (datetime.now() - timedelta(days=2)).isoformat()
-        with patch("elle.daemon.manvault.service.get_connection") as mock_conn, \
-             patch("elle.daemon.manvault.service.get_meta", return_value=old):
+        with (
+            patch("elle.daemon.manvault.service.get_connection") as mock_conn,
+            patch("elle.daemon.manvault.service.get_meta", return_value=old),
+        ):
             mock_c = MagicMock()
             mock_c.close = MagicMock()
             mock_conn.return_value = mock_c
@@ -224,13 +239,15 @@ class TestManVaultService:
         mock_embedder.model = "nomic-embed-text"
         svc._embedder = mock_embedder
 
-        with patch("elle.daemon.manvault.service.get_connection") as mock_conn, \
-             patch("elle.daemon.manvault.service.count_docs", return_value=100), \
-             patch("elle.daemon.manvault.service.count_chunks", return_value=500), \
-             patch("elle.daemon.manvault.service.count_embeddings", return_value=200), \
-             patch("elle.daemon.manvault.service.get_meta", return_value=None), \
-             patch("elle.daemon.manvault.service.get_section_counts", return_value={"1": 80, "8": 20}), \
-             patch("elle.daemon.manvault.service.get_db_path") as mock_path:
+        with (
+            patch("elle.daemon.manvault.service.get_connection") as mock_conn,
+            patch("elle.daemon.manvault.service.count_docs", return_value=100),
+            patch("elle.daemon.manvault.service.count_chunks", return_value=500),
+            patch("elle.daemon.manvault.service.count_embeddings", return_value=200),
+            patch("elle.daemon.manvault.service.get_meta", return_value=None),
+            patch("elle.daemon.manvault.service.get_section_counts", return_value={"1": 80, "8": 20}),
+            patch("elle.daemon.manvault.service.get_db_path") as mock_path,
+        ):
             mock_c = MagicMock()
             mock_c.close = MagicMock()
             mock_conn.return_value = mock_c
@@ -251,9 +268,11 @@ class TestManVaultService:
 # Module-level functions
 # ---------------------------------------------------------------------------
 
+
 class TestModuleFunctions:
     def test_get_service_singleton(self):
         import elle.daemon.manvault.service as svc_mod
+
         old = svc_mod._service
         svc_mod._service = None
         try:
@@ -264,15 +283,17 @@ class TestModuleFunctions:
             svc_mod._service = old
 
     def test_get_status_func(self):
-        with patch("elle.daemon.manvault.service.get_connection") as mock_conn, \
-             patch("elle.daemon.manvault.service.ensure_schema"), \
-             patch("elle.daemon.manvault.service.count_docs", return_value=0), \
-             patch("elle.daemon.manvault.service.count_chunks", return_value=0), \
-             patch("elle.daemon.manvault.service.count_embeddings", return_value=0), \
-             patch("elle.daemon.manvault.service.get_meta", return_value=None), \
-             patch("elle.daemon.manvault.service.get_section_counts", return_value={}), \
-             patch("elle.daemon.manvault.service.get_db_path") as mock_path, \
-             patch("elle.daemon.manvault.service.get_embedder") as mock_emb:
+        with (
+            patch("elle.daemon.manvault.service.get_connection") as mock_conn,
+            patch("elle.daemon.manvault.service.ensure_schema"),
+            patch("elle.daemon.manvault.service.count_docs", return_value=0),
+            patch("elle.daemon.manvault.service.count_chunks", return_value=0),
+            patch("elle.daemon.manvault.service.count_embeddings", return_value=0),
+            patch("elle.daemon.manvault.service.get_meta", return_value=None),
+            patch("elle.daemon.manvault.service.get_section_counts", return_value={}),
+            patch("elle.daemon.manvault.service.get_db_path") as mock_path,
+            patch("elle.daemon.manvault.service.get_embedder") as mock_emb,
+        ):
             mock_c = MagicMock()
             mock_c.close = MagicMock()
             mock_conn.return_value = mock_c
@@ -281,19 +302,22 @@ class TestModuleFunctions:
             mock_path.return_value = mock_p
             mock_emb.return_value = MagicMock(is_available=MagicMock(return_value=False))
             from elle.daemon.manvault.service import get_status
+
             status = get_status()
             assert status.total_docs == 0
 
     def test_get_status_embedder_exception(self):
-        with patch("elle.daemon.manvault.service.get_connection") as mock_conn, \
-             patch("elle.daemon.manvault.service.ensure_schema"), \
-             patch("elle.daemon.manvault.service.count_docs", return_value=0), \
-             patch("elle.daemon.manvault.service.count_chunks", return_value=0), \
-             patch("elle.daemon.manvault.service.count_embeddings", return_value=0), \
-             patch("elle.daemon.manvault.service.get_meta", return_value=None), \
-             patch("elle.daemon.manvault.service.get_section_counts", return_value={}), \
-             patch("elle.daemon.manvault.service.get_db_path") as mock_path, \
-             patch("elle.daemon.manvault.service.get_embedder", side_effect=RuntimeError("no")):
+        with (
+            patch("elle.daemon.manvault.service.get_connection") as mock_conn,
+            patch("elle.daemon.manvault.service.ensure_schema"),
+            patch("elle.daemon.manvault.service.count_docs", return_value=0),
+            patch("elle.daemon.manvault.service.count_chunks", return_value=0),
+            patch("elle.daemon.manvault.service.count_embeddings", return_value=0),
+            patch("elle.daemon.manvault.service.get_meta", return_value=None),
+            patch("elle.daemon.manvault.service.get_section_counts", return_value={}),
+            patch("elle.daemon.manvault.service.get_db_path") as mock_path,
+            patch("elle.daemon.manvault.service.get_embedder", side_effect=RuntimeError("no")),
+        ):
             mock_c = MagicMock()
             mock_c.close = MagicMock()
             mock_conn.return_value = mock_c
@@ -301,12 +325,14 @@ class TestModuleFunctions:
             mock_p.exists.return_value = False
             mock_path.return_value = mock_p
             from elle.daemon.manvault.service import get_status
+
             status = get_status()
             assert status.embedding_model is None
 
     @pytest.mark.asyncio
     async def test_stop_timeout(self):
         from elle.daemon.manvault.service import ManVaultService
+
         svc = ManVaultService()
 
         async def never_ends():

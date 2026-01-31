@@ -604,9 +604,7 @@ async def _handle_bootstrap(args: str) -> str:
     dry_run = "--dry-run" in parts
 
     # If specific flags are given, only include those categories
-    has_specific_flags = any(
-        f in parts for f in ["--core", "--essential", "--deps", "--optional"]
-    )
+    has_specific_flags = any(f in parts for f in ["--core", "--essential", "--deps", "--optional"])
 
     if has_specific_flags:
         include_core = "--core" in parts

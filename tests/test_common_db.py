@@ -11,7 +11,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # =============================================================================
 # init_all_schemas
 # =============================================================================
@@ -69,7 +68,7 @@ class TestStorageEngine:
 
         reset_pools()
         try:
-            with patch("elle.storage.engine.ConnectionPool") as MockPool:
+            with patch("elle.storage.engine.ConnectionPool"):
                 pool = configure_pool()
                 assert pool is not None
         finally:
@@ -93,8 +92,8 @@ class TestStorageEngine:
 
     def test_reset_pools_clears_singletons(self):
         """reset_pools should clear the pool singletons."""
-        from elle.storage.engine import reset_pools
         import elle.storage.engine as engine_mod
+        from elle.storage.engine import reset_pools
 
         reset_pools()
         assert engine_mod._pool is None

@@ -6,9 +6,9 @@ import hashlib
 import json
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -26,7 +26,6 @@ from elle.ops.augeas.models import (
     BackupListResult,
     BackupRecord,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -125,25 +124,19 @@ class TestBackupManagerInit:
 class TestBackup:
     """Tests for creating backups."""
 
-    def test_backup_creates_file(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_backup_creates_file(self, manager: BackupManager, sample_config: Path) -> None:
         """backup should copy the file into the backup directory."""
         record = manager.backup(str(sample_config))
         backup_path = Path(record.backup_path)
         assert backup_path.exists()
         assert backup_path.read_text() == sample_config.read_text()
 
-    def test_backup_preserves_filename(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_backup_preserves_filename(self, manager: BackupManager, sample_config: Path) -> None:
         """The backup file should keep the original file name."""
         record = manager.backup(str(sample_config))
         assert Path(record.backup_path).name == sample_config.name
 
-    def test_backup_record_fields(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_backup_record_fields(self, manager: BackupManager, sample_config: Path) -> None:
         """BackupRecord should contain correct metadata."""
         record = manager.backup(str(sample_config))
         assert record.original_path == str(sample_config)
@@ -152,32 +145,24 @@ class TestBackup:
         assert isinstance(record.created_at, datetime)
         assert isinstance(record.domain, str)
 
-    def test_backup_sha256_matches_file(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_backup_sha256_matches_file(self, manager: BackupManager, sample_config: Path) -> None:
         """The sha256 in the record should match the actual file hash."""
         record = manager.backup(str(sample_config))
         expected = hashlib.sha256(sample_config.read_bytes()).hexdigest()
         assert record.sha256 == expected
 
-    def test_backup_with_metadata(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_backup_with_metadata(self, manager: BackupManager, sample_config: Path) -> None:
         """Optional metadata should be stored in the record."""
         meta = {"incident_id": "INC-001", "description": "test edit"}
         record = manager.backup(str(sample_config), metadata=meta)
         assert record.metadata == meta
 
-    def test_backup_without_metadata(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_backup_without_metadata(self, manager: BackupManager, sample_config: Path) -> None:
         """Metadata should default to empty dict when not provided."""
         record = manager.backup(str(sample_config))
         assert record.metadata == {}
 
-    def test_backup_saves_metadata_json(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_backup_saves_metadata_json(self, manager: BackupManager, sample_config: Path) -> None:
         """A metadata.json should be written alongside the backup file."""
         record = manager.backup(str(sample_config))
         metadata_file = Path(record.backup_path).parent / "metadata.json"
@@ -191,26 +176,20 @@ class TestBackup:
         with pytest.raises(AugeasBackupError, match="File does not exist"):
             manager.backup("/nonexistent/file.conf")
 
-    def test_backup_binary_file(
-        self, manager: BackupManager, sample_binary: Path
-    ) -> None:
+    def test_backup_binary_file(self, manager: BackupManager, sample_binary: Path) -> None:
         """Backing up a binary file should work correctly."""
         record = manager.backup(str(sample_binary))
         backup_path = Path(record.backup_path)
         assert backup_path.exists()
         assert backup_path.read_bytes() == sample_binary.read_bytes()
 
-    def test_backup_cleans_up_on_copy_failure(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_backup_cleans_up_on_copy_failure(self, manager: BackupManager, sample_config: Path) -> None:
         """If shutil.copy2 fails, the backup dir should be cleaned up."""
         with patch("shutil.copy2", side_effect=OSError("disk full")):
             with pytest.raises(AugeasBackupError, match="disk full"):
                 manager.backup(str(sample_config))
 
-    def test_multiple_backups_different_timestamps(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_multiple_backups_different_timestamps(self, manager: BackupManager, sample_config: Path) -> None:
         """Successive backups should be in different timestamped directories."""
         r1 = manager.backup(str(sample_config))
         # Small sleep to guarantee different timestamp
@@ -227,9 +206,7 @@ class TestBackup:
 class TestRestore:
     """Tests for restoring backups."""
 
-    def test_restore_from_record(
-        self, manager: BackupManager, sample_config: Path, tmp_path: Path
-    ) -> None:
+    def test_restore_from_record(self, manager: BackupManager, sample_config: Path, tmp_path: Path) -> None:
         """restore should copy backup back to original location."""
         record = manager.backup(str(sample_config))
         # Modify the original
@@ -240,9 +217,7 @@ class TestRestore:
         assert result is True
         assert sample_config.read_text() == "127.0.0.1 localhost\n"
 
-    def test_restore_to_alternate_path(
-        self, manager: BackupManager, sample_config: Path, tmp_path: Path
-    ) -> None:
+    def test_restore_to_alternate_path(self, manager: BackupManager, sample_config: Path, tmp_path: Path) -> None:
         """restore should support overriding the target path."""
         record = manager.backup(str(sample_config))
         alt_target = tmp_path / "restored.conf"
@@ -262,9 +237,7 @@ class TestRestore:
         assert result is True
         assert alt_target.read_text() == "127.0.0.1 localhost\n"
 
-    def test_restore_string_without_target_raises(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_restore_string_without_target_raises(self, manager: BackupManager, sample_config: Path) -> None:
         """restore with string path but no target should raise."""
         record = manager.backup(str(sample_config))
         with pytest.raises(AugeasBackupError, match="Target path not specified"):
@@ -281,9 +254,7 @@ class TestRestore:
         with pytest.raises(AugeasBackupError, match="Backup file does not exist"):
             manager.restore(fake_record)
 
-    def test_restore_copy_failure_raises(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_restore_copy_failure_raises(self, manager: BackupManager, sample_config: Path) -> None:
         """restore should raise AugeasBackupError when copy fails."""
         record = manager.backup(str(sample_config))
         with patch("shutil.copy2", side_effect=OSError("permission denied")):
@@ -299,9 +270,7 @@ class TestRestore:
 class TestGetBackup:
     """Tests for retrieving a single backup record."""
 
-    def test_get_backup_from_metadata(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_get_backup_from_metadata(self, manager: BackupManager, sample_config: Path) -> None:
         """get_backup should load the BackupRecord from metadata.json."""
         record = manager.backup(str(sample_config))
         loaded = manager.get_backup(record.backup_path)
@@ -314,9 +283,7 @@ class TestGetBackup:
         result = manager.get_backup("/nonexistent/backup")
         assert result is None
 
-    def test_get_backup_without_metadata_file(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_get_backup_without_metadata_file(self, manager: BackupManager, sample_config: Path) -> None:
         """get_backup should create a minimal record when metadata.json is absent."""
         record = manager.backup(str(sample_config))
         # Remove the metadata file
@@ -328,9 +295,7 @@ class TestGetBackup:
         assert loaded.original_path == "unknown"
         assert loaded.domain == "unknown"
 
-    def test_get_backup_corrupt_metadata(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_get_backup_corrupt_metadata(self, manager: BackupManager, sample_config: Path) -> None:
         """get_backup should fall back to minimal record on corrupt metadata."""
         record = manager.backup(str(sample_config))
         metadata = Path(record.backup_path).parent / "metadata.json"
@@ -356,18 +321,14 @@ class TestListBackups:
         assert result.backups == ()
         assert result.total_size_bytes == 0
 
-    def test_list_after_backup(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_list_after_backup(self, manager: BackupManager, sample_config: Path) -> None:
         """list_backups should include recently created backups."""
         manager.backup(str(sample_config))
         result = manager.list_backups()
         assert len(result.backups) == 1
         assert result.backups[0].original_path == str(sample_config)
 
-    def test_list_filter_by_domain(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_list_filter_by_domain(self, manager: BackupManager, sample_config: Path) -> None:
         """list_backups with domain filter should only show matching domain."""
         record = manager.backup(str(sample_config))
         # Filter by the auto-detected domain
@@ -378,9 +339,7 @@ class TestListBackups:
         result_empty = manager.list_backups(domain="nonexistent_domain_xyz")
         assert len(result_empty.backups) == 0
 
-    def test_list_filter_by_original_path(
-        self, manager: BackupManager, sample_config: Path, tmp_path: Path
-    ) -> None:
+    def test_list_filter_by_original_path(self, manager: BackupManager, sample_config: Path, tmp_path: Path) -> None:
         """list_backups with original_path filter should only match that file."""
         manager.backup(str(sample_config))
         other = tmp_path / "other.conf"
@@ -391,9 +350,7 @@ class TestListBackups:
         assert len(result.backups) == 1
         assert result.backups[0].original_path == str(sample_config)
 
-    def test_list_respects_limit(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_list_respects_limit(self, manager: BackupManager, sample_config: Path) -> None:
         """list_backups should respect the limit parameter."""
         for _ in range(3):
             manager.backup(str(sample_config))
@@ -402,18 +359,14 @@ class TestListBackups:
         result = manager.list_backups(limit=2)
         assert len(result.backups) == 2
 
-    def test_list_by_domain_counts(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_list_by_domain_counts(self, manager: BackupManager, sample_config: Path) -> None:
         """by_domain should contain the correct count per domain."""
         record = manager.backup(str(sample_config))
         result = manager.list_backups()
         assert record.domain in result.by_domain
         assert result.by_domain[record.domain] >= 1
 
-    def test_list_includes_backups_without_metadata(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_list_includes_backups_without_metadata(self, manager: BackupManager, sample_config: Path) -> None:
         """list_backups should include entries even without metadata.json."""
         record = manager.backup(str(sample_config))
         # Remove metadata.json
@@ -438,9 +391,7 @@ class TestGetLatestBackup:
         result = manager.get_latest_backup("/etc/hosts")
         assert result is None
 
-    def test_returns_most_recent(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_returns_most_recent(self, manager: BackupManager, sample_config: Path) -> None:
         """get_latest_backup should return the most recent backup."""
         manager.backup(str(sample_config))
         time.sleep(0.01)
@@ -459,9 +410,7 @@ class TestGetLatestBackup:
 class TestDeleteBackup:
     """Tests for deleting backups."""
 
-    def test_delete_removes_directory(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_delete_removes_directory(self, manager: BackupManager, sample_config: Path) -> None:
         """delete_backup should remove the entire timestamp directory."""
         record = manager.backup(str(sample_config))
         backup_dir = Path(record.backup_path).parent
@@ -476,17 +425,13 @@ class TestDeleteBackup:
         result = manager.delete_backup("/nonexistent/backup.conf")
         assert result is False
 
-    def test_delete_with_string_path(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_delete_with_string_path(self, manager: BackupManager, sample_config: Path) -> None:
         """delete_backup should accept a string path."""
         record = manager.backup(str(sample_config))
         result = manager.delete_backup(record.backup_path)
         assert result is True
 
-    def test_delete_failure_returns_false(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_delete_failure_returns_false(self, manager: BackupManager, sample_config: Path) -> None:
         """delete_backup should return False when rmtree fails."""
         record = manager.backup(str(sample_config))
         with patch("shutil.rmtree", side_effect=OSError("locked")):
@@ -502,9 +447,7 @@ class TestDeleteBackup:
 class TestCleanupOldBackups:
     """Tests for cleaning up old backups."""
 
-    def test_cleanup_by_age(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_cleanup_by_age(self, manager: BackupManager, sample_config: Path) -> None:
         """cleanup_old_backups should remove backups older than max_age_days."""
         record = manager.backup(str(sample_config))
         backup_dir = Path(record.backup_path).parent
@@ -516,9 +459,7 @@ class TestCleanupOldBackups:
         deleted = manager.cleanup_old_backups(max_age_days=30)
         assert deleted >= 1
 
-    def test_cleanup_by_count(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_cleanup_by_count(self, manager: BackupManager, sample_config: Path) -> None:
         """cleanup_old_backups should keep at most max_count backups per domain."""
         for _ in range(5):
             manager.backup(str(sample_config))
@@ -527,17 +468,13 @@ class TestCleanupOldBackups:
         deleted = manager.cleanup_old_backups(max_count=2)
         assert deleted >= 3
 
-    def test_cleanup_no_deletions_when_fresh(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_cleanup_no_deletions_when_fresh(self, manager: BackupManager, sample_config: Path) -> None:
         """cleanup_old_backups should delete nothing when backups are fresh."""
         manager.backup(str(sample_config))
         deleted = manager.cleanup_old_backups(max_age_days=30)
         assert deleted == 0
 
-    def test_cleanup_specific_domain(
-        self, manager: BackupManager, tmp_path: Path
-    ) -> None:
+    def test_cleanup_specific_domain(self, manager: BackupManager, tmp_path: Path) -> None:
         """cleanup_old_backups with domain filter should only clean that domain."""
         file_a = tmp_path / "a.conf"
         file_a.write_text("aaa\n")
@@ -571,9 +508,7 @@ class TestCleanupOldBackups:
         # domain_b's backup should still exist
         assert Path(r2.backup_path).exists()
 
-    def test_cleanup_handles_rmtree_failure(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_cleanup_handles_rmtree_failure(self, manager: BackupManager, sample_config: Path) -> None:
         """cleanup should continue and not raise when rmtree fails."""
         record = manager.backup(str(sample_config))
         backup_dir = Path(record.backup_path).parent
@@ -598,17 +533,13 @@ class TestGetBackupSize:
         """get_backup_size should return 0 when no backups exist."""
         assert manager.get_backup_size() == 0
 
-    def test_returns_nonzero_after_backup(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_returns_nonzero_after_backup(self, manager: BackupManager, sample_config: Path) -> None:
         """get_backup_size should be positive after creating a backup."""
         manager.backup(str(sample_config))
         size = manager.get_backup_size()
         assert size > 0
 
-    def test_filter_by_domain(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_filter_by_domain(self, manager: BackupManager, sample_config: Path) -> None:
         """get_backup_size with domain should only count that domain."""
         record = manager.backup(str(sample_config))
         size_domain = manager.get_backup_size(domain=record.domain)
@@ -626,16 +557,12 @@ class TestGetBackupSize:
 class TestVerifyBackup:
     """Tests for verify_backup."""
 
-    def test_valid_backup_passes(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_valid_backup_passes(self, manager: BackupManager, sample_config: Path) -> None:
         """verify_backup should return True for an unmodified backup."""
         record = manager.backup(str(sample_config))
         assert manager.verify_backup(record) is True
 
-    def test_tampered_backup_fails(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_tampered_backup_fails(self, manager: BackupManager, sample_config: Path) -> None:
         """verify_backup should return False if backup file was changed."""
         record = manager.backup(str(sample_config))
         # Tamper with the backup file
@@ -652,9 +579,7 @@ class TestVerifyBackup:
         )
         assert manager.verify_backup(fake_record) is False
 
-    def test_empty_sha256_passes(
-        self, manager: BackupManager, sample_config: Path
-    ) -> None:
+    def test_empty_sha256_passes(self, manager: BackupManager, sample_config: Path) -> None:
         """verify_backup with empty sha256 should return True (nothing to check)."""
         record = manager.backup(str(sample_config))
         # Create a record with no hash
@@ -687,9 +612,7 @@ class TestConvenienceFunctions:
         finally:
             backup_mod._manager = original_manager
 
-    def test_backup_file_with_domain_parameter(
-        self, sample_config: Path, tmp_path: Path
-    ) -> None:
+    def test_backup_file_with_domain_parameter(self, sample_config: Path, tmp_path: Path) -> None:
         """backup_file should accept domain parameter (unused, auto-detected)."""
         import elle.ops.augeas.backup as backup_mod
 
@@ -703,9 +626,7 @@ class TestConvenienceFunctions:
         finally:
             backup_mod._manager = original_manager
 
-    def test_backup_file_with_metadata(
-        self, sample_config: Path, tmp_path: Path
-    ) -> None:
+    def test_backup_file_with_metadata(self, sample_config: Path, tmp_path: Path) -> None:
         """backup_file should pass metadata through."""
         import elle.ops.augeas.backup as backup_mod
 
@@ -718,9 +639,7 @@ class TestConvenienceFunctions:
         finally:
             backup_mod._manager = original_manager
 
-    def test_restore_file_function(
-        self, sample_config: Path, tmp_path: Path
-    ) -> None:
+    def test_restore_file_function(self, sample_config: Path, tmp_path: Path) -> None:
         """restore_file convenience function should restore the file."""
         import elle.ops.augeas.backup as backup_mod
 
@@ -736,9 +655,7 @@ class TestConvenienceFunctions:
         finally:
             backup_mod._manager = original_manager
 
-    def test_list_backups_function(
-        self, sample_config: Path, tmp_path: Path
-    ) -> None:
+    def test_list_backups_function(self, sample_config: Path, tmp_path: Path) -> None:
         """list_backups convenience function should list backups."""
         import elle.ops.augeas.backup as backup_mod
 
@@ -753,9 +670,7 @@ class TestConvenienceFunctions:
         finally:
             backup_mod._manager = original_manager
 
-    def test_get_latest_backup_function(
-        self, sample_config: Path, tmp_path: Path
-    ) -> None:
+    def test_get_latest_backup_function(self, sample_config: Path, tmp_path: Path) -> None:
         """get_latest_backup convenience function should return latest."""
         import elle.ops.augeas.backup as backup_mod
 
@@ -770,9 +685,7 @@ class TestConvenienceFunctions:
         finally:
             backup_mod._manager = original_manager
 
-    def test_cleanup_backups_function(
-        self, sample_config: Path, tmp_path: Path
-    ) -> None:
+    def test_cleanup_backups_function(self, sample_config: Path, tmp_path: Path) -> None:
         """cleanup_backups convenience function should run cleanup."""
         import elle.ops.augeas.backup as backup_mod
 
@@ -807,9 +720,7 @@ class TestConvenienceFunctions:
 class TestEdgeCases:
     """Edge case tests for backup operations."""
 
-    def test_backup_empty_file(
-        self, manager: BackupManager, tmp_path: Path
-    ) -> None:
+    def test_backup_empty_file(self, manager: BackupManager, tmp_path: Path) -> None:
         """Backing up an empty file should work."""
         empty = tmp_path / "empty.conf"
         empty.write_text("")
@@ -818,9 +729,7 @@ class TestEdgeCases:
         assert record.size_bytes == 0
         assert Path(record.backup_path).exists()
 
-    def test_backup_file_with_special_chars_in_name(
-        self, manager: BackupManager, tmp_path: Path
-    ) -> None:
+    def test_backup_file_with_special_chars_in_name(self, manager: BackupManager, tmp_path: Path) -> None:
         """Files with spaces and special chars in the name should work."""
         special = tmp_path / "my config (v2).conf"
         special.write_text("data\n")
@@ -829,9 +738,7 @@ class TestEdgeCases:
         assert Path(record.backup_path).exists()
         assert Path(record.backup_path).read_text() == "data\n"
 
-    def test_backup_large_ish_file(
-        self, manager: BackupManager, tmp_path: Path
-    ) -> None:
+    def test_backup_large_ish_file(self, manager: BackupManager, tmp_path: Path) -> None:
         """Backing up a file larger than the hash chunk size (8192) should work."""
         big = tmp_path / "big.conf"
         big.write_text("x" * 20000)
@@ -841,9 +748,7 @@ class TestEdgeCases:
         assert record.sha256 == expected
         assert record.size_bytes == 20000
 
-    def test_restore_preserves_content(
-        self, manager: BackupManager, tmp_path: Path
-    ) -> None:
+    def test_restore_preserves_content(self, manager: BackupManager, tmp_path: Path) -> None:
         """Restoring should produce byte-identical content."""
         original = tmp_path / "binary_restore.dat"
         content = bytes(range(256))

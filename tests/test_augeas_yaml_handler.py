@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -18,10 +17,10 @@ from elle.ops.augeas.yaml_handler import (
     set_yaml_value,
 )
 
-
 # ---------------------------------------------------------------------------
 # Module availability
 # ---------------------------------------------------------------------------
+
 
 class TestAvailability:
     def test_is_available_true(self):
@@ -35,6 +34,7 @@ class TestAvailability:
 # ---------------------------------------------------------------------------
 # YAMLChange / YAMLEditResult
 # ---------------------------------------------------------------------------
+
 
 class TestModels:
     def test_yaml_change(self):
@@ -50,6 +50,7 @@ class TestModels:
 # ---------------------------------------------------------------------------
 # YAMLHandler
 # ---------------------------------------------------------------------------
+
 
 class TestYAMLHandler:
     def test_init(self):
@@ -289,6 +290,7 @@ class TestYAMLHandler:
 # NetplanHandler
 # ---------------------------------------------------------------------------
 
+
 class TestNetplanHandler:
     def test_init(self):
         h = NetplanHandler()
@@ -383,6 +385,7 @@ class TestNetplanHandler:
 # ---------------------------------------------------------------------------
 # Module-level convenience functions
 # ---------------------------------------------------------------------------
+
 
 class TestConvenienceFunctions:
     def test_load_yaml(self, tmp_path):

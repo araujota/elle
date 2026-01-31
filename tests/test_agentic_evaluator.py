@@ -149,7 +149,9 @@ class TestGoalEvaluatorEvaluate:
         ev = GoalEvaluator()
         need = _make_need(category="service", target="nginx")
         intent = _make_intent(information_needs=(need,))
-        evidence = _make_evidence(capability="service.status", args={"service": "nginx"}, success=False, error="timeout")
+        evidence = _make_evidence(
+            capability="service.status", args={"service": "nginx"}, success=False, error="timeout"
+        )
         result = _make_exec_result([evidence])
 
         evaluation = await ev.evaluate(intent, result)
@@ -172,7 +174,9 @@ class TestGoalEvaluatorEvaluate:
         ev = GoalEvaluator()
         action = _make_action(action_type=ActionType.RESTART, target="nginx", domain="service")
         intent = _make_intent(action_requests=(action,))
-        evidence = _make_evidence(capability="service.restart", args={"service": "nginx"}, success=False, error="denied")
+        evidence = _make_evidence(
+            capability="service.restart", args={"service": "nginx"}, success=False, error="denied"
+        )
         result = _make_exec_result([evidence])
 
         evaluation = await ev.evaluate(intent, result)
@@ -297,5 +301,3 @@ class TestFindMatchingEvidence:
         result = _make_exec_result(evidence)
         matched = ev._find_matching_evidence(need, result)
         assert len(matched) == 0
-
-

@@ -336,7 +336,7 @@ class MultiHopSearch:
         if isinstance(ts, datetime):
             return ts
         if isinstance(ts, str):
-            return parse_datetime(ts)
+            return parse_datetime(ts) or datetime.utcnow()
         return datetime.utcnow()
 
     def _build_chains(

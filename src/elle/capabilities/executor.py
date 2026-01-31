@@ -202,18 +202,20 @@ class CapabilityExecutor:
 
         # 5. Confirmation - check autonomy first
         # Determine if capability can run autonomously
-        can_auto, auto_reason = self.autonomy_engine.can_run_autonomously(
-            spec.name, spec.risk
-        )
+        can_auto, auto_reason = self.autonomy_engine.can_run_autonomously(spec.name, spec.risk)
 
         # Confirmation is needed if:
         # - require_confirmation is True AND
         # - capability cannot run autonomously AND
         # - (policy requires it OR spec requires it OR dry_run requires it)
-        needs_confirm = require_confirmation and not can_auto and (
-            getattr(policy_result, "requires_confirmation", False)
-            or capability_requires_confirmation(spec)
-            or dry_run_result.requires_confirmation
+        needs_confirm = (
+            require_confirmation
+            and not can_auto
+            and (
+                getattr(policy_result, "requires_confirmation", False)
+                or capability_requires_confirmation(spec)
+                or dry_run_result.requires_confirmation
+            )
         )
 
         if needs_confirm:
@@ -295,9 +297,7 @@ class CapabilityExecutor:
 
         # 10. Update autonomy tracking (for earned autonomy)
         try:
-            autonomy_message = self.autonomy_engine.update_after_execution(
-                spec.name, result.success, spec.risk
-            )
+            autonomy_message = self.autonomy_engine.update_after_execution(spec.name, result.success, spec.risk)
             if autonomy_message:
                 logger.info(autonomy_message)
         except Exception as e:

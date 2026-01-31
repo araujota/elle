@@ -1,11 +1,10 @@
-from __future__ import annotations
-
 """Tests for the ELLE setup wizard."""
 
-import logging
+from __future__ import annotations
+
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -23,7 +22,6 @@ from elle.cli.setup.wizard import (
     _build_policy_yaml,
     _build_user_rules,
 )
-
 
 # =============================================================================
 # Fixtures
@@ -161,8 +159,7 @@ class TestLoadSetupState:
     def test_loads_existing_state(self, tmp_config):
         _, config_file, _ = tmp_config
         config_file.write_text(
-            '[setup]\ncompleted = true\nversion = "1.0.0"\n\n'
-            '[setup.preferences]\nsafety_level = "cautious"\n'
+            '[setup]\ncompleted = true\nversion = "1.0.0"\n\n[setup.preferences]\nsafety_level = "cautious"\n'
         )
         with patch("elle.cli.setup.wizard.USER_CONFIG_FILE", config_file):
             from elle.cli.setup.wizard import load_setup_state
@@ -461,9 +458,7 @@ class TestConfigurePolkitPrivileges:
 
 class TestCheckEnvironment:
     def test_returns_continue_when_ollama_running(self, wizard, mock_console):
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": True, "models": ["qwen2.5:7b"]}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": True, "models": ["qwen2.5:7b"]})
         wizard._check_telemetryd_running = MagicMock(return_value=True)
         wizard._check_daemon_running = MagicMock(return_value=True)
 
@@ -471,9 +466,7 @@ class TestCheckEnvironment:
         assert result == StepResult.CONTINUE
 
     def test_ollama_not_installed_continues(self, wizard, mock_console):
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": False, "running": False, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": False, "running": False, "models": []})
         wizard._check_telemetryd_running = MagicMock(return_value=False)
         wizard._check_daemon_running = MagicMock(return_value=False)
         wizard.prompt.prompt_confirm.return_value = True
@@ -482,9 +475,7 @@ class TestCheckEnvironment:
         assert result == StepResult.CONTINUE
 
     def test_cancel_without_ollama(self, wizard, mock_console):
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": False, "running": False, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": False, "running": False, "models": []})
         wizard._check_telemetryd_running = MagicMock(return_value=False)
         wizard._check_daemon_running = MagicMock(return_value=False)
         wizard.prompt.prompt_confirm.return_value = False
@@ -493,9 +484,7 @@ class TestCheckEnvironment:
         assert result == StepResult.CANCEL
 
     def test_ollama_installed_not_running_start_success(self, wizard, mock_console):
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": False, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": False, "models": []})
         wizard._check_telemetryd_running = MagicMock(return_value=True)
         wizard._check_daemon_running = MagicMock(return_value=True)
         wizard._start_ollama = MagicMock(return_value=True)
@@ -578,9 +567,7 @@ class TestConfigureTelemetry:
         assert result == StepResult.BACK
 
     def test_all_telemetry_selected(self, wizard, mock_console):
-        wizard.prompt.prompt_multi_select.return_value = [
-            "journal", "kernel", "probes", "docker", "ebpf"
-        ]
+        wizard.prompt.prompt_multi_select.return_value = ["journal", "kernel", "probes", "docker", "ebpf"]
         wizard._configure_telemetry(can_go_back=True)
         assert wizard.prefs.journal_enabled is True
         assert wizard.prefs.kernel_enabled is True
@@ -782,9 +769,7 @@ class TestCheckOllama:
     def test_ollama_running(self, wizard):
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "models": [{"name": "qwen2.5:7b"}, {"name": "nomic-embed-text"}]
-        }
+        mock_response.json.return_value = {"models": [{"name": "qwen2.5:7b"}, {"name": "nomic-embed-text"}]}
 
         with (
             patch("shutil.which", return_value="/usr/bin/ollama"),

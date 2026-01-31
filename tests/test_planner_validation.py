@@ -7,8 +7,6 @@ package and service checks, and the convenience helpers
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
 from elle.cli.planner.models import (
@@ -33,16 +31,14 @@ from elle.cli.planner.validation import (
 from elle.daemon.telemetry.trends import (
     AnomalyResult,
     Forecast,
-    PlanValidationResult,
     TrendContext,
     TrendWindow,
-    ValidationWarning,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures / Helpers
 # ---------------------------------------------------------------------------
+
 
 def _step(command: str, risk: str = "low", can_fail: bool = False) -> PlanStep:
     """Create a simple PlanStep."""
@@ -182,11 +178,13 @@ class TestPlanInvolvesPackages:
         assert _plan_involves_packages(plan) is False
 
     def test_mixed_steps_one_is_package(self) -> None:
-        plan = _plan(steps=(
-            _step("echo hello"),
-            _step("apt install vim"),
-            _step("cat /etc/hosts"),
-        ))
+        plan = _plan(
+            steps=(
+                _step("echo hello"),
+                _step("apt install vim"),
+                _step("cat /etc/hosts"),
+            )
+        )
         assert _plan_involves_packages(plan) is True
 
 
@@ -355,9 +353,7 @@ class TestValidateForecastChecks:
         plan = _plan(steps=(_step("echo ok"),))
         tc = _trend_context(
             forecasts={
-                "disk./.used_pct": _forecast(
-                    "disk./.used_pct", 80.0, will_cross=True, hours_to_threshold=12.0
-                ),
+                "disk./.used_pct": _forecast("disk./.used_pct", 80.0, will_cross=True, hours_to_threshold=12.0),
             },
         )
         result = validate_plan_against_trends(plan, tc)
@@ -367,9 +363,7 @@ class TestValidateForecastChecks:
         plan = _plan(steps=(_step("echo ok"),))
         tc = _trend_context(
             forecasts={
-                "disk./.used_pct": _forecast(
-                    "disk./.used_pct", 60.0, will_cross=True, hours_to_threshold=72.0
-                ),
+                "disk./.used_pct": _forecast("disk./.used_pct", 60.0, will_cross=True, hours_to_threshold=72.0),
             },
         )
         result = validate_plan_against_trends(plan, tc)
@@ -652,9 +646,7 @@ class TestEstimateSuccessLikelihood:
         assert likelihood == pytest.approx(0.8)
 
     def test_high_risk_steps_reduce_likelihood(self) -> None:
-        plan = _plan(steps=(
-            _step("dd if=/dev/zero of=/dev/sda", risk="high"),
-        ))
+        plan = _plan(steps=(_step("dd if=/dev/zero of=/dev/sda", risk="high"),))
         ctx = _plan_context()
         likelihood = estimate_success_likelihood(plan, ctx)
         # Base 0.8 - 0.1 for high risk - 0.1 for no rollback = 0.6
@@ -676,10 +668,12 @@ class TestEstimateSuccessLikelihood:
         assert likelihood == pytest.approx(0.7)
 
     def test_multiple_high_risk_steps(self) -> None:
-        plan = _plan(steps=(
-            _step("mkfs.ext4 /dev/sdb1", risk="high"),
-            _step("dd if=/dev/zero of=/dev/sdc", risk="high"),
-        ))
+        plan = _plan(
+            steps=(
+                _step("mkfs.ext4 /dev/sdb1", risk="high"),
+                _step("dd if=/dev/zero of=/dev/sdc", risk="high"),
+            )
+        )
         ctx = _plan_context()
         likelihood = estimate_success_likelihood(plan, ctx)
         # Base 0.8 - 0.2 for two high risk - 0.1 no rollback = 0.5
@@ -742,16 +736,18 @@ class TestEstimateSuccessLikelihood:
         assert likelihood == pytest.approx(0.8)
 
     def test_likelihood_clamped_at_minimum(self) -> None:
-        plan = _plan(steps=(
-            _step("cmd", risk="high"),
-            _step("cmd", risk="high"),
-            _step("cmd", risk="high"),
-            _step("cmd", risk="high"),
-            _step("cmd", risk="high"),
-            _step("cmd", risk="high"),
-            _step("cmd", risk="high"),
-            _step("cmd", risk="high"),
-        ))
+        plan = _plan(
+            steps=(
+                _step("cmd", risk="high"),
+                _step("cmd", risk="high"),
+                _step("cmd", risk="high"),
+                _step("cmd", risk="high"),
+                _step("cmd", risk="high"),
+                _step("cmd", risk="high"),
+                _step("cmd", risk="high"),
+                _step("cmd", risk="high"),
+            )
+        )
         ctx = _plan_context(
             trend_context=TrendContextRef(
                 has_warnings=True,
@@ -802,9 +798,7 @@ class TestCombinedScenarios:
         tc = _trend_context(
             memory_trend=_trend_window("mem.used_pct", 92.0),
             forecasts={
-                "mem.used_pct": _forecast(
-                    "mem.used_pct", 92.0, will_cross=True, hours_to_threshold=6.0
-                ),
+                "mem.used_pct": _forecast("mem.used_pct", 92.0, will_cross=True, hours_to_threshold=6.0),
             },
         )
         result = validate_plan_against_trends(plan, tc)
@@ -813,10 +807,12 @@ class TestCombinedScenarios:
 
     def test_clean_system_passes_validation(self) -> None:
         """A healthy system should pass with high probability."""
-        plan = _plan(steps=(
-            _step("apt install nginx"),
-            _step("systemctl start nginx"),
-        ))
+        plan = _plan(
+            steps=(
+                _step("apt install nginx"),
+                _step("systemctl start nginx"),
+            )
+        )
         tc = _trend_context(
             disk_trends={"/": _trend_window("disk./.used_pct", 40.0)},
             memory_trend=_trend_window("mem.used_pct", 55.0),

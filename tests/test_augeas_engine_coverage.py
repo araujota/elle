@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from elle.ops.augeas.models import (
-    AugeasChange,
     AugeasError,
     AugeasLensNotFoundError,
     AugeasOp,
@@ -13,25 +12,28 @@ from elle.ops.augeas.models import (
     AugeasUnavailableError,
 )
 
-
 # ---------------------------------------------------------------------------
 # Module-level functions
 # ---------------------------------------------------------------------------
+
 
 class TestModuleFunctions:
     def test_is_available_true(self):
         with patch("elle.ops.augeas.engine._get_augeas") as mock_get:
             mock_get.return_value = MagicMock()
             from elle.ops.augeas.engine import is_available
+
             assert is_available() is True
 
     def test_is_available_false(self):
         with patch("elle.ops.augeas.engine._get_augeas", side_effect=AugeasUnavailableError("no")):
             from elle.ops.augeas.engine import is_available
+
             assert is_available() is False
 
     def test_get_augeas_cached(self):
         import elle.ops.augeas.engine as eng
+
         old = eng._augeas
         eng._augeas = "cached_module"
         try:
@@ -42,6 +44,7 @@ class TestModuleFunctions:
 
     def test_get_augeas_import_error(self):
         import elle.ops.augeas.engine as eng
+
         old = eng._augeas
         eng._augeas = None
         try:
@@ -61,6 +64,7 @@ class TestModuleFunctions:
 
         with patch("elle.ops.augeas.engine._get_augeas", return_value=mock_aug_mod):
             from elle.ops.augeas.engine import get_version
+
             result = get_version()
             assert result == "1.14.0"
 
@@ -74,12 +78,14 @@ class TestModuleFunctions:
 
         with patch("elle.ops.augeas.engine._get_augeas", return_value=mock_aug_mod):
             from elle.ops.augeas.engine import get_version
+
             result = get_version()
             assert result is None
 
     def test_get_version_exception(self):
         with patch("elle.ops.augeas.engine._get_augeas", side_effect=RuntimeError("nope")):
             from elle.ops.augeas.engine import get_version
+
             result = get_version()
             assert result is None
 
@@ -87,6 +93,7 @@ class TestModuleFunctions:
 # ---------------------------------------------------------------------------
 # AugeasEngine (all mocked)
 # ---------------------------------------------------------------------------
+
 
 class TestAugeasEngine:
     def _make_engine(self):
@@ -97,6 +104,7 @@ class TestAugeasEngine:
 
         with patch("elle.ops.augeas.engine._get_augeas", return_value=mock_aug_mod):
             from elle.ops.augeas.engine import AugeasEngine
+
             engine = AugeasEngine()
         return engine, mock_instance
 
@@ -219,20 +227,16 @@ class TestAugeasEngine:
                 return ["/base/child1", "/base/child2"]
             elif pattern == "/base/child1/*":
                 return ["/base/child1/grandchild"]
-            elif pattern == "/base/child1/grandchild/*":
-                return []
-            elif pattern == "/base/child2/*":
+            elif pattern == "/base/child1/grandchild/*" or pattern == "/base/child2/*":
                 return []
             return []
 
         def mock_get(path):
-            if path == "/base/child1":
-                return None
-            elif path == "/base/child1/grandchild":
-                return "gval"
-            elif path == "/base/child2":
-                return "c2val"
-            return None
+            return {
+                "/base/child1": None,
+                "/base/child1/grandchild": "gval",
+                "/base/child2": "c2val",
+            }.get(path)
 
         mock_aug.match.side_effect = mock_match
         mock_aug.get.side_effect = mock_get
@@ -245,13 +249,11 @@ class TestAugeasEngine:
         engine, mock_aug = self._make_engine()
 
         def mock_match(pattern):
-            if pattern == "/base/*":
-                return ["/base/node"]
-            elif pattern == "/base/node/*":
-                return ["/base/node/sub"]
-            elif pattern == "/base/node/sub/*":
-                return []
-            return []
+            return {
+                "/base/*": ["/base/node"],
+                "/base/node/*": ["/base/node/sub"],
+                "/base/node/sub/*": [],
+            }.get(pattern, [])
 
         def mock_get(path):
             if path == "/base/node":

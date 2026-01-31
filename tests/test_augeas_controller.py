@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -18,14 +17,15 @@ from elle.ops.augeas.models import (
     EditPreview,
 )
 
-
 # ---------------------------------------------------------------------------
 # EditController
 # ---------------------------------------------------------------------------
 
+
 class TestEditController:
     def _make_controller(self):
         from elle.ops.augeas.controller import EditController
+
         mock_backup = MagicMock()
         mock_diff = MagicMock()
         return EditController(backup_manager=mock_backup, diff_generator=mock_diff)
@@ -49,10 +49,12 @@ class TestEditController:
 
         mock_changes = [AugeasChange(path="/p", old_value="old", new_value="new", operation="set")]
 
-        with patch("elle.ops.augeas.controller.is_yaml_file", return_value=False), \
-             patch.object(ctrl, "_preview_augeas", return_value=("key = newval\n", mock_changes)), \
-             patch("elle.ops.augeas.controller.generate_diff") as mock_diff, \
-             patch("elle.ops.augeas.validators.get_validation_command", return_value=None):
+        with (
+            patch("elle.ops.augeas.controller.is_yaml_file", return_value=False),
+            patch.object(ctrl, "_preview_augeas", return_value=("key = newval\n", mock_changes)),
+            patch("elle.ops.augeas.controller.generate_diff") as mock_diff,
+            patch("elle.ops.augeas.validators.get_validation_command", return_value=None),
+        ):
             mock_diff.return_value = MagicMock(unified="--- a\n+++ b\n", colored="colored diff")
             req = AugeasEditRequest(
                 file_path=str(f),
@@ -69,10 +71,12 @@ class TestEditController:
         f.write_text("key: value\n")
 
         mock_changes = [AugeasChange(path="key", old_value="value", new_value="new", operation="set")]
-        with patch("elle.ops.augeas.controller.is_yaml_file", return_value=True), \
-             patch.object(ctrl, "_preview_yaml", return_value=("key: new\n", mock_changes)), \
-             patch("elle.ops.augeas.controller.generate_diff") as mock_diff, \
-             patch("elle.ops.augeas.validators.get_validation_command", return_value=None):
+        with (
+            patch("elle.ops.augeas.controller.is_yaml_file", return_value=True),
+            patch.object(ctrl, "_preview_yaml", return_value=("key: new\n", mock_changes)),
+            patch("elle.ops.augeas.controller.generate_diff") as mock_diff,
+            patch("elle.ops.augeas.validators.get_validation_command", return_value=None),
+        ):
             mock_diff.return_value = MagicMock(unified="diff", colored="colored")
             req = AugeasEditRequest(
                 file_path=str(f),
@@ -144,10 +148,12 @@ class TestEditController:
         f.write_text("content\n")
 
         mock_changes = [AugeasChange(path="/p", new_value="v", operation="set")]
-        with patch("elle.ops.augeas.controller.is_yaml_file", return_value=False), \
-             patch.object(ctrl, "_apply_augeas", new_callable=AsyncMock, return_value=mock_changes), \
-             patch("elle.ops.augeas.controller.generate_diff") as mock_diff, \
-             patch("elle.ops.augeas.controller.validate_config", new_callable=AsyncMock) as mock_val:
+        with (
+            patch("elle.ops.augeas.controller.is_yaml_file", return_value=False),
+            patch.object(ctrl, "_apply_augeas", new_callable=AsyncMock, return_value=mock_changes),
+            patch("elle.ops.augeas.controller.generate_diff") as mock_diff,
+            patch("elle.ops.augeas.controller.validate_config", new_callable=AsyncMock) as mock_val,
+        ):
             mock_diff.return_value = MagicMock(unified="diff", colored="colored")
             mock_val.return_value = MagicMock(valid=True, output="ok", error=None)
 
@@ -172,10 +178,12 @@ class TestEditController:
         ctrl._backup_manager.restore.return_value = True
 
         mock_changes = [AugeasChange(path="/p", new_value="v", operation="set")]
-        with patch("elle.ops.augeas.controller.is_yaml_file", return_value=False), \
-             patch.object(ctrl, "_apply_augeas", new_callable=AsyncMock, return_value=mock_changes), \
-             patch("elle.ops.augeas.controller.generate_diff") as mock_diff, \
-             patch("elle.ops.augeas.controller.validate_config", new_callable=AsyncMock) as mock_val:
+        with (
+            patch("elle.ops.augeas.controller.is_yaml_file", return_value=False),
+            patch.object(ctrl, "_apply_augeas", new_callable=AsyncMock, return_value=mock_changes),
+            patch("elle.ops.augeas.controller.generate_diff") as mock_diff,
+            patch("elle.ops.augeas.controller.validate_config", new_callable=AsyncMock) as mock_val,
+        ):
             mock_diff.return_value = MagicMock(unified="diff", colored="colored")
             mock_val.return_value = MagicMock(valid=False, output="syntax error", error=None)
 
@@ -199,10 +207,12 @@ class TestEditController:
         ctrl._backup_manager.restore.side_effect = RuntimeError("restore fail")
 
         mock_changes = [AugeasChange(path="/p", new_value="v", operation="set")]
-        with patch("elle.ops.augeas.controller.is_yaml_file", return_value=False), \
-             patch.object(ctrl, "_apply_augeas", new_callable=AsyncMock, return_value=mock_changes), \
-             patch("elle.ops.augeas.controller.generate_diff") as mock_diff, \
-             patch("elle.ops.augeas.controller.validate_config", new_callable=AsyncMock) as mock_val:
+        with (
+            patch("elle.ops.augeas.controller.is_yaml_file", return_value=False),
+            patch.object(ctrl, "_apply_augeas", new_callable=AsyncMock, return_value=mock_changes),
+            patch("elle.ops.augeas.controller.generate_diff") as mock_diff,
+            patch("elle.ops.augeas.controller.validate_config", new_callable=AsyncMock) as mock_val,
+        ):
             mock_diff.return_value = MagicMock(unified="diff", colored="colored")
             mock_val.return_value = MagicMock(valid=False, output="syntax error", error=None)
 
@@ -225,8 +235,10 @@ class TestEditController:
         ctrl._backup_manager.backup.return_value = mock_backup_rec
         ctrl._backup_manager.restore.return_value = True
 
-        with patch("elle.ops.augeas.controller.is_yaml_file", return_value=False), \
-             patch.object(ctrl, "_apply_augeas", new_callable=AsyncMock, side_effect=RuntimeError("boom")):
+        with (
+            patch("elle.ops.augeas.controller.is_yaml_file", return_value=False),
+            patch.object(ctrl, "_apply_augeas", new_callable=AsyncMock, side_effect=RuntimeError("boom")),
+        ):
             req = AugeasEditRequest(
                 file_path=str(f),
                 description="test",
@@ -245,8 +257,10 @@ class TestEditController:
         mock_backup_rec.backup_path = str(tmp_path / "backup")
         ctrl._backup_manager.backup.return_value = mock_backup_rec
 
-        with patch("elle.ops.augeas.controller.is_yaml_file", return_value=False), \
-             patch.object(ctrl, "_apply_augeas", new_callable=AsyncMock, side_effect=AugeasPermissionError("/etc/test")):
+        with (
+            patch("elle.ops.augeas.controller.is_yaml_file", return_value=False),
+            patch.object(ctrl, "_apply_augeas", new_callable=AsyncMock, side_effect=AugeasPermissionError("/etc/test")),
+        ):
             req = AugeasEditRequest(
                 file_path=str(f),
                 description="test",
@@ -265,10 +279,12 @@ class TestEditController:
         ctrl._backup_manager.backup.return_value = mock_backup_rec
 
         mock_changes = [AugeasChange(path="key", new_value="new", operation="set")]
-        with patch("elle.ops.augeas.controller.is_yaml_file", return_value=True), \
-             patch.object(ctrl, "_apply_yaml", new_callable=AsyncMock, return_value=mock_changes), \
-             patch("elle.ops.augeas.controller.generate_diff") as mock_diff, \
-             patch("elle.ops.augeas.controller.validate_config", new_callable=AsyncMock) as mock_val:
+        with (
+            patch("elle.ops.augeas.controller.is_yaml_file", return_value=True),
+            patch.object(ctrl, "_apply_yaml", new_callable=AsyncMock, return_value=mock_changes),
+            patch("elle.ops.augeas.controller.generate_diff") as mock_diff,
+            patch("elle.ops.augeas.controller.validate_config", new_callable=AsyncMock) as mock_val,
+        ):
             mock_diff.return_value = MagicMock(unified="diff", colored="colored")
             mock_val.return_value = MagicMock(valid=True, output="ok", error=None)
 
@@ -290,10 +306,12 @@ class TestEditController:
         ctrl._backup_manager.backup.return_value = mock_backup_rec
 
         mock_changes = [AugeasChange(path="/p", new_value="v", operation="set")]
-        with patch("elle.ops.augeas.controller.is_yaml_file", return_value=False), \
-             patch.object(ctrl, "_apply_augeas", new_callable=AsyncMock, return_value=mock_changes), \
-             patch("elle.ops.augeas.controller.generate_diff") as mock_diff, \
-             patch("elle.ops.augeas.controller.validate_config", new_callable=AsyncMock) as mock_val:
+        with (
+            patch("elle.ops.augeas.controller.is_yaml_file", return_value=False),
+            patch.object(ctrl, "_apply_augeas", new_callable=AsyncMock, return_value=mock_changes),
+            patch("elle.ops.augeas.controller.generate_diff") as mock_diff,
+            patch("elle.ops.augeas.controller.validate_config", new_callable=AsyncMock) as mock_val,
+        ):
             mock_diff.return_value = MagicMock(unified="diff", colored="colored")
             mock_val.return_value = MagicMock(valid=True, output="ok", error=None)
 
@@ -385,9 +403,7 @@ class TestEditController:
 
         with patch.object(ctrl, "execute", side_effect=fake_execute):
             batch = BatchEditRequest(
-                edits=(
-                    AugeasEditRequest(file_path=str(f), description="a"),
-                ),
+                edits=(AugeasEditRequest(file_path=str(f), description="a"),),
                 description="batch",
                 incident_id="INC-001",
             )
@@ -403,6 +419,7 @@ class TestEditController:
         f2.write_text("b\n")
 
         call_count = [0]
+
         async def fake_execute(req):
             call_count[0] += 1
             if call_count[0] == 1:
@@ -446,9 +463,7 @@ class TestEditController:
 
         with patch.object(ctrl, "execute", side_effect=fake_execute):
             batch = BatchEditRequest(
-                edits=(
-                    AugeasEditRequest(file_path=str(f1), description="a"),
-                ),
+                edits=(AugeasEditRequest(file_path=str(f1), description="a"),),
                 description="batch",
                 dry_run=True,
             )
@@ -464,9 +479,7 @@ class TestEditController:
 
         with patch.object(ctrl, "execute", side_effect=RuntimeError("boom")):
             batch = BatchEditRequest(
-                edits=(
-                    AugeasEditRequest(file_path="/etc/test", description="a"),
-                ),
+                edits=(AugeasEditRequest(file_path="/etc/test", description="a"),),
                 description="batch",
             )
             result = await ctrl.execute_batch(batch)
@@ -478,9 +491,11 @@ class TestEditController:
 # Module-level functions
 # ---------------------------------------------------------------------------
 
+
 class TestModuleFunctions:
     def test_get_controller_singleton(self):
         import elle.ops.augeas.controller as mod
+
         old = mod._controller
         mod._controller = None
         try:
@@ -492,6 +507,7 @@ class TestModuleFunctions:
 
     def test_preview_edit_func(self, tmp_path):
         from elle.ops.augeas.controller import preview_edit
+
         f = tmp_path / "test.conf"
         f.write_text("content")
 
@@ -504,41 +520,54 @@ class TestModuleFunctions:
         )
         with patch("elle.ops.augeas.controller.get_controller") as mock_ctrl:
             mock_ctrl.return_value.preview.return_value = mock_preview
-            result = preview_edit(AugeasEditRequest(
-                file_path=str(f),
-                description="test",
-            ))
+            result = preview_edit(
+                AugeasEditRequest(
+                    file_path=str(f),
+                    description="test",
+                )
+            )
             assert isinstance(result, EditPreview)
 
     @pytest.mark.asyncio
     async def test_execute_edit_func(self, tmp_path):
         from elle.ops.augeas.controller import execute_edit
+
         with patch("elle.ops.augeas.controller.get_controller") as mock_ctrl:
-            mock_ctrl.return_value.execute = AsyncMock(return_value=AugeasEditResult(
-                success=True,
-                file_path="/etc/test",
-            ))
-            result = await execute_edit(AugeasEditRequest(
-                file_path="/etc/test",
-                description="test",
-            ))
+            mock_ctrl.return_value.execute = AsyncMock(
+                return_value=AugeasEditResult(
+                    success=True,
+                    file_path="/etc/test",
+                )
+            )
+            result = await execute_edit(
+                AugeasEditRequest(
+                    file_path="/etc/test",
+                    description="test",
+                )
+            )
             assert result.success is True
 
     @pytest.mark.asyncio
     async def test_execute_batch_edit_func(self):
         from elle.ops.augeas.controller import execute_batch_edit
+
         with patch("elle.ops.augeas.controller.get_controller") as mock_ctrl:
-            mock_ctrl.return_value.execute_batch = AsyncMock(return_value=BatchEditResult(
-                success=True,
-            ))
-            result = await execute_batch_edit(BatchEditRequest(
-                edits=(),
-                description="test",
-            ))
+            mock_ctrl.return_value.execute_batch = AsyncMock(
+                return_value=BatchEditResult(
+                    success=True,
+                )
+            )
+            result = await execute_batch_edit(
+                BatchEditRequest(
+                    edits=(),
+                    description="test",
+                )
+            )
             assert result.success is True
 
     def test_rollback_edit_func(self):
         from elle.ops.augeas.controller import rollback_edit
+
         with patch("elle.ops.augeas.controller.get_controller") as mock_ctrl:
             mock_ctrl.return_value.rollback.return_value = True
             assert rollback_edit("/etc/test") is True

@@ -9,9 +9,7 @@ Tests the core components:
 
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -251,9 +249,7 @@ def test_audit_record_provenance():
         ),
     )
 
-    snippets = (
-        ManSnippet(name="test", section="1", snippet="Test doc", score=0.9),
-    )
+    snippets = (ManSnippet(name="test", section="1", snippet="Test doc", score=0.9),)
 
     context = RetrievalContext(
         input=input,
@@ -274,7 +270,6 @@ def test_audit_record_provenance():
 
 def test_audit_recorder_flow():
     """Test audit recorder start/complete flow."""
-    from unittest.mock import patch
 
     from elle.cli.agentic.audit import AuditRecorder, ToolCallRecord
     from elle.cli.agentic.unified_input import AgenticInput
@@ -440,26 +435,9 @@ def test_imports_from_main_module():
     from elle.cli.agentic import (
         AgenticInput,
         AgenticLoop,
-        AgenticLoopResult,
-        AuditRecord,
         AuditRecorder,
-        CapabilityMatch,
-        FailedCommand,
-        IncidentMatch,
         InputSource,
-        ManSnippet,
-        Provenance,
-        RetrievalContext,
-        SystemFingerprint,
         UnifiedRetrievalPipeline,
-        VerificationResult,
-        get_audit_recorder,
-        get_retrieval_pipeline,
-        is_agentic_loop_enabled,
-        retrieve_context,
-        run_agentic_loop,
-        run_for_failed_command,
-        run_for_incident,
     )
 
     # All should be importable without error
@@ -475,8 +453,6 @@ def test_daemon_agentic_handler_import():
     from elle.daemon.incidents.agentic_handler import (
         IncidentAgenticHandler,
         IncidentHandlingResult,
-        get_agentic_handler,
-        handle_incident,
     )
 
     assert IncidentAgenticHandler is not None

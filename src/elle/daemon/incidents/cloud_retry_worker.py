@@ -192,8 +192,7 @@ class CloudRetryWorker:
                     queue.mark_succeeded(entry.id, result.cloud_id)
                     self.stats.retries_succeeded += 1
                     logger.info(
-                        f"Cloud retry succeeded for incident {entry.incident_id} "
-                        f"(attempt {entry.retry_count + 1})"
+                        f"Cloud retry succeeded for incident {entry.incident_id} (attempt {entry.retry_count + 1})"
                     )
 
                 except Exception as e:
@@ -204,9 +203,7 @@ class CloudRetryWorker:
                     # If this looks like a server-down error, stop batch early
                     if _is_server_down_error(e):
                         self.stats.cloud_healthy = False
-                        logger.warning(
-                            "Cloud appears down during batch, pausing retries"
-                        )
+                        logger.warning("Cloud appears down during batch, pausing retries")
                         break
 
         except RuntimeError:

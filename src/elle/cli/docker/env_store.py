@@ -25,7 +25,7 @@ PG_SCHEMA = "docker"
 # =============================================================================
 
 
-def _migrate_v1(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+def _migrate_v1(conn: psycopg.Connection) -> None:
     """Create initial docker env tables."""
     conn.execute("""
         CREATE TABLE IF NOT EXISTS docker_env_values (
@@ -37,12 +37,8 @@ def _migrate_v1(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
             PRIMARY KEY (image_family, var_name)
         )
     """)
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_env_values_family ON docker_env_values(image_family)"
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_env_values_updated ON docker_env_values(updated_at)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_env_values_family ON docker_env_values(image_family)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_env_values_updated ON docker_env_values(updated_at)")
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS meta (

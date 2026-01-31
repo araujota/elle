@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import subprocess
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -11,10 +11,8 @@ from elle.ops.yq.models import (
     YQEditRequest,
     YQFilterError,
     YQRequest,
-    YQResult,
     YQUnavailableError,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -35,9 +33,7 @@ features:
 
 def _make_completed(stdout: str = "", stderr: str = "", rc: int = 0):
     """Build a fake subprocess.CompletedProcess."""
-    return subprocess.CompletedProcess(
-        args=["yq"], returncode=rc, stdout=stdout, stderr=stderr
-    )
+    return subprocess.CompletedProcess(args=["yq"], returncode=rc, stdout=stdout, stderr=stderr)
 
 
 # ---------------------------------------------------------------------------

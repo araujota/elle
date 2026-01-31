@@ -45,7 +45,9 @@ class TestSchemaInitialization:
         init_reboot_schema(conn)
 
         cursor = conn.cursor()
-        cursor.execute("SELECT indexname FROM pg_indexes WHERE tablename IN ('reboot_intents', 'pending_verifications', 'meta')")
+        cursor.execute(
+            "SELECT indexname FROM pg_indexes WHERE tablename IN ('reboot_intents', 'pending_verifications', 'meta')"
+        )
         indexes = [row["indexname"] for row in cursor.fetchall()]
 
         # Check key indexes exist

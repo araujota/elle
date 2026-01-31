@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
@@ -13,7 +12,6 @@ from elle.daemon.telemetry.hardware_profile import (
     compute_dynamic_thresholds,
     detect_hardware,
 )
-
 
 # ===========================================================================
 # HardwareProfile model
@@ -138,7 +136,7 @@ class TestComputeDynamicThresholds:
         """Multi-core CPU scales load thresholds."""
         profile = HardwareProfile(cpu_count=16, ram_total_mb=8192)
         t = compute_dynamic_thresholds(profile)
-        assert t.cpu_load_warning == pytest.approx(12.0)   # 16 * 0.75
+        assert t.cpu_load_warning == pytest.approx(12.0)  # 16 * 0.75
         assert t.cpu_load_critical == pytest.approx(16.0)  # 16 * 1.0
 
     def test_high_ram_raises_mem_thresholds(self):
@@ -229,20 +227,24 @@ class TestDetectHardware:
 
     def test_detect_cpu_count(self):
         """Reads CPU count from os.cpu_count()."""
-        with patch("os.cpu_count", return_value=8), \
-             patch("builtins.open", side_effect=OSError), \
-             patch("os.statvfs", side_effect=OSError), \
-             patch("os.popen") as mock_popen:
+        with (
+            patch("os.cpu_count", return_value=8),
+            patch("builtins.open", side_effect=OSError),
+            patch("os.statvfs", side_effect=OSError),
+            patch("os.popen") as mock_popen,
+        ):
             mock_popen.return_value = MagicMock(read=MagicMock(return_value=""), close=MagicMock())
             profile = detect_hardware()
             assert profile.cpu_count == 8
 
     def test_detect_cpu_count_none_fallback(self):
         """os.cpu_count() returning None falls back to 1."""
-        with patch("os.cpu_count", return_value=None), \
-             patch("builtins.open", side_effect=OSError), \
-             patch("os.statvfs", side_effect=OSError), \
-             patch("os.popen") as mock_popen:
+        with (
+            patch("os.cpu_count", return_value=None),
+            patch("builtins.open", side_effect=OSError),
+            patch("os.statvfs", side_effect=OSError),
+            patch("os.popen") as mock_popen,
+        ):
             mock_popen.return_value = MagicMock(read=MagicMock(return_value=""), close=MagicMock())
             profile = detect_hardware()
             assert profile.cpu_count == 1
@@ -250,10 +252,12 @@ class TestDetectHardware:
     def test_detect_ram_from_meminfo(self):
         """Reads RAM from /proc/meminfo."""
         meminfo = "MemTotal:       16384000 kB\nMemFree:         1000000 kB\n"
-        with patch("os.cpu_count", return_value=4), \
-             patch("builtins.open", mock_open(read_data=meminfo)), \
-             patch("os.statvfs", side_effect=OSError), \
-             patch("os.popen") as mock_popen:
+        with (
+            patch("os.cpu_count", return_value=4),
+            patch("builtins.open", mock_open(read_data=meminfo)),
+            patch("os.statvfs", side_effect=OSError),
+            patch("os.popen") as mock_popen,
+        ):
             mock_popen.return_value = MagicMock(read=MagicMock(return_value=""), close=MagicMock())
             profile = detect_hardware()
             # 16384000 kB // 1024 = 16000 MB
@@ -261,10 +265,12 @@ class TestDetectHardware:
 
     def test_detect_ram_meminfo_missing(self):
         """Missing /proc/meminfo results in 0 MB RAM."""
-        with patch("os.cpu_count", return_value=4), \
-             patch("builtins.open", side_effect=OSError), \
-             patch("os.statvfs", side_effect=OSError), \
-             patch("os.popen") as mock_popen:
+        with (
+            patch("os.cpu_count", return_value=4),
+            patch("builtins.open", side_effect=OSError),
+            patch("os.statvfs", side_effect=OSError),
+            patch("os.popen") as mock_popen,
+        ):
             mock_popen.return_value = MagicMock(read=MagicMock(return_value=""), close=MagicMock())
             profile = detect_hardware()
             assert profile.ram_total_mb == 0
@@ -275,10 +281,12 @@ class TestDetectHardware:
         mock_st.f_blocks = 1000000
         mock_st.f_frsize = 4096  # Total = 1000000 * 4096 = 4096000000 B ~ 3.8 GB
 
-        with patch("os.cpu_count", return_value=2), \
-             patch("builtins.open", side_effect=OSError), \
-             patch("os.statvfs", return_value=mock_st), \
-             patch("os.popen") as mock_popen:
+        with (
+            patch("os.cpu_count", return_value=2),
+            patch("builtins.open", side_effect=OSError),
+            patch("os.statvfs", return_value=mock_st),
+            patch("os.popen") as mock_popen,
+        ):
             mock_popen.return_value = MagicMock(read=MagicMock(return_value=""), close=MagicMock())
             profile = detect_hardware()
             assert "/" in profile.disk_total_gb
@@ -287,20 +295,24 @@ class TestDetectHardware:
 
     def test_detect_disk_statvfs_failure(self):
         """OSError from statvfs results in empty disk map."""
-        with patch("os.cpu_count", return_value=2), \
-             patch("builtins.open", side_effect=OSError), \
-             patch("os.statvfs", side_effect=OSError), \
-             patch("os.popen") as mock_popen:
+        with (
+            patch("os.cpu_count", return_value=2),
+            patch("builtins.open", side_effect=OSError),
+            patch("os.statvfs", side_effect=OSError),
+            patch("os.popen") as mock_popen,
+        ):
             mock_popen.return_value = MagicMock(read=MagicMock(return_value=""), close=MagicMock())
             profile = detect_hardware()
             assert profile.disk_total_gb == {}
 
     def test_detect_gpu_nvidia(self):
         """Detects GPU via nvidia-smi output."""
-        with patch("os.cpu_count", return_value=4), \
-             patch("builtins.open", side_effect=OSError), \
-             patch("os.statvfs", side_effect=OSError), \
-             patch("os.popen") as mock_popen:
+        with (
+            patch("os.cpu_count", return_value=4),
+            patch("builtins.open", side_effect=OSError),
+            patch("os.statvfs", side_effect=OSError),
+            patch("os.popen") as mock_popen,
+        ):
             mock_result = MagicMock()
             mock_result.read.return_value = "2\n"
             mock_result.close = MagicMock()
@@ -310,10 +322,12 @@ class TestDetectHardware:
 
     def test_detect_gpu_absent(self):
         """No nvidia-smi output results in gpu_count=0."""
-        with patch("os.cpu_count", return_value=4), \
-             patch("builtins.open", side_effect=OSError), \
-             patch("os.statvfs", side_effect=OSError), \
-             patch("os.popen") as mock_popen:
+        with (
+            patch("os.cpu_count", return_value=4),
+            patch("builtins.open", side_effect=OSError),
+            patch("os.statvfs", side_effect=OSError),
+            patch("os.popen") as mock_popen,
+        ):
             mock_result = MagicMock()
             mock_result.read.return_value = ""
             mock_result.close = MagicMock()
@@ -323,19 +337,23 @@ class TestDetectHardware:
 
     def test_detect_gpu_error(self):
         """OSError from nvidia-smi detection results in gpu_count=0."""
-        with patch("os.cpu_count", return_value=4), \
-             patch("builtins.open", side_effect=OSError), \
-             patch("os.statvfs", side_effect=OSError), \
-             patch("os.popen", side_effect=OSError):
+        with (
+            patch("os.cpu_count", return_value=4),
+            patch("builtins.open", side_effect=OSError),
+            patch("os.statvfs", side_effect=OSError),
+            patch("os.popen", side_effect=OSError),
+        ):
             profile = detect_hardware()
             assert profile.gpu_count == 0
 
     def test_profile_hash_populated(self):
         """detect_hardware populates profile_hash."""
-        with patch("os.cpu_count", return_value=4), \
-             patch("builtins.open", side_effect=OSError), \
-             patch("os.statvfs", side_effect=OSError), \
-             patch("os.popen") as mock_popen:
+        with (
+            patch("os.cpu_count", return_value=4),
+            patch("builtins.open", side_effect=OSError),
+            patch("os.statvfs", side_effect=OSError),
+            patch("os.popen") as mock_popen,
+        ):
             mock_popen.return_value = MagicMock(read=MagicMock(return_value=""), close=MagicMock())
             profile = detect_hardware()
             assert profile.profile_hash != ""

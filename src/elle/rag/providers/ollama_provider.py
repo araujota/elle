@@ -159,11 +159,13 @@ class OllamaProvider(LLMProvider):
                     except json.JSONDecodeError:
                         args = {}
 
-                    tool_calls.append({
-                        "id": tc.get("id", ""),
-                        "name": func.get("name", ""),
-                        "arguments": args,
-                    })
+                    tool_calls.append(
+                        {
+                            "id": tc.get("id", ""),
+                            "name": func.get("name", ""),
+                            "arguments": args,
+                        }
+                    )
 
             return ProviderResponse(
                 content=message.get("content", ""),
@@ -243,11 +245,13 @@ class OllamaProvider(LLMProvider):
                         except json.JSONDecodeError:
                             args = {}
 
-                        tool_calls.append({
-                            "id": tc.get("id", ""),
-                            "name": func.get("name", ""),
-                            "arguments": args,
-                        })
+                        tool_calls.append(
+                            {
+                                "id": tc.get("id", ""),
+                                "name": func.get("name", ""),
+                                "arguments": args,
+                            }
+                        )
 
                 duration_ms = (time.time() - start_time) * 1000
 

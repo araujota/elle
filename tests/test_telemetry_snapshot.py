@@ -3,17 +3,16 @@
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from elle.daemon.incidents.telemetry_snapshot import (
     CPUPressure,
-    DiskIOPressure,
     DiskInfo,
+    DiskIOPressure,
     GPUDevice,
     GPUMetrics,
     InterfaceInfo,
@@ -24,17 +23,16 @@ from elle.daemon.incidents.telemetry_snapshot import (
     TelemetrySnapshot,
     _collect_cpu_pressure,
     _collect_disk_io_pressure,
+    _collect_gpu_metrics,
     _collect_kernel_hardware_signals,
     _collect_memory_pressure,
     _collect_network_liveness,
     _collect_service_runtime,
-    _collect_gpu_metrics,
     _get_hostname,
     _get_uptime_sec,
     _parse_psi_file,
     collect_telemetry_snapshot,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -238,7 +236,7 @@ class TestTelemetryCollection:
 
     def test_collect_has_timestamp(self) -> None:
         """Collected snapshot should have a timestamp."""
-        before = datetime.now(timezone.utc)
+        datetime.now(timezone.utc)
         snap = collect_telemetry_snapshot()
         # collected_at might be naive, so compare carefully
         assert snap.collected_at is not None
@@ -410,7 +408,7 @@ class TestTelemetrySnapshotWithGPU:
     def test_collected_snapshot_has_gpu_field(self) -> None:
         """Collected snapshot should have GPU field (even if unavailable)."""
         snap = collect_telemetry_snapshot()
-        assert hasattr(snap, 'gpu')
+        assert hasattr(snap, "gpu")
         assert isinstance(snap.gpu, GPUMetrics)
         # GPU may or may not be available, just check the field exists
         assert snap.gpu.device_count >= 0
@@ -584,8 +582,7 @@ class TestParsePsiFile:
     def test_parse_psi_normal(self) -> None:
         """Parse PSI some and full avg10 from standard format."""
         content = (
-            "some avg10=2.50 avg60=1.00 avg300=0.50 total=12345\n"
-            "full avg10=0.75 avg60=0.30 avg300=0.10 total=6789\n"
+            "some avg10=2.50 avg60=1.00 avg300=0.50 total=12345\nfull avg10=0.75 avg60=0.30 avg300=0.10 total=6789\n"
         )
         with patch.object(Path, "read_text", return_value=content):
             some, full = _parse_psi_file("/proc/pressure/cpu")
@@ -621,10 +618,7 @@ class TestCollectCpuPressure:
     def test_cpu_pressure_normal(self) -> None:
         """Parse load averages and task counts from /proc/loadavg."""
         loadavg_content = "1.50 0.75 0.30 3/456 12345\n"
-        stat_content = (
-            "cpu  100 20 50 1000 30 5 10 15 0 0\n"
-            "cpu0 50 10 25 500 15 2 5 8 0 0\n"
-        )
+        stat_content = "cpu  100 20 50 1000 30 5 10 15 0 0\ncpu0 50 10 25 500 15 2 5 8 0 0\n"
         with patch.object(Path, "read_text", side_effect=[loadavg_content, stat_content]):
             with patch(
                 "elle.daemon.incidents.telemetry_snapshot._parse_psi_file",
@@ -836,12 +830,7 @@ class TestCollectServiceRuntime:
     def test_service_runtime_memory_not_set(self) -> None:
         """Handle MemoryCurrent=[not set] gracefully."""
         systemctl_output = (
-            "MainPID=0\n"
-            "ActiveState=inactive\n"
-            "NRestarts=0\n"
-            "ExecMainStatus=1\n"
-            "MemoryCurrent=[not set]\n"
-            "CPUUsageNSec=0\n"
+            "MainPID=0\nActiveState=inactive\nNRestarts=0\nExecMainStatus=1\nMemoryCurrent=[not set]\nCPUUsageNSec=0\n"
         )
         mock_result = MagicMock()
         mock_result.returncode = 0
@@ -1008,14 +997,16 @@ class TestCollectTelemetrySnapshotMocked:
 
     def test_collect_passes_oom_kills(self) -> None:
         """Verify oom_kills_1h is passed to memory pressure collector."""
-        with patch("elle.daemon.incidents.telemetry_snapshot._collect_cpu_pressure") as mock_cpu, \
-             patch("elle.daemon.incidents.telemetry_snapshot._collect_memory_pressure") as mock_mem, \
-             patch("elle.daemon.incidents.telemetry_snapshot._collect_disk_io_pressure") as mock_disk, \
-             patch("elle.daemon.incidents.telemetry_snapshot._collect_network_liveness") as mock_net, \
-             patch("elle.daemon.incidents.telemetry_snapshot._collect_kernel_hardware_signals") as mock_kernel, \
-             patch("elle.daemon.incidents.telemetry_snapshot._collect_gpu_metrics") as mock_gpu, \
-             patch("elle.daemon.incidents.telemetry_snapshot._get_hostname", return_value="h"), \
-             patch("elle.daemon.incidents.telemetry_snapshot._get_uptime_sec", return_value=100):
+        with (
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_cpu_pressure") as mock_cpu,
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_memory_pressure") as mock_mem,
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_disk_io_pressure") as mock_disk,
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_network_liveness") as mock_net,
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_kernel_hardware_signals") as mock_kernel,
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_gpu_metrics") as mock_gpu,
+            patch("elle.daemon.incidents.telemetry_snapshot._get_hostname", return_value="h"),
+            patch("elle.daemon.incidents.telemetry_snapshot._get_uptime_sec", return_value=100),
+        ):
             mock_cpu.return_value = CPUPressure(load_1m=0.0, load_5m=0.0, load_15m=0.0)
             mock_mem.return_value = MemoryPressure(total_mb=1024, available_mb=512)
             mock_disk.return_value = DiskIOPressure(disks=())
@@ -1028,15 +1019,17 @@ class TestCollectTelemetrySnapshotMocked:
     def test_collect_limits_services_to_ten(self) -> None:
         """Verify at most 10 services are collected."""
         services = [f"svc{i}.service" for i in range(15)]
-        with patch("elle.daemon.incidents.telemetry_snapshot._collect_cpu_pressure") as mock_cpu, \
-             patch("elle.daemon.incidents.telemetry_snapshot._collect_memory_pressure") as mock_mem, \
-             patch("elle.daemon.incidents.telemetry_snapshot._collect_disk_io_pressure") as mock_disk, \
-             patch("elle.daemon.incidents.telemetry_snapshot._collect_network_liveness") as mock_net, \
-             patch("elle.daemon.incidents.telemetry_snapshot._collect_kernel_hardware_signals") as mock_kernel, \
-             patch("elle.daemon.incidents.telemetry_snapshot._collect_gpu_metrics") as mock_gpu, \
-             patch("elle.daemon.incidents.telemetry_snapshot._collect_service_runtime", return_value=None) as mock_svc, \
-             patch("elle.daemon.incidents.telemetry_snapshot._get_hostname", return_value="h"), \
-             patch("elle.daemon.incidents.telemetry_snapshot._get_uptime_sec", return_value=100):
+        with (
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_cpu_pressure") as mock_cpu,
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_memory_pressure") as mock_mem,
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_disk_io_pressure") as mock_disk,
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_network_liveness") as mock_net,
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_kernel_hardware_signals") as mock_kernel,
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_gpu_metrics") as mock_gpu,
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_service_runtime", return_value=None) as mock_svc,
+            patch("elle.daemon.incidents.telemetry_snapshot._get_hostname", return_value="h"),
+            patch("elle.daemon.incidents.telemetry_snapshot._get_uptime_sec", return_value=100),
+        ):
             mock_cpu.return_value = CPUPressure(load_1m=0.0, load_5m=0.0, load_15m=0.0)
             mock_mem.return_value = MemoryPressure(total_mb=1024, available_mb=512)
             mock_disk.return_value = DiskIOPressure(disks=())
@@ -1049,14 +1042,16 @@ class TestCollectTelemetrySnapshotMocked:
 
     def test_collect_no_services_when_none_implicated(self) -> None:
         """Verify no service collection when implicated_services is None."""
-        with patch("elle.daemon.incidents.telemetry_snapshot._collect_cpu_pressure") as mock_cpu, \
-             patch("elle.daemon.incidents.telemetry_snapshot._collect_memory_pressure") as mock_mem, \
-             patch("elle.daemon.incidents.telemetry_snapshot._collect_disk_io_pressure") as mock_disk, \
-             patch("elle.daemon.incidents.telemetry_snapshot._collect_network_liveness") as mock_net, \
-             patch("elle.daemon.incidents.telemetry_snapshot._collect_kernel_hardware_signals") as mock_kernel, \
-             patch("elle.daemon.incidents.telemetry_snapshot._collect_gpu_metrics") as mock_gpu, \
-             patch("elle.daemon.incidents.telemetry_snapshot._get_hostname", return_value="h"), \
-             patch("elle.daemon.incidents.telemetry_snapshot._get_uptime_sec", return_value=100):
+        with (
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_cpu_pressure") as mock_cpu,
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_memory_pressure") as mock_mem,
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_disk_io_pressure") as mock_disk,
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_network_liveness") as mock_net,
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_kernel_hardware_signals") as mock_kernel,
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_gpu_metrics") as mock_gpu,
+            patch("elle.daemon.incidents.telemetry_snapshot._get_hostname", return_value="h"),
+            patch("elle.daemon.incidents.telemetry_snapshot._get_uptime_sec", return_value=100),
+        ):
             mock_cpu.return_value = CPUPressure(load_1m=0.0, load_5m=0.0, load_15m=0.0)
             mock_mem.return_value = MemoryPressure(total_mb=1024, available_mb=512)
             mock_disk.return_value = DiskIOPressure(disks=())
@@ -1068,14 +1063,16 @@ class TestCollectTelemetrySnapshotMocked:
 
     def test_collect_passes_kernel_event_counts(self) -> None:
         """Verify kernel event counts are passed through to kernel signals collector."""
-        with patch("elle.daemon.incidents.telemetry_snapshot._collect_cpu_pressure") as mock_cpu, \
-             patch("elle.daemon.incidents.telemetry_snapshot._collect_memory_pressure") as mock_mem, \
-             patch("elle.daemon.incidents.telemetry_snapshot._collect_disk_io_pressure") as mock_disk, \
-             patch("elle.daemon.incidents.telemetry_snapshot._collect_network_liveness") as mock_net, \
-             patch("elle.daemon.incidents.telemetry_snapshot._collect_kernel_hardware_signals") as mock_kernel, \
-             patch("elle.daemon.incidents.telemetry_snapshot._collect_gpu_metrics") as mock_gpu, \
-             patch("elle.daemon.incidents.telemetry_snapshot._get_hostname", return_value="h"), \
-             patch("elle.daemon.incidents.telemetry_snapshot._get_uptime_sec", return_value=100):
+        with (
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_cpu_pressure") as mock_cpu,
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_memory_pressure") as mock_mem,
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_disk_io_pressure") as mock_disk,
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_network_liveness") as mock_net,
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_kernel_hardware_signals") as mock_kernel,
+            patch("elle.daemon.incidents.telemetry_snapshot._collect_gpu_metrics") as mock_gpu,
+            patch("elle.daemon.incidents.telemetry_snapshot._get_hostname", return_value="h"),
+            patch("elle.daemon.incidents.telemetry_snapshot._get_uptime_sec", return_value=100),
+        ):
             mock_cpu.return_value = CPUPressure(load_1m=0.0, load_5m=0.0, load_15m=0.0)
             mock_mem.return_value = MemoryPressure(total_mb=1024, available_mb=512)
             mock_disk.return_value = DiskIOPressure(disks=())

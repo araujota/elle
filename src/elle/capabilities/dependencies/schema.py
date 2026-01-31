@@ -56,7 +56,7 @@ INDEXES = [
 # ---------------------------------------------------------------------------
 
 
-def _migrate_to_v1(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+def _migrate_to_v1(conn: psycopg.Connection) -> None:
     """Create the initial deps schema."""
     conn.execute(PREFERENCES_TABLE)
     conn.execute(INSTALLATION_HISTORY_TABLE)
@@ -72,7 +72,7 @@ register_migration(PG_SCHEMA, 1, _migrate_to_v1)
 # ---------------------------------------------------------------------------
 
 
-def ensure_schema(conn: psycopg.Connection) -> None:  # type: ignore[type-arg]
+def ensure_schema(conn: psycopg.Connection) -> None:
     """Ensure the deps schema is up to date.
 
     Args:

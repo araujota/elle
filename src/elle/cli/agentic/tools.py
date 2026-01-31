@@ -49,13 +49,8 @@ class ToolSpec(BaseModel):
 
     name: str = Field(description="Tool name for invocation")
     description: str = Field(description="Human-readable description for LLM")
-    parameters: dict[str, Any] = Field(
-        description="JSON Schema for tool parameters"
-    )
-    is_mutating: bool = Field(
-        default=False,
-        description="Whether this tool can mutate system state"
-    )
+    parameters: dict[str, Any] = Field(description="JSON Schema for tool parameters")
+    is_mutating: bool = Field(default=False, description="Whether this tool can mutate system state")
 
 
 class ToolResult(BaseModel):
@@ -83,13 +78,9 @@ class SearchManVaultInput(BaseModel):
 
     query: str = Field(description="Search query for documentation")
     k: int = Field(default=5, ge=1, le=20, description="Number of results to return")
-    command: str | None = Field(
-        default=None,
-        description="Filter by specific command name (e.g., 'ls', 'systemctl')"
-    )
+    command: str | None = Field(default=None, description="Filter by specific command name (e.g., 'ls', 'systemctl')")
     search_type: Literal["lexical", "semantic", "hybrid"] = Field(
-        default="hybrid",
-        description="Type of search: lexical (fast), semantic (contextual), or hybrid (best)"
+        default="hybrid", description="Type of search: lexical (fast), semantic (contextual), or hybrid (best)"
     )
 
 
@@ -103,8 +94,7 @@ class ManVaultSnippet(BaseModel):
     snippet: str = Field(description="Relevant documentation snippet")
     score: float = Field(description="Relevance score")
     match_section: str | None = Field(
-        default=None,
-        description="Section where match was found (OPTIONS, DESCRIPTION, etc.)"
+        default=None, description="Section where match was found (OPTIONS, DESCRIPTION, etc.)"
     )
 
 
@@ -113,9 +103,7 @@ class SearchManVaultOutput(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    snippets: tuple[ManVaultSnippet, ...] = Field(
-        description="Matching documentation snippets"
-    )
+    snippets: tuple[ManVaultSnippet, ...] = Field(description="Matching documentation snippets")
     total_found: int = Field(description="Number of results found")
 
 
@@ -225,14 +213,10 @@ class SearchIncidentsInput(BaseModel):
 
     query: str = Field(description="Search query describing the problem")
     domain: str | None = Field(
-        default=None,
-        description="Filter by domain: net, disk, oom, docker, auth, pkg, service, fs"
+        default=None, description="Filter by domain: net, disk, oom, docker, auth, pkg, service, fs"
     )
     k: int = Field(default=3, ge=1, le=10, description="Number of results to return")
-    include_actions: bool = Field(
-        default=True,
-        description="Include successful actions from prior incidents"
-    )
+    include_actions: bool = Field(default=True, description="Include successful actions from prior incidents")
 
 
 class PriorIncident(BaseModel):
@@ -256,9 +240,7 @@ class SearchIncidentsOutput(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    prior_art: tuple[PriorIncident, ...] = Field(
-        description="Similar past incidents"
-    )
+    prior_art: tuple[PriorIncident, ...] = Field(description="Similar past incidents")
     total_found: int = Field(description="Number of results found")
 
 
@@ -378,17 +360,9 @@ class ExecuteCapabilityInput(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    capability_name: str = Field(
-        description="Capability name (e.g., 'service.restart', 'file.read')"
-    )
-    args: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Arguments for the capability"
-    )
-    skip_confirmation: bool = Field(
-        default=False,
-        description="Skip user confirmation (use with caution)"
-    )
+    capability_name: str = Field(description="Capability name (e.g., 'service.restart', 'file.read')")
+    args: dict[str, Any] = Field(default_factory=dict, description="Arguments for the capability")
+    skip_confirmation: bool = Field(default=False, description="Skip user confirmation (use with caution)")
 
 
 class ExecuteCapabilityOutput(BaseModel):
@@ -458,9 +432,7 @@ async def execute_capability(
             capability=args.capability_name,
             args=dict(args.args),
             purpose=f"Execute {args.capability_name}",
-            is_read_only=args.capability_name.endswith(
-                (".status", ".logs", ".info", ".list", ".read", ".stat")
-            ),
+            is_read_only=args.capability_name.endswith((".status", ".logs", ".info", ".list", ".read", ".stat")),
         )
 
         intent = AgenticIntent(
@@ -539,13 +511,8 @@ class GetSystemInfoInput(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    aspect: SystemInfoAspect = Field(
-        description="What aspect of system info to retrieve"
-    )
-    filter: str | None = Field(
-        default=None,
-        description="Optional filter (e.g., service name, container name)"
-    )
+    aspect: SystemInfoAspect = Field(description="What aspect of system info to retrieve")
+    filter: str | None = Field(default=None, description="Optional filter (e.g., service name, container name)")
 
 
 GET_SYSTEM_INFO_SPEC = ToolSpec(
@@ -669,32 +636,27 @@ class ShellCommandInput(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    command: str = Field(
-        description="Shell command to execute (read-only operations only)"
-    )
-    timeout: float = Field(
-        default=30.0,
-        ge=1.0,
-        le=120.0,
-        description="Timeout in seconds"
-    )
+    command: str = Field(description="Shell command to execute (read-only operations only)")
+    timeout: float = Field(default=30.0, ge=1.0, le=120.0, description="Timeout in seconds")
 
 
 # Commands that are blocked for safety
-BLOCKED_COMMANDS = frozenset([
-    "rm -rf",
-    "mkfs",
-    "dd if=",
-    "dd of=/dev",
-    "> /dev/sd",
-    "chmod -R 777 /",
-    "shutdown",
-    "reboot",
-    "init 0",
-    "init 6",
-    ":()",  # fork bomb
-    "sudo",
-])
+BLOCKED_COMMANDS = frozenset(
+    [
+        "rm -rf",
+        "mkfs",
+        "dd if=",
+        "dd of=/dev",
+        "> /dev/sd",
+        "chmod -R 777 /",
+        "shutdown",
+        "reboot",
+        "init 0",
+        "init 6",
+        ":()",  # fork bomb
+        "sudo",
+    ]
+)
 
 
 SHELL_COMMAND_SPEC = ToolSpec(
@@ -788,13 +750,9 @@ class ListCapabilitiesInput(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     domain: str | None = Field(
-        default=None,
-        description="Filter by domain: service, file, config, network, package, docker, auth, gui"
+        default=None, description="Filter by domain: service, file, config, network, package, docker, auth, gui"
     )
-    search: str | None = Field(
-        default=None,
-        description="Search by capability name or description"
-    )
+    search: str | None = Field(default=None, description="Search by capability name or description")
 
 
 class CapabilityInfo(BaseModel):
@@ -849,6 +807,7 @@ async def list_capabilities(args: ListCapabilitiesInput) -> ToolResult:
         # Get capabilities, optionally filtered by domain
         if args.domain:
             from elle.capabilities.models import CapabilityDomain
+
             caps = registry.list_by_domain(cast(CapabilityDomain, args.domain))
         else:
             caps = registry.list_all()
@@ -930,14 +889,10 @@ class SearchCapabilitiesInput(BaseModel):
         description="Natural language description of what you want to do (e.g., 'restart the web server')"
     )
     domain: str | None = Field(
-        default=None,
-        description="Filter by domain: service, file, config, network, package, docker, auth, gui"
+        default=None, description="Filter by domain: service, file, config, network, package, docker, auth, gui"
     )
     k: int = Field(default=5, ge=1, le=15, description="Number of results to return")
-    include_unapproved: bool = Field(
-        default=False,
-        description="Include capabilities that haven't been approved yet"
-    )
+    include_unapproved: bool = Field(default=False, description="Include capabilities that haven't been approved yet")
 
 
 class CapabilityMatchInfo(BaseModel):

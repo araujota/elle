@@ -27,6 +27,7 @@ from elle.rag.llm import (
 # LLMConfig
 # ---------------------------------------------------------------------------
 
+
 class TestLLMConfig:
     def test_defaults(self):
         cfg = LLMConfig()
@@ -47,6 +48,7 @@ class TestLLMConfig:
 # LLMResponse
 # ---------------------------------------------------------------------------
 
+
 class TestLLMResponse:
     def test_total_tokens_both(self):
         r = LLMResponse(content="hi", model="m", prompt_tokens=10, completion_tokens=5)
@@ -65,6 +67,7 @@ class TestLLMResponse:
 # Message
 # ---------------------------------------------------------------------------
 
+
 class TestMessage:
     def test_create(self):
         m = Message(role="system", content="hello")
@@ -75,6 +78,7 @@ class TestMessage:
 # ---------------------------------------------------------------------------
 # ContextWindowManager
 # ---------------------------------------------------------------------------
+
 
 class TestContextWindowManager:
     def test_add_and_get(self):
@@ -88,10 +92,12 @@ class TestContextWindowManager:
 
     def test_add_messages(self):
         mgr = ContextWindowManager(max_tokens=1000)
-        mgr.add_messages([
-            {"role": "user", "content": "a"},
-            {"role": "assistant", "content": "b"},
-        ])
+        mgr.add_messages(
+            [
+                {"role": "user", "content": "a"},
+                {"role": "assistant", "content": "b"},
+            ]
+        )
         assert mgr.message_count == 2
 
     def test_token_count(self):
@@ -151,9 +157,7 @@ class TestContextWindowManager:
             mgr.add_message("assistant", f"reply {i} " * 10)
 
         mock_llm = MagicMock()
-        mock_llm.generate.return_value = LLMResponse(
-            content="Summary of conversation.", model="test"
-        )
+        mock_llm.generate.return_value = LLMResponse(content="Summary of conversation.", model="test")
 
         result = await mgr.compact(mock_llm)
         assert result == "Summary of conversation."
@@ -200,6 +204,7 @@ class TestContextWindowManager:
 # Exceptions
 # ---------------------------------------------------------------------------
 
+
 class TestExceptions:
     def test_llm_error(self):
         e = LLMError("bad", status_code=500)
@@ -222,6 +227,7 @@ class TestExceptions:
 # ---------------------------------------------------------------------------
 # LLM (availability + model detection)
 # ---------------------------------------------------------------------------
+
 
 class TestLLMAvailability:
     def test_is_available_cached(self):
@@ -306,6 +312,7 @@ class TestLLMAvailability:
 # LLM generate
 # ---------------------------------------------------------------------------
 
+
 class TestLLMGenerate:
     def _make_llm(self):
         llm = LLM()
@@ -359,9 +366,7 @@ class TestLLMGenerate:
         mock_resp = MagicMock()
         mock_resp.status_code = 500
         mock_resp.text = "Internal error"
-        mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
-            "err", request=MagicMock(), response=mock_resp
-        )
+        mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError("err", request=MagicMock(), response=mock_resp)
         with patch.object(llm._provider._client, "post", return_value=mock_resp):
             with pytest.raises(LLMError) as exc_info:
                 llm.generate("test")
@@ -371,6 +376,7 @@ class TestLLMGenerate:
 # ---------------------------------------------------------------------------
 # LLM generate_json
 # ---------------------------------------------------------------------------
+
 
 class TestLLMGenerateJSON:
     def _make_llm(self):
@@ -411,6 +417,7 @@ class TestLLMGenerateJSON:
         llm = self._make_llm()
 
         call_count = [0]
+
         def mock_post(*args, **kwargs):
             call_count[0] += 1
             resp = MagicMock()
@@ -459,6 +466,7 @@ class TestLLMGenerateJSON:
 # LLM chat
 # ---------------------------------------------------------------------------
 
+
 class TestLLMChat:
     def _make_llm(self):
         llm = LLM()
@@ -475,10 +483,12 @@ class TestLLMChat:
         }
         mock_resp.raise_for_status = MagicMock()
         with patch.object(llm._provider._client, "post", return_value=mock_resp):
-            result = llm.chat([
-                {"role": "system", "content": "sys"},
-                {"role": "user", "content": "hello"},
-            ])
+            result = llm.chat(
+                [
+                    {"role": "system", "content": "sys"},
+                    {"role": "user", "content": "hello"},
+                ]
+            )
             assert result.content == "reply"
 
     def test_chat_message_objects(self):
@@ -491,9 +501,11 @@ class TestLLMChat:
         }
         mock_resp.raise_for_status = MagicMock()
         with patch.object(llm._provider._client, "post", return_value=mock_resp):
-            result = llm.chat([
-                Message(role="user", content="hi"),
-            ])
+            result = llm.chat(
+                [
+                    Message(role="user", content="hi"),
+                ]
+            )
             assert result.content == "ok"
 
     def test_chat_connect_error(self):
@@ -513,9 +525,7 @@ class TestLLMChat:
         mock_resp = MagicMock()
         mock_resp.status_code = 400
         mock_resp.text = "bad request"
-        mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
-            "err", request=MagicMock(), response=mock_resp
-        )
+        mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError("err", request=MagicMock(), response=mock_resp)
         with patch.object(llm._provider._client, "post", return_value=mock_resp):
             with pytest.raises(LLMError):
                 llm.chat([{"role": "user", "content": "hi"}])
@@ -524,6 +534,7 @@ class TestLLMChat:
 # ---------------------------------------------------------------------------
 # LLM chat_json
 # ---------------------------------------------------------------------------
+
 
 class TestLLMChatJSON:
     def _make_llm(self):
@@ -541,10 +552,12 @@ class TestLLMChatJSON:
         }
         mock_resp.raise_for_status = MagicMock()
         with patch.object(llm._provider._client, "post", return_value=mock_resp):
-            result = llm.chat_json([
-                {"role": "system", "content": "sys"},
-                {"role": "user", "content": "hello"},
-            ])
+            result = llm.chat_json(
+                [
+                    {"role": "system", "content": "sys"},
+                    {"role": "user", "content": "hello"},
+                ]
+            )
             assert result == {"status": "ok"}
 
     def test_chat_json_no_system(self):
@@ -557,9 +570,11 @@ class TestLLMChatJSON:
         }
         mock_resp.raise_for_status = MagicMock()
         with patch.object(llm._provider._client, "post", return_value=mock_resp):
-            result = llm.chat_json([
-                {"role": "user", "content": "hello"},
-            ])
+            result = llm.chat_json(
+                [
+                    {"role": "user", "content": "hello"},
+                ]
+            )
             assert result == {"a": 1}
 
     def test_chat_json_with_schema(self):
@@ -619,6 +634,7 @@ class TestLLMChatJSON:
 # ToolCall / ToolCallResponse
 # ---------------------------------------------------------------------------
 
+
 class TestToolModels:
     def test_tool_call(self):
         tc = ToolCall(name="search", arguments={"q": "test"})
@@ -639,6 +655,7 @@ class TestToolModels:
 # ---------------------------------------------------------------------------
 # LLMSession
 # ---------------------------------------------------------------------------
+
 
 class TestLLMSession:
     def _make_session(self, system=None, tools=None):
@@ -803,9 +820,7 @@ class TestLLMSession:
         mock_resp = MagicMock()
         mock_resp.status_code = 500
         mock_resp.text = "error"
-        mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
-            "err", request=MagicMock(), response=mock_resp
-        )
+        mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError("err", request=MagicMock(), response=mock_resp)
         with patch.object(s.llm._provider._client, "post", return_value=mock_resp):
             with pytest.raises(LLMError):
                 await s.chat("test")
@@ -834,10 +849,19 @@ class TestLLMSession:
         chunks_json = [
             json.dumps({"message": {"content": "hel"}, "done": False}),
             json.dumps({"message": {"content": "lo"}, "done": False}),
-            json.dumps({"message": {"content": ""}, "done": True, "model": "testmodel", "prompt_eval_count": 5, "eval_count": 2}),
+            json.dumps(
+                {
+                    "message": {"content": ""},
+                    "done": True,
+                    "model": "testmodel",
+                    "prompt_eval_count": 5,
+                    "eval_count": 2,
+                }
+            ),
         ]
 
         collected = []
+
         def callback(token):
             collected.append(token)
 
@@ -858,9 +882,11 @@ class TestLLMSession:
 # Module-level singleton
 # ---------------------------------------------------------------------------
 
+
 class TestModuleSingleton:
     def test_get_llm_singleton(self):
         import elle.rag.llm as llm_mod
+
         old = llm_mod._llm
         llm_mod._llm = None
         try:
@@ -874,6 +900,7 @@ class TestModuleSingleton:
 
     def test_reset_llm(self):
         import elle.rag.llm as llm_mod
+
         old = llm_mod._llm
         llm_mod._llm = None
         try:
@@ -886,6 +913,7 @@ class TestModuleSingleton:
 
     def test_reset_llm_when_none(self):
         import elle.rag.llm as llm_mod
+
         old = llm_mod._llm
         llm_mod._llm = None
         try:

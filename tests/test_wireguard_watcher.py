@@ -1,23 +1,23 @@
 from __future__ import annotations
 
 import asyncio
-import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
 from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from elle.daemon.telemetry.wireguard_watcher import (
-    WireguardWatcher,
-    watch_wireguard,
-    get_wireguard_summary,
-    POLL_INTERVAL,
-    HANDSHAKE_STALE_THRESHOLD,
     HIGH_TRANSFER_THRESHOLD,
+    POLL_INTERVAL,
+    WireguardWatcher,
+    get_wireguard_summary,
+    watch_wireguard,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_queue():
     q = MagicMock()
@@ -39,8 +39,8 @@ WG_DUMP_OUTPUT = (
 # WireguardWatcher init & properties
 # ---------------------------------------------------------------------------
 
-class TestWireguardWatcherInit:
 
+class TestWireguardWatcherInit:
     def test_init_defaults(self):
         q = _make_queue()
         shutdown = _make_shutdown()
@@ -57,14 +57,13 @@ class TestWireguardWatcherInit:
 # _parse_wg_dump
 # ---------------------------------------------------------------------------
 
-class TestParseWgDump:
 
+class TestParseWgDump:
     def test_parse_interface_and_peer(self):
         q = _make_queue()
         w = WireguardWatcher(q, _make_shutdown())
         output = (
-            "wg0\tPRIV\tPUB\t51820\toff\n"
-            "wg0\tPEER1\t(none)\t1.2.3.4:51820\t10.0.0.0/24\t1700000000\t1000\t2000\toff\n"
+            "wg0\tPRIV\tPUB\t51820\toff\nwg0\tPEER1\t(none)\t1.2.3.4:51820\t10.0.0.0/24\t1700000000\t1000\t2000\toff\n"
         )
         stats = w._parse_wg_dump(output)
         assert "wg0" in stats
@@ -91,10 +90,7 @@ class TestParseWgDump:
 
     def test_parse_peer_with_psk_and_keepalive(self):
         w = WireguardWatcher(_make_queue(), _make_shutdown())
-        output = (
-            "wg0\tPRIV\tPUB\t51820\toff\n"
-            "wg0\tPEER1\tPSK123\t5.6.7.8:51820\t10.0.0.0/24\t0\t500\t600\t25\n"
-        )
+        output = "wg0\tPRIV\tPUB\t51820\toff\nwg0\tPEER1\tPSK123\t5.6.7.8:51820\t10.0.0.0/24\t0\t500\t600\t25\n"
         stats = w._parse_wg_dump(output)
         peer = stats["wg0"]["peers"][0]
         assert peer["preshared_key"] == "PSK123"
@@ -113,16 +109,18 @@ class TestParseWgDump:
 # _get_wg_stats
 # ---------------------------------------------------------------------------
 
-class TestGetWgStats:
 
+class TestGetWgStats:
     @pytest.mark.asyncio
     async def test_success(self):
         w = WireguardWatcher(_make_queue(), _make_shutdown())
         mock_proc = AsyncMock()
         mock_proc.returncode = 0
         mock_proc.communicate.return_value = (b"wg0\tPRIV\tPUB\t51820\toff\n", b"")
-        with patch("asyncio.create_subprocess_exec", return_value=mock_proc), \
-             patch("asyncio.wait_for", return_value=(b"wg0\tPRIV\tPUB\t51820\toff\n", b"")):
+        with (
+            patch("asyncio.create_subprocess_exec", return_value=mock_proc),
+            patch("asyncio.wait_for", return_value=(b"wg0\tPRIV\tPUB\t51820\toff\n", b"")),
+        ):
             mock_proc.communicate = AsyncMock(return_value=(b"wg0\tPRIV\tPUB\t51820\toff\n", b""))
             stats = await w._get_wg_stats()
         assert stats is not None
@@ -138,8 +136,10 @@ class TestGetWgStats:
     async def test_timeout(self):
         w = WireguardWatcher(_make_queue(), _make_shutdown())
         mock_proc = AsyncMock()
-        with patch("asyncio.create_subprocess_exec", return_value=mock_proc), \
-             patch("asyncio.wait_for", side_effect=TimeoutError):
+        with (
+            patch("asyncio.create_subprocess_exec", return_value=mock_proc),
+            patch("asyncio.wait_for", side_effect=TimeoutError),
+        ):
             stats = await w._get_wg_stats()
         assert stats is None
 
@@ -149,8 +149,10 @@ class TestGetWgStats:
         mock_proc = AsyncMock()
         mock_proc.returncode = 1
         mock_proc.communicate = AsyncMock(return_value=(b"", b"err"))
-        with patch("asyncio.create_subprocess_exec", return_value=mock_proc), \
-             patch("asyncio.wait_for", return_value=(b"", b"err")):
+        with (
+            patch("asyncio.create_subprocess_exec", return_value=mock_proc),
+            patch("asyncio.wait_for", return_value=(b"", b"err")),
+        ):
             stats = await w._get_wg_stats()
         assert stats is None
 
@@ -166,8 +168,8 @@ class TestGetWgStats:
 # _emit_event
 # ---------------------------------------------------------------------------
 
-class TestEmitEvent:
 
+class TestEmitEvent:
     @pytest.mark.asyncio
     async def test_emit_event(self):
         q = _make_queue()
@@ -184,8 +186,8 @@ class TestEmitEvent:
 # _poll
 # ---------------------------------------------------------------------------
 
-class TestPoll:
 
+class TestPoll:
     @pytest.mark.asyncio
     async def test_poll_no_stats(self):
         w = WireguardWatcher(_make_queue(), _make_shutdown())
@@ -304,8 +306,8 @@ class TestPoll:
 # start / stop
 # ---------------------------------------------------------------------------
 
-class TestStartStop:
 
+class TestStartStop:
     @pytest.mark.asyncio
     async def test_stop(self):
         w = WireguardWatcher(_make_queue(), _make_shutdown())
@@ -326,8 +328,8 @@ class TestStartStop:
 # watch_wireguard
 # ---------------------------------------------------------------------------
 
-class TestWatchWireguard:
 
+class TestWatchWireguard:
     @pytest.mark.asyncio
     async def test_watch_function(self):
         q = _make_queue()
@@ -340,8 +342,8 @@ class TestWatchWireguard:
 # get_wireguard_summary
 # ---------------------------------------------------------------------------
 
-class TestGetWireguardSummary:
 
+class TestGetWireguardSummary:
     def test_success(self):
         now_ts = int(datetime.utcnow().timestamp())
         dump = (
@@ -380,8 +382,7 @@ class TestGetWireguardSummary:
     def test_stale_peer(self):
         old_ts = int(datetime.utcnow().timestamp()) - 600
         dump = (
-            f"wg0\tPRIV\tPUB\t51820\toff\n"
-            f"wg0\tPEER1\t(none)\t1.2.3.4:51820\t10.0.0.0/24\t{old_ts}\t1000\t2000\toff\n"
+            f"wg0\tPRIV\tPUB\t51820\toff\nwg0\tPEER1\t(none)\t1.2.3.4:51820\t10.0.0.0/24\t{old_ts}\t1000\t2000\toff\n"
         )
         mock_result = MagicMock()
         mock_result.returncode = 0

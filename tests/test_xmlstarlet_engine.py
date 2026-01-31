@@ -1,15 +1,13 @@
-from __future__ import annotations
-
 """Tests for the XMLStarlet engine (elle.ops.xmlstarlet.engine)."""
 
+from __future__ import annotations
+
 import subprocess
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from elle.ops.xmlstarlet.models import (
-    XMLChange,
     XMLEditOperation,
     XMLEditRequest,
     XMLOperation,
@@ -19,14 +17,15 @@ from elle.ops.xmlstarlet.models import (
     XMLValidationResult,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _reset_module_cache():
     """Reset the module-level caches so each test starts fresh."""
     import elle.ops.xmlstarlet.engine as eng
+
     eng._xmlstarlet_path = None
     eng._xmlstarlet_version = None
     eng._xmlstarlet_checked = False
@@ -50,31 +49,37 @@ class TestModuleFunctions:
 
     def test_find_xmlstarlet_found(self):
         from elle.ops.xmlstarlet.engine import _find_xmlstarlet
+
         with patch("shutil.which", side_effect=lambda n: "/usr/bin/xmlstarlet" if n == "xmlstarlet" else None):
             assert _find_xmlstarlet() == "/usr/bin/xmlstarlet"
 
     def test_find_xmlstarlet_xml_name(self):
         from elle.ops.xmlstarlet.engine import _find_xmlstarlet
+
         with patch("shutil.which", side_effect=lambda n: "/usr/bin/xml" if n == "xml" else None):
             assert _find_xmlstarlet() == "/usr/bin/xml"
 
     def test_find_xmlstarlet_not_found(self):
         from elle.ops.xmlstarlet.engine import _find_xmlstarlet
+
         with patch("shutil.which", return_value=None):
             assert _find_xmlstarlet() is None
 
     def test_is_available_true(self):
         from elle.ops.xmlstarlet.engine import is_available
+
         with patch("shutil.which", return_value="/usr/bin/xmlstarlet"):
             assert is_available() is True
 
     def test_is_available_false(self):
         from elle.ops.xmlstarlet.engine import is_available
+
         with patch("shutil.which", return_value=None):
             assert is_available() is False
 
     def test_get_version_available(self):
         from elle.ops.xmlstarlet.engine import get_version
+
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = "1.6.1\ncompiled"
@@ -87,17 +92,20 @@ class TestModuleFunctions:
 
     def test_get_version_cached(self):
         import elle.ops.xmlstarlet.engine as eng
+
         eng._xmlstarlet_version = "cached"
         version = eng.get_version()
         assert version == "cached"
 
     def test_get_version_not_available(self):
         from elle.ops.xmlstarlet.engine import get_version
+
         with patch("shutil.which", return_value=None):
             assert get_version() is None
 
     def test_get_version_exception(self):
         from elle.ops.xmlstarlet.engine import get_version
+
         with (
             patch("shutil.which", return_value="/usr/bin/xmlstarlet"),
             patch("subprocess.run", side_effect=OSError("fail")),
@@ -106,6 +114,7 @@ class TestModuleFunctions:
 
     def test_get_status_available(self):
         from elle.ops.xmlstarlet.engine import get_status
+
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = "1.6.1\n"
@@ -119,6 +128,7 @@ class TestModuleFunctions:
 
     def test_get_status_unavailable(self):
         from elle.ops.xmlstarlet.engine import get_status
+
         with patch("shutil.which", return_value=None):
             status = get_status()
         assert status.available is False
@@ -132,12 +142,14 @@ class TestModuleFunctions:
 class TestXMLStarletEngineInit:
     def test_init_available(self):
         from elle.ops.xmlstarlet.engine import XMLStarletEngine
+
         with patch("shutil.which", return_value="/usr/bin/xmlstarlet"):
             engine = XMLStarletEngine()
         assert engine._xmlstarlet_path == "/usr/bin/xmlstarlet"
 
     def test_init_not_available(self):
         from elle.ops.xmlstarlet.engine import XMLStarletEngine
+
         with (
             patch("shutil.which", return_value=None),
             pytest.raises(XMLStarletUnavailableError),
@@ -146,6 +158,7 @@ class TestXMLStarletEngineInit:
 
     def test_context_manager(self):
         from elle.ops.xmlstarlet.engine import XMLStarletEngine
+
         with patch("shutil.which", return_value="/usr/bin/xmlstarlet"):
             with XMLStarletEngine() as engine:
                 assert engine._xmlstarlet_path == "/usr/bin/xmlstarlet"
@@ -159,6 +172,7 @@ class TestXMLStarletEngineInit:
 class TestRunXMLStarlet:
     def _make_engine(self):
         from elle.ops.xmlstarlet.engine import XMLStarletEngine
+
         with patch("shutil.which", return_value="/usr/bin/xmlstarlet"):
             return XMLStarletEngine()
 
@@ -214,6 +228,7 @@ class TestRunXMLStarlet:
 class TestSelectOperations:
     def _make_engine(self):
         from elle.ops.xmlstarlet.engine import XMLStarletEngine
+
         with patch("shutil.which", return_value="/usr/bin/xmlstarlet"):
             return XMLStarletEngine()
 
@@ -290,6 +305,7 @@ class TestSelectOperations:
 class TestEditOperations:
     def _make_engine(self):
         from elle.ops.xmlstarlet.engine import XMLStarletEngine
+
         with patch("shutil.which", return_value="/usr/bin/xmlstarlet"):
             return XMLStarletEngine()
 
@@ -387,6 +403,7 @@ class TestEditOperations:
 class TestValidation:
     def _make_engine(self):
         from elle.ops.xmlstarlet.engine import XMLStarletEngine
+
         with patch("shutil.which", return_value="/usr/bin/xmlstarlet"):
             return XMLStarletEngine()
 
@@ -465,6 +482,7 @@ class TestValidation:
 class TestFormat:
     def _make_engine(self):
         from elle.ops.xmlstarlet.engine import XMLStarletEngine
+
         with patch("shutil.which", return_value="/usr/bin/xmlstarlet"):
             return XMLStarletEngine()
 
@@ -522,6 +540,7 @@ class TestFormat:
 class TestProcess:
     def _make_engine(self):
         from elle.ops.xmlstarlet.engine import XMLStarletEngine
+
         with patch("shutil.which", return_value="/usr/bin/xmlstarlet"):
             return XMLStarletEngine()
 
@@ -593,7 +612,11 @@ class TestProcess:
             xml_input="<root/>",
             operation=XMLOperation(kind="validate"),
         )
-        with patch.object(engine, "validate_content", return_value=XMLValidationResult(valid=False, well_formed=False, errors=("bad",))):
+        with patch.object(
+            engine,
+            "validate_content",
+            return_value=XMLValidationResult(valid=False, well_formed=False, errors=("bad",)),
+        ):
             result = engine.process(request)
         assert result.success is False
 
@@ -636,6 +659,7 @@ class TestProcess:
 class TestPreviewEdit:
     def _make_engine(self):
         from elle.ops.xmlstarlet.engine import XMLStarletEngine
+
         with patch("shutil.which", return_value="/usr/bin/xmlstarlet"):
             return XMLStarletEngine()
 
@@ -666,7 +690,11 @@ class TestPreviewEdit:
         diff_mod.unified_diff = MagicMock(return_value="diff")
         diff_mod.colored_diff = MagicMock(return_value="cdiff")
         with (
-            patch.object(engine, "_apply_edit_operation", return_value=XMLResult(success=True, output="<root><item>new</item></root>")),
+            patch.object(
+                engine,
+                "_apply_edit_operation",
+                return_value=XMLResult(success=True, output="<root><item>new</item></root>"),
+            ),
             patch.dict("sys.modules", {"elle.ops.augeas.diff": diff_mod}),
         ):
             result = engine.preview_edit(request)
@@ -700,6 +728,7 @@ class TestPreviewEdit:
 class TestApplyEditOperation:
     def _make_engine(self):
         from elle.ops.xmlstarlet.engine import XMLStarletEngine
+
         with patch("shutil.which", return_value="/usr/bin/xmlstarlet"):
             return XMLStarletEngine()
 
@@ -771,6 +800,7 @@ class TestApplyEditOperation:
 class TestExecuteEdit:
     def _make_engine(self):
         from elle.ops.xmlstarlet.engine import XMLStarletEngine
+
         with patch("shutil.which", return_value="/usr/bin/xmlstarlet"):
             return XMLStarletEngine()
 
@@ -783,10 +813,13 @@ class TestExecuteEdit:
         )
         diff_mod = MagicMock()
         backup_mod = MagicMock()
-        with patch.dict("sys.modules", {
-            "elle.ops.augeas.diff": diff_mod,
-            "elle.ops.augeas.backup": backup_mod,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.ops.augeas.diff": diff_mod,
+                "elle.ops.augeas.backup": backup_mod,
+            },
+        ):
             result = engine.execute_edit(request)
         assert result.success is False
 
@@ -802,10 +835,13 @@ class TestExecuteEdit:
         diff_mod = MagicMock()
         backup_mod = MagicMock()
         backup_mod.backup_file = MagicMock(side_effect=RuntimeError("backup err"))
-        with patch.dict("sys.modules", {
-            "elle.ops.augeas.diff": diff_mod,
-            "elle.ops.augeas.backup": backup_mod,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.ops.augeas.diff": diff_mod,
+                "elle.ops.augeas.backup": backup_mod,
+            },
+        ):
             result = engine.execute_edit(request)
         assert result.success is False
 
@@ -825,12 +861,19 @@ class TestExecuteEdit:
         diff_mod.colored_diff = MagicMock(return_value="cdiff")
         backup_mod = MagicMock()
         with (
-            patch.object(engine, "_apply_edit_operation", return_value=XMLResult(success=True, output="<root><item>new</item></root>")),
+            patch.object(
+                engine,
+                "_apply_edit_operation",
+                return_value=XMLResult(success=True, output="<root><item>new</item></root>"),
+            ),
             patch.object(engine, "select", return_value=XMLResult(success=True, output="old")),
-            patch.dict("sys.modules", {
-                "elle.ops.augeas.diff": diff_mod,
-                "elle.ops.augeas.backup": backup_mod,
-            }),
+            patch.dict(
+                "sys.modules",
+                {
+                    "elle.ops.augeas.diff": diff_mod,
+                    "elle.ops.augeas.backup": backup_mod,
+                },
+            ),
         ):
             result = engine.execute_edit(request)
         assert result.success is True
@@ -852,12 +895,19 @@ class TestExecuteEdit:
         diff_mod.colored_diff = MagicMock(return_value="cdiff")
         backup_mod = MagicMock()
         with (
-            patch.object(engine, "_apply_edit_operation", return_value=XMLResult(success=True, output="<root><item>new</item></root>")),
+            patch.object(
+                engine,
+                "_apply_edit_operation",
+                return_value=XMLResult(success=True, output="<root><item>new</item></root>"),
+            ),
             patch.object(engine, "select", return_value=XMLResult(success=True, output="old")),
-            patch.dict("sys.modules", {
-                "elle.ops.augeas.diff": diff_mod,
-                "elle.ops.augeas.backup": backup_mod,
-            }),
+            patch.dict(
+                "sys.modules",
+                {
+                    "elle.ops.augeas.diff": diff_mod,
+                    "elle.ops.augeas.backup": backup_mod,
+                },
+            ),
         ):
             result = engine.execute_edit(request)
         assert result.success is True
@@ -880,10 +930,13 @@ class TestExecuteEdit:
         with (
             patch.object(engine, "_apply_edit_operation", return_value=XMLResult(success=False, error="xpath err")),
             patch.object(engine, "select", return_value=XMLResult(success=True, output="old")),
-            patch.dict("sys.modules", {
-                "elle.ops.augeas.diff": diff_mod,
-                "elle.ops.augeas.backup": backup_mod,
-            }),
+            patch.dict(
+                "sys.modules",
+                {
+                    "elle.ops.augeas.diff": diff_mod,
+                    "elle.ops.augeas.backup": backup_mod,
+                },
+            ),
         ):
             result = engine.execute_edit(request)
         assert result.success is False
@@ -907,10 +960,13 @@ class TestExecuteEdit:
         with (
             patch.object(engine, "_apply_edit_operation", return_value=XMLResult(success=False, error="xpath err")),
             patch.object(engine, "select", return_value=XMLResult(success=True, output="")),
-            patch.dict("sys.modules", {
-                "elle.ops.augeas.diff": diff_mod,
-                "elle.ops.augeas.backup": backup_mod,
-            }),
+            patch.dict(
+                "sys.modules",
+                {
+                    "elle.ops.augeas.diff": diff_mod,
+                    "elle.ops.augeas.backup": backup_mod,
+                },
+            ),
         ):
             result = engine.execute_edit(request)
         assert result.success is False
@@ -931,10 +987,13 @@ class TestExecuteEdit:
         with (
             patch.object(engine, "_apply_edit_operation", return_value=XMLResult(success=False, error="bad")),
             patch.object(engine, "select", return_value=XMLResult(success=True, output="")),
-            patch.dict("sys.modules", {
-                "elle.ops.augeas.diff": diff_mod,
-                "elle.ops.augeas.backup": backup_mod,
-            }),
+            patch.dict(
+                "sys.modules",
+                {
+                    "elle.ops.augeas.diff": diff_mod,
+                    "elle.ops.augeas.backup": backup_mod,
+                },
+            ),
         ):
             result = engine.execute_edit(request)
         assert result.success is False
@@ -956,10 +1015,13 @@ class TestExecuteEdit:
             patch.object(engine, "_apply_edit_operation", return_value=XMLResult(success=True, output="<root/>")),
             patch.object(engine, "select", return_value=XMLResult(success=True, output="")),
             patch("pathlib.Path.write_text", side_effect=PermissionError),
-            patch.dict("sys.modules", {
-                "elle.ops.augeas.diff": diff_mod,
-                "elle.ops.augeas.backup": backup_mod,
-            }),
+            patch.dict(
+                "sys.modules",
+                {
+                    "elle.ops.augeas.diff": diff_mod,
+                    "elle.ops.augeas.backup": backup_mod,
+                },
+            ),
         ):
             result = engine.execute_edit(request)
         assert result.success is False
@@ -982,10 +1044,13 @@ class TestExecuteEdit:
             patch.object(engine, "_apply_edit_operation", return_value=XMLResult(success=True, output="<root/>")),
             patch.object(engine, "select", return_value=XMLResult(success=True, output="")),
             patch("pathlib.Path.write_text", side_effect=OSError("disk full")),
-            patch.dict("sys.modules", {
-                "elle.ops.augeas.diff": diff_mod,
-                "elle.ops.augeas.backup": backup_mod,
-            }),
+            patch.dict(
+                "sys.modules",
+                {
+                    "elle.ops.augeas.diff": diff_mod,
+                    "elle.ops.augeas.backup": backup_mod,
+                },
+            ),
         ):
             result = engine.execute_edit(request)
         assert result.success is False
@@ -1010,11 +1075,16 @@ class TestExecuteEdit:
         with (
             patch.object(engine, "_apply_edit_operation", return_value=XMLResult(success=True, output="<root/>")),
             patch.object(engine, "select", return_value=XMLResult(success=True, output="")),
-            patch.object(engine, "validate", return_value=XMLValidationResult(valid=False, well_formed=False, errors=("bad",))),
-            patch.dict("sys.modules", {
-                "elle.ops.augeas.diff": diff_mod,
-                "elle.ops.augeas.backup": backup_mod,
-            }),
+            patch.object(
+                engine, "validate", return_value=XMLValidationResult(valid=False, well_formed=False, errors=("bad",))
+            ),
+            patch.dict(
+                "sys.modules",
+                {
+                    "elle.ops.augeas.diff": diff_mod,
+                    "elle.ops.augeas.backup": backup_mod,
+                },
+            ),
         ):
             result = engine.execute_edit(request)
         assert result.success is False
@@ -1040,11 +1110,16 @@ class TestExecuteEdit:
         with (
             patch.object(engine, "_apply_edit_operation", return_value=XMLResult(success=True, output="<root/>")),
             patch.object(engine, "select", return_value=XMLResult(success=True, output="")),
-            patch.object(engine, "validate", return_value=XMLValidationResult(valid=False, well_formed=False, errors=("bad",))),
-            patch.dict("sys.modules", {
-                "elle.ops.augeas.diff": diff_mod,
-                "elle.ops.augeas.backup": backup_mod,
-            }),
+            patch.object(
+                engine, "validate", return_value=XMLValidationResult(valid=False, well_formed=False, errors=("bad",))
+            ),
+            patch.dict(
+                "sys.modules",
+                {
+                    "elle.ops.augeas.diff": diff_mod,
+                    "elle.ops.augeas.backup": backup_mod,
+                },
+            ),
         ):
             result = engine.execute_edit(request)
         assert result.success is False
@@ -1068,10 +1143,13 @@ class TestExecuteEdit:
         with (
             patch.object(engine, "_apply_edit_operation", return_value=XMLResult(success=True, output="<root/>")),
             patch.object(engine, "select", return_value=XMLResult(success=True, output="val")),
-            patch.dict("sys.modules", {
-                "elle.ops.augeas.diff": diff_mod,
-                "elle.ops.augeas.backup": backup_mod,
-            }),
+            patch.dict(
+                "sys.modules",
+                {
+                    "elle.ops.augeas.diff": diff_mod,
+                    "elle.ops.augeas.backup": backup_mod,
+                },
+            ),
         ):
             result = engine.execute_edit(request)
         assert result.success is True

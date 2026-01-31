@@ -33,6 +33,7 @@ def _make_mock_autonomy_engine():
     engine.update_after_execution.return_value = None
     return engine
 
+
 # =============================================================================
 # Test fixtures
 # =============================================================================

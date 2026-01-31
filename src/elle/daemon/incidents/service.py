@@ -95,15 +95,15 @@ class IncidentVaultService:
         if not client.is_available():
             return 0
 
-        with get_conn(schema="incidents") as conn:
+        with get_conn(schema="incidents"):
             # Get incidents without embeddings
-            incident_ids = get_incidents_without_embeddings(limit=50, conn=conn)
+            incident_ids = get_incidents_without_embeddings(limit=50)
             if not incident_ids:
                 return 0
 
             embedded = 0
             for incident_id in incident_ids:
-                incident = get_incident(incident_id, conn=conn)
+                incident = get_incident(incident_id)
                 if not incident:
                     continue
 
@@ -120,7 +120,6 @@ class IncidentVaultService:
                         incident_id,
                         embedding,
                         EMBEDDING_MODEL,
-                        conn=conn,
                     )
                     embedded += 1
                 except Exception as e:

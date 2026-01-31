@@ -1,8 +1,7 @@
-from __future__ import annotations
-
 """Tests for cli/reboot/commands.py - reboot persistence and recovery commands."""
 
-import pytest
+from __future__ import annotations
+
 from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -11,6 +10,7 @@ from unittest.mock import MagicMock, patch
 def _make_session():
     """Return a minimal real session."""
     from elle.common.session import create_session
+
     return create_session()
 
 
@@ -22,22 +22,27 @@ def _make_session():
 class TestLooksLikeUUID:
     def test_full_uuid(self):
         from elle.cli.reboot.commands import _looks_like_uuid
+
         assert _looks_like_uuid("abcdef12-3456-7890-abcd-ef1234567890") is True
 
     def test_partial_uuid(self):
         from elle.cli.reboot.commands import _looks_like_uuid
+
         assert _looks_like_uuid("abcdef12") is True
 
     def test_too_short(self):
         from elle.cli.reboot.commands import _looks_like_uuid
+
         assert _looks_like_uuid("abc") is False
 
     def test_invalid_chars(self):
         from elle.cli.reboot.commands import _looks_like_uuid
+
         assert _looks_like_uuid("gggggggg") is False
 
     def test_uppercase_normalized(self):
         from elle.cli.reboot.commands import _looks_like_uuid
+
         assert _looks_like_uuid("ABCDEF12") is True
 
 
@@ -45,6 +50,7 @@ class TestStatusColor:
     def test_known_statuses(self):
         from elle.cli.reboot.commands import _status_color
         from elle.cli.terminal.renderer import Colors
+
         assert _status_color("pending") == Colors.YELLOW
         assert _status_color("completed") == Colors.GREEN
         assert _status_color("failed") == Colors.RED
@@ -52,22 +58,26 @@ class TestStatusColor:
     def test_unknown_status(self):
         from elle.cli.reboot.commands import _status_color
         from elle.cli.terminal.renderer import Colors
+
         assert _status_color("unknown_status") == Colors.RESET
 
 
 class TestOutcomeStr:
     def test_improved(self):
         from elle.cli.reboot.commands import _outcome_str
+
         result = _outcome_str("improved")
         assert "improved" in result
 
     def test_failed(self):
         from elle.cli.reboot.commands import _outcome_str
+
         result = _outcome_str("failed")
         assert "failed" in result
 
     def test_unknown_outcome(self):
         from elle.cli.reboot.commands import _outcome_str
+
         result = _outcome_str("custom")
         assert result == "custom"
 
@@ -75,10 +85,12 @@ class TestOutcomeStr:
 class TestFormatDatetime:
     def test_none(self):
         from elle.cli.reboot.commands import _format_datetime
+
         assert _format_datetime(None) == "N/A"
 
     def test_valid_datetime(self):
         from elle.cli.reboot.commands import _format_datetime
+
         dt = datetime(2024, 3, 15, 14, 30)
         result = _format_datetime(dt)
         assert "2024-03-15" in result
@@ -93,6 +105,7 @@ class TestFormatDatetime:
 class TestRebootHelp:
     def test_contains_commands(self):
         from elle.cli.reboot.commands import _reboot_help
+
         help_text = _reboot_help()
         assert "reboot status" in help_text
         assert "reboot history" in help_text
@@ -110,6 +123,7 @@ class TestHandleRebootCommand:
     @patch("elle.cli.reboot.commands.render_reboot_status", return_value="STATUS")
     def test_default_subcommand_is_status(self, mock_status):
         from elle.cli.reboot.commands import handle_reboot_command
+
         output, success = handle_reboot_command("reboot", _make_session())
         assert output == "STATUS"
         assert success is True
@@ -117,12 +131,14 @@ class TestHandleRebootCommand:
     @patch("elle.cli.reboot.commands.render_reboot_status", return_value="STATUS")
     def test_explicit_status(self, mock_status):
         from elle.cli.reboot.commands import handle_reboot_command
+
         output, success = handle_reboot_command("reboot status", _make_session())
         assert output == "STATUS"
 
     @patch("elle.cli.reboot.commands.render_reboot_history", return_value="HISTORY")
     def test_history_default_limit(self, mock_history):
         from elle.cli.reboot.commands import handle_reboot_command
+
         output, success = handle_reboot_command("reboot history", _make_session())
         assert output == "HISTORY"
         mock_history.assert_called_once_with(20)
@@ -130,35 +146,41 @@ class TestHandleRebootCommand:
     @patch("elle.cli.reboot.commands.render_reboot_history", return_value="HISTORY")
     def test_history_custom_limit(self, mock_history):
         from elle.cli.reboot.commands import handle_reboot_command
+
         output, success = handle_reboot_command("reboot history 5", _make_session())
         mock_history.assert_called_once_with(5)
 
     @patch("elle.cli.reboot.commands.handle_cancel", return_value="CANCELLED")
     def test_cancel(self, mock_cancel):
         from elle.cli.reboot.commands import handle_reboot_command
+
         output, success = handle_reboot_command("reboot cancel", _make_session())
         assert output == "CANCELLED"
 
     @patch("elle.cli.reboot.commands.handle_confirm", return_value="CONFIRMED")
     def test_confirm(self, mock_confirm):
         from elle.cli.reboot.commands import handle_reboot_command
+
         output, success = handle_reboot_command("reboot confirm", _make_session())
         assert output == "CONFIRMED"
 
     @patch("elle.cli.reboot.commands.handle_rollback", return_value="ROLLBACK")
     def test_rollback(self, mock_rollback):
         from elle.cli.reboot.commands import handle_reboot_command
+
         output, success = handle_reboot_command("reboot rollback", _make_session())
         assert output == "ROLLBACK"
 
     @patch("elle.cli.reboot.commands.render_intent_detail", return_value="DETAIL")
     def test_uuid_subcommand(self, mock_detail):
         from elle.cli.reboot.commands import handle_reboot_command
+
         output, success = handle_reboot_command("reboot abcdef12-3456-7890", _make_session())
         assert output == "DETAIL"
 
     def test_unknown_subcommand_shows_help(self):
         from elle.cli.reboot.commands import handle_reboot_command
+
         output, success = handle_reboot_command("reboot xyzzy", _make_session())
         assert "Reboot Recovery Commands" in output
 
@@ -171,6 +193,7 @@ class TestHandleRebootCommand:
 class TestRenderRebootStatus:
     def test_no_active_intent(self):
         from elle.cli.reboot.commands import render_reboot_status
+
         mock_status = SimpleNamespace(
             total_intents=5,
             completed_count=3,
@@ -188,6 +211,7 @@ class TestRenderRebootStatus:
 
     def test_active_intent_verifying(self):
         from elle.cli.reboot.commands import render_reboot_status
+
         active = SimpleNamespace(
             id="abc12345-6789-0000-0000-000000000000",
             goal="Kernel update",
@@ -213,6 +237,7 @@ class TestRenderRebootStatus:
 
     def test_active_intent_failed(self):
         from elle.cli.reboot.commands import render_reboot_status
+
         active = SimpleNamespace(
             id="abc12345-6789-0000-0000-000000000000",
             goal="Kernel update",
@@ -237,6 +262,7 @@ class TestRenderRebootStatus:
 
     def test_exception_handling(self):
         from elle.cli.reboot.commands import render_reboot_status
+
         mock_reboot = MagicMock()
         mock_reboot.get_reboot_status.side_effect = RuntimeError("db error")
         with patch.dict("sys.modules", {"elle.daemon.reboot": mock_reboot}):
@@ -245,6 +271,7 @@ class TestRenderRebootStatus:
 
     def test_with_recent_intents(self):
         from elle.cli.reboot.commands import render_reboot_status
+
         recent = SimpleNamespace(
             status="completed",
             outcome="improved",
@@ -273,6 +300,7 @@ class TestRenderRebootStatus:
 class TestRenderRebootHistory:
     def test_no_history(self):
         from elle.cli.reboot.commands import render_reboot_history
+
         mock_reboot = MagicMock()
         mock_reboot.list_intents.return_value = []
         with patch.dict("sys.modules", {"elle.daemon.reboot": mock_reboot}):
@@ -281,6 +309,7 @@ class TestRenderRebootHistory:
 
     def test_with_history(self):
         from elle.cli.reboot.commands import render_reboot_history
+
         intent = SimpleNamespace(
             id="abc12345-6789-0000-0000-000000000000",
             status="completed",
@@ -301,6 +330,7 @@ class TestRenderRebootHistory:
 
     def test_exception_handling(self):
         from elle.cli.reboot.commands import render_reboot_history
+
         mock_reboot = MagicMock()
         mock_reboot.list_intents.side_effect = RuntimeError("db error")
         with patch.dict("sys.modules", {"elle.daemon.reboot": mock_reboot}):
@@ -316,6 +346,7 @@ class TestRenderRebootHistory:
 class TestRenderIntentDetail:
     def test_not_found(self):
         from elle.cli.reboot.commands import render_intent_detail
+
         mock_reboot = MagicMock()
         mock_reboot.get_intent.return_value = None
         mock_reboot.list_intents.return_value = []
@@ -325,6 +356,7 @@ class TestRenderIntentDetail:
 
     def test_multiple_matches(self):
         from elle.cli.reboot.commands import render_intent_detail
+
         i1 = SimpleNamespace(id="abc12345-aaaa", goal="Goal 1")
         i2 = SimpleNamespace(id="abc12345-bbbb", goal="Goal 2")
         mock_reboot = MagicMock()
@@ -336,6 +368,7 @@ class TestRenderIntentDetail:
 
     def test_found_exact(self):
         from elle.cli.reboot.commands import render_intent_detail
+
         intent = SimpleNamespace(
             id="abc12345-6789-0000-0000-000000000000",
             goal="Kernel update",
@@ -353,7 +386,9 @@ class TestRenderIntentDetail:
             verification_attempts=1,
             last_verification_at=datetime(2024, 3, 15, 10, 3),
             verifications=[
-                SimpleNamespace(passed=True, check_type="service", check_command="systemctl is-active nginx", required=True),
+                SimpleNamespace(
+                    passed=True, check_type="service", check_command="systemctl is-active nginx", required=True
+                ),
                 SimpleNamespace(passed=None, check_type="custom", check_command="echo ok", required=False),
             ],
             outcome_detail="All checks passed",
@@ -372,6 +407,7 @@ class TestRenderIntentDetail:
 
     def test_found_with_failed_verification(self):
         from elle.cli.reboot.commands import render_intent_detail
+
         intent = SimpleNamespace(
             id="def12345-6789",
             goal="Update",
@@ -389,7 +425,9 @@ class TestRenderIntentDetail:
             verification_attempts=3,
             last_verification_at=None,
             verifications=[
-                SimpleNamespace(passed=False, check_type="service", check_command="systemctl is-active nginx", required=True),
+                SimpleNamespace(
+                    passed=False, check_type="service", check_command="systemctl is-active nginx", required=True
+                ),
             ],
             outcome_detail=None,
             incident_id=None,
@@ -402,6 +440,7 @@ class TestRenderIntentDetail:
 
     def test_exception_handling(self):
         from elle.cli.reboot.commands import render_intent_detail
+
         mock_reboot = MagicMock()
         mock_reboot.get_intent.side_effect = RuntimeError("db error")
         with patch.dict("sys.modules", {"elle.daemon.reboot": mock_reboot}):
@@ -417,6 +456,7 @@ class TestRenderIntentDetail:
 class TestHandleCancel:
     def test_no_active_intent(self):
         from elle.cli.reboot.commands import handle_cancel
+
         mock_reboot = MagicMock()
         mock_reboot.get_active_intent.return_value = None
         with patch.dict("sys.modules", {"elle.daemon.reboot": mock_reboot}):
@@ -425,11 +465,11 @@ class TestHandleCancel:
 
     def test_cancel_failed_intent(self):
         from elle.cli.reboot.commands import handle_cancel
+
         active = SimpleNamespace(id="abc123", status="failed", goal="Kernel update")
         mock_manager = MagicMock()
         mock_manager.cancel_pending_rollback.return_value = True
 
-        import asyncio
         mock_reboot = MagicMock()
         mock_reboot.get_active_intent.return_value = active
         mock_reboot.get_manager.return_value = mock_manager
@@ -442,6 +482,7 @@ class TestHandleCancel:
 
     def test_cancel_pending_intent(self):
         from elle.cli.reboot.commands import handle_cancel
+
         active = SimpleNamespace(id="abc123", status="pending", goal="Kernel update")
         mock_manager = MagicMock()
 
@@ -457,6 +498,7 @@ class TestHandleCancel:
 
     def test_cancel_uncancellable_status(self):
         from elle.cli.reboot.commands import handle_cancel
+
         active = SimpleNamespace(id="abc123", status="completed", goal="Done")
         mock_reboot = MagicMock()
         mock_reboot.get_active_intent.return_value = active
@@ -469,6 +511,7 @@ class TestHandleCancel:
 
     def test_cancel_exception(self):
         from elle.cli.reboot.commands import handle_cancel
+
         mock_reboot = MagicMock()
         mock_reboot.get_active_intent.side_effect = RuntimeError("db error")
         with patch.dict("sys.modules", {"elle.daemon.reboot": mock_reboot}):
@@ -484,6 +527,7 @@ class TestHandleCancel:
 class TestHandleConfirm:
     def test_no_active_intent(self):
         from elle.cli.reboot.commands import handle_confirm
+
         mock_reboot = MagicMock()
         mock_reboot.get_active_intent.return_value = None
         with patch.dict("sys.modules", {"elle.daemon.reboot": mock_reboot}):
@@ -492,6 +536,7 @@ class TestHandleConfirm:
 
     def test_wrong_status(self):
         from elle.cli.reboot.commands import handle_confirm
+
         active = SimpleNamespace(id="abc123", status="pending", goal="Test")
         mock_reboot = MagicMock()
         mock_reboot.get_active_intent.return_value = active
@@ -501,6 +546,7 @@ class TestHandleConfirm:
 
     def test_confirm_success(self):
         from elle.cli.reboot.commands import handle_confirm
+
         active = SimpleNamespace(id="abc123", status="failed", goal="Test")
         confirm_result = SimpleNamespace(status="completed")
         mock_reboot = MagicMock()
@@ -514,6 +560,7 @@ class TestHandleConfirm:
 
     def test_confirm_failure(self):
         from elle.cli.reboot.commands import handle_confirm
+
         active = SimpleNamespace(id="abc123", status="verifying", goal="Test")
         mock_reboot = MagicMock()
         mock_reboot.get_active_intent.return_value = active
@@ -526,6 +573,7 @@ class TestHandleConfirm:
 
     def test_confirm_exception(self):
         from elle.cli.reboot.commands import handle_confirm
+
         mock_reboot = MagicMock()
         mock_reboot.get_active_intent.side_effect = RuntimeError("db error")
         with patch.dict("sys.modules", {"elle.daemon.reboot": mock_reboot}):
@@ -541,6 +589,7 @@ class TestHandleConfirm:
 class TestHandleRollback:
     def test_no_active_intent(self):
         from elle.cli.reboot.commands import handle_rollback
+
         mock_reboot = MagicMock()
         mock_reboot.get_active_intent.return_value = None
         with patch.dict("sys.modules", {"elle.daemon.reboot": mock_reboot}):
@@ -549,6 +598,7 @@ class TestHandleRollback:
 
     def test_active_intent_shows_warning(self):
         from elle.cli.reboot.commands import handle_rollback
+
         active = SimpleNamespace(
             id="abc123",
             status="failed",
@@ -564,6 +614,7 @@ class TestHandleRollback:
 
     def test_rollback_exception(self):
         from elle.cli.reboot.commands import handle_rollback
+
         mock_reboot = MagicMock()
         mock_reboot.get_active_intent.side_effect = RuntimeError("db error")
         with patch.dict("sys.modules", {"elle.daemon.reboot": mock_reboot}):
@@ -579,6 +630,7 @@ class TestHandleRollback:
 class TestRenderRecentRebootsSummary:
     def test_no_recent_returns_none(self):
         from elle.cli.reboot.commands import render_recent_reboots_summary
+
         mock_reboot = MagicMock()
         mock_reboot.get_active_intent.return_value = None
         mock_reboot.list_recent_intents.return_value = []
@@ -588,6 +640,7 @@ class TestRenderRecentRebootsSummary:
 
     def test_with_active_intent(self):
         from elle.cli.reboot.commands import render_recent_reboots_summary
+
         active = SimpleNamespace(
             id="abc123",
             status="verifying",
@@ -603,6 +656,7 @@ class TestRenderRecentRebootsSummary:
 
     def test_with_active_failed(self):
         from elle.cli.reboot.commands import render_recent_reboots_summary
+
         active = SimpleNamespace(
             id="abc123",
             status="failed",
@@ -617,6 +671,7 @@ class TestRenderRecentRebootsSummary:
 
     def test_with_notable_recent(self):
         from elle.cli.reboot.commands import render_recent_reboots_summary
+
         recent = SimpleNamespace(
             id="def456",
             status="completed",
@@ -634,6 +689,7 @@ class TestRenderRecentRebootsSummary:
 
     def test_exception_returns_none(self):
         from elle.cli.reboot.commands import render_recent_reboots_summary
+
         mock_reboot = MagicMock()
         mock_reboot.get_active_intent.side_effect = RuntimeError("db error")
         with patch.dict("sys.modules", {"elle.daemon.reboot": mock_reboot}):
