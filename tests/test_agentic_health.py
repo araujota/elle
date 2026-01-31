@@ -304,7 +304,7 @@ class TestLLMCallTracker:
     @pytest.fixture()
     def config(self):
         """Create a config with short timeouts for testing."""
-        return LoopHealthConfig(llm_timeout_seconds=0.5)
+        return LoopHealthConfig(llm_timeout_seconds=0.1)
 
     @pytest.fixture()
     def parent_tracker(self, config):
@@ -331,7 +331,7 @@ class TestLLMCallTracker:
 
         with pytest.raises(LoopTimeoutError) as exc_info:
             async with tracker:
-                await tracker.with_timeout(self._slow_coro(5.0))
+                await tracker.with_timeout(self._slow_coro(10.0))
 
         assert exc_info.value.reason == AbortReason.LLM_TIMEOUT
         assert tracker._timed_out is True
@@ -376,7 +376,7 @@ class TestToolCallTracker:
     @pytest.fixture()
     def config(self):
         """Create a config with short tool timeouts."""
-        return LoopHealthConfig(tool_timeout_seconds=0.5)
+        return LoopHealthConfig(tool_timeout_seconds=0.1)
 
     @pytest.fixture()
     def parent_tracker(self, config):
@@ -404,7 +404,7 @@ class TestToolCallTracker:
 
         with pytest.raises(LoopTimeoutError) as exc_info:
             async with tracker:
-                await tracker.with_timeout(self._slow_tool(5.0))
+                await tracker.with_timeout(self._slow_tool(10.0))
 
         assert exc_info.value.reason == AbortReason.TOOL_TIMEOUT
         assert tracker._timed_out is True

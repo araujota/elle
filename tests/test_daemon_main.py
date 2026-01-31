@@ -410,10 +410,11 @@ class TestNotifyIncident:
 
     async def test_error_severity_notifies(self, daemon):
         mock_mod = MagicMock()
+        mock_notify = MagicMock()
+        mock_mod.notify_incident = mock_notify
         with patch.dict("sys.modules", {"elle.daemon.notifications": mock_mod}):
-            with patch("elle.daemon.notifications.notify_incident") as mock_notify:
-                await daemon._notify_incident("inc1", "test", "error", "disk")
-                mock_notify.assert_called_once()
+            await daemon._notify_incident("inc1", "test", "error", "disk")
+            mock_notify.assert_called_once()
 
     async def test_import_error(self, daemon):
         with patch.dict("sys.modules", {"elle.daemon.notifications": None}):
@@ -462,10 +463,9 @@ class TestRouteToReactive:
         mock_mod = MagicMock()
         mock_mod.get_router.return_value = mock_router
         with patch.dict("sys.modules", {"elle.reactive.router": mock_mod}):
-            with patch("elle.reactive.router.get_router", return_value=mock_router):
-                events = [_mock_event()]
-                await daemon._route_to_reactive(events)
-                mock_router.route.assert_awaited_once()
+            events = [_mock_event()]
+            await daemon._route_to_reactive(events)
+            mock_router.route.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------

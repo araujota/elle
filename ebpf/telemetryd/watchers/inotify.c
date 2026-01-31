@@ -360,7 +360,15 @@ int inotify_watcher_process(struct inotify_watcher *w,
 
         for (char *ptr = buf; ptr < buf + len;
              ptr += sizeof(struct inotify_event) + event->len) {
+            /* Validate event bounds within buffer */
+            size_t remaining = (size_t)(buf + len - ptr);
+            if (remaining < sizeof(struct inotify_event))
+                break;
+
             event = (const struct inotify_event *)ptr;
+
+            if (event->len > remaining - sizeof(struct inotify_event))
+                break;
 
             struct watch_entry *we = find_watch_by_wd(w, event->wd);
             if (!we)

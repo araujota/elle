@@ -324,5 +324,14 @@ class TestModuleFunctions:
 
         svc._task = asyncio.create_task(never_ends())
         svc._stop_requested = True
-        await svc.stop()
+
+        # Patch asyncio.wait_for inside the service module to use a very
+        # short timeout so the test does not block for the full 5 seconds.
+        original_wait_for = asyncio.wait_for
+
+        async def fast_wait_for(fut, *, timeout=None):
+            return await original_wait_for(fut, timeout=0.1)
+
+        with patch("asyncio.wait_for", side_effect=fast_wait_for):
+            await svc.stop()
         assert svc._task is None

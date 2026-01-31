@@ -185,8 +185,12 @@ int network_probe_run(struct normalizer *norm, struct telem_socket *sock, void *
         /* Check for new errors */
         prev = get_or_create_prev(ctx, name);
         if (prev) {
-            int64_t new_errors = (int64_t)(rx_errors - prev->rx_errors) +
-                                 (int64_t)(tx_errors - prev->tx_errors);
+            /* Guard against counter resets (e.g., driver reload) */
+            uint64_t delta_rx = (rx_errors >= prev->rx_errors) ?
+                                (rx_errors - prev->rx_errors) : rx_errors;
+            uint64_t delta_tx = (tx_errors >= prev->tx_errors) ?
+                                (tx_errors - prev->tx_errors) : tx_errors;
+            int64_t new_errors = (int64_t)delta_rx + (int64_t)delta_tx;
 
             if (new_errors > ctx->error_threshold) {
                 struct telem_event evt;
@@ -302,8 +306,10 @@ int network_probe_run(struct normalizer *norm, struct telem_socket *sock, void *
             fclose(snmp_fp);
 
             if (found_tcp_data && ctx->has_prev_snmp) {
-                uint64_t delta_retrans = retrans_segs - ctx->prev_retrans_segs;
-                uint64_t delta_out = out_segs - ctx->prev_out_segs;
+                uint64_t delta_retrans = (retrans_segs >= ctx->prev_retrans_segs) ?
+                                         (retrans_segs - ctx->prev_retrans_segs) : retrans_segs;
+                uint64_t delta_out = (out_segs >= ctx->prev_out_segs) ?
+                                     (out_segs - ctx->prev_out_segs) : out_segs;
 
                 if (delta_out > 0) {
                     double retrans_rate = (double)delta_retrans / (double)delta_out;

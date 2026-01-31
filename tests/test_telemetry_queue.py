@@ -60,7 +60,7 @@ class TestTelemetryQueue:
 
     @pytest.mark.asyncio
     async def test_get_timeout(self, queue):
-        result = await queue.get(timeout=0.1)
+        result = await asyncio.wait_for(queue.get(timeout=0.1), timeout=5.0)
         assert result is None
 
     @pytest.mark.asyncio
@@ -98,7 +98,7 @@ class TestTelemetryQueue:
 
     @pytest.mark.asyncio
     async def test_get_batch_timeout_empty(self, queue):
-        items = await queue.get_batch(max_items=10, timeout=0.1)
+        items = await asyncio.wait_for(queue.get_batch(max_items=10, timeout=0.1), timeout=5.0)
         assert items == []
 
     @pytest.mark.asyncio
@@ -212,12 +212,22 @@ class TestConcurrentAccess:
             stop.set()
 
         async def consumer():
-            while not stop.is_set() or queue.size > 0:
-                item = await queue.get(timeout=0.1)
+            while not stop.is_set() or not queue.empty:
+                item = await queue.get(timeout=0.5)
                 if item is not None:
                     consumed.append(item)
+                elif stop.is_set():
+                    # Producer finished and get timed out: drain remaining
+                    while not queue.empty:
+                        item = queue.get_nowait()
+                        if item is not None:
+                            consumed.append(item)
+                    break
 
-        await asyncio.gather(producer(), consumer())
+        await asyncio.wait_for(
+            asyncio.gather(producer(), consumer()),
+            timeout=10.0,
+        )
 
         assert len(produced) == 50
         assert sorted(consumed) == list(range(50))

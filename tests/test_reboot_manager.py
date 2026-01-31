@@ -794,10 +794,10 @@ class TestDelayedRollback:
         rolled_back = _make_intent(status="rolled_back")
 
         with (
-            patch("elle.daemon.reboot.manager.AUTO_ROLLBACK_DELAY_SEC", 0.01),
+            patch("elle.daemon.reboot.manager.AUTO_ROLLBACK_DELAY_SEC", 0.05),
             patch.object(mgr, "_initiate_rollback", new_callable=AsyncMock, return_value=rolled_back),
         ):
-            await mgr._delayed_rollback(intent)
+            await asyncio.wait_for(mgr._delayed_rollback(intent), timeout=5.0)
             mgr._initiate_rollback.assert_called_once()
 
     @pytest.mark.asyncio

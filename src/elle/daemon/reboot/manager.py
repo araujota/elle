@@ -662,7 +662,7 @@ class RebootManager:
                 # Intervention occurred - don't rollback
                 logger.info("Rollback cancelled by user intervention")
                 return
-            except TimeoutError:
+            except (TimeoutError, asyncio.TimeoutError):
                 pass
 
             # Timeout - proceed with rollback

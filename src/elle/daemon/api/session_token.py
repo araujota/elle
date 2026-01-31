@@ -18,6 +18,25 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+def _validate_runtime_dir(raw_path: str) -> Path | None:
+    """Validate that a runtime directory path is safe to use.
+
+    Guards against path traversal via unsanitized environment variables.
+    Ensures the directory exists, is absolute, and is owned by the current user.
+    """
+    try:
+        p = Path(raw_path).resolve()
+        if not p.is_absolute():
+            return None
+        if not p.is_dir():
+            return None
+        if p.stat().st_uid != os.getuid():
+            return None
+        return p
+    except (OSError, ValueError):
+        return None
+
+
 # Token file locations (in order of preference)
 # XDG_RUNTIME_DIR is ideal - ephemeral, per-user, auto-cleaned
 TOKEN_PATHS = [
@@ -35,8 +54,10 @@ def get_token_path() -> Path:
     """
     # Try XDG_RUNTIME_DIR first (e.g., /run/user/1000)
     xdg_runtime = os.environ.get("XDG_RUNTIME_DIR")
-    if xdg_runtime and Path(xdg_runtime).exists():
-        return Path(xdg_runtime) / "elle" / "session.token"
+    if xdg_runtime:
+        validated = _validate_runtime_dir(xdg_runtime)
+        if validated:
+            return validated / "elle" / "session.token"
 
     # Fall back to ~/.local/state/elle
     state_dir = Path.home() / ".local" / "state" / "elle"

@@ -67,9 +67,9 @@ class TestPathHelpers:
     def test_assess_path_risk_tmp(self) -> None:
         assert _assess_path_risk(Path("/tmp/test.txt")) == "low"
 
-    def test_assess_path_risk_medium(self, tmp_path: Path) -> None:
-        p = tmp_path / "test.txt"
-        assert _assess_path_risk(p) == "medium"
+    def test_assess_path_risk_medium(self) -> None:
+        with patch("elle.capabilities.core.file.Path.resolve", return_value=Path("/opt/myapp/test.txt")):
+            assert _assess_path_risk(Path("/opt/myapp/test.txt")) == "medium"
 
     def test_file_hash_existing(self, tmp_path: Path) -> None:
         f = tmp_path / "test.txt"

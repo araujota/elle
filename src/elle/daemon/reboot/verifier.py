@@ -94,7 +94,7 @@ async def run_command_check(
                 proc.communicate(),
                 timeout=timeout,
             )
-        except TimeoutError:
+        except (TimeoutError, asyncio.TimeoutError):
             proc.kill()
             await proc.wait()
             return (False, -1, "", f"Command timed out after {timeout}s")

@@ -25,6 +25,12 @@ from elle.ops.editing.tier_registry import (
 )
 from elle.ops.editing.tiers.base import BaseTier
 
+# Safe XML parsing: prefer defusedxml to prevent XXE attacks
+try:
+    from defusedxml.ElementTree import fromstring as _safe_xml_fromstring
+except ImportError:
+    from xml.etree.ElementTree import fromstring as _safe_xml_fromstring  # nosec B405 B314
+
 logger = logging.getLogger(__name__)
 
 
@@ -141,7 +147,7 @@ class Tier3Format(BaseTier):
             try:
                 import xml.etree.ElementTree as ET  # nosec B405
 
-                ET.fromstring(content)  # nosec B314
+                _safe_xml_fromstring(content)
                 return ValidationResult(passed=True, method="xml.etree")
             except ET.ParseError as e:
                 return ValidationResult(
@@ -351,7 +357,7 @@ class Tier3Format(BaseTier):
             # Python fallback
             import xml.etree.ElementTree as ET  # nosec B405
 
-            root = ET.fromstring(content)  # nosec B314
+            root = _safe_xml_fromstring(content)
 
             if operation.kind == "set" and operation.path and operation.value is not None:
                 # Simple XPath support
