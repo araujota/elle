@@ -175,7 +175,7 @@ char *probed_json_unit_event(const struct probed_unit_event *evt)
 char *probed_json_dns_event(const struct probed_dns_event *evt)
 {
     json_t *obj = json_object();
-    char message[256];
+    char message[512];
     char *result;
     const char *severity;
 
@@ -193,11 +193,11 @@ char *probed_json_dns_event(const struct probed_dns_event *evt)
     /* Format message */
     if (evt->success) {
         snprintf(message, sizeof(message),
-                 "DNS query %s via %s: OK (%ums)",
+                 "DNS query %.255s via %.63s: OK (%ums)",
                  evt->query, evt->resolver, evt->latency_ms);
     } else {
         snprintf(message, sizeof(message),
-                 "DNS query %s via %s: FAILED (%s)",
+                 "DNS query %.255s via %.63s: FAILED (%.63s)",
                  evt->query, evt->resolver, evt->error_msg);
     }
 
