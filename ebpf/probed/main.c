@@ -88,19 +88,6 @@ static void setup_signals(void)
  * Stdout Output Wrapper
  * ========================================================================== */
 
-/* Wrapper probe function that outputs to stdout instead of socket */
-struct stdout_ctx {
-    probe_func_t real_func;
-    void *real_ctx;
-};
-
-static int stdout_probe_wrapper(struct probed_socket *sock, void *ctx)
-{
-    struct stdout_ctx *sctx = (struct stdout_ctx *)ctx;
-    (void)sock;
-    return sctx->real_func(NULL, sctx->real_ctx);
-}
-
 /* ==========================================================================
  * Ensure Run Directory Exists
  * ========================================================================== */

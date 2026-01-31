@@ -327,7 +327,7 @@ int inotify_watcher_add_default_paths(struct inotify_watcher *w)
         while ((entry = readdir(home_dir)) != NULL) {
             if (entry->d_type == DT_DIR &&
                 entry->d_name[0] != '.') {
-                char path[256];
+                char path[512];
                 snprintf(path, sizeof(path), "/home/%s/.ssh/authorized_keys", entry->d_name);
                 if (inotify_watcher_add_path(w, path, true) == 0)
                     count++;
