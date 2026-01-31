@@ -99,7 +99,7 @@ static int parse_psi_file(const char *path, const char *resource,
     }
 
     memset(reading, 0, sizeof(*reading));
-    strncpy(reading->resource, resource, sizeof(reading->resource) - 1);
+    snprintf(reading->resource, sizeof(reading->resource), "%s", resource);
 
     while (fgets(line, sizeof(line), f)) {
         double avg10, avg60, avg300;

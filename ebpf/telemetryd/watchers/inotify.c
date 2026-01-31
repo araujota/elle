@@ -264,7 +264,7 @@ int inotify_watcher_add_path(struct inotify_watcher *w, const char *path, bool c
 
     if (errno == ENOENT) {
         /* File doesn't exist - watch parent for creation */
-        strncpy(watch_path, path, sizeof(watch_path) - 1);
+        snprintf(watch_path, sizeof(watch_path), "%s", path);
         char *slash = strrchr(watch_path, '/');
         if (slash) {
             *slash = '\0';
@@ -273,7 +273,7 @@ int inotify_watcher_add_path(struct inotify_watcher *w, const char *path, bool c
             return -1;
         }
     } else {
-        strncpy(watch_path, path, sizeof(watch_path) - 1);
+        snprintf(watch_path, sizeof(watch_path), "%s", path);
     }
 
     /* Add inotify watch */
@@ -287,7 +287,7 @@ int inotify_watcher_add_path(struct inotify_watcher *w, const char *path, bool c
     /* Store watch entry */
     struct watch_entry *we = &w->watches[w->num_watches++];
     we->wd = wd;
-    strncpy(we->path, path, sizeof(we->path) - 1);  /* Store original path */
+    snprintf(we->path, sizeof(we->path), "%s", path);  /* Store original path */
     we->cache_content = cache_content;
 
     /* Cache initial content if requested */

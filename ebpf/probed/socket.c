@@ -82,7 +82,7 @@ struct probed_socket *probed_socket_create(const char *path)
     /* Bind to path */
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
+    snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", path);
 
     if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         fprintf(stderr, "ERROR: bind(%s) failed: %s\n", path, strerror(errno));

@@ -91,8 +91,8 @@ static int add_package(struct package_probe_ctx *ctx, const char *name, const ch
         return -1;
 
     struct pkg_entry *entry = &ctx->all_packages[ctx->num_packages++];
-    strncpy(entry->name, name, sizeof(entry->name) - 1);
-    strncpy(entry->version, version, sizeof(entry->version) - 1);
+    snprintf(entry->name, sizeof(entry->name), "%s", name);
+    snprintf(entry->version, sizeof(entry->version), "%s", version);
     entry->hash = hash_string(name);
     return 0;
 }
@@ -213,8 +213,8 @@ static void check_callback(const char *name, const char *version, void *user)
         /* New package */
         if (pctx->probe_ctx->detect_new && pctx->new_count < pctx->new_capacity) {
             struct pkg_entry *entry = &pctx->new_packages[pctx->new_count++];
-            strncpy(entry->name, name, sizeof(entry->name) - 1);
-            strncpy(entry->version, version, sizeof(entry->version) - 1);
+            snprintf(entry->name, sizeof(entry->name), "%s", name);
+            snprintf(entry->version, sizeof(entry->version), "%s", version);
             entry->hash = hash_string(name);
 
             /* Emit event */
@@ -276,7 +276,7 @@ static void check_callback(const char *name, const char *version, void *user)
         }
 
         /* Update stored version */
-        strncpy(existing->version, version, sizeof(existing->version) - 1);
+        snprintf(existing->version, sizeof(existing->version), "%s", version);
     }
 }
 

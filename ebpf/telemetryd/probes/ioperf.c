@@ -107,7 +107,7 @@ int ioperf_probe_run(struct normalizer *norm, struct telem_socket *sock, void *c
             continue;
 
         struct diskstats_snapshot *snap = &current[num_current];
-        strncpy(snap->name, name, sizeof(snap->name) - 1);
+        snprintf(snap->name, sizeof(snap->name), "%s", name);
         snap->major = major;
         snap->rd_ios = rd_ios;
         snap->rd_ticks = rd_ticks;

@@ -221,7 +221,7 @@ static int emit_event(struct gpud_collector *collector, struct gpud_client *clie
     evt.severity = sev;
     evt.device = dev;
 
-    strncpy(evt.message, message, sizeof(evt.message) - 1);
+    snprintf(evt.message, sizeof(evt.message), "%s", message);
     snprintf(evt.entity, sizeof(evt.entity), "gpu:%u", dev->index);
     compute_fingerprint(message, evt.entity, evt.fingerprint);
 

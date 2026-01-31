@@ -80,7 +80,7 @@ static int parse_psi_file(const char *path, const char *resource,
 
     memset(evt, 0, sizeof(*evt));
     evt->ts_ns = get_timestamp_ns();
-    strncpy(evt->resource, resource, sizeof(evt->resource) - 1);
+    snprintf(evt->resource, sizeof(evt->resource), "%s", resource);
 
     while (fgets(line, sizeof(line), f)) {
         double avg10, avg60, avg300;

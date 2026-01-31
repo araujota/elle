@@ -31,8 +31,7 @@ struct cert_probe_ctx *cert_probe_create_ctx(const struct probed_config *cfg)
     /* Parse cert_endpoints from config (comma-separated host:port) */
     if (cfg->cert_endpoints[0] != '\0') {
         char buf[1024];
-        strncpy(buf, cfg->cert_endpoints, sizeof(buf) - 1);
-        buf[sizeof(buf) - 1] = '\0';
+        snprintf(buf, sizeof(buf), "%s", cfg->cert_endpoints);
 
         char *saveptr;
         char *token = strtok_r(buf, ",", &saveptr);
@@ -46,12 +45,12 @@ struct cert_probe_ctx *cert_probe_create_ctx(const struct probed_config *cfg)
             char *colon = strrchr(token, ':');
             if (colon) {
                 *colon = '\0';
-                strncpy(ctx->endpoints[ctx->num_endpoints].host, token,
-                        sizeof(ctx->endpoints[0].host) - 1);
+                snprintf(ctx->endpoints[ctx->num_endpoints].host,
+                         sizeof(ctx->endpoints[0].host), "%s", token);
                 ctx->endpoints[ctx->num_endpoints].port = atoi(colon + 1);
             } else {
-                strncpy(ctx->endpoints[ctx->num_endpoints].host, token,
-                        sizeof(ctx->endpoints[0].host) - 1);
+                snprintf(ctx->endpoints[ctx->num_endpoints].host,
+                         sizeof(ctx->endpoints[0].host), "%s", token);
                 ctx->endpoints[ctx->num_endpoints].port = 443;
             }
             ctx->num_endpoints++;
@@ -61,7 +60,7 @@ struct cert_probe_ctx *cert_probe_create_ctx(const struct probed_config *cfg)
 
     /* Default endpoints if none configured */
     if (ctx->num_endpoints == 0) {
-        strncpy(ctx->endpoints[0].host, "localhost", sizeof(ctx->endpoints[0].host) - 1);
+        snprintf(ctx->endpoints[0].host, sizeof(ctx->endpoints[0].host), "%s", "localhost");
         ctx->endpoints[0].port = 443;
         ctx->num_endpoints = 1;
     }

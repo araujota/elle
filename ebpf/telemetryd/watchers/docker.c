@@ -164,7 +164,7 @@ static int check_crashloop(struct docker_watcher *w, struct container_state *c,
     }
 
     /* Update last action */
-    strncpy(c->last_action, action, sizeof(c->last_action) - 1);
+    snprintf(c->last_action, sizeof(c->last_action), "%s", action);
 
     return is_crashloop ? 1 : 0;
 }
@@ -223,7 +223,7 @@ static int process_event_json(struct docker_watcher *w, const char *json_str,
     if (container_id && strlen(container_id) > 12) {
         memcpy(short_id, container_id, 12);
     } else if (container_id) {
-        strncpy(short_id, container_id, sizeof(short_id) - 1);
+        snprintf(short_id, sizeof(short_id), "%s", container_id);
     }
 
     /* Get or create container state */
@@ -241,7 +241,7 @@ static int process_event_json(struct docker_watcher *w, const char *json_str,
         check_crashloop(w, c, action, callback, user_data);
     } else {
         /* Update last action for non-restart events */
-        strncpy(c->last_action, action, sizeof(c->last_action) - 1);
+        snprintf(c->last_action, sizeof(c->last_action), "%s", action);
     }
 
     json_decref(root);

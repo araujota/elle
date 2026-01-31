@@ -103,13 +103,13 @@ static void aggregate_failures(struct auth_probe_ctx *ctx, uint64_t now_ns,
             }
         }
         if (!found && source_count < 64) {
-            strncpy(sources[source_count], entry->source, 63);
+            snprintf(sources[source_count], sizeof(sources[0]), "%s", entry->source);
             source_count++;
         }
 
         /* Copy last user/source */
-        strncpy(last_user, entry->user, 31);
-        strncpy(last_source, entry->source, 63);
+        snprintf(last_user, 32, "%s", entry->user);
+        snprintf(last_source, 64, "%s", entry->source);
     }
 
     *unique_sources = source_count;
@@ -147,8 +147,7 @@ static void track_source_failure(struct auth_probe_ctx *ctx,
         }
     }
 
-    strncpy(ctx->source_tracker[idx].ip, source, sizeof(ctx->source_tracker[0].ip) - 1);
-    ctx->source_tracker[idx].ip[sizeof(ctx->source_tracker[0].ip) - 1] = '\0';
+    snprintf(ctx->source_tracker[idx].ip, sizeof(ctx->source_tracker[0].ip), "%s", source);
     ctx->source_tracker[idx].failure_count = 1;
     ctx->source_tracker[idx].first_seen_ns = now_ns;
     ctx->source_tracker[idx].last_seen_ns = now_ns;
@@ -169,8 +168,8 @@ static void detect_brute_force(struct auth_probe_ctx *ctx, uint64_t now_ns)
         if ((now_ns - entry->first_seen_ns) <= window_ns &&
             entry->failure_count > 5) {
             ctx->brute_force_detected = true;
-            strncpy(ctx->brute_force_source, entry->ip,
-                    sizeof(ctx->brute_force_source) - 1);
+            snprintf(ctx->brute_force_source, sizeof(ctx->brute_force_source),
+                     "%s", entry->ip);
             ctx->brute_force_count = entry->failure_count;
             break;  /* Report first detected */
         }
@@ -276,7 +275,7 @@ static int parse_auth_failures(struct auth_probe_ctx *ctx)
                 sscanf(user_ptr, "user=%31s", user);
             }
 
-            strncpy(source, "local", sizeof(source) - 1);
+            snprintf(source, sizeof(source), "%s", "local");
             is_failure = 1;
         }
 

@@ -345,8 +345,7 @@ bool entity_extract_from_raw(const char *systemd_unit, const char *unit,
         const char *unit_name = systemd_unit ? systemd_unit : unit;
         if (unit_name && unit_name[0]) {
             char name[256];
-            strncpy(name, unit_name, sizeof(name) - 1);
-            name[sizeof(name) - 1] = '\0';
+            snprintf(name, sizeof(name), "%s", unit_name);
             remove_service_suffix(name);
             snprintf(out_entity, out_len, "service:%s", name);
             return true;

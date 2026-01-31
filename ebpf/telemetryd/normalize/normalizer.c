@@ -121,8 +121,7 @@ bool normalizer_process(struct normalizer *n,
     }
 
     /* Copy message */
-    strncpy(out_event->message, message, sizeof(out_event->message) - 1);
-    out_event->message[sizeof(out_event->message) - 1] = '\0';
+    snprintf(out_event->message, sizeof(out_event->message), "%s", message);
 
     /* Extract entity */
     out_event->has_entity = entity_extract_from_raw(
@@ -178,13 +177,11 @@ bool normalizer_process_prenormalized(struct normalizer *n,
     out_event->category = category;
 
     /* Copy message */
-    strncpy(out_event->message, message, sizeof(out_event->message) - 1);
-    out_event->message[sizeof(out_event->message) - 1] = '\0';
+    snprintf(out_event->message, sizeof(out_event->message), "%s", message);
 
     /* Copy entity if provided */
     if (entity && entity[0]) {
-        strncpy(out_event->entity, entity, sizeof(out_event->entity) - 1);
-        out_event->entity[sizeof(out_event->entity) - 1] = '\0';
+        snprintf(out_event->entity, sizeof(out_event->entity), "%s", entity);
         out_event->has_entity = true;
     }
 

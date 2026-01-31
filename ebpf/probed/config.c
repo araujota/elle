@@ -23,7 +23,7 @@ void probed_config_init(struct probed_config *cfg)
         return;
 
     /* Socket path */
-    strncpy(cfg->socket_path, "/run/elle/probed.sock", sizeof(cfg->socket_path) - 1);
+    snprintf(cfg->socket_path, sizeof(cfg->socket_path), "%s", "/run/elle/probed.sock");
 
     /* PSI probe defaults */
     cfg->psi_enabled = true;
@@ -45,8 +45,8 @@ void probed_config_init(struct probed_config *cfg)
     cfg->dns_enabled = true;
     cfg->dns_interval_sec = 30;
     cfg->dns_timeout_ms = 2000;
-    strncpy(cfg->dns_test_domains[0], "connectivity-check.ubuntu.com",
-            sizeof(cfg->dns_test_domains[0]) - 1);
+    snprintf(cfg->dns_test_domains[0], sizeof(cfg->dns_test_domains[0]), "%s",
+             "connectivity-check.ubuntu.com");
     cfg->dns_test_domain_count = 1;
 
     /* Conntrack probe defaults */

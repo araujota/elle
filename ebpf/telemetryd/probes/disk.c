@@ -200,8 +200,7 @@ int disk_probe_run(struct normalizer *norm, struct telem_socket *sock, void *ctx
             char opts_copy[256];
             bool is_readonly = false;
 
-            strncpy(opts_copy, options, sizeof(opts_copy) - 1);
-            opts_copy[sizeof(opts_copy) - 1] = '\0';
+            snprintf(opts_copy, sizeof(opts_copy), "%s", options);
 
             opt_tok = strtok_r(opts_copy, ",", &opt_saveptr);
             while (opt_tok) {

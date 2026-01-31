@@ -63,7 +63,7 @@ static int parse_resolv_conf(struct dns_probe_ctx *ctx)
     f = fopen("/etc/resolv.conf", "r");
     if (!f) {
         /* Use default 127.0.0.53 (systemd-resolved) */
-        strncpy(ctx->resolvers[0], "127.0.0.53", sizeof(ctx->resolvers[0]) - 1);
+        snprintf(ctx->resolvers[0], sizeof(ctx->resolvers[0]), "%s", "127.0.0.53");
         ctx->resolver_count = 1;
         return 0;
     }
@@ -73,8 +73,8 @@ static int parse_resolv_conf(struct dns_probe_ctx *ctx)
     while (fgets(line, sizeof(line), f) && ctx->resolver_count < 4) {
         char ns[64];
         if (sscanf(line, "nameserver %63s", ns) == 1) {
-            strncpy(ctx->resolvers[ctx->resolver_count], ns,
-                    sizeof(ctx->resolvers[0]) - 1);
+            snprintf(ctx->resolvers[ctx->resolver_count],
+                     sizeof(ctx->resolvers[0]), "%s", ns);
             ctx->resolver_count++;
         }
     }
@@ -83,7 +83,7 @@ static int parse_resolv_conf(struct dns_probe_ctx *ctx)
 
     if (ctx->resolver_count == 0) {
         /* Fallback to systemd-resolved */
-        strncpy(ctx->resolvers[0], "127.0.0.53", sizeof(ctx->resolvers[0]) - 1);
+        snprintf(ctx->resolvers[0], sizeof(ctx->resolvers[0]), "%s", "127.0.0.53");
         ctx->resolver_count = 1;
     }
 
@@ -101,8 +101,8 @@ struct dns_probe_ctx *dns_probe_create_ctx(const struct probed_config *cfg)
     /* Copy test domains */
     ctx->test_domain_count = cfg->dns_test_domain_count;
     for (int i = 0; i < ctx->test_domain_count; i++) {
-        strncpy(ctx->test_domains[i], cfg->dns_test_domains[i],
-                sizeof(ctx->test_domains[0]) - 1);
+        snprintf(ctx->test_domains[i], sizeof(ctx->test_domains[0]), "%s",
+                 cfg->dns_test_domains[i]);
     }
 
     /* Parse resolvers */
@@ -195,7 +195,7 @@ static int dns_query(const char *resolver, const char *domain,
     query_len = build_dns_query(domain, query, sizeof(query));
     if (query_len < 0) {
         evt->error_code = DNS_NETWORK;
-        strncpy(evt->error_msg, "Invalid domain", sizeof(evt->error_msg) - 1);
+        snprintf(evt->error_msg, sizeof(evt->error_msg), "%s", "Invalid domain");
         return -1;
     }
 
@@ -203,7 +203,7 @@ static int dns_query(const char *resolver, const char *domain,
     sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
         evt->error_code = DNS_NETWORK;
-        strncpy(evt->error_msg, "Socket creation failed", sizeof(evt->error_msg) - 1);
+        snprintf(evt->error_msg, sizeof(evt->error_msg), "%s", "Socket creation failed");
         return -1;
     }
 
@@ -218,7 +218,7 @@ static int dns_query(const char *resolver, const char *domain,
     if (inet_pton(AF_INET, resolver, &addr.sin_addr) != 1) {
         close(sock);
         evt->error_code = DNS_NETWORK;
-        strncpy(evt->error_msg, "Invalid resolver address", sizeof(evt->error_msg) - 1);
+        snprintf(evt->error_msg, sizeof(evt->error_msg), "%s", "Invalid resolver address");
         return -1;
     }
 
@@ -230,7 +230,7 @@ static int dns_query(const char *resolver, const char *domain,
                (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         close(sock);
         evt->error_code = DNS_NETWORK;
-        strncpy(evt->error_msg, "Send failed", sizeof(evt->error_msg) - 1);
+        snprintf(evt->error_msg, sizeof(evt->error_msg), "%s", "Send failed");
         return -1;
     }
 
@@ -251,14 +251,14 @@ static int dns_query(const char *resolver, const char *domain,
         /* Timeout */
         close(sock);
         evt->error_code = DNS_TIMEOUT;
-        strncpy(evt->error_msg, "Query timeout", sizeof(evt->error_msg) - 1);
+        snprintf(evt->error_msg, sizeof(evt->error_msg), "%s", "Query timeout");
         return -1;
     }
 
     if (poll_ret < 0) {
         close(sock);
         evt->error_code = DNS_NETWORK;
-        strncpy(evt->error_msg, "Poll failed", sizeof(evt->error_msg) - 1);
+        snprintf(evt->error_msg, sizeof(evt->error_msg), "%s", "Poll failed");
         return -1;
     }
 
@@ -268,7 +268,7 @@ static int dns_query(const char *resolver, const char *domain,
 
     if (recv_len < (ssize_t)sizeof(struct dns_header)) {
         evt->error_code = DNS_NETWORK;
-        strncpy(evt->error_msg, "Invalid response", sizeof(evt->error_msg) - 1);
+        snprintf(evt->error_msg, sizeof(evt->error_msg), "%s", "Invalid response");
         return -1;
     }
 
@@ -285,15 +285,15 @@ static int dns_query(const char *resolver, const char *domain,
         break;
     case DNS_RCODE_NXDOMAIN:
         evt->error_code = DNS_NXDOMAIN;
-        strncpy(evt->error_msg, "NXDOMAIN", sizeof(evt->error_msg) - 1);
+        snprintf(evt->error_msg, sizeof(evt->error_msg), "%s", "NXDOMAIN");
         break;
     case DNS_RCODE_SERVFAIL:
         evt->error_code = DNS_SERVFAIL;
-        strncpy(evt->error_msg, "SERVFAIL", sizeof(evt->error_msg) - 1);
+        snprintf(evt->error_msg, sizeof(evt->error_msg), "%s", "SERVFAIL");
         break;
     case DNS_RCODE_REFUSED:
         evt->error_code = DNS_REFUSED;
-        strncpy(evt->error_msg, "REFUSED", sizeof(evt->error_msg) - 1);
+        snprintf(evt->error_msg, sizeof(evt->error_msg), "%s", "REFUSED");
         break;
     default:
         evt->error_code = DNS_SERVFAIL;

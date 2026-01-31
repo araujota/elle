@@ -76,8 +76,8 @@ static struct edac_error_state *find_or_create_state(
 
     struct edac_error_state *state = &ctx->edac_state[ctx->edac_state_count++];
     memset(state, 0, sizeof(*state));
-    strncpy(state->mc, mc, sizeof(state->mc) - 1);
-    strncpy(state->csrow, csrow, sizeof(state->csrow) - 1);
+    snprintf(state->mc, sizeof(state->mc), "%s", mc);
+    snprintf(state->csrow, sizeof(state->csrow), "%s", csrow);
 
     return state;
 }
@@ -158,10 +158,10 @@ static int scan_edac_mc(struct hardware_probe_ctx *ctx,
 
             memset(&evt, 0, sizeof(evt));
             evt.ts_ns = get_timestamp_ns();
-            strncpy(evt.subsystem, "memory", sizeof(evt.subsystem) - 1);
-            strncpy(evt.error_type, "correctable", sizeof(evt.error_type) - 1);
-            strncpy(evt.mc, mc_name, sizeof(evt.mc) - 1);
-            strncpy(evt.csrow, entry->d_name, sizeof(evt.csrow) - 1);
+            snprintf(evt.subsystem, sizeof(evt.subsystem), "%s", "memory");
+            snprintf(evt.error_type, sizeof(evt.error_type), "%s", "correctable");
+            snprintf(evt.mc, sizeof(evt.mc), "%s", mc_name);
+            snprintf(evt.csrow, sizeof(evt.csrow), "%s", entry->d_name);
 
             snprintf(evt.device, sizeof(evt.device), "%s/%s", mc_name, entry->d_name);
 
@@ -183,10 +183,10 @@ static int scan_edac_mc(struct hardware_probe_ctx *ctx,
 
             memset(&evt, 0, sizeof(evt));
             evt.ts_ns = get_timestamp_ns();
-            strncpy(evt.subsystem, "memory", sizeof(evt.subsystem) - 1);
-            strncpy(evt.error_type, "uncorrectable", sizeof(evt.error_type) - 1);
-            strncpy(evt.mc, mc_name, sizeof(evt.mc) - 1);
-            strncpy(evt.csrow, entry->d_name, sizeof(evt.csrow) - 1);
+            snprintf(evt.subsystem, sizeof(evt.subsystem), "%s", "memory");
+            snprintf(evt.error_type, sizeof(evt.error_type), "%s", "uncorrectable");
+            snprintf(evt.mc, sizeof(evt.mc), "%s", mc_name);
+            snprintf(evt.csrow, sizeof(evt.csrow), "%s", entry->d_name);
 
             snprintf(evt.device, sizeof(evt.device), "%s/%s", mc_name, entry->d_name);
 

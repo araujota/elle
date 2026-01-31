@@ -55,14 +55,14 @@ static char *find_latest_kernel_in_boot(void)
         if (strncmp(entry->d_name, "vmlinuz-", 8) == 0) {
             const char *ver = entry->d_name + 8;
             if (strcmp(ver, best) > 0) {
-                strncpy(best, ver, sizeof(best) - 1);
+                snprintf(best, sizeof(best), "%s", ver);
             }
         }
     }
     closedir(dir);
 
     if (best[0] != '\0') {
-        strncpy(latest, best, sizeof(latest) - 1);
+        snprintf(latest, sizeof(latest), "%s", best);
         return latest;
     }
     return NULL;

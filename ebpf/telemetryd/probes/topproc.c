@@ -134,8 +134,7 @@ static void insert_top(struct ranked_proc *top, int n, int pid, const char *name
             for (int j = n - 1; j > i; j--)
                 top[j] = top[j - 1];
             top[i].pid = pid;
-            strncpy(top[i].name, name, sizeof(top[i].name) - 1);
-            top[i].name[sizeof(top[i].name) - 1] = '\0';
+            snprintf(top[i].name, sizeof(top[i].name), "%s", name);
             top[i].value = value;
             return;
         }

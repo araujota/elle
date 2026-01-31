@@ -59,7 +59,7 @@ static int connect_to_socket(const char *path)
 
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
+    snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", path);
 
     if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         gpud_log_debug("connect(%s) failed: %s", path, strerror(errno));
