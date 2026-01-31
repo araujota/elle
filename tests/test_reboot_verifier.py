@@ -14,7 +14,19 @@ from elle.daemon.reboot.models import (
 from elle.daemon.reboot.verifier import (
     VerificationResult,
     _analyze_likely_causes,
+    _check_disk_space_issues,
+    _check_filesystem_state,
+    _check_module_state,
+    _check_network_state,
+    _collect_dmesg_errors,
+    _collect_failed_services,
+    _collect_journal_errors,
+    _get_kernel_version,
+    _get_uptime_seconds,
     _suggest_investigation,
+    check_critical_services,
+    check_network_connectivity,
+    collect_failure_diagnostics,
     create_default_verifications,
     create_driver_update_verifications,
     create_fstab_change_verifications,
@@ -25,8 +37,13 @@ from elle.daemon.reboot.verifier import (
     run_all_verifications,
     run_command_check,
     run_disk_space_check,
+    run_dmesg_error_check,
     run_file_check,
     run_filesystem_writable_check,
+    run_journal_error_check,
+    run_kernel_module_check,
+    run_mount_check,
+    run_network_interface_check,
     run_port_check,
     run_service_check,
     run_verification,
@@ -363,6 +380,17 @@ class TestRunVerification:
             result = await run_verification(v)
             assert result["passed"] is True
 
+    @pytest.mark.asyncio
+    async def test_output_truncated_to_4096(self):
+        """Verify stdout and stderr are truncated to 4096 characters."""
+        long_output = "x" * 8192
+        with patch("elle.daemon.reboot.verifier.run_command_check", new_callable=AsyncMock) as mock:
+            mock.return_value = (True, 0, long_output, long_output)
+            v = PendingVerification(step_index=0, check_type="command", check_command="echo test")
+            result = await run_verification(v)
+            assert len(result["stdout"]) == 4096
+            assert len(result["stderr"]) == 4096
+
 
 # ===========================================================================
 # run_all_verifications
@@ -419,6 +447,19 @@ class TestRunAllVerifications:
         result = await run_all_verifications(verifications)
         assert result.passed is True
         assert result.required_passed == 3
+
+    @pytest.mark.asyncio
+    async def test_optional_pass_counted(self):
+        """Verify optional_passed counter increments correctly."""
+        verifications = [
+            PendingVerification(step_index=0, check_type="command", check_command="true", required=False),
+            PendingVerification(step_index=1, check_type="command", check_command="true", required=False),
+        ]
+        result = await run_all_verifications(verifications)
+        assert result.passed is True
+        assert result.all_passed is True
+        assert result.optional_passed == 2
+        assert result.required_passed == 0
 
 
 # ===========================================================================
@@ -534,6 +575,15 @@ class TestCreateFstabChangeVerifications:
         vs = create_fstab_change_verifications(["/data"])
         journal_checks = [v for v in vs if v.check_type == "journal_no_errors" and "mount" in v.check_command.lower()]
         assert len(journal_checks) >= 1
+
+    def test_check_writable_false_skips_writable_checks(self):
+        """When check_writable=False, no filesystem_writable checks for custom mounts."""
+        vs = create_fstab_change_verifications(["/data", "/backup"], check_writable=False)
+        # Only the default verifications should have filesystem_writable, not /data or /backup
+        write_checks = [
+            v for v in vs if v.check_type == "filesystem_writable" and v.check_command in ("/data", "/backup")
+        ]
+        assert len(write_checks) == 0
 
 
 class TestCreateServiceRestartVerifications:
@@ -660,6 +710,38 @@ class TestAnalyzeLikelyCauses:
             ["nvidia"],
         )
         assert len(causes) <= 10
+
+    def test_dmesg_io_error_pattern(self):
+        """Verify I/O error pattern detection in dmesg."""
+        causes = _analyze_likely_causes([], ["[789] I/O error, dev sda, sector 12345"], [], [], [], [], [], [], [])
+        assert any("I/O" in c or "hardware" in c.lower() for c in causes)
+
+    def test_journal_dependency_failed_pattern(self):
+        """Verify Dependency failed pattern detection in journal."""
+        causes = _analyze_likely_causes([], [], ["Dependency failed for Some Service"], [], [], [], [], [], [])
+        assert any("dependency" in c.lower() for c in causes)
+
+    def test_journal_failed_to_mount_pattern(self):
+        """Verify Failed to mount pattern detection in journal."""
+        causes = _analyze_likely_causes([], [], ["Failed to mount /data"], [], [], [], [], [], [])
+        assert any("mount" in c.lower() for c in causes)
+
+    def test_dmesg_oops_pattern(self):
+        """Verify kernel oops detection."""
+        causes = _analyze_likely_causes([], ["[100] oops: 0000 [#1]"], [], [], [], [], [], [], [])
+        assert any("oops" in c.lower() for c in causes)
+
+    def test_dmesg_bug_pattern(self):
+        """Verify BUG: detection."""
+        causes = _analyze_likely_causes([], ["[200] BUG: unable to handle page fault"], [], [], [], [], [], [], [])
+        assert any("bug" in c.lower() for c in causes)
+
+    def test_dmesg_ext4_error_pattern(self):
+        """Verify EXT4 error detection."""
+        causes = _analyze_likely_causes(
+            [], ["[300] EXT4-fs error (device sda1): ext4_mb_generate_buddy"], [], [], [], [], [], [], []
+        )
+        assert any("EXT4" in c for c in causes)
 
 
 # ===========================================================================
@@ -809,6 +891,96 @@ class TestRunVerificationWithRetry:
             await run_verification_with_retry(intent, on_attempt=callback)
             callback.assert_called()
 
+    @pytest.mark.asyncio
+    async def test_network_failure_retries_then_fails(self):
+        """When network is never available, all attempts fail and return (False, None)."""
+        intent = _make_intent(
+            verifications=(
+                PendingVerification(step_index=0, check_type="command", check_command="true", required=True),
+            ),
+        )
+        with (
+            patch("elle.daemon.reboot.verifier.check_critical_services", new_callable=AsyncMock) as mock_crit,
+            patch("elle.daemon.reboot.verifier.check_network_connectivity", new_callable=AsyncMock) as mock_net,
+            patch("elle.daemon.reboot.verifier.VERIFICATION_DELAYS", (0, 0, 0)),
+            patch("elle.daemon.reboot.verifier.MAX_VERIFICATION_ATTEMPTS", 3),
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
+            mock_crit.return_value = VerificationResult(
+                passed=True,
+                all_passed=True,
+                critical_failure=False,
+                required_passed=4,
+                required_failed=0,
+                optional_passed=0,
+                optional_failed=0,
+            )
+            mock_net.return_value = False  # network always fails
+            success, result = await run_verification_with_retry(intent)
+            assert success is False
+            # Network failures cause continue, so final_result stays None
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_verification_fails_all_attempts(self):
+        """Custom verifications fail every attempt; returns (False, last_result)."""
+        intent = _make_intent(
+            verifications=(
+                PendingVerification(step_index=0, check_type="command", check_command="false", required=True),
+            ),
+        )
+        with (
+            patch("elle.daemon.reboot.verifier.check_critical_services", new_callable=AsyncMock) as mock_crit,
+            patch("elle.daemon.reboot.verifier.check_network_connectivity", new_callable=AsyncMock) as mock_net,
+            patch("elle.daemon.reboot.verifier.VERIFICATION_DELAYS", (0, 0, 0)),
+            patch("elle.daemon.reboot.verifier.MAX_VERIFICATION_ATTEMPTS", 3),
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
+            mock_crit.return_value = VerificationResult(
+                passed=True,
+                all_passed=True,
+                critical_failure=False,
+                required_passed=4,
+                required_failed=0,
+                optional_passed=0,
+                optional_failed=0,
+            )
+            mock_net.return_value = True
+            success, result = await run_verification_with_retry(intent)
+            assert success is False
+            assert result is not None
+            assert result.required_failed >= 1
+
+    @pytest.mark.asyncio
+    async def test_delay_beyond_verification_delays_length(self):
+        """When attempt index >= len(VERIFICATION_DELAYS), use the last delay value."""
+        intent = _make_intent(
+            verifications=(
+                PendingVerification(step_index=0, check_type="command", check_command="false", required=True),
+            ),
+        )
+        with (
+            patch("elle.daemon.reboot.verifier.check_critical_services", new_callable=AsyncMock) as mock_crit,
+            patch("elle.daemon.reboot.verifier.check_network_connectivity", new_callable=AsyncMock) as mock_net,
+            # Only one delay value, but 3 attempts -- triggers else branch
+            patch("elle.daemon.reboot.verifier.VERIFICATION_DELAYS", (0,)),
+            patch("elle.daemon.reboot.verifier.MAX_VERIFICATION_ATTEMPTS", 3),
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
+            mock_crit.return_value = VerificationResult(
+                passed=True,
+                all_passed=True,
+                critical_failure=False,
+                required_passed=4,
+                required_failed=0,
+                optional_passed=0,
+                optional_failed=0,
+            )
+            mock_net.return_value = True
+            success, result = await run_verification_with_retry(intent)
+            assert success is False
+            # The function should not error out when index exceeds VERIFICATION_DELAYS
+
 
 # ===========================================================================
 # run_mount_check
@@ -820,8 +992,6 @@ class TestRunMountCheck:
     async def test_mounted_path(self):
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
-            from elle.daemon.reboot.verifier import run_mount_check
-
             passed, _, stdout, _ = await run_mount_check("/")
             assert passed is True
             assert "is mounted" in stdout
@@ -830,8 +1000,6 @@ class TestRunMountCheck:
     async def test_not_mounted_path(self):
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=1)
-            from elle.daemon.reboot.verifier import run_mount_check
-
             passed, _, _, stderr = await run_mount_check("/nonexistent")
             assert passed is False
             assert "not a mount point" in stderr
@@ -839,8 +1007,6 @@ class TestRunMountCheck:
     @pytest.mark.asyncio
     async def test_mount_check_exception(self):
         with patch("subprocess.run", side_effect=OSError("fail")):
-            from elle.daemon.reboot.verifier import run_mount_check
-
             passed, exit_code, _, _ = await run_mount_check("/")
             assert passed is False
             assert exit_code == -1
@@ -856,8 +1022,6 @@ class TestRunKernelModuleCheck:
     async def test_module_loaded(self):
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="ext4 12345 1\nsnd 67890 2\n")
-            from elle.daemon.reboot.verifier import run_kernel_module_check
-
             passed, _, stdout, _ = await run_kernel_module_check("ext4")
             assert passed is True
             assert "loaded" in stdout
@@ -866,8 +1030,6 @@ class TestRunKernelModuleCheck:
     async def test_module_not_loaded(self):
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="snd 67890 2\n")
-            from elle.daemon.reboot.verifier import run_kernel_module_check
-
             passed, _, _, stderr = await run_kernel_module_check("nvidia")
             assert passed is False
             assert "not loaded" in stderr
@@ -876,16 +1038,12 @@ class TestRunKernelModuleCheck:
     async def test_lsmod_failure(self):
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=1, stderr="permission denied")
-            from elle.daemon.reboot.verifier import run_kernel_module_check
-
             passed, _, _, _ = await run_kernel_module_check("ext4")
             assert passed is False
 
     @pytest.mark.asyncio
     async def test_lsmod_exception(self):
         with patch("subprocess.run", side_effect=OSError("fail")):
-            from elle.daemon.reboot.verifier import run_kernel_module_check
-
             passed, exit_code, _, _ = await run_kernel_module_check("ext4")
             assert passed is False
             assert exit_code == -1
@@ -901,8 +1059,6 @@ class TestRunDmesgErrorCheck:
     async def test_no_errors(self):
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="")
-            from elle.daemon.reboot.verifier import run_dmesg_error_check
-
             passed, _, stdout, _ = await run_dmesg_error_check()
             assert passed is True
             assert "No critical errors" in stdout
@@ -911,8 +1067,6 @@ class TestRunDmesgErrorCheck:
     async def test_errors_found(self):
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="[123] BUG: kernel panic\n[456] ERROR: oops\n")
-            from elle.daemon.reboot.verifier import run_dmesg_error_check
-
             passed, _, _, stderr = await run_dmesg_error_check()
             assert passed is False
             assert "error(s) in dmesg" in stderr
@@ -921,8 +1075,6 @@ class TestRunDmesgErrorCheck:
     async def test_specific_pattern_found(self):
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="[123] EXT4-fs error on device sda1\n")
-            from elle.daemon.reboot.verifier import run_dmesg_error_check
-
             passed, _, _, stderr = await run_dmesg_error_check("EXT4")
             assert passed is False
             assert "EXT4" in stderr
@@ -931,8 +1083,6 @@ class TestRunDmesgErrorCheck:
     async def test_specific_pattern_not_found(self):
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="[123] other warning\n")
-            from elle.daemon.reboot.verifier import run_dmesg_error_check
-
             passed, _, stdout, _ = await run_dmesg_error_check("EXT4")
             assert passed is True
             assert "not found" in stdout
@@ -940,8 +1090,6 @@ class TestRunDmesgErrorCheck:
     @pytest.mark.asyncio
     async def test_dmesg_exception(self):
         with patch("subprocess.run", side_effect=OSError("fail")):
-            from elle.daemon.reboot.verifier import run_dmesg_error_check
-
             passed, exit_code, _, _ = await run_dmesg_error_check()
             assert passed is False
             assert exit_code == -1
@@ -957,8 +1105,6 @@ class TestRunJournalErrorCheck:
     async def test_no_errors(self):
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="-- No entries --")
-            from elle.daemon.reboot.verifier import run_journal_error_check
-
             passed, _, stdout, _ = await run_journal_error_check()
             assert passed is True
 
@@ -969,8 +1115,6 @@ class TestRunJournalErrorCheck:
                 returncode=0,
                 stdout="Jan 01 00:00:00 host systemd[1]: Failed to start nginx.service\nJan 01 00:00:01 host kernel: I/O error\n",
             )
-            from elle.daemon.reboot.verifier import run_journal_error_check
-
             passed, _, _, stderr = await run_journal_error_check()
             assert passed is False
             assert "error(s) in journal" in stderr
@@ -981,8 +1125,6 @@ class TestRunJournalErrorCheck:
             mock_run.return_value = MagicMock(
                 returncode=0, stdout="Jan 01 00:00:00 host systemd[1]: Failed to mount /data\n"
             )
-            from elle.daemon.reboot.verifier import run_journal_error_check
-
             passed, _, _, stderr = await run_journal_error_check("mount")
             assert passed is False
             assert "matching errors" in stderr
@@ -991,8 +1133,6 @@ class TestRunJournalErrorCheck:
     async def test_specific_pattern_not_found(self):
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="Jan 01 00:00:00 host systemd[1]: Something else\n")
-            from elle.daemon.reboot.verifier import run_journal_error_check
-
             passed, _, stdout, _ = await run_journal_error_check("mount")
             assert passed is True
             assert "not found" in stdout
@@ -1000,11 +1140,27 @@ class TestRunJournalErrorCheck:
     @pytest.mark.asyncio
     async def test_journal_exception(self):
         with patch("subprocess.run", side_effect=OSError("fail")):
-            from elle.daemon.reboot.verifier import run_journal_error_check
-
             passed, exit_code, _, _ = await run_journal_error_check()
             assert passed is False
             assert exit_code == -1
+
+    @pytest.mark.asyncio
+    async def test_since_boot_false_omits_b_flag(self):
+        """When since_boot=False, the -b flag should not be passed to journalctl."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="-- No entries --")
+            await run_journal_error_check(since_boot=False)
+            call_args = mock_run.call_args[0][0]
+            assert "-b" not in call_args
+
+    @pytest.mark.asyncio
+    async def test_since_boot_true_includes_b_flag(self):
+        """When since_boot=True (default), the -b flag should be in the journalctl args."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="-- No entries --")
+            await run_journal_error_check(since_boot=True)
+            call_args = mock_run.call_args[0][0]
+            assert "-b" in call_args
 
 
 # ===========================================================================
@@ -1016,8 +1172,6 @@ class TestRunNetworkInterfaceCheck:
     @pytest.mark.asyncio
     async def test_interface_up(self):
         with patch.object(Path, "exists", return_value=True), patch.object(Path, "read_text", return_value="up\n"):
-            from elle.daemon.reboot.verifier import run_network_interface_check
-
             passed, _, stdout, _ = await run_network_interface_check("eth0")
             assert passed is True
             assert "is up" in stdout
@@ -1025,8 +1179,6 @@ class TestRunNetworkInterfaceCheck:
     @pytest.mark.asyncio
     async def test_interface_down(self):
         with patch.object(Path, "exists", return_value=True), patch.object(Path, "read_text", return_value="down\n"):
-            from elle.daemon.reboot.verifier import run_network_interface_check
-
             passed, _, _, stderr = await run_network_interface_check("eth0")
             assert passed is False
             assert "down" in stderr
@@ -1034,8 +1186,6 @@ class TestRunNetworkInterfaceCheck:
     @pytest.mark.asyncio
     async def test_interface_not_found(self):
         with patch.object(Path, "exists", return_value=False):
-            from elle.daemon.reboot.verifier import run_network_interface_check
-
             passed, _, _, stderr = await run_network_interface_check("eth99")
             assert passed is False
             assert "not found" in stderr
@@ -1043,8 +1193,6 @@ class TestRunNetworkInterfaceCheck:
     @pytest.mark.asyncio
     async def test_interface_exception(self):
         with patch.object(Path, "exists", side_effect=OSError("fail")):
-            from elle.daemon.reboot.verifier import run_network_interface_check
-
             passed, exit_code, _, _ = await run_network_interface_check("eth0")
             assert passed is False
             assert exit_code == -1
@@ -1058,8 +1206,6 @@ class TestRunNetworkInterfaceCheck:
 class TestCheckCriticalServices:
     @pytest.mark.asyncio
     async def test_all_services_active(self):
-        from elle.daemon.reboot.verifier import check_critical_services
-
         with patch("elle.daemon.reboot.verifier.run_service_check", new_callable=AsyncMock) as mock:
             mock.return_value = (True, 0, "active", "")
             result = await check_critical_services()
@@ -1068,11 +1214,9 @@ class TestCheckCriticalServices:
 
     @pytest.mark.asyncio
     async def test_some_services_down(self):
-        from elle.daemon.reboot.verifier import check_critical_services
-
         call_count = [0]
 
-        async def side_effect(name):
+        async def side_effect(name, **kwargs):
             call_count[0] += 1
             if "NetworkManager" in name:
                 return (False, 3, "", "not active")
@@ -1083,6 +1227,38 @@ class TestCheckCriticalServices:
             assert result.critical_failure is True
             assert result.required_failed >= 1
 
+    @pytest.mark.asyncio
+    async def test_error_message_lists_failed_services(self):
+        """When services fail, error message should list them."""
+
+        async def side_effect(name, **kwargs):
+            if "ssh" in name.lower():
+                return (False, 3, "", "not active")
+            return (True, 0, "active", "")
+
+        with patch("elle.daemon.reboot.verifier.run_service_check", side_effect=side_effect):
+            result = await check_critical_services()
+            assert result.critical_failure is True
+            assert result.error is not None
+            assert "ssh" in result.error.lower()
+
+    @pytest.mark.asyncio
+    async def test_service_suffix_fallback(self):
+        """Tests the for/else loop: service fails without .service suffix but passes with it."""
+        call_count = [0]
+
+        async def side_effect(name, **kwargs):
+            call_count[0] += 1
+            # First call without .service suffix fails, second with .service passes
+            if name.endswith(".service"):
+                return (True, 0, "active", "")
+            return (False, 3, "", "not active")
+
+        with patch("elle.daemon.reboot.verifier.run_service_check", side_effect=side_effect):
+            result = await check_critical_services()
+            assert result.passed is True
+            assert result.critical_failure is False
+
 
 # ===========================================================================
 # check_network_connectivity
@@ -1092,8 +1268,6 @@ class TestCheckCriticalServices:
 class TestCheckNetworkConnectivity:
     @pytest.mark.asyncio
     async def test_gateway_reachable(self):
-        from elle.daemon.reboot.verifier import check_network_connectivity
-
         mock_proc = AsyncMock()
         mock_proc.returncode = 0
         mock_proc.wait = AsyncMock(return_value=0)
@@ -1105,8 +1279,6 @@ class TestCheckNetworkConnectivity:
 
     @pytest.mark.asyncio
     async def test_no_default_route(self):
-        from elle.daemon.reboot.verifier import check_network_connectivity
-
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=1, stdout="")
             result = await check_network_connectivity()
@@ -1114,8 +1286,6 @@ class TestCheckNetworkConnectivity:
 
     @pytest.mark.asyncio
     async def test_no_gateway_in_output(self):
-        from elle.daemon.reboot.verifier import check_network_connectivity
-
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="no default route\n")
             result = await check_network_connectivity()
@@ -1123,17 +1293,469 @@ class TestCheckNetworkConnectivity:
 
     @pytest.mark.asyncio
     async def test_ip_command_exception(self):
-        from elle.daemon.reboot.verifier import check_network_connectivity
-
         with patch("subprocess.run", side_effect=OSError("fail")):
             result = await check_network_connectivity()
             assert result is False
 
     @pytest.mark.asyncio
     async def test_ping_exception(self):
-        from elle.daemon.reboot.verifier import check_network_connectivity
-
         with patch("subprocess.run") as mock_run, patch("asyncio.create_subprocess_exec", side_effect=OSError("fail")):
             mock_run.return_value = MagicMock(returncode=0, stdout="default via 192.168.1.1 dev eth0\n")
             result = await check_network_connectivity()
             assert result is False
+
+    @pytest.mark.asyncio
+    async def test_ping_timeout(self):
+        """When ping times out, check_network_connectivity returns False."""
+        import asyncio as _asyncio
+
+        mock_proc = AsyncMock()
+        mock_proc.returncode = None
+        mock_proc.wait = AsyncMock(side_effect=_asyncio.TimeoutError)
+        mock_proc.kill = MagicMock()
+
+        with (
+            patch("subprocess.run") as mock_run,
+            patch("asyncio.create_subprocess_exec", return_value=mock_proc),
+        ):
+            mock_run.return_value = MagicMock(returncode=0, stdout="default via 192.168.1.1 dev eth0\n")
+            result = await check_network_connectivity(timeout=0.01)
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_ping_nonzero_exit(self):
+        """When ping exits with non-zero, network is considered down."""
+        mock_proc = AsyncMock()
+        mock_proc.returncode = 1
+        mock_proc.wait = AsyncMock(return_value=1)
+
+        with (
+            patch("subprocess.run") as mock_run,
+            patch("asyncio.create_subprocess_exec", return_value=mock_proc),
+        ):
+            mock_run.return_value = MagicMock(returncode=0, stdout="default via 192.168.1.1 dev eth0\n")
+            result = await check_network_connectivity()
+            assert result is False
+
+
+# ===========================================================================
+# Diagnostic collection helpers (private functions)
+# ===========================================================================
+
+
+class TestCollectDmesgErrors:
+    @pytest.mark.asyncio
+    async def test_returns_error_lines(self):
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout="[100] BUG: kernel panic\n[200] ERROR: oops\n",
+            )
+            errors = await _collect_dmesg_errors()
+            assert len(errors) == 2
+            assert "BUG" in errors[0]
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_on_no_errors(self):
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="")
+            errors = await _collect_dmesg_errors()
+            assert errors == []
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_on_exception(self):
+        with patch("subprocess.run", side_effect=OSError("fail")):
+            errors = await _collect_dmesg_errors()
+            assert errors == []
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_on_nonzero_returncode(self):
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=1, stdout="some output")
+            errors = await _collect_dmesg_errors()
+            assert errors == []
+
+
+class TestCollectJournalErrors:
+    @pytest.mark.asyncio
+    async def test_returns_error_lines(self):
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout="Jan 01 error line 1\nJan 01 error line 2\n",
+            )
+            errors = await _collect_journal_errors()
+            assert len(errors) == 2
+
+    @pytest.mark.asyncio
+    async def test_filters_header_lines(self):
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout="-- Journal begins at ...\nJan 01 real error line\n",
+            )
+            errors = await _collect_journal_errors()
+            assert len(errors) == 1
+            assert "real error" in errors[0]
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_on_exception(self):
+        with patch("subprocess.run", side_effect=OSError("fail")):
+            errors = await _collect_journal_errors()
+            assert errors == []
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_on_empty_output(self):
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="")
+            errors = await _collect_journal_errors()
+            assert errors == []
+
+
+class TestCollectFailedServices:
+    @pytest.mark.asyncio
+    async def test_returns_service_names(self):
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout="nginx.service loaded failed failed\nredis.service loaded failed failed\n",
+            )
+            services = await _collect_failed_services()
+            assert len(services) == 2
+            assert services[0] == "nginx.service"
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_when_no_failures(self):
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="")
+            services = await _collect_failed_services()
+            assert services == []
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_on_exception(self):
+        with patch("subprocess.run", side_effect=OSError("fail")):
+            services = await _collect_failed_services()
+            assert services == []
+
+
+class TestCheckFilesystemState:
+    @pytest.mark.asyncio
+    async def test_detects_read_only_mounts(self):
+        mount_output = "/dev/sda1 on / type ext4 (ro,relatime)\n/dev/sda2 on /home type ext4 (rw,relatime)\n"
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout=mount_output)
+            read_only, missing = await _check_filesystem_state()
+            assert "/" in read_only
+
+    @pytest.mark.asyncio
+    async def test_detects_missing_critical_mounts(self):
+        # Only root is mounted; /var, /tmp, /home are missing
+        mount_output = "/dev/sda1 on / type ext4 (rw,relatime)\n"
+        with (
+            patch("subprocess.run") as mock_run,
+            patch.object(Path, "exists", return_value=False),
+        ):
+            mock_run.return_value = MagicMock(returncode=0, stdout=mount_output)
+            read_only, missing = await _check_filesystem_state()
+            # /var, /tmp, /home should be reported as missing
+            assert len(missing) > 0
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_on_exception(self):
+        with patch("subprocess.run", side_effect=OSError("fail")):
+            read_only, missing = await _check_filesystem_state()
+            assert read_only == []
+            assert missing == []
+
+
+class TestCheckDiskSpaceIssues:
+    @pytest.mark.asyncio
+    async def test_reports_low_disk_space(self):
+        with (
+            patch("shutil.disk_usage") as mock_du,
+            patch.object(Path, "exists", return_value=True),
+        ):
+            # 10MB free, below any requirement
+            mock_du.return_value = MagicMock(free=10 * 1024 * 1024)
+            issues = await _check_disk_space_issues()
+            assert len(issues) > 0
+            assert "free" in issues[0]
+
+    @pytest.mark.asyncio
+    async def test_no_issues_when_space_sufficient(self):
+        with (
+            patch("shutil.disk_usage") as mock_du,
+            patch.object(Path, "exists", return_value=True),
+        ):
+            # 100GB free
+            mock_du.return_value = MagicMock(free=100 * 1024 * 1024 * 1024)
+            issues = await _check_disk_space_issues()
+            assert issues == []
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_on_exception(self):
+        with patch("shutil.disk_usage", side_effect=OSError("fail")):
+            issues = await _check_disk_space_issues()
+            assert issues == []
+
+
+class TestCheckNetworkState:
+    @pytest.mark.asyncio
+    async def test_detects_interfaces_down(self):
+        mock_iface = MagicMock()
+        mock_iface.name = "eth0"
+        mock_operstate = MagicMock()
+        mock_operstate.exists.return_value = True
+        mock_operstate.read_text.return_value = "down\n"
+        mock_iface.__truediv__ = MagicMock(return_value=mock_operstate)
+
+        mock_net_dir = MagicMock()
+        mock_net_dir.exists.return_value = True
+        mock_net_dir.iterdir.return_value = [mock_iface]
+
+        with (
+            patch("elle.daemon.reboot.verifier.Path") as mock_path_cls,
+            patch("subprocess.run") as mock_run,
+        ):
+            mock_path_cls.return_value = mock_net_dir
+            mock_run.return_value = MagicMock(returncode=0, stdout="")
+            interfaces_down, network_errors = await _check_network_state()
+            assert len(interfaces_down) == 1
+            assert "eth0" in interfaces_down[0]
+
+    @pytest.mark.asyncio
+    async def test_skips_loopback(self):
+        """Loopback interface should be skipped."""
+        mock_lo = MagicMock()
+        mock_lo.name = "lo"
+
+        mock_net_dir = MagicMock()
+        mock_net_dir.exists.return_value = True
+        mock_net_dir.iterdir.return_value = [mock_lo]
+
+        with (
+            patch("elle.daemon.reboot.verifier.Path") as mock_path_cls,
+            patch("subprocess.run") as mock_run,
+        ):
+            mock_path_cls.return_value = mock_net_dir
+            mock_run.return_value = MagicMock(returncode=0, stdout="")
+            interfaces_down, network_errors = await _check_network_state()
+            assert len(interfaces_down) == 0
+
+
+class TestCheckModuleState:
+    @pytest.mark.asyncio
+    async def test_detects_missing_modules_for_driver_update(self):
+        intent = _make_intent(
+            reason="driver_update",
+            plan_json={"expected_modules": ["nvidia"]},
+        )
+        with patch("subprocess.run") as mock_run:
+            # First call for dmesg, second for lsmod
+            mock_run.side_effect = [
+                MagicMock(returncode=0, stdout=""),  # dmesg - no module errors
+                MagicMock(returncode=0, stdout="Module Size Used\next4 12345 1\n"),  # lsmod - nvidia missing
+            ]
+            missing, errors = await _check_module_state(intent)
+            assert "nvidia" in missing
+
+    @pytest.mark.asyncio
+    async def test_no_expected_modules_for_non_driver(self):
+        intent = _make_intent(reason="user_requested")
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="")
+            missing, errors = await _check_module_state(intent)
+            assert missing == []
+
+    @pytest.mark.asyncio
+    async def test_detects_module_errors_in_dmesg(self):
+        intent = _make_intent(reason="driver_update", plan_json={})
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout="[100] modprobe: failed to load module nvidia\n",
+            )
+            missing, errors = await _check_module_state(intent)
+            assert len(errors) == 1
+            assert "modprobe" in errors[0]
+
+
+class TestGetKernelVersion:
+    @pytest.mark.asyncio
+    async def test_returns_kernel_version(self):
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="6.8.0-40-generic\n")
+            version = await _get_kernel_version()
+            assert version == "6.8.0-40-generic"
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_failure(self):
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=1, stdout="")
+            version = await _get_kernel_version()
+            assert version is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_exception(self):
+        with patch("subprocess.run", side_effect=OSError("fail")):
+            version = await _get_kernel_version()
+            assert version is None
+
+
+class TestGetUptimeSeconds:
+    @pytest.mark.asyncio
+    async def test_returns_uptime(self):
+        with (
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "read_text", return_value="123.45 678.90\n"),
+        ):
+            uptime = await _get_uptime_seconds()
+            assert uptime == 123
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_file_missing(self):
+        with patch.object(Path, "exists", return_value=False):
+            uptime = await _get_uptime_seconds()
+            assert uptime is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_exception(self):
+        with (
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "read_text", side_effect=OSError("fail")),
+        ):
+            uptime = await _get_uptime_seconds()
+            assert uptime is None
+
+
+# ===========================================================================
+# collect_failure_diagnostics (integration-level with mocked externals)
+# ===========================================================================
+
+
+class TestCollectFailureDiagnostics:
+    @pytest.mark.asyncio
+    async def test_collects_all_diagnostic_fields(self):
+        """Verify collect_failure_diagnostics assembles all diagnostic data."""
+        intent = _make_intent(
+            reason="kernel_update",
+            reason_detail="Upgrading to 6.8.0",
+            session_history=("apt upgrade", "reboot"),
+            plan_json={"config_files": ["/etc/default/grub"]},
+            pre_snapshot_json={"kernel": "6.5.0-generic"},
+            grub_default_saved="0",
+        )
+
+        verification_results = [
+            {"passed": True, "check_type": "service_active", "check_command": "sshd"},
+            {"passed": False, "check_type": "command", "check_command": "uname -r", "stderr": "wrong kernel"},
+        ]
+
+        mock_grub_state = MagicMock()
+        mock_grub_state.entries = ("Ubuntu 6.8.0", "Ubuntu 6.5.0")
+
+        with (
+            patch(
+                "elle.daemon.reboot.verifier._collect_dmesg_errors",
+                new_callable=AsyncMock,
+                return_value=["[100] EXT4 error"],
+            ),
+            patch(
+                "elle.daemon.reboot.verifier._collect_journal_errors",
+                new_callable=AsyncMock,
+                return_value=["Failed to start nginx"],
+            ),
+            patch(
+                "elle.daemon.reboot.verifier._collect_failed_services",
+                new_callable=AsyncMock,
+                return_value=["nginx.service"],
+            ),
+            patch("elle.daemon.reboot.verifier._check_filesystem_state", new_callable=AsyncMock, return_value=([], [])),
+            patch("elle.daemon.reboot.verifier._check_disk_space_issues", new_callable=AsyncMock, return_value=[]),
+            patch("elle.daemon.reboot.verifier._check_network_state", new_callable=AsyncMock, return_value=([], [])),
+            patch("elle.daemon.reboot.verifier._check_module_state", new_callable=AsyncMock, return_value=([], [])),
+            patch(
+                "elle.daemon.reboot.verifier._get_kernel_version",
+                new_callable=AsyncMock,
+                return_value="6.8.0-40-generic",
+            ),
+            patch("elle.daemon.reboot.verifier._get_uptime_seconds", new_callable=AsyncMock, return_value=120),
+            patch.object(Path, "exists", return_value=False),  # BIOS mode (no /sys/firmware/efi)
+            patch("elle.daemon.reboot.grub.get_grub_state", return_value=mock_grub_state),
+            patch("elle.daemon.reboot.grub.get_saved_default", return_value="0"),
+        ):
+            diagnostics = await collect_failure_diagnostics(intent, verification_results)
+
+            assert diagnostics.intent_goal == "Test reboot"
+            assert diagnostics.intent_reason == "kernel_update"
+            assert diagnostics.kernel_version == "6.8.0-40-generic"
+            assert diagnostics.previous_kernel == "6.5.0-generic"
+            assert diagnostics.boot_mode == "BIOS"
+            assert diagnostics.uptime_seconds == 120
+            assert len(diagnostics.failed_checks) == 1
+            assert len(diagnostics.passed_checks) == 1
+            assert len(diagnostics.dmesg_errors) == 1
+            assert len(diagnostics.journal_errors) == 1
+            assert len(diagnostics.failed_services) == 1
+            assert diagnostics.config_changes == ("/etc/default/grub",)
+            assert diagnostics.current_grub_entry == "0"
+            assert diagnostics.previous_grub_entry == "0"
+            assert len(diagnostics.grub_entries_available) == 2
+            assert len(diagnostics.likely_causes) >= 1
+            assert len(diagnostics.suggested_investigation) >= 1
+
+    @pytest.mark.asyncio
+    async def test_handles_none_verification_results(self):
+        """collect_failure_diagnostics should handle None verification_results."""
+        intent = _make_intent()
+
+        mock_grub_state = MagicMock()
+        mock_grub_state.entries = ()
+
+        with (
+            patch("elle.daemon.reboot.verifier._collect_dmesg_errors", new_callable=AsyncMock, return_value=[]),
+            patch("elle.daemon.reboot.verifier._collect_journal_errors", new_callable=AsyncMock, return_value=[]),
+            patch("elle.daemon.reboot.verifier._collect_failed_services", new_callable=AsyncMock, return_value=[]),
+            patch("elle.daemon.reboot.verifier._check_filesystem_state", new_callable=AsyncMock, return_value=([], [])),
+            patch("elle.daemon.reboot.verifier._check_disk_space_issues", new_callable=AsyncMock, return_value=[]),
+            patch("elle.daemon.reboot.verifier._check_network_state", new_callable=AsyncMock, return_value=([], [])),
+            patch("elle.daemon.reboot.verifier._check_module_state", new_callable=AsyncMock, return_value=([], [])),
+            patch("elle.daemon.reboot.verifier._get_kernel_version", new_callable=AsyncMock, return_value=None),
+            patch("elle.daemon.reboot.verifier._get_uptime_seconds", new_callable=AsyncMock, return_value=None),
+            patch.object(Path, "exists", return_value=True),  # UEFI mode
+            patch("elle.daemon.reboot.grub.get_grub_state", return_value=mock_grub_state),
+            patch("elle.daemon.reboot.grub.get_saved_default", return_value=None),
+        ):
+            diagnostics = await collect_failure_diagnostics(intent, verification_results=None)
+
+            assert diagnostics.boot_mode == "UEFI"
+            assert diagnostics.failed_checks == ()
+            assert diagnostics.passed_checks == ()
+            assert diagnostics.kernel_version is None
+            assert diagnostics.uptime_seconds is None
+
+    @pytest.mark.asyncio
+    async def test_handles_no_plan_json(self):
+        """When intent has no plan_json, config_changes should be empty tuple."""
+        intent = _make_intent(plan_json={})
+
+        mock_grub_state = MagicMock()
+        mock_grub_state.entries = ()
+
+        with (
+            patch("elle.daemon.reboot.verifier._collect_dmesg_errors", new_callable=AsyncMock, return_value=[]),
+            patch("elle.daemon.reboot.verifier._collect_journal_errors", new_callable=AsyncMock, return_value=[]),
+            patch("elle.daemon.reboot.verifier._collect_failed_services", new_callable=AsyncMock, return_value=[]),
+            patch("elle.daemon.reboot.verifier._check_filesystem_state", new_callable=AsyncMock, return_value=([], [])),
+            patch("elle.daemon.reboot.verifier._check_disk_space_issues", new_callable=AsyncMock, return_value=[]),
+            patch("elle.daemon.reboot.verifier._check_network_state", new_callable=AsyncMock, return_value=([], [])),
+            patch("elle.daemon.reboot.verifier._check_module_state", new_callable=AsyncMock, return_value=([], [])),
+            patch("elle.daemon.reboot.verifier._get_kernel_version", new_callable=AsyncMock, return_value=None),
+            patch("elle.daemon.reboot.verifier._get_uptime_seconds", new_callable=AsyncMock, return_value=None),
+            patch.object(Path, "exists", return_value=False),
+            patch("elle.daemon.reboot.grub.get_grub_state", return_value=mock_grub_state),
+            patch("elle.daemon.reboot.grub.get_saved_default", return_value=None),
+        ):
+            diagnostics = await collect_failure_diagnostics(intent)
+
+            assert diagnostics.config_changes == ()

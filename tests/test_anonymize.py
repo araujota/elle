@@ -598,3 +598,1108 @@ class TestActionSummary:
         # Only one action has a non-None duration
         assert summary.total_duration_ms == 400
         assert summary.avg_duration_ms == 400  # 400 // 1
+
+
+# =============================================================================
+# TestAnonymizeTelemetry
+# =============================================================================
+
+
+class TestAnonymizeTelemetry:
+    """Tests for _anonymize_telemetry -- REDACT/GENERALIZE/PRESERVE telemetry data."""
+
+    def test_cpu_preserved(self):
+        """CPU metrics are preserved as-is."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        telemetry = {"cpu": {"load_1m": 1.5, "load_5m": 1.2, "load_15m": 0.9}}
+        result = anonymizer._anonymize_telemetry(telemetry, ctx)
+        assert result["cpu"] == {"load_1m": 1.5, "load_5m": 1.2, "load_15m": 0.9}
+
+    def test_memory_preserved(self):
+        """Memory metrics are preserved as-is."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        telemetry = {"memory": {"total_mb": 16384, "available_mb": 8192, "used_pct": 50.0}}
+        result = anonymizer._anonymize_telemetry(telemetry, ctx)
+        assert result["memory"]["total_mb"] == 16384
+
+    def test_disk_anonymized(self):
+        """Disk mount points generalized, devices anonymized."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        telemetry = {
+            "disk": {
+                "io_wait_pct": 5.0,
+                "io_errors_1h": 0,
+                "psi_some_pct": 1.0,
+                "psi_full_pct": 0.5,
+                "disks": [
+                    {
+                        "mount": "/",
+                        "used_pct": 80.0,
+                        "avail_gb": 50.0,
+                        "device": "/dev/sda1",
+                        "read_only": False,
+                    },
+                    {
+                        "mount": "/home",
+                        "used_pct": 60.0,
+                        "avail_gb": 200.0,
+                        "device": "/dev/sdb1",
+                        "read_only": False,
+                    },
+                ],
+            }
+        }
+        result = anonymizer._anonymize_telemetry(telemetry, ctx)
+        disk = result["disk"]
+        assert disk["io_wait_pct"] == 5.0
+        assert len(disk["disks"]) == 2
+        assert disk["disks"][0]["mount"] == "root"
+        assert disk["disks"][1]["mount"] == "home"
+        assert disk["disks"][0]["device"].startswith("disk-")
+        assert disk["disks"][0]["used_pct"] == 80.0
+
+    def test_network_anonymized(self):
+        """Network interfaces anonymized, metrics preserved."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        telemetry = {
+            "network": {
+                "interfaces_up": 2,
+                "interfaces_down": 0,
+                "default_route_present": True,
+                "dns_resolution_ok": True,
+                "interfaces": [
+                    {"name": "eth0", "state": "UP", "rx_errors": 0, "tx_errors": 0},
+                    {"name": "wlan0", "state": "UP", "rx_errors": 1, "tx_errors": 0},
+                ],
+            }
+        }
+        result = anonymizer._anonymize_telemetry(telemetry, ctx)
+        net = result["network"]
+        assert net["interfaces_up"] == 2
+        assert net["dns_resolution_ok"] is True
+        assert net["interfaces"][0]["name"] == "ethN"
+        assert net["interfaces"][1]["name"] == "wlanN"
+        assert net["interfaces"][0]["state"] == "UP"
+
+    def test_kernel_preserved(self):
+        """Kernel signals are preserved as-is."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        telemetry = {"kernel": {"oom_kills": 3, "panics": 0}}
+        result = anonymizer._anonymize_telemetry(telemetry, ctx)
+        assert result["kernel"] == {"oom_kills": 3, "panics": 0}
+
+    def test_services_anonymized(self):
+        """Service names anonymized for unknown services, preserved for known."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        telemetry = {
+            "services": [
+                {
+                    "service": "nginx",
+                    "rss_mb": 128,
+                    "cpu_pct": 2.5,
+                    "active_state": "active",
+                    "restart_count": 0,
+                    "last_exit_code": 0,
+                    "cgroup_memory_limit_mb": 512,
+                },
+                {
+                    "service": "my-custom-app",
+                    "rss_mb": 256,
+                    "cpu_pct": 10.0,
+                    "active_state": "active",
+                    "restart_count": 3,
+                    "last_exit_code": None,
+                    "cgroup_memory_limit_mb": None,
+                },
+            ]
+        }
+        result = anonymizer._anonymize_telemetry(telemetry, ctx)
+        assert result["services"][0]["service"] == "nginx"
+        assert result["services"][1]["service"].startswith("svc-")
+        assert result["services"][0]["rss_mb"] == 128
+        assert result["services"][1]["restart_count"] == 3
+
+    def test_uptime_preserved(self):
+        """Uptime seconds are preserved."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        telemetry = {"uptime_sec": 86400}
+        result = anonymizer._anonymize_telemetry(telemetry, ctx)
+        assert result["uptime_sec"] == 86400
+
+    def test_pydantic_model_telemetry(self):
+        """Telemetry passed as a Pydantic model is handled via model_dump()."""
+        from unittest.mock import MagicMock
+
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+
+        mock_model = MagicMock()
+        mock_model.model_dump.return_value = {"cpu": {"load": 1.0}, "uptime_sec": 100}
+
+        result = anonymizer._anonymize_telemetry(mock_model, ctx)
+        assert result["cpu"] == {"load": 1.0}
+        assert result["uptime_sec"] == 100
+        mock_model.model_dump.assert_called_once()
+
+    def test_non_dict_non_model_returns_empty(self):
+        """Non-dict, non-model telemetry returns empty dict."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        result = anonymizer._anonymize_telemetry("not a dict", ctx)
+        assert result == {}
+
+    def test_disk_empty_disks_list(self):
+        """Disk section with no disks."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        telemetry = {"disk": {"io_wait_pct": 0.0, "disks": []}}
+        result = anonymizer._anonymize_telemetry(telemetry, ctx)
+        assert result["disk"]["disks"] == []
+
+    def test_network_empty_interfaces(self):
+        """Network section with no interfaces."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        telemetry = {"network": {"interfaces_up": 0, "interfaces": []}}
+        result = anonymizer._anonymize_telemetry(telemetry, ctx)
+        assert result["network"]["interfaces"] == []
+
+
+# =============================================================================
+# TestAnonymizeControlSurface
+# =============================================================================
+
+
+class TestAnonymizeControlSurface:
+    """Tests for _anonymize_control_surface."""
+
+    def test_services_anonymized(self):
+        """Service unit_name anonymized, boolean/string fields preserved."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        surface = {
+            "services": [
+                {
+                    "unit_name": "nginx",
+                    "enabled": True,
+                    "active_state": "active",
+                    "restart_policy": "always",
+                    "cpu_quota": "50%",
+                    "memory_max": "512M",
+                    "dropin_count": 2,
+                    "effective_hash": "abc123",
+                }
+            ]
+        }
+        result = anonymizer._anonymize_control_surface(surface, ctx)
+        assert result["services"][0]["unit_name"] == "nginx"  # known service
+        assert result["services"][0]["enabled"] is True
+        assert result["services"][0]["restart_policy"] == "always"
+        assert result["services"][0]["effective_hash"] == "abc123"
+
+    def test_configs_anonymized(self):
+        """Config paths anonymized, mode and sha256 preserved."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        surface = {
+            "configs": [
+                {
+                    "path": "/etc/nginx/nginx.conf",
+                    "mode": "0644",
+                    "sha256": "deadbeef123",
+                    "fragment_count": 3,
+                }
+            ]
+        }
+        result = anonymizer._anonymize_control_surface(surface, ctx)
+        assert result["configs"][0]["path"] == "/etc/nginx/[config]"
+        assert result["configs"][0]["mode"] == "0644"
+        assert result["configs"][0]["sha256"] == "deadbeef123"
+
+    def test_packages_preserved(self):
+        """Packages are public, preserved as-is."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        surface = {"packages": {"packages": [{"name": "nginx", "version": "1.22"}]}}
+        result = anonymizer._anonymize_control_surface(surface, ctx)
+        assert result["packages"] == surface["packages"]
+
+    def test_scheduler_preserved(self):
+        """Scheduler data preserved."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        surface = {"scheduler": {"cron_hash": "abc"}}
+        result = anonymizer._anonymize_control_surface(surface, ctx)
+        assert result["scheduler"] == {"cron_hash": "abc"}
+
+    def test_privilege_fields(self):
+        """Privilege section preserves hashes and modes."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        surface = {
+            "privilege": {
+                "sudoers_hash": "aaa",
+                "groups_hash": "bbb",
+                "polkit_rules_hash": "ccc",
+                "selinux_mode": "enforcing",
+                "apparmor_mode": "enforce",
+            }
+        }
+        result = anonymizer._anonymize_control_surface(surface, ctx)
+        assert result["privilege"]["sudoers_hash"] == "aaa"
+        assert result["privilege"]["selinux_mode"] == "enforcing"
+        assert result["privilege"]["apparmor_mode"] == "enforce"
+
+    def test_network_control_preserved(self):
+        """network_control preserved."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        surface = {"network_control": {"firewall": "ufw", "dns": "systemd-resolved"}}
+        result = anonymizer._anonymize_control_surface(surface, ctx)
+        assert result["network_control"]["firewall"] == "ufw"
+
+    def test_kernel_policy_preserved(self):
+        """kernel_policy preserved."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        surface = {"kernel_policy": {"version": "5.15.0", "sysctl_hash": "xyz"}}
+        result = anonymizer._anonymize_control_surface(surface, ctx)
+        assert result["kernel_policy"]["version"] == "5.15.0"
+
+    def test_hardware_preserved(self):
+        """hardware preserved."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        surface = {"hardware": {"cpu_model": "i9", "ram_gb": 32}}
+        result = anonymizer._anonymize_control_surface(surface, ctx)
+        assert result["hardware"]["cpu_model"] == "i9"
+
+    def test_pydantic_model_surface(self):
+        """Control surface as Pydantic model uses model_dump()."""
+        from unittest.mock import MagicMock
+
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+
+        mock_model = MagicMock()
+        mock_model.model_dump.return_value = {"packages": [{"name": "foo"}]}
+        result = anonymizer._anonymize_control_surface(mock_model, ctx)
+        assert result["packages"] == [{"name": "foo"}]
+
+    def test_non_dict_non_model_returns_empty(self):
+        """Non-dict, non-model surface returns empty dict."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        result = anonymizer._anonymize_control_surface(42, ctx)
+        assert result == {}
+
+    def test_unknown_service_anonymized(self):
+        """Custom services get svc- prefix hash."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        surface = {
+            "services": [
+                {
+                    "unit_name": "my-private-app",
+                    "enabled": True,
+                    "active_state": "active",
+                    "restart_policy": "",
+                    "cpu_quota": "",
+                    "memory_max": "",
+                    "dropin_count": 0,
+                    "effective_hash": "",
+                }
+            ]
+        }
+        result = anonymizer._anonymize_control_surface(surface, ctx)
+        assert result["services"][0]["unit_name"].startswith("svc-")
+
+
+# =============================================================================
+# TestDriftExplanations
+# =============================================================================
+
+
+class TestDriftExplanations:
+    """Tests for _compute_drift_explanations and _explain_* methods."""
+
+    def test_service_added(self):
+        """Service present in post but not pre."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+
+        pre = {"services": []}
+        post = {"services": [{"unit_name": "nginx", "enabled": True, "active_state": "active"}]}
+        drift = {"service:nginx": True}
+
+        explanations = anonymizer._compute_drift_explanations(pre, post, drift, ctx)
+        assert len(explanations) == 1
+        assert "added" in explanations[0].explanation
+
+    def test_service_removed(self):
+        """Service present in pre but not post."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+
+        pre = {"services": [{"unit_name": "nginx", "enabled": True, "active_state": "active"}]}
+        post = {"services": []}
+        drift = {"service:nginx": True}
+
+        explanations = anonymizer._compute_drift_explanations(pre, post, drift, ctx)
+        assert "removed" in explanations[0].explanation
+
+    def test_service_not_in_either(self):
+        """Service not found in pre or post."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+
+        pre = {"services": []}
+        post = {"services": []}
+        drift = {"service:ghost": True}
+
+        explanations = anonymizer._compute_drift_explanations(pre, post, drift, ctx)
+        assert "changed" in explanations[0].explanation
+
+    def test_service_enabled_changed(self):
+        """Service enabled flag changed."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+
+        pre = {"services": [{"unit_name": "nginx", "enabled": True}]}
+        post = {"services": [{"unit_name": "nginx", "enabled": False}]}
+        drift = {"service:nginx": True}
+
+        explanations = anonymizer._compute_drift_explanations(pre, post, drift, ctx)
+        assert "disabled" in explanations[0].explanation
+        assert explanations[0].before_value is not None
+        assert explanations[0].after_value is not None
+
+    def test_service_restart_policy_changed(self):
+        """Service restart policy changed."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+
+        pre = {"services": [{"unit_name": "nginx", "restart_policy": "no"}]}
+        post = {"services": [{"unit_name": "nginx", "restart_policy": "always"}]}
+        drift = {"service:nginx": True}
+
+        explanations = anonymizer._compute_drift_explanations(pre, post, drift, ctx)
+        assert "restart policy" in explanations[0].explanation
+
+    def test_service_memory_max_changed(self):
+        """Service memory limit changed."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+
+        pre = {"services": [{"unit_name": "nginx", "memory_max": "256M"}]}
+        post = {"services": [{"unit_name": "nginx", "memory_max": "512M"}]}
+        drift = {"service:nginx": True}
+
+        explanations = anonymizer._compute_drift_explanations(pre, post, drift, ctx)
+        assert "memory limit" in explanations[0].explanation
+
+    def test_service_cpu_quota_changed(self):
+        """Service CPU quota changed."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+
+        pre = {"services": [{"unit_name": "nginx", "cpu_quota": "50%"}]}
+        post = {"services": [{"unit_name": "nginx", "cpu_quota": "100%"}]}
+        drift = {"service:nginx": True}
+
+        explanations = anonymizer._compute_drift_explanations(pre, post, drift, ctx)
+        assert "CPU quota" in explanations[0].explanation
+
+    def test_service_no_specific_changes(self):
+        """Service changed but no specific tracked field differs."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+
+        pre = {"services": [{"unit_name": "nginx", "active_state": "active"}]}
+        post = {"services": [{"unit_name": "nginx", "active_state": "inactive"}]}
+        drift = {"service:nginx": True}
+
+        explanations = anonymizer._compute_drift_explanations(pre, post, drift, ctx)
+        assert "configuration changed" in explanations[0].explanation
+
+    def test_config_created(self):
+        """Config present in post but not pre."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+
+        pre = {"configs": []}
+        post = {"configs": [{"path": "/etc/nginx/nginx.conf", "sha256": "abc", "mode": "0644"}]}
+        drift = {"config:/etc/nginx/nginx.conf": True}
+
+        explanations = anonymizer._compute_drift_explanations(pre, post, drift, ctx)
+        assert "created" in explanations[0].explanation
+
+    def test_config_deleted(self):
+        """Config present in pre but not post."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+
+        pre = {"configs": [{"path": "/etc/nginx/nginx.conf", "sha256": "abc", "mode": "0644"}]}
+        post = {"configs": []}
+        drift = {"config:/etc/nginx/nginx.conf": True}
+
+        explanations = anonymizer._compute_drift_explanations(pre, post, drift, ctx)
+        assert "deleted" in explanations[0].explanation
+
+    def test_config_not_in_either(self):
+        """Config not found in pre or post."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+
+        pre = {"configs": []}
+        post = {"configs": []}
+        drift = {"config:/etc/ghost": True}
+
+        explanations = anonymizer._compute_drift_explanations(pre, post, drift, ctx)
+        assert "changed" in explanations[0].explanation
+
+    def test_config_contents_modified(self):
+        """Config sha256 changed."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+
+        pre = {"configs": [{"path": "/etc/nginx/nginx.conf", "sha256": "aaa111bbb", "mode": "0644"}]}
+        post = {"configs": [{"path": "/etc/nginx/nginx.conf", "sha256": "ccc222ddd", "mode": "0644"}]}
+        drift = {"config:/etc/nginx/nginx.conf": True}
+
+        explanations = anonymizer._compute_drift_explanations(pre, post, drift, ctx)
+        assert "contents modified" in explanations[0].explanation
+        assert explanations[0].before_value is not None
+        assert explanations[0].after_value is not None
+
+    def test_config_mode_changed(self):
+        """Config mode changed."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+
+        pre = {"configs": [{"path": "/etc/ssh/sshd_config", "sha256": "same", "mode": "0644"}]}
+        post = {"configs": [{"path": "/etc/ssh/sshd_config", "sha256": "same", "mode": "0600"}]}
+        drift = {"config:/etc/ssh/sshd_config": True}
+
+        explanations = anonymizer._compute_drift_explanations(pre, post, drift, ctx)
+        assert "mode" in explanations[0].explanation
+
+    def test_config_no_specific_changes(self):
+        """Config changed but no specific tracked field differs."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+
+        pre = {"configs": [{"path": "/etc/hosts", "sha256": "same", "mode": "0644"}]}
+        post = {"configs": [{"path": "/etc/hosts", "sha256": "same", "mode": "0644"}]}
+        drift = {"config:/etc/hosts": True}
+
+        explanations = anonymizer._compute_drift_explanations(pre, post, drift, ctx)
+        assert "changed" in explanations[0].explanation
+
+    def test_packages_drift(self):
+        """Package surface drift with added and removed packages."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+
+        pre = {"packages": {"packages": [{"name": "nginx"}, {"name": "curl"}]}}
+        post = {"packages": {"packages": [{"name": "nginx"}, {"name": "wget"}]}}
+        drift = {"packages": True}
+
+        explanations = anonymizer._compute_drift_explanations(pre, post, drift, ctx)
+        assert "1 added" in explanations[0].explanation
+        assert "1 removed" in explanations[0].explanation
+        assert explanations[0].before_value is not None
+
+    def test_packages_no_changes(self):
+        """Package surface present but no package names changed."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+
+        pre = {"packages": {"packages": [{"name": "nginx"}]}}
+        post = {"packages": {"packages": [{"name": "nginx"}]}}
+        drift = {"packages": True}
+
+        explanations = anonymizer._compute_drift_explanations(pre, post, drift, ctx)
+        assert "Package state changed" in explanations[0].explanation
+
+    def test_simple_drift_scheduler(self):
+        """Scheduler drift gets simple explanation."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+
+        pre = {}
+        post = {}
+        drift = {"scheduler": True}
+
+        explanations = anonymizer._compute_drift_explanations(pre, post, drift, ctx)
+        assert "Scheduler changed" in explanations[0].explanation
+
+    def test_simple_drift_privilege(self):
+        """Privilege drift gets simple explanation."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        drift = {"privilege": False}
+        explanations = anonymizer._compute_drift_explanations({}, {}, drift, ctx)
+        assert "Privilege configuration unchanged" in explanations[0].explanation
+
+    def test_simple_drift_network_control(self):
+        """Network control drift."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        drift = {"network_control": True}
+        explanations = anonymizer._compute_drift_explanations({}, {}, drift, ctx)
+        assert "Network control plane changed" in explanations[0].explanation
+
+    def test_simple_drift_kernel_policy(self):
+        """Kernel policy drift."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        drift = {"kernel_policy": True}
+        explanations = anonymizer._compute_drift_explanations({}, {}, drift, ctx)
+        assert "Kernel policy changed" in explanations[0].explanation
+
+    def test_simple_drift_hardware(self):
+        """Hardware drift."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        drift = {"hardware": False}
+        explanations = anonymizer._compute_drift_explanations({}, {}, drift, ctx)
+        assert "Hardware identity unchanged" in explanations[0].explanation
+
+    def test_unknown_surface_key(self):
+        """Unknown surface key falls through to default."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        drift = {"custom_thing": True}
+        explanations = anonymizer._compute_drift_explanations({}, {}, drift, ctx)
+        assert "custom_thing changed" in explanations[0].explanation
+
+    def test_unknown_surface_key_unchanged(self):
+        """Unknown surface key unchanged."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+        drift = {"custom_thing": False}
+        explanations = anonymizer._compute_drift_explanations({}, {}, drift, ctx)
+        assert "custom_thing unchanged" in explanations[0].explanation
+
+    def test_drift_with_pydantic_models(self):
+        """Control surfaces as Pydantic models use model_dump()."""
+        from unittest.mock import MagicMock
+
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        ctx = AnonymizationContext(secret=b"test-secret")
+
+        pre_model = MagicMock()
+        pre_model.model_dump.return_value = {"services": []}
+        post_model = MagicMock()
+        post_model.model_dump.return_value = {"services": [{"unit_name": "nginx"}]}
+        drift = {"service:nginx": True}
+
+        explanations = anonymizer._compute_drift_explanations(pre_model, post_model, drift, ctx)
+        assert len(explanations) == 1
+
+
+# =============================================================================
+# TestAnonymizationContextPaths
+# =============================================================================
+
+
+class TestAnonymizationContextPaths:
+    """Additional tests for path generalization edge cases."""
+
+    def test_etc_two_levels_only(self):
+        """'/etc' alone goes to 'etc/[path]'."""
+        ctx = AnonymizationContext(secret=b"test-secret")
+        result = ctx.anonymize_path("/etc")
+        assert result == "etc/[path]"
+
+    def test_var_two_levels_only(self):
+        """'/var' alone goes to 'var/[path]'."""
+        ctx = AnonymizationContext(secret=b"test-secret")
+        result = ctx.anonymize_path("/var")
+        assert result == "var/[path]"
+
+    def test_usr_path(self):
+        """'/usr/bin/foo' goes to 'usr/[path]'."""
+        ctx = AnonymizationContext(secret=b"test-secret")
+        result = ctx.anonymize_path("/usr/bin/foo")
+        assert result == "usr/[path]"
+
+    def test_tmp_path(self):
+        """'/tmp/...' goes to 'tmp/[path]'."""
+        ctx = AnonymizationContext(secret=b"test-secret")
+        result = ctx.anonymize_path("/tmp/some-file")
+        assert result == "tmp/[path]"
+
+    def test_boot_path(self):
+        """'/boot/...' goes to 'boot/[path]'."""
+        ctx = AnonymizationContext(secret=b"test-secret")
+        result = ctx.anonymize_path("/boot/vmlinuz")
+        assert result == "boot/[path]"
+
+    def test_srv_path(self):
+        """'/srv/...' goes to 'data/[path]'."""
+        ctx = AnonymizationContext(secret=b"test-secret")
+        result = ctx.anonymize_path("/srv/myapp")
+        assert result == "data/[path]"
+
+    def test_opt_path(self):
+        """'/opt/...' goes to 'opt/[path]'."""
+        ctx = AnonymizationContext(secret=b"test-secret")
+        result = ctx.anonymize_path("/opt/something")
+        assert result == "opt/[path]"
+
+    def test_mnt_path(self):
+        """'/mnt/...' goes to 'mnt/[path]'."""
+        ctx = AnonymizationContext(secret=b"test-secret")
+        result = ctx.anonymize_path("/mnt/usb")
+        assert result == "mnt/[path]"
+
+    def test_media_path(self):
+        """'/media/...' goes to 'media/[path]'."""
+        ctx = AnonymizationContext(secret=b"test-secret")
+        result = ctx.anonymize_path("/media/cdrom")
+        assert result == "media/[path]"
+
+    def test_relative_path_hashed(self):
+        """Relative paths (no leading /) are hashed."""
+        ctx = AnonymizationContext(secret=b"test-secret")
+        result = ctx.anonymize_path("relative/path/file.txt")
+        assert result.startswith("path-")
+
+    def test_root_path(self):
+        """'/' path generalization."""
+        ctx = AnonymizationContext(secret=b"test-secret")
+        result = ctx.anonymize_path("/")
+        # "/" splits to ["", ""], len(parts) > 1, root = "/", which matches "root"
+        assert result == "root/[path]"
+
+    def test_path_caching(self):
+        """Same path returns same anonymized value."""
+        ctx = AnonymizationContext(secret=b"test-secret")
+        r1 = ctx.anonymize_path("/custom/something/deep")
+        r2 = ctx.anonymize_path("/custom/something/deep")
+        assert r1 == r2
+
+
+# =============================================================================
+# TestAnonymizationContextInterfaces
+# =============================================================================
+
+
+class TestAnonymizationContextInterfaces:
+    """Additional tests for interface anonymization."""
+
+    def test_enp_interface(self):
+        """enp3s0 becomes 'enpN'."""
+        ctx = AnonymizationContext(secret=b"test-secret")
+        assert ctx.anonymize_interface("enp3s0") == "enpN"
+
+    def test_wlp_interface(self):
+        """wlp2s0 becomes 'wlpN'."""
+        ctx = AnonymizationContext(secret=b"test-secret")
+        assert ctx.anonymize_interface("wlp2s0") == "wlpN"
+
+    def test_unknown_interface_indexed(self):
+        """Unknown interface like bond0 gets indexed 'ifN'."""
+        ctx = AnonymizationContext(secret=b"test-secret")
+        r1 = ctx.anonymize_interface("bond0")
+        r2 = ctx.anonymize_interface("br-docker0")
+        assert r1 == "if0"
+        assert r2 == "if1"
+
+    def test_unknown_interface_cached(self):
+        """Same unknown interface returns same index."""
+        ctx = AnonymizationContext(secret=b"test-secret")
+        r1 = ctx.anonymize_interface("bond0")
+        r2 = ctx.anonymize_interface("bond0")
+        assert r1 == r2 == "if0"
+
+
+# =============================================================================
+# TestAnonymizeIncidentConvenienceFunction
+# =============================================================================
+
+
+class TestAnonymizeIncidentConvenience:
+    """Tests for the anonymize_incident() convenience function."""
+
+    def test_basic_anonymization(self):
+        """anonymize_incident() wraps IncidentAnonymizer.anonymize()."""
+        from elle.daemon.incidents.anonymize import anonymize_incident
+
+        incident = _make_incident()
+        result = anonymize_incident(incident)
+        assert isinstance(result, AnonymizedIncidentReport)
+        assert result.incident_id == "inc-001"
+
+    def test_with_all_params(self):
+        """anonymize_incident() passes all parameters through."""
+        from elle.daemon.incidents.anonymize import anonymize_incident
+
+        incident = _make_incident()
+        actions = [_make_action(kind="shell")]
+        hashes_pre = {"a": "b"}
+        hashes_post = {"a": "c"}
+        control_pre = {"services": []}
+        control_post = {"services": []}
+        telemetry_pre = {"cpu": {}}
+        telemetry_post = {"cpu": {}}
+
+        result = anonymize_incident(
+            incident=incident,
+            actions=actions,
+            telemetry_pre=telemetry_pre,
+            telemetry_post=telemetry_post,
+            surface_hashes_pre=hashes_pre,
+            surface_hashes_post=hashes_post,
+            control_surface_pre=control_pre,
+            control_surface_post=control_post,
+            detail_level="detailed",
+        )
+        assert result.detail_level == "detailed"
+        assert result.action_summary.total_actions == 1
+        assert result.control_surface_pre is not None
+
+    def test_default_detail_level(self):
+        """Default detail_level is 'hashes'."""
+        from elle.daemon.incidents.anonymize import anonymize_incident
+
+        incident = _make_incident()
+        result = anonymize_incident(incident)
+        assert result.detail_level == "hashes"
+
+
+# =============================================================================
+# TestAnonymizeSecretManagement
+# =============================================================================
+
+
+class TestAnonymizeSecretManagement:
+    """Tests for _get_anon_secret and set_anon_secret."""
+
+    def test_get_anon_secret_generates_when_none(self):
+        """_get_anon_secret generates a secret when not set."""
+        from elle.daemon.incidents.anonymize import _get_anon_secret
+
+        set_anon_secret(None)  # Clear
+        # Force clear the global
+        import elle.daemon.incidents.anonymize as anon_module
+
+        anon_module._ANON_SECRET = None
+        secret = _get_anon_secret()
+        assert isinstance(secret, bytes)
+        assert len(secret) == 32
+
+    def test_set_anon_secret_overrides(self):
+        """set_anon_secret() overrides the global secret."""
+        from elle.daemon.incidents.anonymize import _get_anon_secret
+
+        set_anon_secret(b"custom-secret")
+        assert _get_anon_secret() == b"custom-secret"
+
+    def test_anon_context_uses_installation_secret(self):
+        """When no secret provided, AnonymizationContext uses installation secret."""
+        set_anon_secret(b"installation-level")
+        ctx = AnonymizationContext()
+        # Hashing should work
+        result = ctx.anonymize_hostname("test-host")
+        assert result.startswith("anon-")
+
+
+# =============================================================================
+# TestAnonymizedModels
+# =============================================================================
+
+
+class TestAnonymizedModels:
+    """Tests for Pydantic model validation edge cases."""
+
+    def test_action_summary_defaults(self):
+        """ActionSummary with defaults."""
+        from elle.daemon.incidents.anonymize import ActionSummary
+
+        summary = ActionSummary()
+        assert summary.total_actions == 0
+        assert summary.successful_actions == 0
+        assert summary.failed_actions == 0
+        assert summary.shell_count == 0
+        assert summary.total_duration_ms == 0
+        assert summary.avg_duration_ms == 0
+
+    def test_drift_explanation_defaults(self):
+        """DriftExplanation with defaults."""
+        from elle.daemon.incidents.anonymize import DriftExplanation
+
+        de = DriftExplanation(surface="test", changed=True)
+        assert de.surface == "test"
+        assert de.changed is True
+        assert de.explanation == ""
+        assert de.before_value is None
+        assert de.after_value is None
+
+    def test_drift_explanation_with_values(self):
+        """DriftExplanation with all fields."""
+        from elle.daemon.incidents.anonymize import DriftExplanation
+
+        de = DriftExplanation(
+            surface="service:nginx",
+            changed=True,
+            explanation="nginx was restarted",
+            before_value="active",
+            after_value="inactive",
+        )
+        assert de.explanation == "nginx was restarted"
+        assert de.before_value == "active"
+
+    def test_anonymized_report_defaults(self):
+        """AnonymizedIncidentReport defaults."""
+        now = datetime(2024, 1, 1, 0, 0, 0)
+        report = AnonymizedIncidentReport(
+            incident_id="test-001",
+            created_at_hour=now,
+            updated_at_hour=now,
+        )
+        assert report.domain == "other"
+        assert report.severity == "warning"
+        assert report.status == "open"
+        assert report.outcome == "unknown"
+        assert report.confidence == 0.0
+        assert report.anonymization_version == "1.0"
+        assert report.detail_level == "hashes"
+        assert report.original_hash == ""
+
+    def test_anonymized_report_frozen(self):
+        """AnonymizedIncidentReport is frozen (immutable)."""
+        now = datetime(2024, 1, 1, 0, 0, 0)
+        report = AnonymizedIncidentReport(
+            incident_id="test-001",
+            created_at_hour=now,
+            updated_at_hour=now,
+        )
+        with pytest.raises(Exception):
+            report.incident_id = "other"
+
+
+# =============================================================================
+# TestAnonymizeWithIncidentTelemetry
+# =============================================================================
+
+
+class TestAnonymizeWithIncidentTelemetry:
+    """Tests for anonymize() when telemetry comes from the incident model directly."""
+
+    def test_telemetry_from_incident_model(self):
+        """When no external telemetry passed, use incident's own telemetry_pre/post."""
+        incident = _make_incident(
+            telemetry_pre={"cpu": {"load": 5.0}, "uptime_sec": 1000},
+            telemetry_post={"cpu": {"load": 2.0}, "uptime_sec": 1100},
+        )
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        result = anonymizer.anonymize(incident)
+        assert result.telemetry_pre is not None
+        assert result.telemetry_pre["cpu"] == {"load": 5.0}
+        assert result.telemetry_post is not None
+        assert result.telemetry_post["cpu"] == {"load": 2.0}
+
+    def test_external_telemetry_overrides_incident(self):
+        """External telemetry takes priority over incident telemetry."""
+        incident = _make_incident(
+            telemetry_pre={"cpu": {"load": 5.0}, "uptime_sec": 0},
+        )
+        external_pre = {"memory": {"total": 16384}, "uptime_sec": 2000}
+
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        result = anonymizer.anonymize(incident, telemetry_pre=external_pre)
+        # External overrides incident
+        assert result.telemetry_pre is not None
+        assert "memory" in result.telemetry_pre
+
+    def test_control_surface_from_incident(self):
+        """When no external control surface, use incident's own."""
+        incident = _make_incident(
+            control_surface_pre={"packages": {"packages": [{"name": "nginx"}]}},
+            control_surface_post={"packages": {"packages": [{"name": "nginx"}, {"name": "curl"}]}},
+        )
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        result = anonymizer.anonymize(
+            incident,
+            surface_hashes_pre={"packages": "a"},
+            surface_hashes_post={"packages": "b"},
+            detail_level="detailed",
+        )
+        assert result.control_surface_pre is not None
+        assert result.control_surface_post is not None
+
+
+# =============================================================================
+# TestMountPointGeneralization
+# =============================================================================
+
+
+class TestMountPointGeneralization:
+    """Tests for _generalize_mount_point."""
+
+    def test_all_known_mounts(self):
+        """Test all entries in MOUNT_CATEGORIES."""
+        from elle.daemon.incidents.anonymize import MOUNT_CATEGORIES
+
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        for mount, category in MOUNT_CATEGORIES.items():
+            assert anonymizer._generalize_mount_point(mount) == category
+
+    def test_empty_mount(self):
+        """Empty mount returns empty string."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        assert anonymizer._generalize_mount_point("") == ""
+
+    def test_unknown_mount(self):
+        """Unknown mount returns 'other'."""
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        assert anonymizer._generalize_mount_point("/data/warehouse") == "other"
+
+
+# =============================================================================
+# TestPreserveSurfaceHashes
+# =============================================================================
+
+
+class TestPreserveSurfaceHashes:
+    """Tests for _preserve_surface_hashes."""
+
+    def test_none_returns_none(self):
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        assert anonymizer._preserve_surface_hashes(None) is None
+
+    def test_returns_copy(self):
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        original = {"key": "value"}
+        result = anonymizer._preserve_surface_hashes(original)
+        assert result == original
+        assert result is not original
+
+    def test_empty_dict(self):
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        assert anonymizer._preserve_surface_hashes({}) == {}
+
+
+# =============================================================================
+# TestComputeIncidentHash
+# =============================================================================
+
+
+class TestComputeIncidentHash:
+    """Tests for _compute_incident_hash."""
+
+    def test_deterministic(self):
+        """Same incident produces same hash."""
+        incident = _make_incident()
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        h1 = anonymizer._compute_incident_hash(incident)
+        h2 = anonymizer._compute_incident_hash(incident)
+        assert h1 == h2
+
+    def test_different_incidents_different_hashes(self):
+        """Different incidents produce different hashes."""
+        i1 = _make_incident(incident_id="a")
+        i2 = _make_incident(incident_id="b")
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        assert anonymizer._compute_incident_hash(i1) != anonymizer._compute_incident_hash(i2)
+
+
+# =============================================================================
+# TestHmacHash
+# =============================================================================
+
+
+class TestHmacHash:
+    """Tests for the _hmac_hash method."""
+
+    def test_with_prefix(self):
+        ctx = AnonymizationContext(secret=b"test-secret")
+        result = ctx._hmac_hash("value", "pre-")
+        assert result.startswith("pre-")
+        assert len(result) > 4
+
+    def test_without_prefix(self):
+        ctx = AnonymizationContext(secret=b"test-secret")
+        result = ctx._hmac_hash("value")
+        assert not result.startswith("pre-")
+        assert len(result) == 12  # 12 hex chars
+
+    def test_deterministic(self):
+        ctx = AnonymizationContext(secret=b"test-secret")
+        r1 = ctx._hmac_hash("same-input", "p-")
+        r2 = ctx._hmac_hash("same-input", "p-")
+        assert r1 == r2
+
+    def test_different_inputs(self):
+        ctx = AnonymizationContext(secret=b"test-secret")
+        r1 = ctx._hmac_hash("input-a")
+        r2 = ctx._hmac_hash("input-b")
+        assert r1 != r2
+
+
+# =============================================================================
+# TestSurfaceDriftWithAsymmetricKeys
+# =============================================================================
+
+
+class TestSurfaceDriftWithAsymmetricKeys:
+    """Test surface drift when pre and post have different key sets."""
+
+    def test_key_only_in_post(self):
+        """Key in post but not pre means drift=True."""
+        hashes_pre = {"a": "1"}
+        hashes_post = {"a": "1", "b": "2"}
+
+        incident = _make_incident()
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        result = anonymizer.anonymize(
+            incident,
+            surface_hashes_pre=hashes_pre,
+            surface_hashes_post=hashes_post,
+        )
+        assert result.surface_drift["a"] is False
+        assert result.surface_drift["b"] is True  # None != "2"
+
+    def test_key_only_in_pre(self):
+        """Key in pre but not post means drift=True."""
+        hashes_pre = {"a": "1", "b": "2"}
+        hashes_post = {"a": "1"}
+
+        incident = _make_incident()
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        result = anonymizer.anonymize(
+            incident,
+            surface_hashes_pre=hashes_pre,
+            surface_hashes_post=hashes_post,
+        )
+        assert result.surface_drift["a"] is False
+        assert result.surface_drift["b"] is True  # "2" != None
+
+
+# =============================================================================
+# TestExplainSimpleDrift
+# =============================================================================
+
+
+class TestExplainSimpleDrift:
+    """Tests for _explain_simple_drift."""
+
+    def test_changed(self):
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        result = anonymizer._explain_simple_drift("Test Surface", True)
+        assert result == "Test Surface changed"
+
+    def test_unchanged(self):
+        anonymizer = IncidentAnonymizer(secret=b"test-secret")
+        result = anonymizer._explain_simple_drift("Test Surface", False)
+        assert result == "Test Surface unchanged"

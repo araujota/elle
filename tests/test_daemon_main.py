@@ -10,9 +10,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from elle.daemon.config import ApiConfig, Config, QueueConfig
+from elle.daemon.config import ApiConfig, CloudSyncConfig, Config, QueueConfig
 from elle.daemon.main import (
     ElledDaemon,
+    main,
+    run_daemon,
     setup_logging,
 )
 from elle.daemon.telemetry.models import DaemonStatus, TelemetryEvent
@@ -517,3 +519,1030 @@ class TestRun:
                 await daemon.run()
                 mock_start.assert_awaited_once()
                 mock_stop.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# _correlate_events
+# ---------------------------------------------------------------------------
+
+
+class TestCorrelateEvents:
+    async def test_correlate_warning_creates_incident(self, daemon):
+        mock_correlator = MagicMock()
+        mock_correlator.process_event.return_value = "inc-123"
+        with patch("elle.daemon.incidents.correlator.get_correlator", return_value=mock_correlator):
+            with patch.object(daemon, "_notify_incident", new_callable=AsyncMock) as mock_notify:
+                events = [_mock_event(severity="warning")]
+                await daemon._correlate_events(events)
+                mock_correlator.process_event.assert_called_once()
+                assert daemon._incidents_total == 1
+                mock_notify.assert_awaited_once()
+
+    async def test_correlate_error_creates_incident(self, daemon):
+        mock_correlator = MagicMock()
+        mock_correlator.process_event.return_value = "inc-456"
+        with patch("elle.daemon.incidents.correlator.get_correlator", return_value=mock_correlator):
+            with patch.object(daemon, "_notify_incident", new_callable=AsyncMock):
+                events = [_mock_event(severity="error")]
+                await daemon._correlate_events(events)
+                assert daemon._incidents_total == 1
+
+    async def test_correlate_critical_creates_incident(self, daemon):
+        mock_correlator = MagicMock()
+        mock_correlator.process_event.return_value = "inc-789"
+        with patch("elle.daemon.incidents.correlator.get_correlator", return_value=mock_correlator):
+            with patch.object(daemon, "_notify_incident", new_callable=AsyncMock):
+                events = [_mock_event(severity="critical")]
+                await daemon._correlate_events(events)
+                assert daemon._incidents_total == 1
+
+    async def test_correlate_info_skipped(self, daemon):
+        mock_correlator = MagicMock()
+        with patch("elle.daemon.incidents.correlator.get_correlator", return_value=mock_correlator):
+            events = [_mock_event(severity="info")]
+            await daemon._correlate_events(events)
+            mock_correlator.process_event.assert_not_called()
+            assert daemon._incidents_total == 0
+
+    async def test_correlate_no_incident_returned(self, daemon):
+        mock_correlator = MagicMock()
+        mock_correlator.process_event.return_value = None
+        with patch("elle.daemon.incidents.correlator.get_correlator", return_value=mock_correlator):
+            events = [_mock_event(severity="error")]
+            await daemon._correlate_events(events)
+            assert daemon._incidents_total == 0
+
+    async def test_correlate_exception_handled(self, daemon):
+        mock_correlator = MagicMock()
+        mock_correlator.process_event.side_effect = RuntimeError("DB error")
+        with patch("elle.daemon.incidents.correlator.get_correlator", return_value=mock_correlator):
+            events = [_mock_event(severity="error")]
+            await daemon._correlate_events(events)
+            assert daemon._incidents_total == 0
+
+    async def test_correlate_multiple_events(self, daemon):
+        mock_correlator = MagicMock()
+        mock_correlator.process_event.side_effect = ["inc-1", None, "inc-3"]
+        with patch("elle.daemon.incidents.correlator.get_correlator", return_value=mock_correlator):
+            with patch.object(daemon, "_notify_incident", new_callable=AsyncMock):
+                events = [
+                    _mock_event(severity="warning"),
+                    _mock_event(severity="error"),
+                    _mock_event(severity="critical"),
+                ]
+                await daemon._correlate_events(events)
+                assert daemon._incidents_total == 2
+
+
+# ---------------------------------------------------------------------------
+# _processor_loop
+# ---------------------------------------------------------------------------
+
+
+class TestProcessorLoop:
+    async def test_processor_no_queue_sleeps(self, daemon):
+        daemon.event_queue = None
+        # Set shutdown after a brief moment
+        async def set_shutdown():
+            await asyncio.sleep(0.2)
+            daemon.shutdown.set()
+
+        asyncio.create_task(set_shutdown())
+        await daemon._processor_loop()
+
+    async def test_processor_empty_batch(self, daemon):
+        mock_queue = MagicMock()
+        mock_queue.get_batch = AsyncMock(return_value=[])
+        daemon.event_queue = mock_queue
+
+        async def set_shutdown():
+            await asyncio.sleep(0.2)
+            daemon.shutdown.set()
+
+        asyncio.create_task(set_shutdown())
+        await daemon._processor_loop()
+
+    async def test_processor_processes_events(self, daemon):
+        events = [_mock_event(severity="info")]
+        mock_queue = MagicMock()
+        call_count = 0
+
+        async def get_batch_side_effect(max_items=100, timeout=1.0):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return events
+            daemon.shutdown.set()
+            return []
+
+        mock_queue.get_batch = AsyncMock(side_effect=get_batch_side_effect)
+        daemon.event_queue = mock_queue
+
+        with patch("elle.daemon.main.insert_events_batch", return_value=1) as mock_insert:
+            with patch.object(daemon, "_correlate_events", new_callable=AsyncMock) as mock_corr:
+                with patch.object(daemon, "_route_to_reactive", new_callable=AsyncMock) as mock_route:
+                    await daemon._processor_loop()
+                    mock_insert.assert_called_once_with(events)
+                    mock_corr.assert_awaited_once()
+                    mock_route.assert_awaited_once()
+                    assert daemon._events_total == 1
+
+    async def test_processor_store_failure(self, daemon, caplog):
+        events = [_mock_event()]
+        mock_queue = MagicMock()
+        call_count = 0
+
+        async def get_batch_side_effect(max_items=100, timeout=1.0):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return events
+            daemon.shutdown.set()
+            return []
+
+        mock_queue.get_batch = AsyncMock(side_effect=get_batch_side_effect)
+        daemon.event_queue = mock_queue
+
+        with patch("elle.daemon.main.insert_events_batch", side_effect=RuntimeError("DB fail")):
+            with patch.object(daemon, "_correlate_events", new_callable=AsyncMock):
+                with patch.object(daemon, "_route_to_reactive", new_callable=AsyncMock):
+                    with caplog.at_level(logging.ERROR):
+                        await daemon._processor_loop()
+                    assert "Failed to store events" in caplog.text
+
+    async def test_processor_correlate_failure(self, daemon, caplog):
+        events = [_mock_event()]
+        mock_queue = MagicMock()
+        call_count = 0
+
+        async def get_batch_side_effect(max_items=100, timeout=1.0):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return events
+            daemon.shutdown.set()
+            return []
+
+        mock_queue.get_batch = AsyncMock(side_effect=get_batch_side_effect)
+        daemon.event_queue = mock_queue
+
+        with patch("elle.daemon.main.insert_events_batch", return_value=1):
+            with patch.object(daemon, "_correlate_events", new_callable=AsyncMock, side_effect=RuntimeError("corr fail")):
+                with patch.object(daemon, "_route_to_reactive", new_callable=AsyncMock):
+                    with caplog.at_level(logging.ERROR):
+                        await daemon._processor_loop()
+                    assert "Failed to correlate events" in caplog.text
+
+    async def test_processor_route_failure(self, daemon, caplog):
+        events = [_mock_event()]
+        mock_queue = MagicMock()
+        call_count = 0
+
+        async def get_batch_side_effect(max_items=100, timeout=1.0):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return events
+            daemon.shutdown.set()
+            return []
+
+        mock_queue.get_batch = AsyncMock(side_effect=get_batch_side_effect)
+        daemon.event_queue = mock_queue
+
+        with patch("elle.daemon.main.insert_events_batch", return_value=1):
+            with patch.object(daemon, "_correlate_events", new_callable=AsyncMock):
+                with patch.object(daemon, "_route_to_reactive", new_callable=AsyncMock, side_effect=RuntimeError("route fail")):
+                    with caplog.at_level(logging.ERROR):
+                        await daemon._processor_loop()
+                    assert "Failed to route events" in caplog.text
+
+    async def test_processor_handles_pkg_events_with_versioning(self, daemon, caplog):
+        daemon.config = Config(
+            api=ApiConfig(enabled=False),
+            queues=QueueConfig(raw_queue_size=100, event_queue_size=50),
+            capability_versioning_enabled=True,
+            capability_bootstrap_enabled=False,
+        )
+        events = [_mock_event(category="pkg", severity="info")]
+        mock_queue = MagicMock()
+        call_count = 0
+
+        async def get_batch_side_effect(max_items=100, timeout=1.0):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return events
+            daemon.shutdown.set()
+            return []
+
+        mock_queue.get_batch = AsyncMock(side_effect=get_batch_side_effect)
+        daemon.event_queue = mock_queue
+
+        with patch("elle.daemon.main.insert_events_batch", return_value=1):
+            with patch.object(daemon, "_correlate_events", new_callable=AsyncMock):
+                with patch.object(daemon, "_route_to_reactive", new_callable=AsyncMock):
+                    with patch.object(daemon, "_handle_package_event", new_callable=AsyncMock) as mock_handle:
+                        await daemon._processor_loop()
+                        mock_handle.assert_awaited_once()
+
+    async def test_processor_pkg_event_handler_exception(self, daemon, caplog):
+        daemon.config = Config(
+            api=ApiConfig(enabled=False),
+            queues=QueueConfig(raw_queue_size=100, event_queue_size=50),
+            capability_versioning_enabled=True,
+            capability_bootstrap_enabled=False,
+        )
+        events = [_mock_event(category="pkg", severity="info")]
+        mock_queue = MagicMock()
+        call_count = 0
+
+        async def get_batch_side_effect(max_items=100, timeout=1.0):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return events
+            daemon.shutdown.set()
+            return []
+
+        mock_queue.get_batch = AsyncMock(side_effect=get_batch_side_effect)
+        daemon.event_queue = mock_queue
+
+        with patch("elle.daemon.main.insert_events_batch", return_value=1):
+            with patch.object(daemon, "_correlate_events", new_callable=AsyncMock):
+                with patch.object(daemon, "_route_to_reactive", new_callable=AsyncMock):
+                    with patch.object(daemon, "_handle_package_event", new_callable=AsyncMock, side_effect=RuntimeError("pkg fail")):
+                        await daemon._processor_loop()
+
+    async def test_processor_cancelled_error(self, daemon):
+        mock_queue = MagicMock()
+        mock_queue.get_batch = AsyncMock(side_effect=asyncio.CancelledError)
+        daemon.event_queue = mock_queue
+        await daemon._processor_loop()
+
+    async def test_processor_general_exception_continues(self, daemon, caplog):
+        mock_queue = MagicMock()
+        call_count = 0
+
+        async def get_batch_side_effect(max_items=100, timeout=1.0):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise ValueError("unexpected error")
+            daemon.shutdown.set()
+            return []
+
+        mock_queue.get_batch = AsyncMock(side_effect=get_batch_side_effect)
+        daemon.event_queue = mock_queue
+
+        with caplog.at_level(logging.ERROR):
+            await daemon._processor_loop()
+        assert "Processor error" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# _start_capability_versioning
+# ---------------------------------------------------------------------------
+
+
+class TestStartCapabilityVersioning:
+    async def test_successful_start(self, daemon):
+        mock_store = MagicMock()
+        mock_versioner = MagicMock()
+        mock_versioner.build_package_map.return_value = {"nginx": ["cap1"]}
+
+        with patch("elle.capabilities.autogen.store.get_store", return_value=mock_store):
+            with patch("elle.capabilities.autogen.versioner.CapabilityVersioner", return_value=mock_versioner):
+                await daemon._start_capability_versioning()
+
+        assert daemon._capability_versioner is mock_versioner
+
+    async def test_import_error(self, daemon, caplog):
+        with patch.dict("sys.modules", {"elle.capabilities.autogen.store": None}):
+            await daemon._start_capability_versioning()
+        assert daemon._capability_versioner is None
+
+    async def test_general_exception(self, daemon, caplog):
+        with patch("elle.capabilities.autogen.store.get_store", side_effect=RuntimeError("store fail")):
+            with caplog.at_level(logging.WARNING):
+                await daemon._start_capability_versioning()
+            assert "Failed to start capability versioning" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# _run_capability_bootstrap
+# ---------------------------------------------------------------------------
+
+
+class TestRunCapabilityBootstrap:
+    async def test_bootstrap_already_complete(self, daemon, caplog):
+        mock_mod = MagicMock()
+        mock_mod.should_run_bootstrap.return_value = False
+        with patch.dict("sys.modules", {"elle.capabilities.autogen.bootstrap": mock_mod}):
+            with caplog.at_level(logging.DEBUG):
+                await daemon._run_capability_bootstrap()
+
+    async def test_bootstrap_runs_successfully(self, daemon, caplog):
+        mock_result = MagicMock()
+        mock_result.packages_succeeded = 10
+        mock_result.packages_attempted = 10
+        mock_result.capabilities_saved = 50
+        mock_result.duration_seconds = 5.0
+        mock_result.failed_packages = []
+
+        mock_mod = MagicMock()
+        mock_mod.should_run_bootstrap.return_value = True
+        mock_mod.run_bootstrap = AsyncMock(return_value=mock_result)
+        mock_mod.set_bootstrap_complete = MagicMock()
+
+        with patch.dict("sys.modules", {"elle.capabilities.autogen.bootstrap": mock_mod}):
+            with caplog.at_level(logging.INFO):
+                await daemon._run_capability_bootstrap()
+            mock_mod.set_bootstrap_complete.assert_called_once_with(mock_result)
+
+    async def test_bootstrap_with_failures(self, daemon, caplog):
+        mock_result = MagicMock()
+        mock_result.packages_succeeded = 8
+        mock_result.packages_attempted = 10
+        mock_result.capabilities_saved = 40
+        mock_result.duration_seconds = 10.0
+        mock_result.failed_packages = ["pkg1", "pkg2"]
+
+        mock_mod = MagicMock()
+        mock_mod.should_run_bootstrap.return_value = True
+        mock_mod.run_bootstrap = AsyncMock(return_value=mock_result)
+        mock_mod.set_bootstrap_complete = MagicMock()
+
+        with patch.dict("sys.modules", {"elle.capabilities.autogen.bootstrap": mock_mod}):
+            with caplog.at_level(logging.WARNING):
+                await daemon._run_capability_bootstrap()
+            assert "failed" in caplog.text.lower()
+
+    async def test_bootstrap_import_error(self, daemon, caplog):
+        with patch.dict("sys.modules", {"elle.capabilities.autogen.bootstrap": None}):
+            await daemon._run_capability_bootstrap()
+
+    async def test_bootstrap_cancelled(self, daemon):
+        mock_mod = MagicMock()
+        mock_mod.should_run_bootstrap.return_value = True
+        mock_mod.run_bootstrap = AsyncMock(side_effect=asyncio.CancelledError)
+
+        with patch.dict("sys.modules", {"elle.capabilities.autogen.bootstrap": mock_mod}):
+            await daemon._run_capability_bootstrap()
+
+    async def test_bootstrap_general_exception(self, daemon, caplog):
+        mock_mod = MagicMock()
+        mock_mod.should_run_bootstrap.return_value = True
+        mock_mod.run_bootstrap = AsyncMock(side_effect=RuntimeError("bootstrap fail"))
+
+        with patch.dict("sys.modules", {"elle.capabilities.autogen.bootstrap": mock_mod}):
+            with caplog.at_level(logging.ERROR):
+                await daemon._run_capability_bootstrap()
+            assert "Capability bootstrap failed" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# _start_cloud_retry_worker
+# ---------------------------------------------------------------------------
+
+
+class TestStartCloudRetryWorker:
+    async def test_cloud_sync_disabled(self, daemon, caplog):
+        daemon.config = Config(
+            api=ApiConfig(enabled=False),
+            queues=QueueConfig(raw_queue_size=100, event_queue_size=50),
+            cloud_sync=CloudSyncConfig(enabled=False),
+        )
+        with caplog.at_level(logging.INFO):
+            await daemon._start_cloud_retry_worker()
+        assert "Cloud sync disabled" in caplog.text
+
+    async def test_cloud_sync_enabled_success(self, daemon):
+        daemon.config = Config(
+            api=ApiConfig(enabled=False),
+            queues=QueueConfig(raw_queue_size=100, event_queue_size=50),
+            cloud_sync=CloudSyncConfig(enabled=True),
+        )
+        mock_worker = MagicMock()
+        mock_worker.start = AsyncMock()
+
+        with patch("elle.daemon.incidents.cloud_queue.configure_cloud_queue"):
+            with patch("elle.daemon.incidents.cloud_retry_worker.CloudRetryWorker", return_value=mock_worker):
+                await daemon._start_cloud_retry_worker()
+        assert daemon._cloud_retry_worker is mock_worker
+        mock_worker.start.assert_awaited_once()
+
+    async def test_cloud_sync_exception(self, daemon, caplog):
+        daemon.config = Config(
+            api=ApiConfig(enabled=False),
+            queues=QueueConfig(raw_queue_size=100, event_queue_size=50),
+            cloud_sync=CloudSyncConfig(enabled=True),
+        )
+        with patch("elle.daemon.incidents.cloud_queue.configure_cloud_queue", side_effect=RuntimeError("cloud fail")):
+            with caplog.at_level(logging.WARNING):
+                await daemon._start_cloud_retry_worker()
+            assert "Failed to start cloud retry worker" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# _handle_package_event - additional coverage
+# ---------------------------------------------------------------------------
+
+
+class TestHandlePackageEventExtended:
+    async def test_missing_new_version(self, daemon):
+        daemon._capability_versioner = MagicMock()
+        event = _mock_event(category="pkg", raw={"package_name": "nginx"})
+        await daemon._handle_package_event(event)
+        daemon._capability_versioner.on_package_upgraded.assert_not_called()
+
+    async def test_exception_in_versioner(self, daemon, caplog):
+        mock_versioner = MagicMock()
+        mock_versioner.on_package_upgraded = AsyncMock(side_effect=RuntimeError("regen fail"))
+        daemon._capability_versioner = mock_versioner
+        event = _mock_event(
+            category="pkg",
+            raw={"package_name": "nginx", "new_version": "2.0", "old_version": "1.0"},
+        )
+        with caplog.at_level(logging.ERROR):
+            await daemon._handle_package_event(event)
+        assert "Failed to handle package upgrade" in caplog.text
+
+    async def test_regenerated_empty_list(self, daemon):
+        mock_versioner = MagicMock()
+        mock_versioner.on_package_upgraded = AsyncMock(return_value=[])
+        daemon._capability_versioner = mock_versioner
+        event = _mock_event(
+            category="pkg",
+            raw={"package_name": "nginx", "new_version": "2.0", "old_version": "1.0"},
+        )
+        await daemon._handle_package_event(event)
+
+
+# ---------------------------------------------------------------------------
+# _notify_incident - additional coverage
+# ---------------------------------------------------------------------------
+
+
+class TestNotifyIncidentExtended:
+    async def test_critical_severity_notifies(self, daemon):
+        mock_mod = MagicMock()
+        with patch.dict("sys.modules", {"elle.daemon.notifications": mock_mod}):
+            await daemon._notify_incident("inc1", "test", "critical", "disk")
+            mock_mod.notify_incident.assert_called_once()
+
+    async def test_notify_exception_handled(self, daemon, caplog):
+        mock_mod = MagicMock()
+        mock_mod.notify_incident.side_effect = RuntimeError("notify fail")
+        with patch.dict("sys.modules", {"elle.daemon.notifications": mock_mod}):
+            with caplog.at_level(logging.DEBUG):
+                await daemon._notify_incident("inc1", "test", "error", "disk")
+
+    async def test_info_severity_skipped(self, daemon):
+        await daemon._notify_incident("inc1", "test", "info", "disk")
+
+    async def test_notice_severity_skipped(self, daemon):
+        await daemon._notify_incident("inc1", "test", "notice", "disk")
+
+
+# ---------------------------------------------------------------------------
+# _check_reboot_recovery - additional coverage
+# ---------------------------------------------------------------------------
+
+
+class TestCheckRebootRecoveryExtended:
+    async def test_intent_with_unknown_outcome_no_update(self, daemon):
+        mock_intent = MagicMock()
+        mock_intent.id = "i1"
+        mock_intent.status = "completed"
+        mock_intent.outcome = "unknown"
+        mock_intent.incident_id = "inc1"
+
+        mock_mgr = MagicMock()
+        mock_mgr.check_pending_reboots = AsyncMock(return_value=mock_intent)
+        mock_mgr.cleanup_stale_intents = AsyncMock(return_value=0)
+
+        with patch("elle.daemon.reboot.get_manager", return_value=mock_mgr):
+            with patch.object(daemon, "_update_incident_with_reboot_result", new_callable=AsyncMock) as mock_update:
+                await daemon._check_reboot_recovery()
+                mock_update.assert_not_awaited()
+
+    async def test_intent_without_incident_id_no_update(self, daemon):
+        mock_intent = MagicMock()
+        mock_intent.id = "i1"
+        mock_intent.status = "completed"
+        mock_intent.outcome = "improved"
+        mock_intent.incident_id = None
+
+        mock_mgr = MagicMock()
+        mock_mgr.check_pending_reboots = AsyncMock(return_value=mock_intent)
+        mock_mgr.cleanup_stale_intents = AsyncMock(return_value=0)
+
+        with patch("elle.daemon.reboot.get_manager", return_value=mock_mgr):
+            with patch.object(daemon, "_update_incident_with_reboot_result", new_callable=AsyncMock) as mock_update:
+                await daemon._check_reboot_recovery()
+                mock_update.assert_not_awaited()
+
+    async def test_stale_intents_cleaned(self, daemon, caplog):
+        mock_mgr = MagicMock()
+        mock_mgr.check_pending_reboots = AsyncMock(return_value=None)
+        mock_mgr.cleanup_stale_intents = AsyncMock(return_value=3)
+
+        with patch("elle.daemon.reboot.get_manager", return_value=mock_mgr):
+            with caplog.at_level(logging.WARNING):
+                await daemon._check_reboot_recovery()
+            assert "Cleaned up 3 stale reboot intents" in caplog.text
+
+    async def test_general_exception(self, daemon, caplog):
+        with patch("elle.daemon.reboot.get_manager", side_effect=RuntimeError("reboot fail")):
+            with caplog.at_level(logging.ERROR):
+                await daemon._check_reboot_recovery()
+            assert "Failed to check reboot recovery" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# _update_incident_with_reboot_result - additional coverage
+# ---------------------------------------------------------------------------
+
+
+class TestUpdateIncidentExtended:
+    async def test_rolled_back_outcome(self, daemon):
+        mock_intent = MagicMock()
+        mock_intent.outcome = "rolled_back"
+        mock_intent.incident_id = "inc1"
+        mock_intent.outcome_detail = "reverted changes"
+        with patch("elle.daemon.incidents.store.update_incident") as mock_update:
+            await daemon._update_incident_with_reboot_result(mock_intent)
+        mock_update.assert_called_once()
+        call_kwargs = mock_update.call_args
+        assert call_kwargs[1]["outcome"] == "partial"
+
+    async def test_other_outcome_does_nothing(self, daemon):
+        mock_intent = MagicMock()
+        mock_intent.outcome = "pending"
+        mock_intent.incident_id = "inc1"
+        with patch("elle.daemon.incidents.store.update_incident") as mock_update:
+            await daemon._update_incident_with_reboot_result(mock_intent)
+        mock_update.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _route_to_reactive - additional coverage
+# ---------------------------------------------------------------------------
+
+
+class TestRouteToReactiveExtended:
+    async def test_route_per_event_exception(self, daemon, caplog):
+        mock_router = MagicMock()
+        mock_router.route = AsyncMock(side_effect=RuntimeError("route fail"))
+        mock_mod = MagicMock()
+        mock_mod.get_router.return_value = mock_router
+        with patch.dict("sys.modules", {"elle.reactive.router": mock_mod}):
+            events = [_mock_event(), _mock_event()]
+            await daemon._route_to_reactive(events)
+
+
+# ---------------------------------------------------------------------------
+# stop - additional coverage
+# ---------------------------------------------------------------------------
+
+
+class TestStopExtended:
+    async def test_stop_cloud_retry_worker(self, daemon):
+        daemon.started_at = datetime.now(timezone.utc)
+        mock_worker = MagicMock()
+        mock_worker.stop = AsyncMock()
+        daemon._cloud_retry_worker = mock_worker
+        await daemon.stop()
+        mock_worker.stop.assert_awaited_once()
+
+    async def test_stop_cloud_retry_worker_error(self, daemon, caplog):
+        daemon.started_at = datetime.now(timezone.utc)
+        mock_worker = MagicMock()
+        mock_worker.stop = AsyncMock(side_effect=RuntimeError("cloud stop fail"))
+        daemon._cloud_retry_worker = mock_worker
+        with caplog.at_level(logging.WARNING):
+            await daemon.stop()
+        assert "Error stopping cloud retry worker" in caplog.text
+
+    async def test_stop_task_timeout(self, daemon, caplog):
+        daemon.started_at = datetime.now(timezone.utc)
+
+        async def _never_ending():
+            try:
+                while True:
+                    await asyncio.sleep(3600)
+            except asyncio.CancelledError:
+                # Simulate a task that doesn't stop quickly
+                await asyncio.sleep(10)
+
+        task = asyncio.create_task(_never_ending())
+        daemon._tasks = [task]
+
+        with caplog.at_level(logging.WARNING):
+            await daemon.stop()
+        # The timeout may or may not be hit depending on timing,
+        # but the stop should still complete
+
+
+# ---------------------------------------------------------------------------
+# _warmup_models - additional coverage
+# ---------------------------------------------------------------------------
+
+
+class TestWarmupModelsExtended:
+    async def test_model_not_ready(self, daemon, caplog):
+        mock_service = MagicMock()
+        mock_service.ensure_model_ready = AsyncMock(return_value=False)
+
+        with patch("elle.rag.model_warmup.ModelWarmupService", return_value=mock_service):
+            with caplog.at_level(logging.WARNING):
+                await daemon._warmup_models()
+        assert "not available" in caplog.text
+
+    async def test_model_ready_warmup_success(self, daemon, caplog):
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.model = "qwen2.5"
+        mock_result.duration_ms = 150.0
+
+        mock_service = MagicMock()
+        mock_service.ensure_model_ready = AsyncMock(return_value=True)
+        mock_service.warm_llm = AsyncMock(return_value=mock_result)
+        mock_service.start_periodic_warmup = AsyncMock()
+
+        with patch("elle.rag.model_warmup.ModelWarmupService", return_value=mock_service):
+            with caplog.at_level(logging.INFO):
+                await daemon._warmup_models()
+        mock_service.start_periodic_warmup.assert_awaited_once()
+
+    async def test_model_ready_warmup_failure(self, daemon, caplog):
+        mock_result = MagicMock()
+        mock_result.success = False
+        mock_result.error = "timeout"
+
+        mock_service = MagicMock()
+        mock_service.ensure_model_ready = AsyncMock(return_value=True)
+        mock_service.warm_llm = AsyncMock(return_value=mock_result)
+
+        with patch("elle.rag.model_warmup.ModelWarmupService", return_value=mock_service):
+            with caplog.at_level(logging.WARNING):
+                await daemon._warmup_models()
+        assert "warmup failed" in caplog.text.lower()
+
+
+# ---------------------------------------------------------------------------
+# _start_notification_service - additional coverage
+# ---------------------------------------------------------------------------
+
+
+class TestStartNotificationExtended:
+    async def test_successful_start(self, daemon, caplog):
+        mock_svc = MagicMock()
+        mock_svc.start = AsyncMock()
+        mock_mod = MagicMock()
+        mock_mod.get_service.return_value = mock_svc
+        with patch.dict("sys.modules", {"elle.daemon.notifications": mock_mod}):
+            with caplog.at_level(logging.INFO):
+                await daemon._start_notification_service()
+            assert "Notification service started" in caplog.text
+            assert daemon._notification_service is mock_svc
+
+
+# ---------------------------------------------------------------------------
+# _run_api - additional coverage
+# ---------------------------------------------------------------------------
+
+
+class TestRunApiExtended:
+    async def test_server_exception(self, daemon, caplog):
+        mock_uvicorn = MagicMock()
+        mock_server = MagicMock()
+        mock_server.serve = AsyncMock(side_effect=RuntimeError("bind failed"))
+        mock_uvicorn.Server.return_value = mock_server
+        mock_uvicorn.Config = MagicMock()
+        with patch.dict("sys.modules", {"uvicorn": mock_uvicorn}):
+            with patch("elle.daemon.api.app.create_app", return_value=MagicMock()):
+                with caplog.at_level(logging.ERROR):
+                    await daemon._run_api()
+                assert "API server error" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# setup_logging - additional coverage
+# ---------------------------------------------------------------------------
+
+
+class TestSetupLoggingExtended:
+    def test_warning_level(self):
+        setup_logging("WARNING")
+        root = logging.getLogger()
+        assert root.level == logging.WARNING
+
+    def test_error_level(self):
+        setup_logging("ERROR")
+        root = logging.getLogger()
+        assert root.level == logging.ERROR
+
+    def test_invalid_level_defaults_to_info(self):
+        setup_logging("NONEXISTENT")
+        root = logging.getLogger()
+        assert root.level == logging.INFO
+
+
+# ---------------------------------------------------------------------------
+# run_daemon
+# ---------------------------------------------------------------------------
+
+
+class TestRunDaemon:
+    async def test_run_daemon_creates_and_runs(self):
+        with patch("elle.daemon.main.ElledDaemon") as MockDaemon:
+            mock_instance = MagicMock()
+            mock_instance.run = AsyncMock()
+            mock_instance.shutdown = asyncio.Event()
+            MockDaemon.return_value = mock_instance
+
+            # run_daemon accesses the event loop, so we patch that
+            mock_loop = MagicMock()
+            mock_loop.add_signal_handler = MagicMock()
+            mock_loop.remove_signal_handler = MagicMock()
+            with patch("asyncio.get_event_loop", return_value=mock_loop):
+                await run_daemon(Config())
+            mock_instance.run.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
+
+
+class TestMain:
+    @patch("elle.daemon.main.asyncio.run")
+    @patch("elle.daemon.main.set_config")
+    @patch("elle.daemon.main.load_config")
+    @patch("elle.daemon.main.setup_logging")
+    @patch("argparse.ArgumentParser.parse_args")
+    def test_main_defaults(self, mock_args, mock_setup, mock_load, mock_set, mock_run):
+        mock_args.return_value = MagicMock(config=None, log_level="INFO", no_api=False)
+        mock_load.return_value = Config()
+        result = main()
+        assert result == 0
+        mock_setup.assert_called_once_with("INFO")
+        mock_load.assert_called_once()
+        mock_set.assert_called_once()
+        mock_run.assert_called_once()
+
+    @patch("elle.daemon.main.asyncio.run")
+    @patch("elle.daemon.main.set_config")
+    @patch("elle.daemon.main.load_config")
+    @patch("elle.daemon.main.setup_logging")
+    @patch("argparse.ArgumentParser.parse_args")
+    def test_main_no_api_flag(self, mock_args, mock_setup, mock_load, mock_set, mock_run):
+        mock_args.return_value = MagicMock(config=None, log_level="DEBUG", no_api=True)
+        mock_load.return_value = Config()
+        result = main()
+        assert result == 0
+        # Verify that api was set to disabled
+        call_args = mock_set.call_args[0][0]
+        assert call_args.api.enabled is False
+
+    @patch("elle.daemon.main.asyncio.run", side_effect=KeyboardInterrupt)
+    @patch("elle.daemon.main.set_config")
+    @patch("elle.daemon.main.load_config")
+    @patch("elle.daemon.main.setup_logging")
+    @patch("argparse.ArgumentParser.parse_args")
+    def test_main_keyboard_interrupt(self, mock_args, mock_setup, mock_load, mock_set, mock_run):
+        mock_args.return_value = MagicMock(config=None, log_level="INFO", no_api=False)
+        mock_load.return_value = Config()
+        result = main()
+        assert result == 0
+
+    @patch("elle.daemon.main.asyncio.run", side_effect=RuntimeError("telemetryd not available"))
+    @patch("elle.daemon.main.set_config")
+    @patch("elle.daemon.main.load_config")
+    @patch("elle.daemon.main.setup_logging")
+    @patch("argparse.ArgumentParser.parse_args")
+    def test_main_telemetryd_error(self, mock_args, mock_setup, mock_load, mock_set, mock_run):
+        mock_args.return_value = MagicMock(config=None, log_level="INFO", no_api=False)
+        mock_load.return_value = Config()
+        result = main()
+        assert result == 1
+
+    @patch("elle.daemon.main.asyncio.run", side_effect=RuntimeError("some other error"))
+    @patch("elle.daemon.main.set_config")
+    @patch("elle.daemon.main.load_config")
+    @patch("elle.daemon.main.setup_logging")
+    @patch("argparse.ArgumentParser.parse_args")
+    def test_main_other_runtime_error(self, mock_args, mock_setup, mock_load, mock_set, mock_run):
+        mock_args.return_value = MagicMock(config=None, log_level="INFO", no_api=False)
+        mock_load.return_value = Config()
+        with pytest.raises(RuntimeError, match="some other error"):
+            main()
+
+    @patch("elle.daemon.main.asyncio.run", side_effect=OSError("daemon failed"))
+    @patch("elle.daemon.main.set_config")
+    @patch("elle.daemon.main.load_config")
+    @patch("elle.daemon.main.setup_logging")
+    @patch("argparse.ArgumentParser.parse_args")
+    def test_main_general_exception(self, mock_args, mock_setup, mock_load, mock_set, mock_run):
+        mock_args.return_value = MagicMock(config=None, log_level="INFO", no_api=False)
+        mock_load.return_value = Config()
+        result = main()
+        assert result == 1
+
+    @patch("elle.daemon.main.asyncio.run")
+    @patch("elle.daemon.main.set_config")
+    @patch("elle.daemon.main.load_config")
+    @patch("elle.daemon.main.setup_logging")
+    @patch("argparse.ArgumentParser.parse_args")
+    def test_main_with_config_path(self, mock_args, mock_setup, mock_load, mock_set, mock_run):
+        mock_args.return_value = MagicMock(config=Path("/etc/elle/custom.toml"), log_level="INFO", no_api=False)
+        mock_load.return_value = Config()
+        result = main()
+        assert result == 0
+        mock_load.assert_called_once_with(Path("/etc/elle/custom.toml"))
+
+
+# ---------------------------------------------------------------------------
+# get_status - additional coverage
+# ---------------------------------------------------------------------------
+
+
+class TestGetStatusExtended:
+    def test_status_api_enabled(self, daemon):
+        daemon.config = Config(
+            api=ApiConfig(enabled=True),
+            queues=QueueConfig(raw_queue_size=100, event_queue_size=50),
+        )
+        status = daemon.get_status()
+        assert status.api_active is True
+
+    def test_status_api_disabled(self, daemon):
+        status = daemon.get_status()
+        assert status.api_active is False
+
+    def test_status_with_incidents(self, daemon):
+        daemon._incidents_total = 7
+        status = daemon.get_status()
+        assert status.incidents_total == 7
+
+    def test_status_no_watcher_no_errors(self, daemon):
+        daemon._telemetryd_watcher = None
+        status = daemon.get_status()
+        assert len(status.errors) == 0
+        assert status.healthy is True
+
+
+# ---------------------------------------------------------------------------
+# start - additional coverage
+# ---------------------------------------------------------------------------
+
+
+class TestStartExtended:
+    @patch("elle.daemon.main.is_telemetryd_available", return_value=True)
+    async def test_start_with_api_enabled(self, _, tmp_path):
+        cfg = Config(
+            api=ApiConfig(enabled=True, host="127.0.0.1", port=8377),
+            queues=QueueConfig(raw_queue_size=100, event_queue_size=50),
+            capability_versioning_enabled=False,
+            capability_bootstrap_enabled=False,
+        )
+        daemon = ElledDaemon(config=cfg)
+
+        mock_token_mgr = MagicMock()
+        mock_token_mgr.initialize = MagicMock()
+        mock_token_mgr.token_path = tmp_path / "token"
+
+        mock_state_cache = MagicMock()
+        mock_state_cache.start = AsyncMock()
+
+        mock_watcher = MagicMock()
+        mock_watcher.start = AsyncMock()
+
+        with patch("elle.daemon.api.session_token.get_token_manager", return_value=mock_token_mgr):
+            with patch.object(daemon, "_init_database"):
+                with patch.object(daemon, "_warmup_models", new_callable=AsyncMock):
+                    with patch.object(daemon, "_start_notification_service", new_callable=AsyncMock):
+                        with patch.object(daemon, "_check_reboot_recovery", new_callable=AsyncMock):
+                            with patch("elle.daemon.main.TelemetrydWatcher", return_value=mock_watcher):
+                                with patch("elle.daemon.main.StateCache", return_value=mock_state_cache):
+                                    with patch("elle.daemon.main.create_queues") as mock_cq:
+                                        mock_cq.return_value = (MagicMock(), MagicMock())
+                                        with patch.object(daemon, "_processor_loop", new_callable=AsyncMock):
+                                            with patch.object(daemon, "_run_api", new_callable=AsyncMock):
+                                                with patch.object(daemon, "_start_cloud_retry_worker", new_callable=AsyncMock):
+                                                    with patch.dict("sys.modules", {"elle.daemon.manvault.service": MagicMock()}):
+                                                        await daemon.start()
+
+        # API task should be created
+        api_tasks = [t for t in daemon._tasks if t.get_name() == "api"]
+        assert len(api_tasks) == 1
+
+    @patch("elle.daemon.main.is_telemetryd_available", return_value=True)
+    async def test_start_with_capability_versioning(self, _, tmp_path):
+        cfg = Config(
+            api=ApiConfig(enabled=False),
+            queues=QueueConfig(raw_queue_size=100, event_queue_size=50),
+            capability_versioning_enabled=True,
+            capability_bootstrap_enabled=False,
+        )
+        daemon = ElledDaemon(config=cfg)
+
+        mock_token_mgr = MagicMock()
+        mock_token_mgr.initialize = MagicMock()
+        mock_token_mgr.token_path = tmp_path / "token"
+
+        mock_state_cache = MagicMock()
+        mock_state_cache.start = AsyncMock()
+
+        mock_watcher = MagicMock()
+        mock_watcher.start = AsyncMock()
+
+        with patch("elle.daemon.api.session_token.get_token_manager", return_value=mock_token_mgr):
+            with patch.object(daemon, "_init_database"):
+                with patch.object(daemon, "_warmup_models", new_callable=AsyncMock):
+                    with patch.object(daemon, "_start_notification_service", new_callable=AsyncMock):
+                        with patch.object(daemon, "_check_reboot_recovery", new_callable=AsyncMock):
+                            with patch("elle.daemon.main.TelemetrydWatcher", return_value=mock_watcher):
+                                with patch("elle.daemon.main.StateCache", return_value=mock_state_cache):
+                                    with patch("elle.daemon.main.create_queues") as mock_cq:
+                                        mock_cq.return_value = (MagicMock(), MagicMock())
+                                        with patch.object(daemon, "_processor_loop", new_callable=AsyncMock):
+                                            with patch.object(daemon, "_start_capability_versioning", new_callable=AsyncMock) as mock_cv:
+                                                with patch.object(daemon, "_start_cloud_retry_worker", new_callable=AsyncMock):
+                                                    with patch.dict("sys.modules", {"elle.daemon.manvault.service": MagicMock()}):
+                                                        await daemon.start()
+
+        mock_cv.assert_awaited_once()
+
+    @patch("elle.daemon.main.is_telemetryd_available", return_value=True)
+    async def test_start_with_bootstrap(self, _, tmp_path):
+        cfg = Config(
+            api=ApiConfig(enabled=False),
+            queues=QueueConfig(raw_queue_size=100, event_queue_size=50),
+            capability_versioning_enabled=False,
+            capability_bootstrap_enabled=True,
+        )
+        daemon = ElledDaemon(config=cfg)
+
+        mock_token_mgr = MagicMock()
+        mock_token_mgr.initialize = MagicMock()
+        mock_token_mgr.token_path = tmp_path / "token"
+
+        mock_state_cache = MagicMock()
+        mock_state_cache.start = AsyncMock()
+
+        mock_watcher = MagicMock()
+        mock_watcher.start = AsyncMock()
+
+        with patch("elle.daemon.api.session_token.get_token_manager", return_value=mock_token_mgr):
+            with patch.object(daemon, "_init_database"):
+                with patch.object(daemon, "_warmup_models", new_callable=AsyncMock):
+                    with patch.object(daemon, "_start_notification_service", new_callable=AsyncMock):
+                        with patch.object(daemon, "_check_reboot_recovery", new_callable=AsyncMock):
+                            with patch("elle.daemon.main.TelemetrydWatcher", return_value=mock_watcher):
+                                with patch("elle.daemon.main.StateCache", return_value=mock_state_cache):
+                                    with patch("elle.daemon.main.create_queues") as mock_cq:
+                                        mock_cq.return_value = (MagicMock(), MagicMock())
+                                        with patch.object(daemon, "_processor_loop", new_callable=AsyncMock):
+                                            with patch.object(daemon, "_run_capability_bootstrap", new_callable=AsyncMock):
+                                                with patch.object(daemon, "_start_cloud_retry_worker", new_callable=AsyncMock):
+                                                    with patch.dict("sys.modules", {"elle.daemon.manvault.service": MagicMock()}):
+                                                        await daemon.start()
+
+        bootstrap_tasks = [t for t in daemon._tasks if t.get_name() == "capability_bootstrap"]
+        assert len(bootstrap_tasks) == 1
+
+    @patch("elle.daemon.main.is_telemetryd_available", return_value=True)
+    async def test_start_manvault_failure(self, _, daemon, tmp_path, caplog):
+        mock_token_mgr = MagicMock()
+        mock_token_mgr.initialize = MagicMock()
+        mock_token_mgr.token_path = tmp_path / "token"
+
+        mock_state_cache = MagicMock()
+        mock_state_cache.start = AsyncMock()
+
+        mock_watcher = MagicMock()
+        mock_watcher.start = AsyncMock()
+
+        mock_manvault_mod = MagicMock()
+        mock_manvault_svc = MagicMock()
+        mock_manvault_svc.start = AsyncMock(side_effect=RuntimeError("manvault fail"))
+        mock_manvault_mod.get_service.return_value = mock_manvault_svc
+
+        with patch("elle.daemon.api.session_token.get_token_manager", return_value=mock_token_mgr):
+            with patch.object(daemon, "_init_database"):
+                with patch.object(daemon, "_warmup_models", new_callable=AsyncMock):
+                    with patch.object(daemon, "_start_notification_service", new_callable=AsyncMock):
+                        with patch.object(daemon, "_check_reboot_recovery", new_callable=AsyncMock):
+                            with patch("elle.daemon.main.TelemetrydWatcher", return_value=mock_watcher):
+                                with patch("elle.daemon.main.StateCache", return_value=mock_state_cache):
+                                    with patch("elle.daemon.main.create_queues") as mock_cq:
+                                        mock_cq.return_value = (MagicMock(), MagicMock())
+                                        with patch.object(daemon, "_processor_loop", new_callable=AsyncMock):
+                                            with patch.object(daemon, "_start_cloud_retry_worker", new_callable=AsyncMock):
+                                                with patch.dict("sys.modules", {"elle.daemon.manvault.service": mock_manvault_mod}):
+                                                    with caplog.at_level(logging.WARNING):
+                                                        await daemon.start()
+
+        assert "Failed to start Man Vault service" in caplog.text

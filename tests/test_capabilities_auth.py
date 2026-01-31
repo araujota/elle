@@ -27,9 +27,12 @@ _ST = "elle.daemon.api.session_token"
 # resolve the dotted path.  The patch decorator then replaces MobileCrypto
 # with a per-test MagicMock as usual.
 # ---------------------------------------------------------------------------
+import elle.mobile  # noqa: E402
+
 if "elle.mobile.crypto" not in sys.modules:
     _crypto_stub = MagicMock()
-    sys.modules.setdefault("elle.mobile.crypto", _crypto_stub)
+    sys.modules["elle.mobile.crypto"] = _crypto_stub
+    elle.mobile.crypto = _crypto_stub  # Required for patch() dotted-path resolution
 
 
 # =============================================================================

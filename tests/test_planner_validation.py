@@ -835,3 +835,105 @@ class TestCombinedScenarios:
         assert result.has_warnings is True
         assert "drift_detection" in result.checks_performed
         assert "disk_space_for_packages" in result.checks_performed
+
+
+# ---------------------------------------------------------------------------
+# Edge-case branch coverage tests
+# ---------------------------------------------------------------------------
+
+
+class TestEdgeCaseBranches:
+    """Tests targeting remaining partial branch coverage gaps."""
+
+    def test_has_warnings_true_but_no_messages(self) -> None:
+        """has_warnings=True with empty warning_messages exercises the empty-tuple branch."""
+        plan = _plan(steps=(_step("apt install nginx"),))
+        ctx = _plan_context(
+            trend_context=TrendContextRef(
+                has_warnings=True,
+                warning_messages=(),
+            ),
+        )
+        warnings = get_trend_warnings_for_plan(plan, ctx)
+        assert warnings == []
+
+    def test_service_plan_with_disk_warning_not_matched(self) -> None:
+        """Service plan + disk warning is not relevant (only mem is relevant to services)."""
+        plan = _plan(steps=(_step("systemctl restart nginx"),))
+        ctx = _plan_context(
+            trend_context=TrendContextRef(
+                has_warnings=True,
+                warning_messages=("Disk / at 92%",),
+            ),
+        )
+        warnings = get_trend_warnings_for_plan(plan, ctx)
+        assert warnings == []
+
+    def test_package_plan_with_mem_warning_not_matched(self) -> None:
+        """Package plan + mem warning is not relevant (only disk is relevant to packages)."""
+        plan = _plan(steps=(_step("apt install nginx"),))
+        ctx = _plan_context(
+            trend_context=TrendContextRef(
+                has_warnings=True,
+                warning_messages=("mem usage is high",),
+            ),
+        )
+        warnings = get_trend_warnings_for_plan(plan, ctx)
+        assert warnings == []
+
+    def test_service_loop_all_steps_none_command(self) -> None:
+        """Multiple steps with command=None should not match service keywords."""
+        step_a = PlanStep(
+            command=None,
+            explanation="capability only",
+            risk_level="low",
+            capability="service.restart",
+        )
+        step_b = PlanStep(
+            command=None,
+            explanation="another capability",
+            risk_level="low",
+            capability="file.read",
+        )
+        plan = _plan(steps=(step_a, step_b))
+        assert _plan_involves_services(plan) is False
+        assert _plan_involves_packages(plan) is False
+
+    def test_forecast_threshold_crossing_at_exactly_24h(self) -> None:
+        """Forecast crossing at exactly 24h is NOT within the <24h window."""
+        plan = _plan(steps=(_step("echo ok"),))
+        tc = _trend_context(
+            forecasts={
+                "disk./.used_pct": _forecast("disk./.used_pct", 80.0, will_cross=True, hours_to_threshold=24.0),
+            },
+        )
+        result = validate_plan_against_trends(plan, tc)
+        # Exactly 24 is not < 24, so no warning should be produced
+        assert not any("threshold" in w.message.lower() for w in result.warnings)
+
+    def test_forecast_threshold_none_hours_treated_as_zero(self) -> None:
+        """When time_to_threshold_hours is None, it should be treated as 0 hours."""
+        plan = _plan(steps=(_step("echo ok"),))
+        tc = _trend_context(
+            forecasts={
+                "disk./.used_pct": _forecast("disk./.used_pct", 80.0, will_cross=True, hours_to_threshold=None),
+            },
+        )
+        result = validate_plan_against_trends(plan, tc)
+        # None -> 0, which is < 24, so a warning IS generated
+        assert any("threshold" in w.message.lower() for w in result.warnings)
+
+    def test_multiple_disk_mounts_multiple_warnings(self) -> None:
+        """Multiple high-usage disk mounts each produce their own warning."""
+        plan = _plan(steps=(_step("apt install nginx"),))
+        tc = _trend_context(
+            disk_trends={
+                "/": _trend_window("disk./.used_pct", 91.0),
+                "/var": _trend_window("disk./var.used_pct", 96.0),
+            },
+        )
+        result = validate_plan_against_trends(plan, tc)
+        assert len(result.warnings) == 2
+        severities = {w.severity for w in result.warnings}
+        assert "warning" in severities
+        assert "critical" in severities

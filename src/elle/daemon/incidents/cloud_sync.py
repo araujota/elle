@@ -235,7 +235,7 @@ class CloudSyncClient:
                 similar_count=data.get("similar_count", 0),
             )
         except Exception as e:
-            logger.warning("Cloud submission failed", error=str(e), endpoint=self._endpoint)
+            logger.warning(f"Cloud submission failed: error={e}, endpoint={self._endpoint}")
             raise
 
     async def query_similar(
@@ -311,7 +311,7 @@ class CloudSyncClient:
             )
 
         except Exception as e:
-            logger.debug("Cloud query failed", error=str(e), endpoint=self._endpoint)
+            logger.debug(f"Cloud query failed: error={e}, endpoint={self._endpoint}")
             raise
 
     async def get_resolution_stats(
@@ -347,7 +347,7 @@ class CloudSyncClient:
             response.raise_for_status()
             return cast(dict[str, Any], response.json())
         except Exception as e:
-            logger.debug("Cloud stats query failed", error=str(e), endpoint=self._endpoint)
+            logger.debug(f"Cloud stats query failed: error={e}, endpoint={self._endpoint}")
             raise
 
     async def health_check(self) -> bool:
@@ -478,9 +478,7 @@ async def submit_incident_with_retry(
         return result
     except Exception as e:
         logger.warning(
-            "Direct cloud submission failed, enqueuing for retry",
-            error=str(e),
-            incident_id=incident.incident_id,
+            f"Direct cloud submission failed, enqueuing for retry: error={e}, incident_id={incident.incident_id}"
         )
 
         # Enqueue for retry
@@ -498,11 +496,7 @@ async def submit_incident_with_retry(
             # Queue not configured -- this is fine during startup
             logger.debug("Cloud queue not configured, cannot enqueue for retry")
         except Exception as queue_err:
-            logger.error(
-                "Failed to enqueue incident for retry",
-                error=str(queue_err),
-                incident_id=incident.incident_id,
-            )
+            logger.error(f"Failed to enqueue incident for retry: error={queue_err}, incident_id={incident.incident_id}")
 
         return None
 
@@ -563,5 +557,5 @@ def query_cloud_sync(
                 )
             )
     except Exception as e:
-        logger.debug("Cloud query failed", error=str(e))
+        logger.debug(f"Cloud query failed: error={e}")
         return None

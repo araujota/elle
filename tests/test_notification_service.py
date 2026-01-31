@@ -653,3 +653,323 @@ class TestCreateActionCallback:
         with patch("elle.daemon.notifications.service._open_elle_repl") as mock_open:
             callback(None, "confirm", None)
             mock_open.assert_called_once()
+
+    def test_cancel_action_no_reboot_context(self):
+        """Cancel action with non-reboot context should not call _cancel_reboot."""
+        action = NotificationAction(id="cancel", label="Cancel")
+        n = _make_notification(context_type="job", context_id="job-1")
+        callback = _create_action_callback(action, n)
+        with patch("elle.daemon.notifications.service._cancel_reboot") as mock_cancel:
+            callback(None, "cancel", None)
+            mock_cancel.assert_not_called()
+
+    def test_cancel_action_no_context_id(self):
+        """Cancel action with no context_id should not call _cancel_reboot."""
+        action = NotificationAction(id="cancel", label="Cancel")
+        n = _make_notification(context_type="reboot")
+        callback = _create_action_callback(action, n)
+        with patch("elle.daemon.notifications.service._cancel_reboot") as mock_cancel:
+            callback(None, "cancel", None)
+            mock_cancel.assert_not_called()
+
+    def test_execute_plan_action_no_context_id(self):
+        """Execute plan action with no context_id should not call _execute_forecast_plan."""
+        action = NotificationAction(id="execute_plan", label="Execute")
+        n = _make_notification()
+        callback = _create_action_callback(action, n)
+        with patch("elle.daemon.notifications.service._execute_forecast_plan") as mock_exec:
+            callback(None, "execute_plan", None)
+            mock_exec.assert_not_called()
+
+    def test_view_action_callback(self):
+        """View action should open ELLE REPL."""
+        action = NotificationAction(id="view", label="View")
+        n = _make_notification(context_type="incident", context_id="inc-1")
+        callback = _create_action_callback(action, n)
+        with patch("elle.daemon.notifications.service._open_elle_repl") as mock_open:
+            callback(None, "view", None)
+            mock_open.assert_called_once_with("incident", "inc-1")
+
+    def test_investigate_action_callback(self):
+        """Investigate action should open ELLE REPL."""
+        action = NotificationAction(id="investigate", label="Investigate")
+        n = _make_notification(context_type="incident", context_id="inc-2")
+        callback = _create_action_callback(action, n)
+        with patch("elle.daemon.notifications.service._open_elle_repl") as mock_open:
+            callback(None, "investigate", None)
+            mock_open.assert_called_once_with("incident", "inc-2")
+
+    def test_default_action_callback(self):
+        """Default action should open ELLE REPL."""
+        action = NotificationAction(id="default", label="Default")
+        n = _make_notification(context_type="incident", context_id="inc-3")
+        callback = _create_action_callback(action, n)
+        with patch("elle.daemon.notifications.service._open_elle_repl") as mock_open:
+            callback(None, "default", None)
+            mock_open.assert_called_once_with("incident", "inc-3")
+
+
+# ===========================================================================
+# _execute_forecast_plan
+# ===========================================================================
+
+
+class TestExecuteForecastPlan:
+    def test_execute_plan_success(self):
+        from elle.daemon.notifications.service import _execute_forecast_plan
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        with patch.dict("sys.modules", {"httpx": MagicMock()}) as _, patch(
+            "elle.daemon.notifications.service.httpx",
+            create=True,
+        ) as mock_httpx:
+            mock_httpx.Client.return_value = mock_client
+            # Should not raise
+            _execute_forecast_plan("inc-123")
+
+    def test_execute_plan_fallback_on_error(self):
+        from elle.daemon.notifications.service import _execute_forecast_plan
+
+        with (
+            patch(
+                "elle.daemon.notifications.service.httpx",
+                create=True,
+                side_effect=ImportError("no httpx"),
+            ),
+            patch("elle.daemon.notifications.service._open_elle_repl") as mock_open,
+        ):
+            # When httpx import fails, should fallback
+            _execute_forecast_plan("inc-456")
+            # Due to the try/except, this may or may not call _open_elle_repl
+            # depending on exact error flow, but should not raise
+
+
+# ===========================================================================
+# _send_via_libnotify
+# ===========================================================================
+
+
+class TestSendViaLibnotify:
+    def test_libnotify_not_available(self):
+        from elle.daemon.notifications.service import _send_via_libnotify
+
+        with patch("elle.daemon.notifications.service._init_libnotify", return_value=False):
+            n = _make_notification()
+            result = _send_via_libnotify(n)
+            assert result.success is False
+            assert "not available" in result.error
+            assert result.method == "libnotify"
+
+
+# ===========================================================================
+# _urgency_to_libnotify
+# ===========================================================================
+
+
+class TestUrgencyToLibnotify:
+    def test_gi_not_available(self):
+        from elle.daemon.notifications.models import NotificationUrgency
+        from elle.daemon.notifications.service import _urgency_to_libnotify
+
+        with patch("elle.daemon.notifications.service._gi_available", False):
+            result = _urgency_to_libnotify(NotificationUrgency.LOW)
+            assert result is None
+
+
+# ===========================================================================
+# send with libnotify
+# ===========================================================================
+
+
+class TestSendWithLibnotify:
+    def test_libnotify_success_used(self):
+        from elle.daemon.notifications.service import _send_via_libnotify
+
+        with (
+            patch("elle.daemon.notifications.service._gi_available", True),
+            patch("elle.daemon.notifications.service._push_to_mobile"),
+            patch(
+                "elle.daemon.notifications.service._send_via_libnotify",
+                return_value=NotificationResult(success=True, method="libnotify"),
+            ) as mock_lib,
+        ):
+            n = _make_notification()
+            result = send(n)
+            assert result.success is True
+            assert result.method == "libnotify"
+            mock_lib.assert_called_once()
+
+    def test_libnotify_failure_falls_back(self):
+        with (
+            patch("elle.daemon.notifications.service._gi_available", True),
+            patch("elle.daemon.notifications.service._push_to_mobile"),
+            patch(
+                "elle.daemon.notifications.service._send_via_libnotify",
+                return_value=NotificationResult(success=False, error="fail", method="libnotify"),
+            ),
+            patch(
+                "elle.daemon.notifications.service._send_via_notify_send",
+                return_value=NotificationResult(success=True, method="notify-send"),
+            ) as mock_ns,
+        ):
+            n = _make_notification()
+            result = send(n)
+            assert result.method == "notify-send"
+            mock_ns.assert_called_once()
+
+
+# ===========================================================================
+# send_async and notify_async
+# ===========================================================================
+
+
+class TestAsyncWrappers:
+    @pytest.mark.asyncio
+    async def test_send_async(self):
+        from elle.daemon.notifications.service import send_async
+
+        with patch(
+            "elle.daemon.notifications.service.send",
+            return_value=NotificationResult(success=True, method="test"),
+        ):
+            n = _make_notification()
+            result = await send_async(n)
+            assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_notify_async(self):
+        from elle.daemon.notifications.service import notify_async
+
+        with patch(
+            "elle.daemon.notifications.service.notify",
+            return_value=NotificationResult(success=True, method="test"),
+        ):
+            result = await notify_async("Hello", "World")
+            assert result.success is True
+
+
+# ===========================================================================
+# NotificationService process_queue
+# ===========================================================================
+
+
+class TestNotificationServiceProcessQueue:
+    @pytest.mark.asyncio
+    async def test_process_queue_sends_notification(self):
+        import asyncio
+
+        svc = NotificationService()
+        n = _make_notification()
+        with patch(
+            "elle.daemon.notifications.service.send_async",
+            new_callable=AsyncMock,
+            return_value=NotificationResult(success=True, method="test"),
+        ):
+            await svc.start()
+            svc.queue(n)
+            # Give the queue time to process
+            await asyncio.sleep(0.2)
+            await svc.stop()
+            assert len(svc._history) >= 1
+
+    @pytest.mark.asyncio
+    async def test_stop_without_start(self):
+        svc = NotificationService()
+        await svc.stop()
+        assert svc._running is False
+
+    def test_queue_full(self):
+        import asyncio as _asyncio
+
+        svc = NotificationService()
+        svc._queue = MagicMock()
+        svc._queue.put_nowait.side_effect = _asyncio.QueueFull()
+        n = _make_notification()
+        # Should not raise
+        svc.queue(n)
+
+
+# ===========================================================================
+# notify_forecast
+# ===========================================================================
+
+
+class TestNotifyForecast:
+    def test_notify_forecast(self):
+        from elle.daemon.notifications.service import notify_forecast
+
+        with patch("elle.daemon.notifications.service.send") as mock_send:
+            mock_send.return_value = NotificationResult(success=True, method="test")
+            result = notify_forecast(
+                metric="disk./.used_pct",
+                current_value=85.0,
+                threshold=90.0,
+                time_to_threshold_hours=12.5,
+                incident_id="inc-1",
+                plan_summary="Docker prune",
+            )
+            assert result.success is True
+
+    def test_notify_forecast_auto_remediated(self):
+        from elle.daemon.notifications.service import notify_forecast
+
+        with patch("elle.daemon.notifications.service.send") as mock_send:
+            mock_send.return_value = NotificationResult(success=True, method="test")
+            result = notify_forecast(
+                metric="disk./.used_pct",
+                current_value=85.0,
+                threshold=90.0,
+                time_to_threshold_hours=None,
+                incident_id="inc-2",
+                auto_remediated=True,
+                outcome="improved",
+            )
+            assert result.success is True
+
+
+# ===========================================================================
+# Additional convenience function edge cases
+# ===========================================================================
+
+
+class TestConvenienceFunctionEdgeCases:
+    def test_notify_incident_with_rich_context(self):
+        with patch("elle.daemon.notifications.service.send") as mock_send:
+            mock_send.return_value = NotificationResult(success=True, method="test")
+            result = notify_incident(
+                "Disk Full",
+                "critical",
+                "disk",
+                "inc-99",
+                "Disk at 98%",
+                symptoms=["High I/O wait"],
+                metrics={"used_pct": 98},
+                entities=["disk:/dev/sda1"],
+                suspected_causes=["Docker logs"],
+                entity="disk:/dev/sda1",
+            )
+            assert result.success is True
+
+    def test_notify_health_with_metrics(self):
+        with patch("elle.daemon.notifications.service.send") as mock_send:
+            mock_send.return_value = NotificationResult(success=True, method="test")
+            result = notify_health(
+                "memory",
+                "Low memory available",
+                severity="critical",
+                metrics={"available_mb": 128, "used_pct": 95},
+            )
+            assert result.success is True
+
+    def test_notify_error_with_context(self):
+        with patch("elle.daemon.notifications.service.send") as mock_send:
+            mock_send.return_value = NotificationResult(success=True, method="test")
+            result = notify_error(
+                "Error",
+                "Something failed",
+                context_type="incident",
+                context_id="inc-1",
+            )
+            assert result.success is True

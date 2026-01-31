@@ -91,6 +91,19 @@ def _make_prefs(base_level_value: str = "low_risk", earned_enabled: bool = True)
     )
 
 
+def _make_prefs_enum(base_level=None, earned_enabled: bool = True):
+    """Build prefs using actual AutonomyLevel enum for functions that need hashable values."""
+    from elle.cli.capabilities_commands import AutonomyLevel
+
+    if base_level is None:
+        base_level = AutonomyLevel.LOW_RISK
+    earned = _make_earned_autonomy(enabled=earned_enabled)
+    return SimpleNamespace(
+        base_level=base_level,
+        earned_autonomy=earned,
+    )
+
+
 def _make_session():
     """Return a minimal real session."""
     from elle.common.session import create_session
@@ -554,3 +567,480 @@ class TestHandleCapabilityQuery:
         mock_reg.return_value.list_domains.return_value = []
         result = await handle_capability_query("what can you do about the capability", _make_session())
         assert result.output == "SUMMARY"
+
+
+# ---------------------------------------------------------------------------
+# Extended coverage: _render_domain_summary
+# ---------------------------------------------------------------------------
+
+
+class TestRenderDomainSummary:
+    @patch("elle.cli.capabilities_commands.get_autonomy_engine")
+    @patch("elle.cli.capabilities_commands.get_registry")
+    def test_renders_with_capabilities(self, mock_reg, mock_engine):
+        from elle.cli.capabilities_commands import AutonomyLevel, _render_domain_summary
+
+        caps = [
+            _make_cap_spec(name="service.restart", domain="service", risk="low"),
+            _make_cap_spec(name="service.start", domain="service", risk="medium"),
+            _make_cap_spec(name="file.read", domain="file", risk="none"),
+        ]
+        mock_reg.return_value.list_all.return_value = caps
+        mock_engine.return_value.store.get_preferences.return_value = _make_prefs_enum(
+            AutonomyLevel.LOW_RISK
+        )
+        mock_engine.return_value.get_autonomy_status.return_value = _make_autonomy_status(
+            can_run=True
+        )
+
+        result = _render_domain_summary()
+        assert isinstance(result, str)
+        # Should contain domain counts
+        assert "3" in result or "service" in result.lower() or "Capabilities" in result
+
+    @patch("elle.cli.capabilities_commands.get_autonomy_engine")
+    @patch("elle.cli.capabilities_commands.get_registry")
+    def test_renders_empty_capabilities(self, mock_reg, mock_engine):
+        from elle.cli.capabilities_commands import AutonomyLevel, _render_domain_summary
+
+        mock_reg.return_value.list_all.return_value = []
+        mock_engine.return_value.store.get_preferences.return_value = _make_prefs_enum(
+            AutonomyLevel.LOW_RISK
+        )
+
+        result = _render_domain_summary()
+        assert isinstance(result, str)
+        assert "0" in result
+
+    @patch("elle.cli.capabilities_commands.get_autonomy_engine")
+    @patch("elle.cli.capabilities_commands.get_registry")
+    def test_renders_earned_autonomy_disabled(self, mock_reg, mock_engine):
+        from elle.cli.capabilities_commands import AutonomyLevel, _render_domain_summary
+
+        mock_reg.return_value.list_all.return_value = []
+        mock_engine.return_value.store.get_preferences.return_value = _make_prefs_enum(
+            AutonomyLevel.LOW_RISK, earned_enabled=False
+        )
+
+        result = _render_domain_summary()
+        assert "disabled" in result
+
+
+# ---------------------------------------------------------------------------
+# Extended coverage: _render_domain_capabilities
+# ---------------------------------------------------------------------------
+
+
+class TestRenderDomainCapabilities:
+    @patch("elle.cli.capabilities_commands.get_autonomy_engine")
+    @patch("elle.cli.capabilities_commands.get_registry")
+    def test_renders_empty_domain(self, mock_reg, mock_engine):
+        from elle.cli.capabilities_commands import _render_domain_capabilities
+
+        mock_reg.return_value.list_by_domain.return_value = []
+        result = _render_domain_capabilities("nope")
+        assert "No capabilities found" in result
+
+    @patch("elle.cli.capabilities_commands.get_autonomy_engine")
+    @patch("elle.cli.capabilities_commands.get_registry")
+    def test_renders_domain_with_stats(self, mock_reg, mock_engine):
+        from elle.cli.capabilities_commands import _render_domain_capabilities
+
+        caps = [
+            _make_cap_spec(name="service.restart", domain="service", risk="low"),
+            _make_cap_spec(name="service.start", domain="service", risk="medium"),
+        ]
+        mock_reg.return_value.list_by_domain.return_value = caps
+
+        stats = _make_exec_stats(total=10, success=9, failed=1)
+        mock_engine.return_value.get_autonomy_status.return_value = _make_autonomy_status(
+            can_run=True, stats=stats
+        )
+
+        result = _render_domain_capabilities("service")
+        assert isinstance(result, str)
+
+    @patch("elle.cli.capabilities_commands.get_autonomy_engine")
+    @patch("elle.cli.capabilities_commands.get_registry")
+    def test_renders_domain_with_zero_executions(self, mock_reg, mock_engine):
+        from elle.cli.capabilities_commands import _render_domain_capabilities
+
+        caps = [_make_cap_spec(name="service.restart", domain="service")]
+        mock_reg.return_value.list_by_domain.return_value = caps
+
+        stats = _make_exec_stats(total=0, success=0, failed=0)
+        mock_engine.return_value.get_autonomy_status.return_value = _make_autonomy_status(
+            can_run=False, source="risk_blocked", stats=stats
+        )
+
+        result = _render_domain_capabilities("service")
+        assert isinstance(result, str)
+
+
+# ---------------------------------------------------------------------------
+# Extended coverage: _render_capability_detail
+# ---------------------------------------------------------------------------
+
+
+class TestRenderCapabilityDetail:
+    @patch("elle.cli.capabilities_commands.get_autonomy_engine")
+    def test_detail_with_side_effects(self, mock_engine):
+        from elle.cli.capabilities_commands import _render_capability_detail
+
+        effect = SimpleNamespace(kind="restart", target="nginx", reversible=True)
+        spec = _make_cap_spec(
+            name="service.restart",
+            side_effects=(effect,),
+            dependencies=("systemd",),
+        )
+
+        stats = _make_exec_stats(total=5, success=4, failed=1, last_at=datetime.utcnow())
+        mock_engine.return_value.get_autonomy_status.return_value = _make_autonomy_status(
+            can_run=True, source="earned", stats=stats, earned_progress=0.75
+        )
+
+        result = _render_capability_detail(spec)
+        assert isinstance(result, str)
+
+    @patch("elle.cli.capabilities_commands.get_autonomy_engine")
+    def test_detail_no_executions(self, mock_engine):
+        from elle.cli.capabilities_commands import _render_capability_detail
+
+        spec = _make_cap_spec(name="file.read")
+
+        stats = _make_exec_stats(total=0, success=0, failed=0)
+        mock_engine.return_value.get_autonomy_status.return_value = _make_autonomy_status(
+            can_run=False, source="risk_blocked", stats=stats
+        )
+
+        result = _render_capability_detail(spec)
+        assert "No executions recorded" in result
+
+    @patch("elle.cli.capabilities_commands.get_autonomy_engine")
+    def test_detail_irreversible_side_effect(self, mock_engine):
+        from elle.cli.capabilities_commands import _render_capability_detail
+
+        effect = SimpleNamespace(kind="delete", target="/data", reversible=False)
+        spec = _make_cap_spec(
+            name="file.delete",
+            side_effects=(effect,),
+        )
+        stats = _make_exec_stats(total=0, success=0, failed=0)
+        mock_engine.return_value.get_autonomy_status.return_value = _make_autonomy_status(
+            can_run=False, stats=stats
+        )
+
+        result = _render_capability_detail(spec)
+        assert isinstance(result, str)
+
+    @patch("elle.cli.capabilities_commands.get_autonomy_engine")
+    def test_detail_with_earned_progress_none(self, mock_engine):
+        from elle.cli.capabilities_commands import _render_capability_detail
+
+        spec = _make_cap_spec(name="file.read")
+        stats = _make_exec_stats(total=0, success=0, failed=0)
+        mock_engine.return_value.get_autonomy_status.return_value = _make_autonomy_status(
+            can_run=False, stats=stats, earned_progress=None
+        )
+
+        result = _render_capability_detail(spec)
+        assert isinstance(result, str)
+        # Should not contain progress bar when earned_progress is None
+        assert "[" not in result or "Earned progress" not in result
+
+
+# ---------------------------------------------------------------------------
+# Extended coverage: _render_autonomy_status
+# ---------------------------------------------------------------------------
+
+
+class TestRenderAutonomyStatus:
+    @patch("elle.cli.capabilities_commands.get_autonomy_engine")
+    def test_status_with_earned_enabled_and_overrides(self, mock_engine):
+        from elle.cli.capabilities_commands import AutonomyLevel, _render_autonomy_status
+
+        prefs = _make_prefs_enum(AutonomyLevel.LOW_RISK, earned_enabled=True)
+        override = SimpleNamespace(
+            capability_name="service.restart",
+            autonomous=True,
+            reason="manual",
+        )
+        mock_engine.return_value.store.get_preferences.return_value = prefs
+        mock_engine.return_value.store.list_overrides.return_value = [override]
+
+        result = _render_autonomy_status()
+        assert isinstance(result, str)
+        assert "Overrides" in result
+
+    @patch("elle.cli.capabilities_commands.get_autonomy_engine")
+    def test_status_earned_disabled_no_overrides(self, mock_engine):
+        from elle.cli.capabilities_commands import AutonomyLevel, _render_autonomy_status
+
+        prefs = _make_prefs_enum(AutonomyLevel.LOW_RISK, earned_enabled=False)
+        mock_engine.return_value.store.get_preferences.return_value = prefs
+        mock_engine.return_value.store.list_overrides.return_value = []
+
+        result = _render_autonomy_status()
+        assert isinstance(result, str)
+        assert "disabled" in result
+
+    @patch("elle.cli.capabilities_commands.get_autonomy_engine")
+    def test_status_with_revoke_overrides(self, mock_engine):
+        from elle.cli.capabilities_commands import AutonomyLevel, _render_autonomy_status
+
+        prefs = _make_prefs_enum(AutonomyLevel.LOW_RISK)
+        override_grant = SimpleNamespace(
+            capability_name="service.restart",
+            autonomous=True,
+            reason="manual",
+        )
+        override_revoke = SimpleNamespace(
+            capability_name="file.delete",
+            autonomous=False,
+            reason="too risky",
+        )
+        mock_engine.return_value.store.get_preferences.return_value = prefs
+        mock_engine.return_value.store.list_overrides.return_value = [
+            override_grant,
+            override_revoke,
+        ]
+
+        result = _render_autonomy_status()
+        assert "2" in result  # 2 overrides
+        assert "1 grants" in result
+        assert "1 revokes" in result
+
+
+# ---------------------------------------------------------------------------
+# Extended: _render_overrides with revoked override
+# ---------------------------------------------------------------------------
+
+
+class TestRenderOverridesExtended:
+    @patch("elle.cli.capabilities_commands.get_autonomy_engine")
+    def test_with_revoked_override(self, mock_engine):
+        from elle.cli.capabilities_commands import _render_overrides
+
+        override = SimpleNamespace(
+            capability_name="file.delete",
+            autonomous=False,
+            reason="too dangerous",
+        )
+        mock_engine.return_value.store.list_overrides.return_value = [override]
+        result = _render_overrides()
+        assert "file.delete" in result
+        assert "revoked" in result
+
+
+# ---------------------------------------------------------------------------
+# Extended: handle_capabilities_command domain prefix match
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestHandleCapabilitiesCommandExtended:
+    @patch("elle.cli.capabilities_commands.get_registry")
+    @patch("elle.cli.capabilities_commands._render_domain_capabilities", return_value="DOMAIN_BY_PREFIX")
+    async def test_partial_name_domain_prefix(self, mock_render, mock_get_reg):
+        """When arg has a dot but full name not found, should match domain prefix."""
+        from elle.cli.capabilities_commands import handle_capabilities_command
+
+        mock_get_reg.return_value.list_domains.return_value = ["service"]
+        mock_get_reg.return_value.get.return_value = None  # full name not found
+        result = await handle_capabilities_command("/capabilities service.nonexist", _make_session())
+        assert result.output == "DOMAIN_BY_PREFIX"
+
+
+# ---------------------------------------------------------------------------
+# Extended: handle_autonomy_command earn synonyms
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestHandleAutonomyCommandExtended:
+    @patch("elle.cli.capabilities_commands.get_autonomy_engine")
+    async def test_earn_enable_synonym(self, mock_engine):
+        from elle.cli.capabilities_commands import handle_autonomy_command
+
+        result = await handle_autonomy_command("/autonomy earn enable", _make_session())
+        assert "enabled" in result.output
+
+    @patch("elle.cli.capabilities_commands.get_autonomy_engine")
+    async def test_earn_true_synonym(self, mock_engine):
+        from elle.cli.capabilities_commands import handle_autonomy_command
+
+        result = await handle_autonomy_command("/autonomy earn true", _make_session())
+        assert "enabled" in result.output
+
+    @patch("elle.cli.capabilities_commands.get_autonomy_engine")
+    async def test_earn_1_synonym(self, mock_engine):
+        from elle.cli.capabilities_commands import handle_autonomy_command
+
+        result = await handle_autonomy_command("/autonomy earn 1", _make_session())
+        assert "enabled" in result.output
+
+    @patch("elle.cli.capabilities_commands.get_autonomy_engine")
+    async def test_earn_disable_synonym(self, mock_engine):
+        from elle.cli.capabilities_commands import handle_autonomy_command
+
+        result = await handle_autonomy_command("/autonomy earn disable", _make_session())
+        assert "disabled" in result.output
+
+    @patch("elle.cli.capabilities_commands.get_autonomy_engine")
+    async def test_earn_false_synonym(self, mock_engine):
+        from elle.cli.capabilities_commands import handle_autonomy_command
+
+        result = await handle_autonomy_command("/autonomy earn false", _make_session())
+        assert "disabled" in result.output
+
+    @patch("elle.cli.capabilities_commands.get_autonomy_engine")
+    async def test_earn_0_synonym(self, mock_engine):
+        from elle.cli.capabilities_commands import handle_autonomy_command
+
+        result = await handle_autonomy_command("/autonomy earn 0", _make_session())
+        assert "disabled" in result.output
+
+    @patch("elle.cli.capabilities_commands.get_registry")
+    @patch("elle.cli.capabilities_commands.get_autonomy_engine")
+    async def test_revoke_nonexistent_cap(self, mock_engine, mock_reg):
+        from elle.cli.capabilities_commands import handle_autonomy_command
+
+        mock_reg.return_value.get.return_value = None
+        result = await handle_autonomy_command("/autonomy revoke nosuchcap", _make_session())
+        assert "not found" in result.output
+
+    @patch("elle.cli.capabilities_commands.get_autonomy_engine")
+    async def test_set_with_hyphen_conversion(self, mock_engine):
+        from elle.cli.capabilities_commands import handle_autonomy_command
+
+        result = await handle_autonomy_command("/autonomy set low-risk", _make_session())
+        assert "level set to" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Extended: handle_capability_query NL routing
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestHandleCapabilityQueryExtended:
+    @patch("elle.cli.capabilities_commands._render_domain_summary", return_value="SUMMARY")
+    async def test_tell_me_what_you_can_do(self, mock_render):
+        from elle.cli.capabilities_commands import handle_capability_query
+
+        result = await handle_capability_query("tell me what you can do", _make_session())
+        assert result.output == "SUMMARY"
+
+    @patch("elle.cli.capabilities_commands._render_domain_summary", return_value="SUMMARY")
+    async def test_show_capabilities(self, mock_render):
+        from elle.cli.capabilities_commands import handle_capability_query
+
+        result = await handle_capability_query("show capabilities", _make_session())
+        assert result.output == "SUMMARY"
+
+    @patch("elle.cli.capabilities_commands._render_domain_summary", return_value="SUMMARY")
+    async def test_list_capabilities(self, mock_render):
+        from elle.cli.capabilities_commands import handle_capability_query
+
+        result = await handle_capability_query("list capabilities", _make_session())
+        assert result.output == "SUMMARY"
+
+    @patch("elle.cli.capabilities_commands._render_autonomy_status", return_value="AUTO_STATUS")
+    async def test_what_runs_autonomously(self, mock_render):
+        from elle.cli.capabilities_commands import handle_capability_query
+
+        result = await handle_capability_query("what runs autonomously", _make_session())
+        assert result.output == "AUTO_STATUS"
+
+    @patch("elle.cli.capabilities_commands._render_autonomy_status", return_value="AUTO_STATUS")
+    async def test_autonomy_status_query(self, mock_render):
+        from elle.cli.capabilities_commands import handle_capability_query
+
+        result = await handle_capability_query("autonomy status", _make_session())
+        assert result.output == "AUTO_STATUS"
+
+    @patch("elle.cli.capabilities_commands.get_registry")
+    @patch("elle.cli.capabilities_commands._render_domain_capabilities", return_value="FILE_CAPS")
+    async def test_capabilities_for_domain(self, mock_render, mock_reg):
+        from elle.cli.capabilities_commands import handle_capability_query
+
+        mock_reg.return_value.list_domains.return_value = ["file"]
+        result = await handle_capability_query("capabilities for file", _make_session())
+        assert result.output == "FILE_CAPS"
+
+
+# ---------------------------------------------------------------------------
+# Extended: _level_description coverage
+# ---------------------------------------------------------------------------
+
+
+class TestLevelDescriptionExtended:
+    def test_medium_risk(self):
+        from elle.cli.capabilities_commands import AutonomyLevel, _level_description
+
+        result = _level_description(AutonomyLevel.MEDIUM_RISK)
+        assert "medium" in result
+
+    def test_high_risk(self):
+        from elle.cli.capabilities_commands import AutonomyLevel, _level_description
+
+        result = _level_description(AutonomyLevel.HIGH_RISK)
+        assert "high" in result
+
+    def test_low_risk(self):
+        from elle.cli.capabilities_commands import AutonomyLevel, _level_description
+
+        result = _level_description(AutonomyLevel.LOW_RISK)
+        assert "low" in result
+
+
+# ---------------------------------------------------------------------------
+# Extended: risk_bar mixed distributions
+# ---------------------------------------------------------------------------
+
+
+class TestRiskBarExtended:
+    def test_single_critical(self):
+        from elle.cli.capabilities_commands import risk_bar
+
+        bar = risk_bar({"critical": 1})
+        assert len(bar.plain) > 0
+
+    def test_all_none_risk(self):
+        from elle.cli.capabilities_commands import risk_bar
+
+        bar = risk_bar({"none": 5})
+        assert len(bar.plain) > 0
+
+    def test_medium_only(self):
+        from elle.cli.capabilities_commands import risk_bar
+
+        bar = risk_bar({"medium": 3})
+        assert len(bar.plain) > 0
+
+    def test_custom_width(self):
+        from elle.cli.capabilities_commands import risk_bar
+
+        bar = risk_bar({"low": 5}, width=20)
+        assert len(bar.plain) > 0
+
+
+# ---------------------------------------------------------------------------
+# Extended: _progress_bar edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestProgressBarExtended:
+    def test_custom_width(self):
+        from elle.cli.capabilities_commands import _progress_bar
+
+        result = _progress_bar(0.5, width=20)
+        assert len(result) == 22  # brackets + 20 chars
+
+    def test_tiny_progress(self):
+        from elle.cli.capabilities_commands import _progress_bar
+
+        result = _progress_bar(0.01)
+        # Should have at least the bracket structure
+        assert result.startswith("[")
+        assert result.endswith("]")

@@ -897,6 +897,387 @@ class TestTier2Structured:
         assert result.success is False
         assert "Backup failed" in result.error
 
+    # --- _apply_json_edit with jq engine ------------------------------------
+
+    def test_apply_json_edit_jq_set(self):
+        tier = self._make_tier()
+        content = '{"key": "old"}'
+        op = _op(kind="set", path=".key", value="new")
+        mock_jq_mod = MagicMock()
+        mock_engine = MagicMock()
+        mock_engine.set_value.return_value = '{"key": "new"}\n'
+        mock_jq_mod.JQEngine.return_value = mock_engine
+        with (
+            patch.object(tier, "_is_jq_available", return_value=True),
+            patch.dict("sys.modules", {"elle.ops.jq": mock_jq_mod}),
+        ):
+            result = tier._apply_json_edit(content, op)
+        assert "new" in result
+        mock_engine.set_value.assert_called_once()
+
+    def test_apply_json_edit_jq_rm(self):
+        tier = self._make_tier()
+        content = '{"key": "val", "other": 1}'
+        op = _op(kind="rm", path=".key")
+        mock_jq_mod = MagicMock()
+        mock_engine = MagicMock()
+        mock_engine.delete_value.return_value = '{"other": 1}\n'
+        mock_jq_mod.JQEngine.return_value = mock_engine
+        with (
+            patch.object(tier, "_is_jq_available", return_value=True),
+            patch.dict("sys.modules", {"elle.ops.jq": mock_jq_mod}),
+        ):
+            result = tier._apply_json_edit(content, op)
+        assert "other" in result
+        mock_engine.delete_value.assert_called_once()
+
+    def test_apply_json_edit_jq_transform(self):
+        tier = self._make_tier()
+        content = '{"key": "val"}'
+        op = _op(kind="append")
+        mock_jq_mod = MagicMock()
+        mock_engine = MagicMock()
+        transform_result = MagicMock()
+        transform_result.success = True
+        transform_result.output = '{"key": "val"}\n'
+        mock_engine.transform.return_value = transform_result
+        mock_jq_mod.JQEngine.return_value = mock_engine
+        with (
+            patch.object(tier, "_is_jq_available", return_value=True),
+            patch.dict("sys.modules", {"elle.ops.jq": mock_jq_mod}),
+        ):
+            result = tier._apply_json_edit(content, op)
+        mock_engine.transform.assert_called_once()
+        assert "key" in result
+
+    def test_apply_json_edit_jq_transform_error(self):
+        tier = self._make_tier()
+        content = '{"key": "val"}'
+        op = _op(kind="append")
+        mock_jq_mod = MagicMock()
+        mock_engine = MagicMock()
+        transform_result = MagicMock()
+        transform_result.success = False
+        transform_result.error = "jq filter failed"
+        mock_engine.transform.return_value = transform_result
+        mock_jq_mod.JQEngine.return_value = mock_engine
+        with (
+            patch.object(tier, "_is_jq_available", return_value=True),
+            patch.dict("sys.modules", {"elle.ops.jq": mock_jq_mod}),
+        ):
+            with pytest.raises(ValueError, match="jq filter failed"):
+                tier._apply_json_edit(content, op)
+
+    # --- _apply_yaml_edit ---------------------------------------------------
+
+    def test_apply_yaml_edit_yq_set(self):
+        tier = self._make_tier()
+        content = "key: old\n"
+        op = _op(kind="set", path=".key", value="new")
+        mock_yq_mod = MagicMock()
+        mock_engine = MagicMock()
+        mock_engine.set_value.return_value = "key: new\n"
+        mock_yq_mod.YQEngine.return_value = mock_engine
+        with (
+            patch.object(tier, "_is_yq_available", return_value=True),
+            patch.dict("sys.modules", {"elle.ops.yq": mock_yq_mod}),
+        ):
+            result = tier._apply_yaml_edit(content, op)
+        assert "new" in result
+
+    def test_apply_yaml_edit_yq_rm(self):
+        tier = self._make_tier()
+        content = "key: val\nother: 1\n"
+        op = _op(kind="rm", path=".key")
+        mock_yq_mod = MagicMock()
+        mock_engine = MagicMock()
+        mock_engine.delete_value.return_value = "other: 1\n"
+        mock_yq_mod.YQEngine.return_value = mock_engine
+        with (
+            patch.object(tier, "_is_yq_available", return_value=True),
+            patch.dict("sys.modules", {"elle.ops.yq": mock_yq_mod}),
+        ):
+            result = tier._apply_yaml_edit(content, op)
+        assert "other" in result
+
+    def test_apply_yaml_edit_yq_transform(self):
+        tier = self._make_tier()
+        content = "key: val\n"
+        op = _op(kind="append")
+        mock_yq_mod = MagicMock()
+        mock_engine = MagicMock()
+        transform_result = MagicMock()
+        transform_result.success = True
+        transform_result.output = "key: val\n"
+        mock_engine.transform.return_value = transform_result
+        mock_yq_mod.YQEngine.return_value = mock_engine
+        with (
+            patch.object(tier, "_is_yq_available", return_value=True),
+            patch.dict("sys.modules", {"elle.ops.yq": mock_yq_mod}),
+        ):
+            result = tier._apply_yaml_edit(content, op)
+        assert "key" in result
+
+    def test_apply_yaml_edit_yq_transform_error(self):
+        tier = self._make_tier()
+        content = "key: val\n"
+        op = _op(kind="append")
+        mock_yq_mod = MagicMock()
+        mock_engine = MagicMock()
+        transform_result = MagicMock()
+        transform_result.success = False
+        transform_result.error = "yq error"
+        mock_engine.transform.return_value = transform_result
+        mock_yq_mod.YQEngine.return_value = mock_engine
+        with (
+            patch.object(tier, "_is_yq_available", return_value=True),
+            patch.dict("sys.modules", {"elle.ops.yq": mock_yq_mod}),
+        ):
+            with pytest.raises(ValueError, match="yq error"):
+                tier._apply_yaml_edit(content, op)
+
+    def test_apply_yaml_edit_python_pyyaml(self):
+        """YAML edit with PyYAML fallback when ruamel not available."""
+        tier = self._make_tier()
+        content = "key: old\n"
+        op = _op(kind="set", path=".key", value="new")
+        with (
+            patch.object(tier, "_is_yq_available", return_value=False),
+            patch.dict("sys.modules", {"ruamel.yaml": None}),
+        ):
+            result = tier._apply_yaml_edit(content, op)
+        assert "new" in result
+
+    # --- _apply_toml_edit ---------------------------------------------------
+
+    def test_apply_toml_edit_set(self):
+        tier = self._make_tier()
+        content = '[section]\nkey = "old"\n'
+        op = _op(kind="set", path=".section.key", value='"new"')
+        mock_toml = MagicMock()
+        mock_toml.loads.return_value = {"section": {"key": "old"}}
+        mock_toml.dumps.return_value = '[section]\nkey = "new"\n'
+        with patch.dict("sys.modules", {"toml": mock_toml}):
+            result = tier._apply_toml_edit(content, op)
+        assert "new" in result
+
+    def test_apply_toml_edit_rm(self):
+        tier = self._make_tier()
+        content = '[section]\nkey = "val"\nother = 1\n'
+        op = _op(kind="rm", path=".section.key")
+        mock_toml = MagicMock()
+        mock_toml.loads.return_value = {"section": {"key": "val", "other": 1}}
+        mock_toml.dumps.return_value = '[section]\nother = 1\n'
+        with patch.dict("sys.modules", {"toml": mock_toml}):
+            result = tier._apply_toml_edit(content, op)
+        assert "other" in result
+
+    # --- _apply_dict_edit edge cases ----------------------------------------
+
+    def test_apply_dict_rm_key_exists(self):
+        tier = self._make_tier()
+        data = {"a": {"b": "val", "c": 1}}
+        op = _op(kind="rm", path="a.b")
+        result = tier._apply_dict_edit(data, op)
+        assert "b" not in result["a"]
+        assert result["a"]["c"] == 1
+
+    def test_apply_dict_rm_key_not_exists(self):
+        """Removing a key that does not exist is a no-op."""
+        tier = self._make_tier()
+        data = {"a": {"b": "val"}}
+        op = _op(kind="rm", path="a.nonexistent")
+        result = tier._apply_dict_edit(data, op)
+        assert result == {"a": {"b": "val"}}
+
+    # --- preview for YAML ---------------------------------------------------
+
+    def test_preview_yaml(self, tmp_path):
+        tier = self._make_tier()
+        f = tmp_path / "test.yaml"
+        f.write_text("key: old\n")
+        op = _op(kind="set", path=".key", value="new")
+        diff_mod = _stub_diff_module()
+        with (
+            patch.object(tier, "_is_yq_available", return_value=False),
+            patch.dict("sys.modules", {"elle.ops.augeas.diff": diff_mod, "ruamel.yaml": None}),
+        ):
+            result = tier.preview(f, op)
+        assert result.is_valid is True
+        assert result.tier_selected == 2
+
+    def test_preview_toml(self, tmp_path):
+        tier = self._make_tier()
+        f = tmp_path / "test.toml"
+        f.write_text('[section]\nkey = "old"\n')
+        op = _op(kind="set", path=".section.key", value='"new"')
+        diff_mod = _stub_diff_module()
+        mock_toml = MagicMock()
+        mock_toml.loads.return_value = {"section": {"key": "old"}}
+        mock_toml.dumps.return_value = '[section]\nkey = "new"\n'
+        with patch.dict("sys.modules", {"elle.ops.augeas.diff": diff_mod, "toml": mock_toml}):
+            result = tier.preview(f, op)
+        assert result.is_valid is True
+
+    def test_preview_unknown_fmt_identity(self, tmp_path):
+        """Preview for non-structured file returns original as proposed."""
+        tier = self._make_tier()
+        f = tmp_path / "test.txt"
+        f.write_text("plain text\n")
+        op = _op(kind="set", path=".key", value="val")
+        diff_mod = _stub_diff_module()
+        with patch.dict("sys.modules", {"elle.ops.augeas.diff": diff_mod}):
+            result = tier.preview(f, op)
+        # Unknown format means proposed == original
+        assert result.proposed_content == "plain text\n"
+
+    # --- apply for YAML / TOML with backup and validation -------------------
+
+    @pytest.mark.asyncio
+    async def test_apply_yaml_success(self, tmp_path):
+        tier = self._make_tier()
+        f = tmp_path / "test.yaml"
+        f.write_text("key: old\n")
+        op = _op(kind="set", path=".key", value="new")
+        diff_mod = _stub_diff_module()
+        backup_mod = _stub_backup_module()
+        with (
+            patch.object(tier, "_is_yq_available", return_value=False),
+            patch.dict(
+                "sys.modules",
+                {
+                    "elle.ops.augeas.diff": diff_mod,
+                    "elle.ops.augeas.backup": backup_mod,
+                    "ruamel.yaml": None,
+                },
+            ),
+        ):
+            result = await tier.apply(f, op, skip_backup=True)
+        assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_apply_toml_success(self, tmp_path):
+        tier = self._make_tier()
+        f = tmp_path / "test.toml"
+        f.write_text('[section]\nkey = "old"\n')
+        op = _op(kind="set", path=".section.key", value='"new"')
+        diff_mod = _stub_diff_module()
+        backup_mod = _stub_backup_module()
+        mock_toml = MagicMock()
+        mock_toml.loads.return_value = {"section": {"key": "old"}}
+        mock_toml.dumps.return_value = '[section]\nkey = "new"\n'
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.ops.augeas.diff": diff_mod,
+                "elle.ops.augeas.backup": backup_mod,
+                "toml": mock_toml,
+            },
+        ):
+            result = await tier.apply(f, op, skip_backup=True)
+        assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_apply_edit_raises(self, tmp_path):
+        """When the edit function itself raises, result is failure."""
+        tier = self._make_tier()
+        f = tmp_path / "test.json"
+        f.write_text("not valid json at all")
+        op = _op(kind="set", path=".a", value="2")
+        diff_mod = _stub_diff_module()
+        backup_mod = _stub_backup_module()
+        with (
+            patch.object(tier, "_is_jq_available", return_value=False),
+            patch.dict(
+                "sys.modules",
+                {
+                    "elle.ops.augeas.diff": diff_mod,
+                    "elle.ops.augeas.backup": backup_mod,
+                },
+            ),
+        ):
+            result = await tier.apply(f, op, skip_backup=True)
+        assert result.success is False
+        assert "Edit failed" in result.error
+
+    @pytest.mark.asyncio
+    async def test_apply_validation_fails(self, tmp_path):
+        """When validation fails, result is failure."""
+        tier = self._make_tier()
+        f = tmp_path / "test.json"
+        f.write_text('{"a": 1}')
+        op = _op(kind="set", path=".a", value="2")
+        diff_mod = _stub_diff_module()
+        backup_mod = _stub_backup_module()
+        with (
+            patch.object(tier, "_is_jq_available", return_value=False),
+            patch.object(
+                tier,
+                "validate_syntax",
+                return_value=ValidationResult(
+                    passed=False, method="json.loads", errors=("syntax error",)
+                ),
+            ),
+            patch.dict(
+                "sys.modules",
+                {
+                    "elle.ops.augeas.diff": diff_mod,
+                    "elle.ops.augeas.backup": backup_mod,
+                },
+            ),
+        ):
+            result = await tier.apply(f, op, skip_backup=True)
+        assert result.success is False
+        assert "Validation failed" in result.error
+
+    @pytest.mark.asyncio
+    async def test_apply_skip_validation(self, tmp_path):
+        """skip_validation=True bypasses validation."""
+        tier = self._make_tier()
+        f = tmp_path / "test.json"
+        f.write_text('{"a": 1}')
+        op = _op(kind="set", path=".a", value="2")
+        diff_mod = _stub_diff_module()
+        backup_mod = _stub_backup_module()
+        with (
+            patch.object(tier, "_is_jq_available", return_value=False),
+            patch.dict(
+                "sys.modules",
+                {
+                    "elle.ops.augeas.diff": diff_mod,
+                    "elle.ops.augeas.backup": backup_mod,
+                },
+            ),
+        ):
+            result = await tier.apply(f, op, skip_backup=True, skip_validation=True)
+        assert result.success is True
+
+    # --- _is_jq_available / _is_yq_available edge cases --------------------
+
+    def test_is_jq_available_import_error(self):
+        tier = self._make_tier()
+        with patch.dict("sys.modules", {"elle.ops.jq": None}):
+            assert tier._is_jq_available() is False
+
+    def test_is_yq_available_import_error(self):
+        tier = self._make_tier()
+        with patch.dict("sys.modules", {"elle.ops.yq": None}):
+            assert tier._is_yq_available() is False
+
+    def test_is_jq_available_true(self):
+        tier = self._make_tier()
+        mock_mod = MagicMock()
+        mock_mod.is_available.return_value = True
+        with patch.dict("sys.modules", {"elle.ops.jq": mock_mod}):
+            assert tier._is_jq_available() is True
+
+    def test_is_yq_available_true(self):
+        tier = self._make_tier()
+        mock_mod = MagicMock()
+        mock_mod.is_available.return_value = True
+        with patch.dict("sys.modules", {"elle.ops.yq": mock_mod}):
+            assert tier._is_yq_available() is True
+
 
 # ============================================================================
 # Tier 3 -- Format Editors (INI / XML)

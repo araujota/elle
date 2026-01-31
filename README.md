@@ -2,231 +2,78 @@
 
 **Enabling Layer Learning Everything**
 
-[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-❤-ea4aaa?logo=github)](https://github.com/sponsors/araujota)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org)
+[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-ea4aaa?logo=github)](https://github.com/sponsors/araujota)
 
 A local-first, agentic system layer for Ubuntu 22.04+ LTS that converts kernel-level telemetry into natural language insight and safe system operations.
 
-## Architecture: The Spine
+## What is ELLE?
 
-ELLE is built around a unified execution pipeline called **The Spine**:
+ELLE is an AI-powered system administrator that runs entirely on your machine. It watches your system's telemetry in real time, reasons over it with a local LLM, and executes safe operations through a typed capability system — all with full provenance tracking and decision memory. No cloud dependency, no data leaving your machine.
+
+## Key features
+
+- **Natural language interface** — Ask questions or give commands in plain English
+- **Agentic execution** — Plans multi-step operations and executes via typed, policy-governed capabilities
+- **Decision memory** — PostgreSQL + pgvector-backed Incident Vault records every action with full provenance, enabling similarity search and learning from experience
+- **Real-time telemetry** — Journal, kernel, eBPF, Docker, and periodic probes monitored by the daemon
+- **Reactive functions** — Event-driven automations defined in natural language
+- **Safety first** — Command denylist, risk levels, policy engine, Polkit (never sudo)
+- **Capability auto-generation** — `/learn` generates typed operations from installed packages
+- **Team knowledge sharing** — Anonymized incidents synced via self-hosted elle-cloud over mTLS
+
+## Quick start
+
+```bash
+# Install Ollama and pull the model
+curl -fsSL https://ollama.ai/install.sh | sh
+ollama pull qwen2.5:7b-instruct-q8_0
+
+# Install ELLE (from source)
+git clone https://github.com/araujota/elle.git && cd elle
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+
+# Launch
+elle
+```
+
+See the [Installation wiki page](https://github.com/araujota/elle/wiki/Installation) for APT repository setup and full instructions.
+
+## How it works
+
+Every interaction flows through **The Spine**:
 
 ```
 DAEMON → SIGNALS → INCIDENT REPORT → AGENT LOOP → CAPABILITIES → OUTCOME → INCIDENT MEMORY
 ```
 
-Every interaction flows through this pipeline, ensuring complete auditability, learning from experience, and consistent behavior.
+The daemon captures telemetry. The Agent Loop reasons over it with documentation and past decisions. Capabilities execute safe, typed operations through the Policy Engine. Outcomes are recorded for future learning.
 
-### The Three Pillars
+## Documentation
 
-| Pillar | Role |
-|--------|------|
-| **Daemon (`elled`)** | Owns ALL passive monitoring: telemetry, events, state changes, probes |
-| **Capabilities** | Typed, policy-governed operations - the ONLY way to mutate the system |
-| **Agent Loop** | LLM-powered reasoning that plans and executes via capabilities |
+Full documentation lives in the [GitHub Wiki](https://github.com/araujota/elle/wiki):
 
-```
-User ──▶ elle (CLI/REPL)
-         │
-         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     AGENT LOOP                                   │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │ 1. Create Incident Report (provenance tracking)          │  │
-│  │ 2. Search Man Vault (documentation)                      │  │
-│  │ 3. Search Incident Vault (prior decisions)               │  │
-│  │ 4. LLM reasons over context                              │  │
-│  │ 5. Execute Capabilities (policy-enforced)                │  │
-│  │ 6. Record outcome to Incident Memory                     │  │
-│  └──────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      DAEMON (elled)                              │
-│  ├─▶ Telemetry: Journal, Kernel, eBPF, inotify, probes          │
-│  ├─▶ Man Vault: ~24,000 man pages indexed                       │
-│  ├─▶ Incident Vault: Decision memory + outcomes                 │
-│  ├─▶ Event correlation & fingerprinting                         │
-│  └─▶ Polkit helper for privileged operations                    │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-## Features
-
-### Core System
-- **Agent Loop** - LLM-powered reasoning with full provenance tracking
-- **Typed Capabilities** - Safe, auditable system operations with risk levels
-- **Policy Engine** - Rule-based access control (allow, deny, require_confirmation)
-- **Incident Vault** - Decision memory that learns from every interaction
-
-### Knowledge & Memory
-- **Man Vault** - SQLite+FTS5 index of ~24,000 man pages with semantic search
-- **Incident Memory** - Every action recorded with provenance and outcome
-- **Pattern Matching** - Prior successful incidents inform future decisions
-
-### Capability Auto-Generation
-- **Package Learning** - `/learn <package>` generates typed capabilities from installed packages
-- **Multi-Source Intelligence** - Extracts from dpkg, shell completions, man pages, systemd units
-- **Bootstrap on Install** - Core capabilities generated automatically on first run
-- **Auto-Learn** - Capabilities generated when new packages are installed
-
-### Automations
-- **Reactive Functions** - Event-driven automations from natural language
-
-### Monitoring & Telemetry
-- **eBPF Probes** - Kernel-level telemetry (OOM, disk I/O, network, thermal)
-- **Watchers** - Journal, kernel, Docker, inotify, package changes
-- **Notifications** - ntfy integration for alerts
-- **Observability** - Prometheus/JSON metrics export for external dashboards
-- **Trend Analysis** - Detects anomalies and forecasts resource exhaustion
-
-### Configuration Management
-- **Tiered Editing** - Structured config editing via Augeas, crudini, yq, xmlstarlet
-- **Config Rollback** - Restore config files from incident-linked backups
-- **Config Tracking** - All `/etc` modifications tracked as incidents for audit trail
-
-### Shared Incident Vault (ELLE Cloud)
-- **Team Knowledge Sharing** - Anonymized incident reports shared across installations
-- **mTLS Security** - Mutual TLS with per-installation client certificates
-- **Self-Hosted** - Deploy via Docker in your own infrastructure
-- **Similarity Search** - Find how other installations resolved similar issues
-
-### Mobile Gateway
-- **QR Code Pairing** - Secure device pairing
-- **mTLS Authentication** - Mutual TLS with auto-generated certificates
-- **Role-Based Access** - Read-only and operator modes with temporary elevation
-
-## Requirements
-
-- Ubuntu 22.04+ LTS (jammy, noble, or later)
-- Python 3.10+
-- [Ollama](https://ollama.ai) for local LLM inference
-
-## Installation
-
-### 1. Install Ollama
-
-```bash
-curl -fsSL https://ollama.ai/install.sh | sh
-
-# Pull the LLM model
-ollama pull qwen2.5:7b-instruct-q8_0
-```
-
-### 2. Install ELLE
-
-#### From APT Repository (Recommended)
-
-```bash
-# Add the GPG key
-curl -fsSL https://repo.agentelle.org/elle.gpg \
-  | sudo gpg --dearmor -o /usr/share/keyrings/elle-archive-keyring.gpg
-
-# Add the repository
-sudo tee /etc/apt/sources.list.d/elle.sources > /dev/null <<EOF
-Types: deb
-URIs: https://repo.agentelle.org
-Suites: jammy
-Components: main
-Architectures: amd64
-Signed-By: /usr/share/keyrings/elle-archive-keyring.gpg
-EOF
-
-# Install ELLE
-sudo apt update
-sudo apt install elle
-```
-
-#### From Source (Development)
-
-```bash
-git clone https://github.com/araujota/elle.git
-cd elle
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-```
-
-## Usage
-
-### Interactive Terminal
-
-```bash
-$ elle
-ELLE - Ubuntu System Assistant
-
-elle > what is using port 8080?
-elle > why is nginx failing?
-elle > configure nginx as reverse proxy for localhost:3000
-```
-
-### One-shot Commands
-
-```bash
-elle "check disk space"
-elle status
-elle help
-```
-
-### Capability Learning
-
-```bash
-# Learn a specific package
-elle > /learn ffmpeg
-Generating capabilities: ffmpeg.convert, ffmpeg.probe, ffmpeg.stream
-
-# Learn all installed packages
-elle > /learn --all
-
-# Approve a capability for use
-elle > /learn approve ffmpeg.convert
-```
-
-### Reactive Functions
-
-```bash
-# Create event-driven automations
-elle > /react create "when disk > 90%, clean docker images and notify me"
-
-# Manage reactive functions
-elle > /react list
-elle > /react enable disk-cleanup
-```
-
-### Mobile Gateway
-
-```bash
-elle > /mobile up          # Start gateway with QR code
-elle > /mobile devices     # List paired devices
-elle > /mobile approve <device> --ttl 30m  # Grant elevation
-```
-
-## Safety
-
-ELLE includes multiple safety mechanisms:
-- **Command denylist** - Blocks dangerous commands (rm -rf /, fork bombs, etc.)
-- **Policy enforcement** - All capabilities go through the Policy Engine
-- **Incident tracking** - Every action recorded with full provenance
-- **No implicit sudo** - Privileged operations require explicit confirmation
-- **Preview before apply** - Configuration changes show diffs before execution
-
-## ELLE Cloud (Shared Incident Vault)
-
-ELLE Cloud is a companion service that enables teams to share anonymized incident knowledge across installations. See [`elle-cloud/`](https://github.com/araujota/elle-cloud) for deployment instructions.
-
-```bash
-# Quick start with Docker
-cd elle-cloud
-docker compose up -d
-```
+- **[Home](https://github.com/araujota/elle/wiki)** — Overview and quick links
+- **[Why ELLE](https://github.com/araujota/elle/wiki/Why-ELLE)** — Philosophy and motivation
+- **[Installation](https://github.com/araujota/elle/wiki/Installation)** — Prerequisites, install methods, hardware requirements
+- **[Setup Wizard](https://github.com/araujota/elle/wiki/Setup-Wizard)** — First-run configuration walkthrough
+- **[Configuration](https://github.com/araujota/elle/wiki/Configuration)** — Complete `elle.toml` reference
+- **[LLM Providers](https://github.com/araujota/elle/wiki/LLM-Providers)** — Ollama, OpenAI-compatible, fallback chain
+- **[Architecture](https://github.com/araujota/elle/wiki/Architecture)** — The Spine, Three Pillars, data flow
+- **[Capabilities](https://github.com/araujota/elle/wiki/Capabilities)** — Typed operations, domains, policy engine
+- **[Reactive Functions](https://github.com/araujota/elle/wiki/Reactive-Functions)** — Event-driven automations
+- **[Telemetry](https://github.com/araujota/elle/wiki/Telemetry)** — What ELLE monitors, event sources, C daemon
+- **[Security](https://github.com/araujota/elle/wiki/Security)** — Safety model, privilege levels, denylist
+- **[Private Incident Vault](https://github.com/araujota/elle/wiki/Private-Incident-Vault)** — elle-cloud deployment, certs, team setup
 
 ## Development
 
 ```bash
-source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
 pytest                    # Run tests
-pytest --cov=elle         # With coverage
 ruff check src/           # Lint
 ruff format src/          # Format
 mypy src/                 # Type check
@@ -236,16 +83,10 @@ mypy src/                 # Type check
 
 ELLE is open source and free to use. If you find it valuable, consider sponsoring development:
 
-[![Sponsor on GitHub](https://img.shields.io/badge/Sponsor_on_GitHub-❤-ea4aaa?style=for-the-badge&logo=github)](https://github.com/sponsors/araujota)
+[![Sponsor on GitHub](https://img.shields.io/badge/Sponsor_on_GitHub-ea4aaa?style=for-the-badge&logo=github)](https://github.com/sponsors/araujota)
 
-**Questions or feedback?** Email: araujota97@gmail.com
+Questions or feedback? Email: araujota97@gmail.com
 
 ## License
 
-GPL-3.0-or-later
-
-## Links
-
-- **Website:** https://araujota.github.io/elle
-- **Repository:** https://github.com/araujota/elle
-- **Sponsor:** https://github.com/sponsors/araujota
+[GPL-3.0-or-later](https://www.gnu.org/licenses/gpl-3.0)

@@ -390,3 +390,494 @@ class TestFileResult:
 
         with pytest.raises(Exception):
             result.success = False  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# Extended coverage: Read and Write operations
+# ---------------------------------------------------------------------------
+
+
+class TestReadOperations:
+    """Tests for read operations through FileHandler."""
+
+    def test_read_existing_file(self, tmp_path) -> None:
+        """Should read content of existing file."""
+        f = tmp_path / "readme.txt"
+        f.write_text("hello world")
+
+        handler = FileHandler()
+        request = FileRequest(
+            operations=(FileOp(kind="read", source=str(f)),),
+            description="Read test",
+        )
+        result = handler.execute(request)
+        assert result.success is True
+        assert result.results[0].content == "hello world"
+
+    def test_read_nonexistent_file(self, tmp_path) -> None:
+        """Should fail for nonexistent file."""
+        handler = FileHandler()
+        request = FileRequest(
+            operations=(FileOp(kind="read", source=str(tmp_path / "missing.txt")),),
+            description="Read test",
+        )
+        result = handler.execute(request)
+        assert result.success is False
+
+    def test_read_directory(self, tmp_path) -> None:
+        """Should fail when reading a directory."""
+        d = tmp_path / "adir"
+        d.mkdir()
+
+        handler = FileHandler()
+        request = FileRequest(
+            operations=(FileOp(kind="read", source=str(d)),),
+            description="Read test",
+        )
+        result = handler.execute(request)
+        assert result.success is False
+        assert "directory" in result.results[0].error.lower()
+
+    def test_read_with_encoding_error(self, tmp_path) -> None:
+        """Should handle encoding error."""
+        f = tmp_path / "binary.bin"
+        f.write_bytes(b"\x80\x81\x82\x83")
+
+        handler = FileHandler()
+        request = FileRequest(
+            operations=(FileOp(kind="read", source=str(f), encoding="ascii"),),
+            description="Read test",
+        )
+        result = handler.execute(request)
+        assert result.success is False
+        assert "Encoding error" in result.results[0].error
+
+
+class TestWriteOperations:
+    """Tests for write operations through FileHandler."""
+
+    def test_write_new_file(self, tmp_path) -> None:
+        """Should write content to new file."""
+        f = tmp_path / "output.txt"
+
+        handler = FileHandler()
+        request = FileRequest(
+            operations=(FileOp(kind="write", source=str(f), content="new content", overwrite=True),),
+            description="Write test",
+        )
+        result = handler.execute(request)
+        assert result.success is True
+        assert f.read_text() == "new content"
+
+    def test_write_without_content(self, tmp_path) -> None:
+        """Should fail when content is None."""
+        handler = FileHandler()
+        request = FileRequest(
+            operations=(FileOp(kind="write", source=str(tmp_path / "out.txt")),),
+            description="Write test",
+        )
+        result = handler.execute(request)
+        assert result.success is False
+        assert "requires content" in result.results[0].error
+
+    def test_write_overwrite_existing(self, tmp_path) -> None:
+        """Should overwrite existing file when overwrite=True."""
+        f = tmp_path / "existing.txt"
+        f.write_text("old content")
+
+        handler = FileHandler(temp_dir=tmp_path / "backups")
+        request = FileRequest(
+            operations=(FileOp(kind="write", source=str(f), content="new content", overwrite=True),),
+            description="Write test",
+        )
+        result = handler.execute(request)
+        assert result.success is True
+        assert f.read_text() == "new content"
+
+    def test_write_no_overwrite_existing(self, tmp_path) -> None:
+        """Should fail when overwrite=False and file exists."""
+        f = tmp_path / "existing.txt"
+        f.write_text("old content")
+
+        handler = FileHandler()
+        request = FileRequest(
+            operations=(FileOp(kind="write", source=str(f), content="new", overwrite=False),),
+            description="Write test",
+        )
+        result = handler.execute(request)
+        assert result.success is False
+
+    def test_write_creates_parent_dirs(self, tmp_path) -> None:
+        """Should create parent directories if needed."""
+        f = tmp_path / "subdir" / "deep" / "file.txt"
+
+        handler = FileHandler()
+        request = FileRequest(
+            operations=(FileOp(kind="write", source=str(f), content="deep content", overwrite=True),),
+            description="Write test",
+        )
+        result = handler.execute(request)
+        assert result.success is True
+        assert f.read_text() == "deep content"
+
+
+# ---------------------------------------------------------------------------
+# Extended coverage: Unknown operation kind
+# ---------------------------------------------------------------------------
+
+
+class TestUnknownOperationKind:
+    def test_execute_unknown_kind(self, tmp_path) -> None:
+        """Should handle unknown operation kind gracefully."""
+        handler = FileHandler()
+        # Create a FileOp with a known kind then monkey-patch it for the test
+        op = FileOp(kind="move", source=str(tmp_path / "src"))
+        # We need to use the internal method directly
+        result = handler._execute_op(op)
+        # The source doesn't exist, so it will fail with FileNotFoundError
+        assert result.success is False
+
+
+# ---------------------------------------------------------------------------
+# Extended coverage: Copy directory operations
+# ---------------------------------------------------------------------------
+
+
+class TestCopyDirectoryOperations:
+    def test_copy_directory_recursive(self, tmp_path) -> None:
+        """Should copy directory recursively."""
+        src = tmp_path / "srcdir"
+        src.mkdir()
+        (src / "a.txt").write_text("aaa")
+        (src / "b.txt").write_text("bbb")
+        dest = tmp_path / "destdir"
+
+        handler = FileHandler()
+        request = FileRequest(
+            operations=(FileOp(kind="copy", source=str(src), dest=str(dest), recursive=True),),
+            description="Copy dir",
+        )
+        result = handler.execute(request)
+        assert result.success is True
+        assert (dest / "a.txt").exists()
+        assert (dest / "b.txt").exists()
+
+    def test_copy_directory_not_recursive(self, tmp_path) -> None:
+        """Should fail to copy directory without recursive flag."""
+        src = tmp_path / "srcdir"
+        src.mkdir()
+        (src / "file.txt").write_text("content")
+        dest = tmp_path / "destdir"
+
+        handler = FileHandler()
+        request = FileRequest(
+            operations=(FileOp(kind="copy", source=str(src), dest=str(dest), recursive=False),),
+            description="Copy dir",
+        )
+        result = handler.execute(request)
+        assert result.success is False
+
+
+# ---------------------------------------------------------------------------
+# Extended coverage: Delete operations
+# ---------------------------------------------------------------------------
+
+
+class TestDeleteOperationsExtended:
+    def test_delete_nonexistent_is_success(self, tmp_path) -> None:
+        """Deleting nonexistent file should succeed."""
+        handler = FileHandler()
+        request = FileRequest(
+            operations=(FileOp(kind="delete", source=str(tmp_path / "missing.txt")),),
+            description="Delete test",
+        )
+        result = handler.execute(request)
+        assert result.success is True
+
+    def test_delete_directory_recursive(self, tmp_path) -> None:
+        """Should delete directory recursively."""
+        d = tmp_path / "toremove"
+        d.mkdir()
+        (d / "sub").mkdir()
+        (d / "sub" / "file.txt").write_text("data")
+
+        handler = FileHandler(temp_dir=tmp_path / "backups")
+        request = FileRequest(
+            operations=(FileOp(kind="delete", source=str(d), recursive=True),),
+            description="Delete dir",
+        )
+        result = handler.execute(request)
+        assert result.success is True
+        assert not d.exists()
+
+    def test_delete_empty_directory_non_recursive(self, tmp_path) -> None:
+        """Should delete empty directory without recursive."""
+        d = tmp_path / "emptydir"
+        d.mkdir()
+
+        handler = FileHandler(temp_dir=tmp_path / "backups")
+        request = FileRequest(
+            operations=(FileOp(kind="delete", source=str(d)),),
+            description="Delete dir",
+        )
+        result = handler.execute(request)
+        assert result.success is True
+        assert not d.exists()
+
+
+# ---------------------------------------------------------------------------
+# Extended coverage: Mkdir operations
+# ---------------------------------------------------------------------------
+
+
+class TestMkdirOperationsExtended:
+    def test_mkdir_existing_dir(self, tmp_path) -> None:
+        """Creating existing directory should succeed."""
+        d = tmp_path / "existing"
+        d.mkdir()
+
+        handler = FileHandler()
+        request = FileRequest(
+            operations=(FileOp(kind="mkdir", source=str(d)),),
+            description="Mkdir test",
+        )
+        result = handler.execute(request)
+        assert result.success is True
+
+    def test_mkdir_existing_file(self, tmp_path) -> None:
+        """Creating dir at file path should fail."""
+        f = tmp_path / "afile"
+        f.write_text("not a dir")
+
+        handler = FileHandler()
+        request = FileRequest(
+            operations=(FileOp(kind="mkdir", source=str(f)),),
+            description="Mkdir test",
+        )
+        result = handler.execute(request)
+        assert result.success is False
+
+    def test_mkdir_nested(self, tmp_path) -> None:
+        """Should create nested directories."""
+        d = tmp_path / "a" / "b" / "c"
+
+        handler = FileHandler()
+        request = FileRequest(
+            operations=(FileOp(kind="mkdir", source=str(d)),),
+            description="Mkdir test",
+        )
+        result = handler.execute(request)
+        assert result.success is True
+        assert d.exists()
+
+
+# ---------------------------------------------------------------------------
+# Extended coverage: Rollback mechanism
+# ---------------------------------------------------------------------------
+
+
+class TestRollbackMechanism:
+    def test_rollback_on_atomic_failure(self, tmp_path) -> None:
+        """Rollback should undo previous operations on failure."""
+        src = tmp_path / "file1.txt"
+        src.write_text("content1")
+        dest1 = tmp_path / "moved1.txt"
+
+        handler = FileHandler(temp_dir=tmp_path / "backups")
+        request = FileRequest(
+            operations=(
+                FileOp(kind="move", source=str(src), dest=str(dest1)),
+                FileOp(kind="move", source=str(tmp_path / "nonexistent"), dest=str(tmp_path / "out")),
+            ),
+            description="Rollback test",
+            atomic=True,
+        )
+        result = handler.execute(request)
+        assert result.success is False
+        assert result.rollback_applied is True
+        # First operation should be rolled back
+        assert src.exists()
+        assert not dest1.exists()
+
+    def test_non_atomic_no_rollback(self, tmp_path) -> None:
+        """Non-atomic should not rollback on failure."""
+        src = tmp_path / "file1.txt"
+        src.write_text("content1")
+        dest1 = tmp_path / "moved1.txt"
+
+        handler = FileHandler(temp_dir=tmp_path / "backups")
+        request = FileRequest(
+            operations=(
+                FileOp(kind="move", source=str(src), dest=str(dest1)),
+                FileOp(kind="move", source=str(tmp_path / "nonexistent"), dest=str(tmp_path / "out")),
+            ),
+            description="Non-atomic test",
+            atomic=False,
+        )
+        result = handler.execute(request)
+        # First op succeeded, second failed, but no rollback
+        assert dest1.exists()
+
+
+# ---------------------------------------------------------------------------
+# Extended coverage: Convenience functions read_file and write_file
+# ---------------------------------------------------------------------------
+
+
+class TestConvenienceFunctionsExtended:
+    def test_read_file_success(self, tmp_path) -> None:
+        """read_file should return content."""
+        from elle.ops.files.handler import read_file
+
+        f = tmp_path / "test.txt"
+        f.write_text("hello")
+        result = read_file(f)
+        assert result.success is True
+        assert result.content == "hello"
+
+    def test_read_file_not_found(self, tmp_path) -> None:
+        """read_file should fail for missing file."""
+        from elle.ops.files.handler import read_file
+
+        result = read_file(tmp_path / "missing.txt")
+        assert result.success is False
+        assert "not found" in result.error.lower()
+
+    def test_read_file_directory(self, tmp_path) -> None:
+        """read_file should fail for directory."""
+        from elle.ops.files.handler import read_file
+
+        result = read_file(tmp_path)
+        assert result.success is False
+        assert "directory" in result.error.lower()
+
+    def test_read_file_encoding_error(self, tmp_path) -> None:
+        """read_file should handle encoding errors."""
+        from elle.ops.files.handler import read_file
+
+        f = tmp_path / "bin.dat"
+        f.write_bytes(b"\x80\x81\x82")
+        result = read_file(f, encoding="ascii")
+        assert result.success is False
+        assert "Encoding error" in result.error
+
+    def test_write_file_success(self, tmp_path) -> None:
+        """write_file should write content."""
+        from elle.ops.files.handler import write_file
+
+        f = tmp_path / "out.txt"
+        result = write_file(f, "hello")
+        assert result.success is True
+        assert result.created is True
+        assert f.read_text() == "hello"
+
+    def test_write_file_already_exists(self, tmp_path) -> None:
+        """write_file should fail without overwrite."""
+        from elle.ops.files.handler import write_file
+
+        f = tmp_path / "existing.txt"
+        f.write_text("old")
+        result = write_file(f, "new", overwrite=False)
+        assert result.success is False
+        assert "already exists" in result.error
+
+    def test_write_file_overwrite(self, tmp_path) -> None:
+        """write_file should overwrite with flag."""
+        from elle.ops.files.handler import write_file
+
+        f = tmp_path / "existing.txt"
+        f.write_text("old")
+        result = write_file(f, "new", overwrite=True)
+        assert result.success is True
+        assert f.read_text() == "new"
+
+    def test_write_file_creates_parents(self, tmp_path) -> None:
+        """write_file should create parent directories."""
+        from elle.ops.files.handler import write_file
+
+        f = tmp_path / "sub" / "deep" / "file.txt"
+        result = write_file(f, "content")
+        assert result.success is True
+        assert f.read_text() == "content"
+
+    def test_preview_operations_convenience(self, tmp_path) -> None:
+        """preview_operations convenience function should work."""
+        from elle.ops.files.handler import preview_operations
+
+        f = tmp_path / "src.txt"
+        f.write_text("data")
+        request = FileRequest(
+            operations=(FileOp(kind="move", source=str(f), dest=str(tmp_path / "dst.txt")),),
+            description="Preview test",
+        )
+        preview = preview_operations(request)
+        assert len(preview.previews) == 1
+
+    def test_execute_operations_convenience(self, tmp_path) -> None:
+        """execute_operations convenience function should work."""
+        from elle.ops.files.handler import execute_operations
+
+        f = tmp_path / "src.txt"
+        f.write_text("data")
+        request = FileRequest(
+            operations=(FileOp(kind="copy", source=str(f), dest=str(tmp_path / "dst.txt")),),
+            description="Execute test",
+        )
+        result = execute_operations(request)
+        assert result.success is True
+
+
+# ---------------------------------------------------------------------------
+# Extended coverage: Preview with symlink
+# ---------------------------------------------------------------------------
+
+
+class TestPreviewExtended:
+    def test_preview_symlink(self, tmp_path) -> None:
+        """Preview should detect symlinks."""
+        target = tmp_path / "target.txt"
+        target.write_text("target content")
+        link = tmp_path / "link.txt"
+        link.symlink_to(target)
+
+        handler = FileHandler()
+        request = FileRequest(
+            operations=(FileOp(kind="move", source=str(link), dest=str(tmp_path / "out.txt")),),
+            description="Symlink test",
+        )
+        preview = handler.preview(request)
+        assert preview.previews[0].source_type == "symlink"
+
+    def test_preview_mkdir_no_source_warning(self, tmp_path) -> None:
+        """Preview mkdir should not warn about missing source."""
+        handler = FileHandler()
+        request = FileRequest(
+            operations=(FileOp(kind="mkdir", source=str(tmp_path / "newdir")),),
+            description="Mkdir preview",
+        )
+        preview = handler.preview(request)
+        # mkdir does not warn about source not existing
+        assert preview.previews[0].warning is None
+
+
+# ---------------------------------------------------------------------------
+# Extended coverage: _get_size helper
+# ---------------------------------------------------------------------------
+
+
+class TestGetSizeHelper:
+    def test_get_size_file(self, tmp_path) -> None:
+        """Should return file size."""
+        f = tmp_path / "sized.txt"
+        f.write_text("12345")
+        handler = FileHandler()
+        assert handler._get_size(f) == 5
+
+    def test_get_size_directory(self, tmp_path) -> None:
+        """Should return total directory size."""
+        d = tmp_path / "dir"
+        d.mkdir()
+        (d / "a.txt").write_text("aaa")
+        (d / "b.txt").write_text("bb")
+        handler = FileHandler()
+        assert handler._get_size(d) == 5

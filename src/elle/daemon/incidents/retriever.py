@@ -166,7 +166,7 @@ def search(
                     elif name == "cloud":
                         cloud_results = result
                 except Exception as e:
-                    logger.debug(f"{name} search failed", error=str(e))
+                    logger.debug(f"{name} search failed: error={e}")
 
         # Merge and rank local candidates
         ranked = _merge_and_rank(
@@ -264,16 +264,13 @@ def _cloud_search(
             )
 
         logger.debug(
-            "Cloud search returned results",
-            count=len(search_results),
-            total_searched=result.total_searched,
-            query_time_ms=result.query_time_ms,
+            f"Cloud search returned results: count={len(search_results)}, total_searched={result.total_searched}, query_time_ms={result.query_time_ms}"
         )
 
         return search_results
 
     except Exception as e:
-        logger.debug("Cloud search failed", error=str(e))
+        logger.debug(f"Cloud search failed: error={e}")
         return []
 
 

@@ -442,3 +442,522 @@ class TestCheckAvailable:
         watcher = _make_watcher(tmp_path)
         watcher._socket_path = sock_path
         assert await watcher.check_available() is False
+
+    async def test_socket_connect_fails(self, tmp_path):
+        """check_available returns False when connection fails."""
+        import os
+        import socket as sock_mod
+        import tempfile
+
+        # Use a short temp path to avoid AF_UNIX path length limits
+        fd, short_path = tempfile.mkstemp(suffix=".sock", dir="/tmp")
+        os.close(fd)
+        os.unlink(short_path)
+        sock_path = Path(short_path)
+        try:
+            s = sock_mod.socket(sock_mod.AF_UNIX, sock_mod.SOCK_STREAM)
+            s.bind(str(sock_path))
+            s.close()
+
+            watcher = _make_watcher(tmp_path)
+            watcher._socket_path = sock_path
+            with patch(
+                "asyncio.wait_for",
+                side_effect=OSError("refused"),
+            ):
+                assert await watcher.check_available() is False
+        finally:
+            if sock_path.exists():
+                sock_path.unlink()
+
+    async def test_socket_connect_success(self, tmp_path):
+        """check_available returns True when connection succeeds."""
+        import os
+        import socket as sock_mod
+        import tempfile
+
+        fd, short_path = tempfile.mkstemp(suffix=".sock", dir="/tmp")
+        os.close(fd)
+        os.unlink(short_path)
+        sock_path = Path(short_path)
+        try:
+            s = sock_mod.socket(sock_mod.AF_UNIX, sock_mod.SOCK_STREAM)
+            s.bind(str(sock_path))
+            s.close()
+
+            watcher = _make_watcher(tmp_path)
+            watcher._socket_path = sock_path
+            mock_writer = MagicMock()
+            mock_writer.close = MagicMock()
+            mock_writer.wait_closed = AsyncMock()
+            mock_reader = MagicMock()
+
+            async def mock_wait_for(coro, timeout):
+                return (mock_reader, mock_writer)
+
+            with patch("asyncio.wait_for", side_effect=mock_wait_for):
+                assert await watcher.check_available() is True
+            mock_writer.close.assert_called_once()
+        finally:
+            if sock_path.exists():
+                sock_path.unlink()
+
+
+# ---------------------------------------------------------------------------
+# _read_events
+# ---------------------------------------------------------------------------
+
+
+class TestReadEvents:
+    """Tests for _read_events."""
+
+    async def test_no_reader_returns_immediately(self, watcher):
+        """_read_events returns when no reader."""
+        watcher._reader = None
+        await watcher._read_events()
+
+    async def test_eof_disconnects(self, watcher):
+        """EOF on reader triggers disconnect."""
+        mock_reader = AsyncMock()
+        mock_reader.readline = AsyncMock(return_value=b"")  # EOF
+        watcher._reader = mock_reader
+        watcher._connected = True
+        watcher._shutdown = asyncio.Event()
+        watcher._writer = MagicMock()
+        watcher._writer.close = MagicMock()
+        watcher._writer.wait_closed = AsyncMock()
+        await watcher._read_events()
+        assert watcher._connected is False
+
+    async def test_valid_json_event_queued(self, watcher):
+        """Valid JSON event is converted and queued."""
+        event_data = _make_raw_event()
+        line = json.dumps(event_data).encode("utf-8") + b"\n"
+
+        call_count = 0
+
+        async def mock_readline():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return line
+            # Signal shutdown after first event
+            watcher._shutdown.set()
+            return b""
+
+        mock_reader = AsyncMock()
+        mock_reader.readline = mock_readline
+        watcher._reader = mock_reader
+        watcher._connected = True
+        watcher._shutdown = asyncio.Event()
+        watcher._writer = MagicMock()
+        watcher._writer.close = MagicMock()
+        watcher._writer.wait_closed = AsyncMock()
+        await watcher._read_events()
+        assert watcher._total_events == 1
+
+    async def test_invalid_json_increments_errors(self, watcher):
+        """Invalid JSON line increments error counter."""
+        call_count = 0
+
+        async def mock_readline():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return b"not valid json\n"
+            watcher._connected = False
+            return b""
+
+        mock_reader = AsyncMock()
+        mock_reader.readline = mock_readline
+        watcher._reader = mock_reader
+        watcher._connected = True
+        watcher._shutdown = asyncio.Event()
+        watcher._writer = MagicMock()
+        watcher._writer.close = MagicMock()
+        watcher._writer.wait_closed = AsyncMock()
+        await watcher._read_events()
+        assert watcher._total_errors == 1
+
+    async def test_read_timeout_continues(self, watcher):
+        """Timeout on readline continues the loop."""
+        call_count = 0
+
+        async def mock_readline():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise asyncio.TimeoutError()
+            # After timeout, signal shutdown
+            watcher._shutdown.set()
+            return b""
+
+        mock_reader = AsyncMock()
+        mock_reader.readline = mock_readline
+        watcher._reader = mock_reader
+        watcher._connected = True
+        watcher._shutdown = asyncio.Event()
+        watcher._writer = MagicMock()
+        watcher._writer.close = MagicMock()
+        watcher._writer.wait_closed = AsyncMock()
+
+        await watcher._read_events()
+        # Should have continued past timeout; call_count > 1
+        assert call_count >= 2
+
+    async def test_read_error_disconnects(self, watcher):
+        """General read error disconnects."""
+        mock_reader = AsyncMock()
+        mock_reader.readline = AsyncMock(side_effect=ConnectionResetError("reset"))
+        watcher._reader = mock_reader
+        watcher._connected = True
+        watcher._shutdown = asyncio.Event()
+        watcher._writer = MagicMock()
+        watcher._writer.close = MagicMock()
+        watcher._writer.wait_closed = AsyncMock()
+        await watcher._read_events()
+        assert watcher._connected is False
+
+
+# ---------------------------------------------------------------------------
+# _watch_loop
+# ---------------------------------------------------------------------------
+
+
+class TestWatchLoop:
+    """Tests for _watch_loop."""
+
+    async def test_shutdown_breaks_loop(self, watcher):
+        """Shutdown event breaks the watch loop."""
+        watcher._shutdown = asyncio.Event()
+        watcher._shutdown.set()
+        watcher._connected = False
+        with patch.object(watcher, "_connect", return_value=False):
+            await watcher._watch_loop()
+
+    async def test_connection_failure_retries(self, watcher):
+        """Failed connection waits and retries."""
+        watcher._shutdown = asyncio.Event()
+        connect_calls = 0
+
+        async def mock_connect():
+            nonlocal connect_calls
+            connect_calls += 1
+            if connect_calls >= 2:
+                watcher._shutdown.set()
+            return False
+
+        watcher._connected = False
+        with patch.object(watcher, "_connect", side_effect=mock_connect):
+            with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError):
+                await watcher._watch_loop()
+
+        assert connect_calls >= 2
+
+    async def test_successful_connection_reads_events(self, watcher):
+        """Successful connection proceeds to _read_events."""
+        watcher._shutdown = asyncio.Event()
+
+        async def mock_connect():
+            watcher._connected = True
+            return True
+
+        async def mock_read_events():
+            # Simulate disconnect after reading
+            watcher._connected = False
+            watcher._shutdown.set()
+
+        with patch.object(watcher, "_connect", side_effect=mock_connect):
+            with patch.object(watcher, "_read_events", side_effect=mock_read_events):
+                await watcher._watch_loop()
+
+    async def test_exception_in_loop_recovers(self, watcher):
+        """Exception in watch loop disconnects and sleeps."""
+        watcher._shutdown = asyncio.Event()
+        call_count = 0
+
+        async def mock_connect():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                watcher._connected = True
+                return True
+            watcher._shutdown.set()
+            return False
+
+        with patch.object(watcher, "_connect", side_effect=mock_connect):
+            with patch.object(
+                watcher, "_read_events", side_effect=RuntimeError("read error")
+            ):
+                with patch.object(watcher, "_disconnect", new_callable=AsyncMock):
+                    with patch("asyncio.sleep", new_callable=AsyncMock):
+                        await watcher._watch_loop()
+
+
+# ---------------------------------------------------------------------------
+# _attempt_recovery (additional branches)
+# ---------------------------------------------------------------------------
+
+
+class TestAttemptRecoveryExtended:
+    """Additional recovery tests."""
+
+    async def test_systemctl_restart_failure(self, watcher):
+        """systemctl restart returns non-zero code."""
+        watcher._restart_count = 0
+        watcher._last_restart_time = None
+        with patch.object(watcher, "_disconnect", new_callable=AsyncMock):
+            with patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec:
+                mock_proc = MagicMock()
+                mock_proc.wait = AsyncMock(return_value=1)
+                mock_proc.returncode = 1
+                mock_exec.return_value = mock_proc
+                with patch("asyncio.sleep", new_callable=AsyncMock):
+                    with patch.object(watcher, "_connect", return_value=False):
+                        await watcher._attempt_recovery()
+        assert watcher._restart_count == 1
+
+    async def test_systemctl_restart_timeout(self, watcher):
+        """systemctl restart times out."""
+        watcher._restart_count = 0
+        watcher._last_restart_time = None
+        with patch.object(watcher, "_disconnect", new_callable=AsyncMock):
+            with patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec:
+                mock_proc = MagicMock()
+                mock_proc.wait = AsyncMock(side_effect=asyncio.TimeoutError)
+                mock_exec.return_value = mock_proc
+                with patch("asyncio.sleep", new_callable=AsyncMock):
+                    with patch.object(watcher, "_connect", return_value=False):
+                        await watcher._attempt_recovery()
+        assert watcher._restart_count == 1
+
+    async def test_systemctl_restart_exception(self, watcher):
+        """Exception during systemctl restart is handled."""
+        watcher._restart_count = 0
+        watcher._last_restart_time = None
+        with patch.object(watcher, "_disconnect", new_callable=AsyncMock):
+            with patch(
+                "asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                side_effect=OSError("not found"),
+            ):
+                with patch("asyncio.sleep", new_callable=AsyncMock):
+                    with patch.object(watcher, "_connect", return_value=False):
+                        await watcher._attempt_recovery()
+        assert watcher._restart_count == 1
+
+    async def test_successful_reconnect_resets_event_time(self, watcher):
+        """Successful reconnection updates last_event_time."""
+        watcher._restart_count = 0
+        watcher._last_restart_time = None
+        watcher._last_event_time = None
+        with patch.object(watcher, "_disconnect", new_callable=AsyncMock):
+            with patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec:
+                mock_proc = MagicMock()
+                mock_proc.wait = AsyncMock(return_value=0)
+                mock_proc.returncode = 0
+                mock_exec.return_value = mock_proc
+                with patch("asyncio.sleep", new_callable=AsyncMock):
+                    with patch.object(watcher, "_connect", return_value=True):
+                        await watcher._attempt_recovery()
+        assert watcher._last_event_time is not None
+
+
+# ---------------------------------------------------------------------------
+# _check_health (additional branches)
+# ---------------------------------------------------------------------------
+
+
+class TestCheckHealthExtended:
+    """Additional health check tests."""
+
+    async def test_stale_events_with_successful_ping(self, watcher):
+        """Stale events but successful ping returns True."""
+        from datetime import timedelta
+
+        watcher._reader = MagicMock()
+        watcher._reader.at_eof.return_value = False
+        watcher._connected = True
+        watcher._last_event_time = datetime.now(timezone.utc) - timedelta(
+            seconds=STALE_THRESHOLD + 10
+        )
+        with patch.object(watcher, "_send_ping", return_value=True):
+            assert await watcher._check_health() is True
+
+    async def test_stale_events_with_failed_ping(self, watcher):
+        """Stale events and failed ping returns False."""
+        from datetime import timedelta
+
+        watcher._reader = MagicMock()
+        watcher._reader.at_eof.return_value = False
+        watcher._connected = True
+        watcher._last_event_time = datetime.now(timezone.utc) - timedelta(
+            seconds=STALE_THRESHOLD + 10
+        )
+        with patch.object(watcher, "_send_ping", return_value=False):
+            assert await watcher._check_health() is False
+
+
+# ---------------------------------------------------------------------------
+# _health_check_loop
+# ---------------------------------------------------------------------------
+
+
+class TestHealthCheckLoop:
+    """Tests for _health_check_loop."""
+
+    async def test_stops_when_not_running(self, watcher):
+        """Health check loop stops when _running is False."""
+        watcher._running = False
+        await watcher._health_check_loop()
+
+    async def test_calls_check_health(self, watcher):
+        """Health check loop calls _check_health."""
+        check_count = 0
+
+        async def mock_check_health():
+            nonlocal check_count
+            check_count += 1
+            watcher._running = False  # Stop after first check
+            return True
+
+        watcher._running = True
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            with patch.object(watcher, "_check_health", side_effect=mock_check_health):
+                await watcher._health_check_loop()
+        assert check_count == 1
+
+    async def test_attempts_recovery_on_unhealthy(self, watcher):
+        """Health check loop calls _attempt_recovery when unhealthy."""
+        check_count = 0
+
+        async def mock_check_health():
+            nonlocal check_count
+            check_count += 1
+            if check_count >= 2:
+                watcher._running = False
+            return False
+
+        watcher._running = True
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            with patch.object(watcher, "_check_health", side_effect=mock_check_health):
+                with patch.object(
+                    watcher, "_attempt_recovery", new_callable=AsyncMock
+                ) as mock_recover:
+                    await watcher._health_check_loop()
+        mock_recover.assert_called()
+
+    async def test_exception_in_health_check(self, watcher):
+        """Exception in health check loop does not crash."""
+        check_count = 0
+
+        async def mock_check_health():
+            nonlocal check_count
+            check_count += 1
+            if check_count >= 2:
+                watcher._running = False
+                return True
+            raise RuntimeError("check failed")
+
+        watcher._running = True
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            with patch.object(watcher, "_check_health", side_effect=mock_check_health):
+                await watcher._health_check_loop()
+
+
+# ---------------------------------------------------------------------------
+# start (additional)
+# ---------------------------------------------------------------------------
+
+
+class TestStartExtended:
+    """Additional start tests."""
+
+    async def test_start_available_then_cancelled(self, watcher):
+        """start runs _watch_loop until CancelledError."""
+        with patch.object(watcher, "check_available", return_value=True):
+            with patch.object(
+                watcher, "_watch_loop", side_effect=asyncio.CancelledError
+            ):
+                with patch.object(watcher, "stop", new_callable=AsyncMock):
+                    await watcher.start()
+                    assert watcher._running is False  # stop() sets this
+
+    async def test_start_available_then_error(self, watcher):
+        """start handles exceptions from _watch_loop."""
+        with patch.object(watcher, "check_available", return_value=True):
+            with patch.object(
+                watcher, "_watch_loop", side_effect=RuntimeError("loop error")
+            ):
+                with patch.object(watcher, "stop", new_callable=AsyncMock) as mock_stop:
+                    await watcher.start()
+                    mock_stop.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# stop (additional)
+# ---------------------------------------------------------------------------
+
+
+class TestStopExtended:
+    """Additional stop tests."""
+
+    async def test_stop_with_no_health_task(self, watcher):
+        """stop works when health_task is None."""
+        watcher._running = True
+        watcher._health_task = None
+        watcher._writer = None
+        watcher._reader = None
+        await watcher.stop()
+        assert watcher._running is False
+
+    async def test_stop_with_already_done_health_task(self, watcher):
+        """stop works when health_task is already done."""
+        watcher._running = True
+
+        async def _already_done():
+            pass
+
+        task = asyncio.create_task(_already_done())
+        await task  # Let it finish
+        watcher._health_task = task
+        watcher._writer = None
+        watcher._reader = None
+        await watcher.stop()
+        assert watcher._running is False
+
+
+# ---------------------------------------------------------------------------
+# _convert_to_event edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestConvertToEventExtended:
+    """Additional convert_to_event edge cases."""
+
+    def test_all_sources_mapped(self, watcher):
+        """All valid source strings produce valid events."""
+        for source in ("journal", "kernel", "probe", "ebpf", "docker", "inotify"):
+            raw = _make_raw_event(source=source)
+            event = watcher._convert_to_event(raw)
+            assert event is not None
+            assert event.source == source
+
+    def test_empty_raw_dict(self, watcher):
+        """Empty raw dict produces event with defaults."""
+        raw: dict[str, Any] = {}
+        event = watcher._convert_to_event(raw)
+        assert event is not None
+        assert event.source == "journal"
+        assert event.severity == "info"
+        assert event.category == "other"
+        assert event.message == ""
+
+    def test_nanosecond_timestamp_conversion(self, watcher):
+        """Nanosecond timestamp is correctly converted."""
+        # 2025-01-15 00:00:00 UTC in nanoseconds
+        ts_ns = 1736899200_000_000_000
+        raw = _make_raw_event(ts=ts_ns)
+        event = watcher._convert_to_event(raw)
+        assert event is not None
+        assert event.ts.year == 2025

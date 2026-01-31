@@ -852,3 +852,1325 @@ class TestHandleBootstrapStatus:
             result = run_async(_handle_bootstrap_status(""))
             assert "Not completed" in result
             assert "bootstrap" in result.lower()
+
+
+# =============================================================================
+# _learn_package deep tests
+# =============================================================================
+
+
+class TestLearnPackageInternal:
+    """Tests for the _learn_package internal logic."""
+
+    def test_no_intelligence_sources(self):
+        """When aggregator returns empty extraction_sources, return early with error."""
+        from elle.cli.package_learn_commands import _learn_package
+
+        mock_intel = MagicMock()
+        mock_intel.extraction_sources = ()
+
+        mock_aggregator = MagicMock()
+        mock_aggregator.gather = AsyncMock(return_value=mock_intel)
+
+        with (
+            patch("elle.capabilities.autogen.discover_binary", return_value=None),
+            patch("elle.capabilities.autogen.intelligence.get_aggregator", return_value=mock_aggregator),
+        ):
+            result = run_async(_learn_package("nonexistent-pkg"))
+            assert result.capabilities_generated == 0
+            assert result.capabilities_validated == 0
+            assert "No intelligence sources available" in result.errors
+
+    def test_llm_generation_failure(self):
+        """When LLM fails, return error result with extraction_sources."""
+        from elle.cli.package_learn_commands import _learn_package
+
+        mock_intel = MagicMock()
+        mock_intel.extraction_sources = ("dpkg", "man")
+        mock_intel.primary_binary = "nginx"
+
+        mock_aggregator = MagicMock()
+        mock_aggregator.gather = AsyncMock(return_value=mock_intel)
+        mock_aggregator.to_llm_context.return_value = "context"
+
+        mock_composer = MagicMock()
+        mock_composer.compose.return_value = "system prompt"
+
+        with (
+            patch("elle.capabilities.autogen.discover_binary", return_value=None),
+            patch("elle.capabilities.autogen.intelligence.get_aggregator", return_value=mock_aggregator),
+            patch("elle.rag.prompts.get_composer", return_value=mock_composer),
+            patch("elle.rag.llm.LLM") as mock_llm_cls,
+        ):
+            mock_llm_cls.return_value.generate_json.side_effect = RuntimeError("Ollama down")
+            result = run_async(_learn_package("nginx"))
+            assert result.capabilities_generated == 0
+            assert any("LLM generation failed" in e for e in result.errors)
+            assert result.extraction_sources == ("dpkg", "man")
+
+    def test_parse_validate_save_full_pipeline(self):
+        """Full pipeline: generate, validate, save capabilities."""
+        from elle.cli.package_learn_commands import _learn_package
+
+        mock_binary = MagicMock()
+        mock_binary.path = "/usr/bin/nginx"
+
+        mock_intel = MagicMock()
+        mock_intel.extraction_sources = ("dpkg",)
+        mock_intel.primary_binary = "nginx"
+        mock_intel.metadata.name = "nginx"
+        mock_intel.metadata.version = "1.22"
+
+        mock_aggregator = MagicMock()
+        mock_aggregator.gather = AsyncMock(return_value=mock_intel)
+        mock_aggregator.to_llm_context.return_value = "context"
+
+        mock_composer = MagicMock()
+        mock_composer.compose.return_value = "system prompt"
+
+        caps_json = {
+            "capabilities": [
+                {
+                    "name": "nginx.restart",
+                    "description": "Restart nginx",
+                    "risk_level": "medium",
+                    "command_template": "systemctl restart nginx",
+                    "source_command": "nginx",
+                    "side_effects": ["service_restart"],
+                    "input_fields": [{"name": "force", "constraints": {}}],
+                    "output_fields": ["status"],
+                }
+            ]
+        }
+
+        mock_spec = MagicMock()
+        mock_spec.name = "nginx.restart"
+
+        mock_validation = MagicMock()
+        mock_validation.overall_passed = True
+        mock_validation.trust_level = "core"
+
+        mock_store = MagicMock()
+
+        with (
+            patch("elle.capabilities.autogen.discover_binary", return_value=mock_binary),
+            patch("elle.capabilities.autogen.intelligence.get_aggregator", return_value=mock_aggregator),
+            patch("elle.rag.prompts.get_composer", return_value=mock_composer),
+            patch("elle.rag.llm.LLM") as mock_llm_cls,
+            patch("elle.capabilities.autogen.GeneratedCapabilitySpec") as mock_spec_cls,
+            patch("elle.capabilities.autogen.validate_capability", return_value=mock_validation),
+            patch("elle.capabilities.autogen.get_store", return_value=mock_store),
+            patch("elle.capabilities.autogen.factory.generate_input_model_code", return_value="code"),
+            patch("elle.capabilities.autogen.factory.generate_output_model_code", return_value="code"),
+            patch("elle.capabilities.autogen.factory.generate_capability_class_code", return_value="code"),
+            patch("elle.cli.agentic.incident_recorder.record_arm_action"),
+        ):
+            mock_llm_cls.return_value.generate_json.return_value = caps_json
+            mock_spec_cls.return_value = mock_spec
+            result = run_async(_learn_package("nginx"))
+            assert result.capabilities_generated == 1
+            assert result.package_name == "nginx"
+
+    def test_dry_run_skips_save(self):
+        """In dry_run mode, capabilities are generated but NOT saved."""
+        from elle.cli.package_learn_commands import _learn_package
+
+        mock_intel = MagicMock()
+        mock_intel.extraction_sources = ("dpkg",)
+        mock_intel.primary_binary = "nginx"
+
+        mock_aggregator = MagicMock()
+        mock_aggregator.gather = AsyncMock(return_value=mock_intel)
+        mock_aggregator.to_llm_context.return_value = "context"
+
+        mock_composer = MagicMock()
+        mock_composer.compose.return_value = "prompt"
+
+        mock_spec = MagicMock()
+        mock_spec.name = "nginx.restart"
+
+        mock_validation = MagicMock()
+        mock_validation.overall_passed = True
+
+        caps_json = {"capabilities": [{"name": "nginx.restart", "description": "x", "risk_level": "low", "command_template": "cmd", "source_command": "nginx", "side_effects": []}]}
+
+        with (
+            patch("elle.capabilities.autogen.discover_binary", return_value=None),
+            patch("elle.capabilities.autogen.intelligence.get_aggregator", return_value=mock_aggregator),
+            patch("elle.rag.prompts.get_composer", return_value=mock_composer),
+            patch("elle.rag.llm.LLM") as mock_llm_cls,
+            patch("elle.capabilities.autogen.GeneratedCapabilitySpec") as mock_spec_cls,
+            patch("elle.capabilities.autogen.validate_capability", return_value=mock_validation),
+            patch("elle.capabilities.autogen.get_store") as mock_get_store,
+        ):
+            mock_llm_cls.return_value.generate_json.return_value = caps_json
+            mock_spec_cls.return_value = mock_spec
+            result = run_async(_learn_package("nginx", dry_run=True))
+            assert result.capabilities_saved == 0
+            mock_get_store.assert_not_called()
+
+    def test_validation_failure_adds_warning(self):
+        """When validation fails, add warning and exclude from validated."""
+        from elle.cli.package_learn_commands import _learn_package
+
+        mock_intel = MagicMock()
+        mock_intel.extraction_sources = ("dpkg",)
+        mock_intel.primary_binary = "nginx"
+
+        mock_aggregator = MagicMock()
+        mock_aggregator.gather = AsyncMock(return_value=mock_intel)
+        mock_aggregator.to_llm_context.return_value = "context"
+
+        mock_composer = MagicMock()
+        mock_composer.compose.return_value = "prompt"
+
+        mock_spec = MagicMock()
+        mock_spec.name = "nginx.restart"
+
+        mock_stage = MagicMock()
+        mock_stage.errors = ["missing template"]
+        mock_validation = MagicMock()
+        mock_validation.overall_passed = False
+        mock_validation.stages = [mock_stage]
+
+        caps_json = {"capabilities": [{"name": "nginx.restart", "description": "x", "risk_level": "low", "command_template": "cmd", "source_command": "nginx", "side_effects": []}]}
+
+        with (
+            patch("elle.capabilities.autogen.discover_binary", return_value=None),
+            patch("elle.capabilities.autogen.intelligence.get_aggregator", return_value=mock_aggregator),
+            patch("elle.rag.prompts.get_composer", return_value=mock_composer),
+            patch("elle.rag.llm.LLM") as mock_llm_cls,
+            patch("elle.capabilities.autogen.GeneratedCapabilitySpec") as mock_spec_cls,
+            patch("elle.capabilities.autogen.validate_capability", return_value=mock_validation),
+        ):
+            mock_llm_cls.return_value.generate_json.return_value = caps_json
+            mock_spec_cls.return_value = mock_spec
+            result = run_async(_learn_package("nginx", dry_run=True))
+            assert result.capabilities_validated == 0
+            assert any("Validation failed" in w for w in result.warnings)
+
+    def test_validation_exception_adds_warning(self):
+        """When validate_capability raises, add warning."""
+        from elle.cli.package_learn_commands import _learn_package
+
+        mock_intel = MagicMock()
+        mock_intel.extraction_sources = ("dpkg",)
+        mock_intel.primary_binary = "nginx"
+
+        mock_aggregator = MagicMock()
+        mock_aggregator.gather = AsyncMock(return_value=mock_intel)
+        mock_aggregator.to_llm_context.return_value = "context"
+
+        mock_composer = MagicMock()
+        mock_composer.compose.return_value = "prompt"
+
+        mock_spec = MagicMock()
+        mock_spec.name = "nginx.restart"
+
+        caps_json = {"capabilities": [{"name": "nginx.restart", "description": "x", "risk_level": "low", "command_template": "cmd", "source_command": "nginx", "side_effects": []}]}
+
+        with (
+            patch("elle.capabilities.autogen.discover_binary", return_value=None),
+            patch("elle.capabilities.autogen.intelligence.get_aggregator", return_value=mock_aggregator),
+            patch("elle.rag.prompts.get_composer", return_value=mock_composer),
+            patch("elle.rag.llm.LLM") as mock_llm_cls,
+            patch("elle.capabilities.autogen.GeneratedCapabilitySpec") as mock_spec_cls,
+            patch("elle.capabilities.autogen.validate_capability", side_effect=RuntimeError("boom")),
+        ):
+            mock_llm_cls.return_value.generate_json.return_value = caps_json
+            mock_spec_cls.return_value = mock_spec
+            result = run_async(_learn_package("nginx", dry_run=True))
+            assert result.capabilities_validated == 0
+            assert any("Validation error" in w for w in result.warnings)
+
+    def test_invalid_capability_spec_adds_warning(self):
+        """When GeneratedCapabilitySpec(...) raises, add warning."""
+        from elle.cli.package_learn_commands import _learn_package
+
+        mock_intel = MagicMock()
+        mock_intel.extraction_sources = ("dpkg",)
+        mock_intel.primary_binary = "nginx"
+
+        mock_aggregator = MagicMock()
+        mock_aggregator.gather = AsyncMock(return_value=mock_intel)
+        mock_aggregator.to_llm_context.return_value = "context"
+
+        mock_composer = MagicMock()
+        mock_composer.compose.return_value = "prompt"
+
+        caps_json = {"capabilities": [{"name": "nginx.restart", "description": "x", "risk_level": "low", "command_template": "cmd", "source_command": "nginx", "side_effects": []}]}
+
+        with (
+            patch("elle.capabilities.autogen.discover_binary", return_value=None),
+            patch("elle.capabilities.autogen.intelligence.get_aggregator", return_value=mock_aggregator),
+            patch("elle.rag.prompts.get_composer", return_value=mock_composer),
+            patch("elle.rag.llm.LLM") as mock_llm_cls,
+            patch("elle.capabilities.autogen.GeneratedCapabilitySpec", side_effect=TypeError("bad field")),
+        ):
+            mock_llm_cls.return_value.generate_json.return_value = caps_json
+            result = run_async(_learn_package("nginx", dry_run=True))
+            assert result.capabilities_generated == 0
+            assert any("Invalid capability spec" in w for w in result.warnings)
+
+    def test_save_failure_adds_warning(self):
+        """When store.save() raises, add warning and continue."""
+        from elle.cli.package_learn_commands import _learn_package
+
+        mock_binary = MagicMock()
+        mock_binary.path = "/usr/bin/nginx"
+
+        mock_intel = MagicMock()
+        mock_intel.extraction_sources = ("dpkg",)
+        mock_intel.primary_binary = "nginx"
+        mock_intel.metadata.name = "nginx"
+        mock_intel.metadata.version = "1.22"
+
+        mock_aggregator = MagicMock()
+        mock_aggregator.gather = AsyncMock(return_value=mock_intel)
+        mock_aggregator.to_llm_context.return_value = "context"
+
+        mock_composer = MagicMock()
+        mock_composer.compose.return_value = "prompt"
+
+        mock_spec = MagicMock()
+        mock_spec.name = "nginx.restart"
+
+        mock_validation = MagicMock()
+        mock_validation.overall_passed = True
+        mock_validation.trust_level = "core"
+
+        mock_store = MagicMock()
+        mock_store.save.side_effect = RuntimeError("DB full")
+
+        caps_json = {"capabilities": [{"name": "nginx.restart", "description": "x", "risk_level": "low", "command_template": "cmd", "source_command": "nginx", "side_effects": []}]}
+
+        with (
+            patch("elle.capabilities.autogen.discover_binary", return_value=mock_binary),
+            patch("elle.capabilities.autogen.intelligence.get_aggregator", return_value=mock_aggregator),
+            patch("elle.rag.prompts.get_composer", return_value=mock_composer),
+            patch("elle.rag.llm.LLM") as mock_llm_cls,
+            patch("elle.capabilities.autogen.GeneratedCapabilitySpec") as mock_spec_cls,
+            patch("elle.capabilities.autogen.validate_capability", return_value=mock_validation),
+            patch("elle.capabilities.autogen.get_store", return_value=mock_store),
+            patch("elle.capabilities.autogen.factory.generate_input_model_code", return_value="code"),
+            patch("elle.capabilities.autogen.factory.generate_output_model_code", return_value="code"),
+            patch("elle.capabilities.autogen.factory.generate_capability_class_code", return_value="code"),
+            patch("elle.cli.agentic.incident_recorder.record_arm_action"),
+        ):
+            mock_llm_cls.return_value.generate_json.return_value = caps_json
+            mock_spec_cls.return_value = mock_spec
+            result = run_async(_learn_package("nginx"))
+            assert result.capabilities_saved == 0
+            assert any("Failed to save" in w for w in result.warnings)
+
+    def test_incident_recording_failure_is_silent(self):
+        """When record_arm_action fails, it is silently logged."""
+        from elle.cli.package_learn_commands import _learn_package
+
+        mock_binary = MagicMock()
+        mock_binary.path = "/usr/bin/nginx"
+
+        mock_intel = MagicMock()
+        mock_intel.extraction_sources = ("dpkg",)
+        mock_intel.primary_binary = "nginx"
+        mock_intel.metadata.name = "nginx"
+        mock_intel.metadata.version = "1.22"
+
+        mock_aggregator = MagicMock()
+        mock_aggregator.gather = AsyncMock(return_value=mock_intel)
+        mock_aggregator.to_llm_context.return_value = "context"
+
+        mock_composer = MagicMock()
+        mock_composer.compose.return_value = "prompt"
+
+        mock_spec = MagicMock()
+        mock_spec.name = "nginx.restart"
+
+        mock_validation = MagicMock()
+        mock_validation.overall_passed = True
+        mock_validation.trust_level = "core"
+
+        mock_store = MagicMock()
+
+        caps_json = {"capabilities": [{"name": "nginx.restart", "description": "x", "risk_level": "low", "command_template": "cmd", "source_command": "nginx", "side_effects": []}]}
+
+        with (
+            patch("elle.capabilities.autogen.discover_binary", return_value=mock_binary),
+            patch("elle.capabilities.autogen.intelligence.get_aggregator", return_value=mock_aggregator),
+            patch("elle.rag.prompts.get_composer", return_value=mock_composer),
+            patch("elle.rag.llm.LLM") as mock_llm_cls,
+            patch("elle.capabilities.autogen.GeneratedCapabilitySpec") as mock_spec_cls,
+            patch("elle.capabilities.autogen.validate_capability", return_value=mock_validation),
+            patch("elle.capabilities.autogen.get_store", return_value=mock_store),
+            patch("elle.capabilities.autogen.factory.generate_input_model_code", return_value="code"),
+            patch("elle.capabilities.autogen.factory.generate_output_model_code", return_value="code"),
+            patch("elle.capabilities.autogen.factory.generate_capability_class_code", return_value="code"),
+            patch(
+                "elle.cli.agentic.incident_recorder.record_arm_action",
+                side_effect=RuntimeError("vault down"),
+            ),
+        ):
+            mock_llm_cls.return_value.generate_json.return_value = caps_json
+            mock_spec_cls.return_value = mock_spec
+            # Should not raise
+            result = run_async(_learn_package("nginx"))
+            assert result.package_name == "nginx"
+
+    def test_no_capabilities_key_in_json(self):
+        """When LLM returns JSON without 'capabilities' key, no specs generated."""
+        from elle.cli.package_learn_commands import _learn_package
+
+        mock_intel = MagicMock()
+        mock_intel.extraction_sources = ("dpkg",)
+        mock_intel.primary_binary = "nginx"
+
+        mock_aggregator = MagicMock()
+        mock_aggregator.gather = AsyncMock(return_value=mock_intel)
+        mock_aggregator.to_llm_context.return_value = "context"
+
+        mock_composer = MagicMock()
+        mock_composer.compose.return_value = "prompt"
+
+        with (
+            patch("elle.capabilities.autogen.discover_binary", return_value=None),
+            patch("elle.capabilities.autogen.intelligence.get_aggregator", return_value=mock_aggregator),
+            patch("elle.rag.prompts.get_composer", return_value=mock_composer),
+            patch("elle.rag.llm.LLM") as mock_llm_cls,
+        ):
+            mock_llm_cls.return_value.generate_json.return_value = {"result": "ok"}
+            result = run_async(_learn_package("nginx", dry_run=True))
+            assert result.capabilities_generated == 0
+            assert result.capabilities_validated == 0
+
+    def test_source_command_defaults_to_primary_binary(self):
+        """When cap data lacks source_command, defaults to primary_binary."""
+        from elle.cli.package_learn_commands import _learn_package
+
+        mock_intel = MagicMock()
+        mock_intel.extraction_sources = ("dpkg",)
+        mock_intel.primary_binary = "ffmpeg"
+
+        mock_aggregator = MagicMock()
+        mock_aggregator.gather = AsyncMock(return_value=mock_intel)
+        mock_aggregator.to_llm_context.return_value = "context"
+
+        mock_composer = MagicMock()
+        mock_composer.compose.return_value = "prompt"
+
+        # Cap without source_command
+        caps_json = {
+            "capabilities": [
+                {
+                    "name": "ffmpeg.convert",
+                    "description": "Convert media",
+                    "risk_level": "low",
+                    "command_template": "ffmpeg -i {input}",
+                    "side_effects": [],
+                }
+            ]
+        }
+
+        mock_spec_cls_instance = MagicMock()
+        mock_spec_cls_instance.name = "ffmpeg.convert"
+
+        mock_validation = MagicMock()
+        mock_validation.overall_passed = True
+
+        with (
+            patch("elle.capabilities.autogen.discover_binary", return_value=None),
+            patch("elle.capabilities.autogen.intelligence.get_aggregator", return_value=mock_aggregator),
+            patch("elle.rag.prompts.get_composer", return_value=mock_composer),
+            patch("elle.rag.llm.LLM") as mock_llm_cls,
+            patch("elle.capabilities.autogen.GeneratedCapabilitySpec") as mock_spec_cls,
+            patch("elle.capabilities.autogen.validate_capability", return_value=mock_validation),
+        ):
+            mock_llm_cls.return_value.generate_json.return_value = caps_json
+            mock_spec_cls.return_value = mock_spec_cls_instance
+            result = run_async(_learn_package("ffmpeg", dry_run=True))
+            # The source_command should have been injected
+            call_kwargs = mock_spec_cls.call_args[1]
+            assert call_kwargs["source_command"] == "ffmpeg"
+
+    def test_input_fields_without_constraints(self):
+        """Input fields missing constraints get empty dict added."""
+        from elle.cli.package_learn_commands import _learn_package
+
+        mock_intel = MagicMock()
+        mock_intel.extraction_sources = ("dpkg",)
+        mock_intel.primary_binary = "test"
+
+        mock_aggregator = MagicMock()
+        mock_aggregator.gather = AsyncMock(return_value=mock_intel)
+        mock_aggregator.to_llm_context.return_value = "context"
+
+        mock_composer = MagicMock()
+        mock_composer.compose.return_value = "prompt"
+
+        caps_json = {
+            "capabilities": [
+                {
+                    "name": "test.run",
+                    "description": "Run test",
+                    "risk_level": "low",
+                    "command_template": "test run",
+                    "source_command": "test",
+                    "side_effects": [],
+                    "input_fields": [{"name": "verbose"}],
+                    "output_fields": ["result"],
+                }
+            ]
+        }
+
+        mock_spec_instance = MagicMock()
+        mock_spec_instance.name = "test.run"
+
+        mock_validation = MagicMock()
+        mock_validation.overall_passed = True
+
+        with (
+            patch("elle.capabilities.autogen.discover_binary", return_value=None),
+            patch("elle.capabilities.autogen.intelligence.get_aggregator", return_value=mock_aggregator),
+            patch("elle.rag.prompts.get_composer", return_value=mock_composer),
+            patch("elle.rag.llm.LLM") as mock_llm_cls,
+            patch("elle.capabilities.autogen.GeneratedCapabilitySpec") as mock_spec_cls,
+            patch("elle.capabilities.autogen.validate_capability", return_value=mock_validation),
+        ):
+            mock_llm_cls.return_value.generate_json.return_value = caps_json
+            mock_spec_cls.return_value = mock_spec_instance
+            result = run_async(_learn_package("test", dry_run=True))
+            # Should have added constraints
+            call_kwargs = mock_spec_cls.call_args[1]
+            assert call_kwargs["input_fields"][0]["constraints"] == {}
+
+
+# =============================================================================
+# _handle_learn_all tests
+# =============================================================================
+
+
+class TestHandleLearnAll:
+    def test_all_dry_run(self):
+        from elle.cli.package_learn_commands import _handle_learn_all
+
+        with (
+            patch(
+                "elle.cli.package_learn_commands._get_all_installed_packages",
+                new_callable=AsyncMock,
+                return_value=["pkg1", "pkg2", "pkg3"],
+            ),
+            patch(
+                "elle.cli.package_learn_commands._filter_learnable_packages",
+                new_callable=AsyncMock,
+                return_value=["pkg1", "pkg2"],
+            ),
+        ):
+            result = run_async(_handle_learn_all("--all --dry-run"))
+            assert "Would learn 2 packages" in result
+            assert "pkg1" in result
+            assert "pkg2" in result
+
+    def test_all_no_packages(self):
+        from elle.cli.package_learn_commands import _handle_learn_all
+
+        with patch(
+            "elle.cli.package_learn_commands._get_all_installed_packages",
+            new_callable=AsyncMock,
+            return_value=[],
+        ):
+            result = run_async(_handle_learn_all("--all"))
+            assert "No installed packages" in result
+
+    def test_all_get_packages_failure(self):
+        from elle.cli.package_learn_commands import _handle_learn_all
+
+        with patch(
+            "elle.cli.package_learn_commands._get_all_installed_packages",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("dpkg broken"),
+        ):
+            result = run_async(_handle_learn_all("--all"))
+            assert "Failed to list installed packages" in result
+
+    def test_all_runs_full_system_learn(self):
+        from elle.cli.package_learn_commands import _handle_learn_all
+
+        mock_result = {
+            "attempted": 2,
+            "succeeded": 1,
+            "failed": 1,
+            "skipped": 0,
+            "capabilities_generated": 3,
+            "duration": 10.5,
+            "failures": [("pkg2", "LLM timeout")],
+        }
+
+        with (
+            patch(
+                "elle.cli.package_learn_commands._get_all_installed_packages",
+                new_callable=AsyncMock,
+                return_value=["pkg1", "pkg2"],
+            ),
+            patch(
+                "elle.cli.package_learn_commands._filter_learnable_packages",
+                new_callable=AsyncMock,
+                return_value=["pkg1", "pkg2"],
+            ),
+            patch(
+                "elle.cli.package_learn_commands._run_full_system_learn",
+                new_callable=AsyncMock,
+                return_value=mock_result,
+            ),
+        ):
+            result = run_async(_handle_learn_all("--all"))
+            assert "Complete!" in result
+            assert "2" in result
+            assert "LLM timeout" in result
+
+    def test_all_system_learn_failure(self):
+        from elle.cli.package_learn_commands import _handle_learn_all
+
+        with (
+            patch(
+                "elle.cli.package_learn_commands._get_all_installed_packages",
+                new_callable=AsyncMock,
+                return_value=["pkg1"],
+            ),
+            patch(
+                "elle.cli.package_learn_commands._filter_learnable_packages",
+                new_callable=AsyncMock,
+                return_value=["pkg1"],
+            ),
+            patch(
+                "elle.cli.package_learn_commands._run_full_system_learn",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("crash"),
+            ),
+        ):
+            result = run_async(_handle_learn_all("--all"))
+            assert "failed" in result.lower()
+
+    def test_all_dry_run_many_packages(self):
+        """When more than 50 packages, output truncated."""
+        from elle.cli.package_learn_commands import _handle_learn_all
+
+        pkgs = [f"pkg{i}" for i in range(70)]
+        with (
+            patch(
+                "elle.cli.package_learn_commands._get_all_installed_packages",
+                new_callable=AsyncMock,
+                return_value=pkgs,
+            ),
+            patch(
+                "elle.cli.package_learn_commands._filter_learnable_packages",
+                new_callable=AsyncMock,
+                return_value=pkgs,
+            ),
+        ):
+            result = run_async(_handle_learn_all("--all --dry-run"))
+            assert "20 more" in result
+
+    def test_all_with_max_concurrent(self):
+        from elle.cli.package_learn_commands import _handle_learn_all
+
+        mock_result = {
+            "attempted": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "skipped": 0,
+            "capabilities_generated": 2,
+            "duration": 5.0,
+            "failures": [],
+        }
+
+        with (
+            patch(
+                "elle.cli.package_learn_commands._get_all_installed_packages",
+                new_callable=AsyncMock,
+                return_value=["pkg1"],
+            ),
+            patch(
+                "elle.cli.package_learn_commands._filter_learnable_packages",
+                new_callable=AsyncMock,
+                return_value=["pkg1"],
+            ),
+            patch(
+                "elle.cli.package_learn_commands._run_full_system_learn",
+                new_callable=AsyncMock,
+                return_value=mock_result,
+            ) as mock_run,
+        ):
+            run_async(_handle_learn_all("--all --max-concurrent=4"))
+            call_kwargs = mock_run.call_args
+            assert call_kwargs[1]["max_concurrent"] == 4
+
+    def test_all_with_no_skip(self):
+        from elle.cli.package_learn_commands import _handle_learn_all
+
+        mock_result = {
+            "attempted": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "skipped": 0,
+            "capabilities_generated": 1,
+            "duration": 1.0,
+            "failures": [],
+        }
+
+        with (
+            patch(
+                "elle.cli.package_learn_commands._get_all_installed_packages",
+                new_callable=AsyncMock,
+                return_value=["pkg1"],
+            ),
+            patch(
+                "elle.cli.package_learn_commands._filter_learnable_packages",
+                new_callable=AsyncMock,
+                return_value=["pkg1"],
+            ),
+            patch(
+                "elle.cli.package_learn_commands._run_full_system_learn",
+                new_callable=AsyncMock,
+                return_value=mock_result,
+            ) as mock_run,
+        ):
+            run_async(_handle_learn_all("--all --no-skip"))
+            call_kwargs = mock_run.call_args
+            assert call_kwargs[1]["skip_existing"] is False
+
+    def test_all_result_with_skipped(self):
+        from elle.cli.package_learn_commands import _handle_learn_all
+
+        mock_result = {
+            "attempted": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "skipped": 5,
+            "capabilities_generated": 1,
+            "duration": 1.0,
+            "failures": [],
+        }
+
+        with (
+            patch(
+                "elle.cli.package_learn_commands._get_all_installed_packages",
+                new_callable=AsyncMock,
+                return_value=["pkg1"],
+            ),
+            patch(
+                "elle.cli.package_learn_commands._filter_learnable_packages",
+                new_callable=AsyncMock,
+                return_value=["pkg1"],
+            ),
+            patch(
+                "elle.cli.package_learn_commands._run_full_system_learn",
+                new_callable=AsyncMock,
+                return_value=mock_result,
+            ),
+        ):
+            result = run_async(_handle_learn_all("--all"))
+            assert "Skipped" in result
+
+
+# =============================================================================
+# _get_all_installed_packages tests
+# =============================================================================
+
+
+class TestGetAllInstalledPackages:
+    def test_success(self):
+        from elle.cli.package_learn_commands import _get_all_installed_packages
+
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = "pkg1\npkg2\npkg3\n"
+
+        with patch("subprocess.run", return_value=mock_proc):
+            result = run_async(_get_all_installed_packages())
+            assert result == ["pkg1", "pkg2", "pkg3"]
+
+    def test_failure(self):
+        from elle.cli.package_learn_commands import _get_all_installed_packages
+
+        mock_proc = MagicMock()
+        mock_proc.returncode = 1
+        mock_proc.stderr = "not found"
+
+        with patch("subprocess.run", return_value=mock_proc):
+            with pytest.raises(RuntimeError, match="dpkg-query failed"):
+                run_async(_get_all_installed_packages())
+
+    def test_empty_lines_filtered(self):
+        from elle.cli.package_learn_commands import _get_all_installed_packages
+
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = "pkg1\n\n  \npkg2\n"
+
+        with patch("subprocess.run", return_value=mock_proc):
+            result = run_async(_get_all_installed_packages())
+            assert result == ["pkg1", "pkg2"]
+
+
+# =============================================================================
+# _filter_learnable_packages tests
+# =============================================================================
+
+
+class TestFilterLearnablePackages:
+    def test_binary_detected(self):
+        from elle.cli.package_learn_commands import _filter_learnable_packages
+
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = "/usr/bin/nginx\n/usr/share/doc/nginx/readme"
+
+        with patch("subprocess.run", return_value=mock_proc):
+            result = run_async(_filter_learnable_packages(["nginx"]))
+            assert result == ["nginx"]
+
+    def test_manpage_detected(self):
+        from elle.cli.package_learn_commands import _filter_learnable_packages
+
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = "/usr/share/man/man1/foo.1.gz\n/usr/share/doc/foo"
+
+        with patch("subprocess.run", return_value=mock_proc):
+            result = run_async(_filter_learnable_packages(["foo"]))
+            assert result == ["foo"]
+
+    def test_no_binary_no_manpage(self):
+        from elle.cli.package_learn_commands import _filter_learnable_packages
+
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = "/usr/share/doc/libfoo/readme\n/usr/lib/libfoo.so"
+
+        with patch("subprocess.run", return_value=mock_proc):
+            result = run_async(_filter_learnable_packages(["libfoo"]))
+            assert result == []
+
+    def test_dpkg_query_failure_skipped(self):
+        from elle.cli.package_learn_commands import _filter_learnable_packages
+
+        mock_proc = MagicMock()
+        mock_proc.returncode = 1
+
+        with patch("subprocess.run", return_value=mock_proc):
+            result = run_async(_filter_learnable_packages(["broken"]))
+            assert result == []
+
+    def test_exception_skipped(self):
+        from elle.cli.package_learn_commands import _filter_learnable_packages
+
+        with patch("subprocess.run", side_effect=OSError("permission denied")):
+            result = run_async(_filter_learnable_packages(["pkg"]))
+            assert result == []
+
+    def test_sbin_binary_detected(self):
+        from elle.cli.package_learn_commands import _filter_learnable_packages
+
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = "/usr/sbin/iptables\n/usr/share/doc/iptables"
+
+        with patch("subprocess.run", return_value=mock_proc):
+            result = run_async(_filter_learnable_packages(["iptables"]))
+            assert result == ["iptables"]
+
+    def test_man8_detected(self):
+        from elle.cli.package_learn_commands import _filter_learnable_packages
+
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = "/usr/share/man/man8/mount.8.gz"
+
+        with patch("subprocess.run", return_value=mock_proc):
+            result = run_async(_filter_learnable_packages(["mount"]))
+            assert result == ["mount"]
+
+
+# =============================================================================
+# _run_full_system_learn tests
+# =============================================================================
+
+
+class TestRunFullSystemLearn:
+    def test_skip_existing_packages(self):
+        from elle.cli.package_learn_commands import _run_full_system_learn
+
+        mock_store = MagicMock()
+        mock_store.list_packages_with_capabilities.return_value = [("pkg1", "1.0")]
+
+        mock_result = LearnResult(
+            package_name="pkg2",
+            capabilities_generated=1,
+            capabilities_validated=1,
+            capabilities_saved=1,
+            extraction_sources=("dpkg",),
+        )
+
+        with (
+            patch("elle.capabilities.autogen.get_store", return_value=mock_store),
+            patch(
+                "elle.cli.package_learn_commands._learn_package",
+                new_callable=AsyncMock,
+                return_value=mock_result,
+            ),
+        ):
+            result = run_async(_run_full_system_learn(["pkg1", "pkg2"], skip_existing=True))
+            assert result["skipped"] == 1
+            assert result["attempted"] == 1
+            assert result["succeeded"] == 1
+
+    def test_no_skip_learns_all(self):
+        from elle.cli.package_learn_commands import _run_full_system_learn
+
+        mock_store = MagicMock()
+        mock_store.list_packages_with_capabilities.return_value = []
+
+        mock_result = LearnResult(
+            package_name="pkg",
+            capabilities_generated=1,
+            capabilities_validated=1,
+            capabilities_saved=1,
+            extraction_sources=("dpkg",),
+        )
+
+        with (
+            patch("elle.capabilities.autogen.get_store", return_value=mock_store),
+            patch(
+                "elle.cli.package_learn_commands._learn_package",
+                new_callable=AsyncMock,
+                return_value=mock_result,
+            ),
+        ):
+            result = run_async(_run_full_system_learn(["pkg1", "pkg2"], skip_existing=False))
+            assert result["attempted"] == 2
+            assert result["succeeded"] == 2
+
+    def test_learn_failure_tracked(self):
+        from elle.cli.package_learn_commands import _run_full_system_learn
+
+        mock_store = MagicMock()
+        mock_store.list_packages_with_capabilities.return_value = []
+
+        mock_result_with_errors = LearnResult(
+            package_name="bad-pkg",
+            capabilities_generated=0,
+            capabilities_validated=0,
+            capabilities_saved=0,
+            extraction_sources=(),
+            errors=("No intel",),
+        )
+
+        with (
+            patch("elle.capabilities.autogen.get_store", return_value=mock_store),
+            patch(
+                "elle.cli.package_learn_commands._learn_package",
+                new_callable=AsyncMock,
+                return_value=mock_result_with_errors,
+            ),
+        ):
+            result = run_async(_run_full_system_learn(["bad-pkg"]))
+            assert result["failed"] == 1
+            assert result["failures"][0] == ("bad-pkg", "No intel")
+
+    def test_exception_in_learn_one(self):
+        from elle.cli.package_learn_commands import _run_full_system_learn
+
+        mock_store = MagicMock()
+        mock_store.list_packages_with_capabilities.return_value = []
+
+        with (
+            patch("elle.capabilities.autogen.get_store", return_value=mock_store),
+            patch(
+                "elle.cli.package_learn_commands._learn_package",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("total crash"),
+            ),
+        ):
+            result = run_async(_run_full_system_learn(["pkg1"]))
+            assert result["failed"] == 1
+            assert "total crash" in result["failures"][0][1]
+
+    def test_duration_computed(self):
+        from elle.cli.package_learn_commands import _run_full_system_learn
+
+        mock_store = MagicMock()
+        mock_store.list_packages_with_capabilities.return_value = []
+
+        mock_result = LearnResult(
+            package_name="pkg",
+            capabilities_generated=0,
+            capabilities_validated=0,
+            capabilities_saved=0,
+            extraction_sources=(),
+            errors=("no intel",),
+        )
+
+        with (
+            patch("elle.capabilities.autogen.get_store", return_value=mock_store),
+            patch(
+                "elle.cli.package_learn_commands._learn_package",
+                new_callable=AsyncMock,
+                return_value=mock_result,
+            ),
+        ):
+            result = run_async(_run_full_system_learn([]))
+            assert "duration" in result
+            assert result["duration"] >= 0.0
+
+
+# =============================================================================
+# _handle_show extended tests
+# =============================================================================
+
+
+class TestHandleShowExtended:
+    def test_show_disabled_capability(self):
+        from elle.cli.package_learn_commands import _handle_show
+
+        mock_stored = MagicMock()
+        mock_stored.approved = False
+        mock_stored.enabled = False
+        mock_stored.trust_level.value = "third_party"
+
+        mock_spec = MagicMock()
+        mock_spec.name = "custom.run"
+        mock_spec.description = "A custom operation for running things with parameters"
+        mock_spec.risk_level = "high"
+        mock_spec.command_template = "custom-tool run --mode=full --verbose --output"
+
+        mock_store = MagicMock()
+        mock_store.list_by_package.return_value = [mock_stored]
+
+        with (
+            patch("elle.capabilities.autogen.get_store", return_value=mock_store),
+            patch(
+                "elle.capabilities.autogen.GeneratedCapabilitySpec.model_validate_json",
+                return_value=mock_spec,
+            ),
+        ):
+            result = run_async(_handle_show("custom"))
+            assert "pending" in result
+            assert "disabled" in result
+            assert "custom.run" in result
+
+    def test_show_spec_parse_error(self):
+        from elle.cli.package_learn_commands import _handle_show
+
+        mock_stored = MagicMock()
+        mock_stored.capability_name = "broken.cap"
+
+        mock_store = MagicMock()
+        mock_store.list_by_package.return_value = [mock_stored]
+
+        with (
+            patch("elle.capabilities.autogen.get_store", return_value=mock_store),
+            patch(
+                "elle.capabilities.autogen.GeneratedCapabilitySpec.model_validate_json",
+                side_effect=ValueError("bad json"),
+            ),
+        ):
+            result = run_async(_handle_show("broken"))
+            assert "Error loading spec" in result
+            assert "broken.cap" in result
+
+
+# =============================================================================
+# _handle_approve / _handle_delete incident recording failure tests
+# =============================================================================
+
+
+class TestApproveDeleteRecordingFailure:
+    def test_approve_recording_failure_silent(self):
+        from elle.cli.package_learn_commands import _handle_approve
+
+        mock_store = MagicMock()
+        mock_store.approve.return_value = True
+
+        with (
+            patch("elle.capabilities.autogen.get_store", return_value=mock_store),
+            patch(
+                "elle.cli.agentic.incident_recorder.record_arm_action",
+                side_effect=RuntimeError("vault down"),
+            ),
+        ):
+            result = run_async(_handle_approve("test.cap"))
+            assert "Approved" in result
+
+    def test_delete_recording_failure_silent(self):
+        from elle.cli.package_learn_commands import _handle_delete
+
+        mock_store = MagicMock()
+        mock_store.delete.return_value = True
+
+        with (
+            patch("elle.capabilities.autogen.get_store", return_value=mock_store),
+            patch(
+                "elle.cli.agentic.incident_recorder.record_arm_action",
+                side_effect=RuntimeError("vault down"),
+            ),
+        ):
+            result = run_async(_handle_delete("test.cap"))
+            assert "Deleted" in result
+
+
+# =============================================================================
+# _handle_bootstrap extended tests
+# =============================================================================
+
+
+class TestHandleBootstrapExtended:
+    def test_bootstrap_core_flag(self):
+        from elle.cli.package_learn_commands import _handle_bootstrap
+
+        mock_result = MagicMock()
+        mock_result.packages_attempted = 5
+        mock_result.packages_succeeded = 5
+        mock_result.packages_failed = 0
+        mock_result.packages_skipped = 0
+        mock_result.capabilities_generated = 10
+        mock_result.capabilities_validated = 10
+        mock_result.capabilities_saved = 10
+        mock_result.duration_seconds = 5.0
+        mock_result.failed_packages = []
+
+        with (
+            patch(
+                "elle.capabilities.autogen.bootstrap.run_bootstrap",
+                new_callable=AsyncMock,
+                return_value=mock_result,
+            ) as mock_run,
+            patch("elle.capabilities.autogen.bootstrap.set_bootstrap_complete"),
+        ):
+            run_async(_handle_bootstrap("--core"))
+            call_kwargs = mock_run.call_args[1]
+            assert call_kwargs["include_core"] is True
+            assert call_kwargs["include_essential"] is False
+            assert call_kwargs["include_optional"] is False
+            assert call_kwargs["include_dependencies"] is False
+
+    def test_bootstrap_essential_flag(self):
+        from elle.cli.package_learn_commands import _handle_bootstrap
+
+        mock_result = MagicMock()
+        mock_result.packages_attempted = 5
+        mock_result.packages_succeeded = 5
+        mock_result.packages_failed = 0
+        mock_result.packages_skipped = 0
+        mock_result.capabilities_generated = 10
+        mock_result.capabilities_validated = 10
+        mock_result.capabilities_saved = 10
+        mock_result.duration_seconds = 5.0
+        mock_result.failed_packages = []
+
+        with (
+            patch(
+                "elle.capabilities.autogen.bootstrap.run_bootstrap",
+                new_callable=AsyncMock,
+                return_value=mock_result,
+            ) as mock_run,
+            patch("elle.capabilities.autogen.bootstrap.set_bootstrap_complete"),
+        ):
+            run_async(_handle_bootstrap("--essential"))
+            call_kwargs = mock_run.call_args[1]
+            assert call_kwargs["include_essential"] is True
+            assert call_kwargs["include_core"] is False
+
+    def test_bootstrap_deps_flag(self):
+        from elle.cli.package_learn_commands import _handle_bootstrap
+
+        mock_result = MagicMock()
+        mock_result.packages_attempted = 5
+        mock_result.packages_succeeded = 5
+        mock_result.packages_failed = 0
+        mock_result.packages_skipped = 0
+        mock_result.capabilities_generated = 10
+        mock_result.capabilities_validated = 10
+        mock_result.capabilities_saved = 10
+        mock_result.duration_seconds = 5.0
+        mock_result.failed_packages = []
+
+        with (
+            patch(
+                "elle.capabilities.autogen.bootstrap.run_bootstrap",
+                new_callable=AsyncMock,
+                return_value=mock_result,
+            ) as mock_run,
+            patch("elle.capabilities.autogen.bootstrap.set_bootstrap_complete"),
+        ):
+            run_async(_handle_bootstrap("--deps"))
+            call_kwargs = mock_run.call_args[1]
+            assert call_kwargs["include_dependencies"] is True
+            assert call_kwargs["include_core"] is False
+
+    def test_bootstrap_many_failed_packages(self):
+        from elle.cli.package_learn_commands import _handle_bootstrap
+
+        mock_result = MagicMock()
+        mock_result.packages_attempted = 20
+        mock_result.packages_succeeded = 5
+        mock_result.packages_failed = 15
+        mock_result.packages_skipped = 3
+        mock_result.capabilities_generated = 10
+        mock_result.capabilities_validated = 8
+        mock_result.capabilities_saved = 8
+        mock_result.duration_seconds = 60.0
+        mock_result.failed_packages = [(f"pkg{i}", f"error{i}") for i in range(15)]
+
+        with (
+            patch(
+                "elle.capabilities.autogen.bootstrap.run_bootstrap",
+                new_callable=AsyncMock,
+                return_value=mock_result,
+            ),
+            patch("elle.capabilities.autogen.bootstrap.set_bootstrap_complete"),
+        ):
+            result = run_async(_handle_bootstrap(""))
+            assert "Failed packages:" in result
+            assert "5 more" in result  # 15 - 10 = 5 truncated
+
+    def test_bootstrap_no_failures_no_skipped(self):
+        from elle.cli.package_learn_commands import _handle_bootstrap
+
+        mock_result = MagicMock()
+        mock_result.packages_attempted = 5
+        mock_result.packages_succeeded = 5
+        mock_result.packages_failed = 0
+        mock_result.packages_skipped = 0
+        mock_result.capabilities_generated = 10
+        mock_result.capabilities_validated = 10
+        mock_result.capabilities_saved = 10
+        mock_result.duration_seconds = 3.0
+        mock_result.failed_packages = []
+
+        with (
+            patch(
+                "elle.capabilities.autogen.bootstrap.run_bootstrap",
+                new_callable=AsyncMock,
+                return_value=mock_result,
+            ),
+            patch("elle.capabilities.autogen.bootstrap.set_bootstrap_complete"),
+        ):
+            result = run_async(_handle_bootstrap(""))
+            assert "Bootstrap complete" in result
+            assert "Failed" not in result
+            assert "Skipped" not in result
+
+
+# =============================================================================
+# handle_learn_command edge cases
+# =============================================================================
+
+
+class TestHandleLearnCommandEdgeCases:
+    def test_all_flag_with_extra_flags(self):
+        """--all with additional flags dispatches to _handle_learn_all."""
+        with patch(
+            "elle.cli.package_learn_commands._handle_learn_all",
+            new_callable=AsyncMock,
+            return_value="all output",
+        ) as mock_all:
+            result = run_async(handle_learn_command("--all --dry-run"))
+            mock_all.assert_called_once_with("--all --dry-run")
+            assert result == "all output"
+
+    def test_package_with_multiple_flags(self):
+        """Package with --refresh --dry-run dispatches correctly."""
+        with patch(
+            "elle.cli.package_learn_commands._handle_learn",
+            new_callable=AsyncMock,
+            return_value="learn output",
+        ) as mock_learn:
+            result = run_async(handle_learn_command("nginx --refresh --dry-run"))
+            mock_learn.assert_called_once_with("nginx --refresh --dry-run")
+            assert result == "learn output"
+
+    def test_session_parameter_passed_through(self):
+        """Session parameter does not cause errors."""
+        result = run_async(handle_learn_command("", session=None))
+        assert "/learn" in result
+
+    def test_show_with_extra_whitespace(self):
+        """Whitespace in show args is handled -- args.strip() then split(None, 1)."""
+        with patch(
+            "elle.cli.package_learn_commands._handle_show",
+            new_callable=AsyncMock,
+            return_value="show output",
+        ) as mock_show:
+            result = run_async(handle_learn_command("show   nginx  "))
+            # args.strip() => "show   nginx", then split(None, 1) => ["show", "nginx"]
+            mock_show.assert_called_once_with("nginx")
+            assert result == "show output"
+
+
+# =============================================================================
+# handle_learn_command_sync extended tests
+# =============================================================================
+
+
+class TestHandleLearnCommandSyncExtended:
+    def test_sync_no_event_loop(self):
+        """When no event loop exists, create one."""
+        from elle.cli.package_learn_commands import handle_learn_command_sync
+
+        mock_loop = MagicMock()
+        mock_loop.run_until_complete.return_value = "help text"
+
+        # Force no existing event loop, patch new_event_loop and set_event_loop
+        with (
+            patch("asyncio.get_event_loop", side_effect=RuntimeError("no loop")),
+            patch("asyncio.new_event_loop", return_value=mock_loop),
+            patch("asyncio.set_event_loop"),
+        ):
+            result = handle_learn_command_sync("")
+            assert result == "help text"
+            mock_loop.run_until_complete.assert_called_once()
+
+
+# =============================================================================
+# _handle_list with mixed approval counts
+# =============================================================================
+
+
+class TestHandleListExtended:
+    def test_list_mixed_approved_counts(self):
+        from elle.cli.package_learn_commands import _handle_list
+
+        cap_approved = MagicMock()
+        cap_approved.approved = True
+
+        cap_not_approved = MagicMock()
+        cap_not_approved.approved = False
+
+        mock_store = MagicMock()
+        mock_store.list_packages_with_capabilities.return_value = [
+            ("nginx", "1.22"),
+        ]
+        mock_store.list_by_package.return_value = [
+            cap_approved,
+            cap_not_approved,
+            cap_not_approved,
+        ]
+
+        with patch("elle.capabilities.autogen.get_store", return_value=mock_store):
+            result = run_async(_handle_list(""))
+            assert "nginx" in result
+            assert "3 caps" in result
+            assert "1 approved" in result
+
+    def test_list_package_unknown_version(self):
+        from elle.cli.package_learn_commands import _handle_list
+
+        mock_store = MagicMock()
+        mock_store.list_packages_with_capabilities.return_value = [
+            ("testpkg", None),
+        ]
+        mock_store.list_by_package.return_value = []
+
+        with patch("elle.capabilities.autogen.get_store", return_value=mock_store):
+            result = run_async(_handle_list(""))
+            assert "testpkg" in result
+            assert "unknown" in result
