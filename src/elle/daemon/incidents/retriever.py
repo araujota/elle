@@ -23,7 +23,15 @@ from datetime import datetime
 from typing import Any
 
 import psycopg
-import structlog
+
+try:
+    import structlog
+
+    logger = structlog.get_logger()
+except ImportError:
+    import logging
+
+    logger = logging.getLogger(__name__)  # type: ignore[assignment]
 
 from elle.common.pydantic_compat import safe_model_dump
 from elle.daemon.incidents.models import (
@@ -38,8 +46,6 @@ from elle.daemon.incidents.store import (
     _row_to_incident,
 )
 from elle.storage.engine import get_conn
-
-logger = structlog.get_logger()
 
 # PostgreSQL schema name
 PG_SCHEMA = "incidents"
