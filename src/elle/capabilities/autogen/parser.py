@@ -43,7 +43,7 @@ def read_man_page(command: str) -> str | None:
         # Use col -b to strip formatting codes
         result = subprocess.run(
             f"man {command} 2>/dev/null | col -b",
-            shell=True,
+            shell=True,  # nosec B602 - man page retrieval requires pipe through col
             capture_output=True,
             text=True,
             timeout=10,

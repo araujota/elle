@@ -95,24 +95,15 @@ from elle.cli.agentic.audit import (
 )
 from elle.cli.agentic.evaluator import (
     GoalEvaluator,
-    SufficiencyEvaluator,
-    get_evaluator,
     get_goal_evaluator,
     reset_evaluator,
 )
-from elle.cli.agentic.executor import (
-    GatherExecutor,
-    get_executor,
-    reset_executor,
-)
 from elle.cli.agentic.handler import (
     AgenticHandlerError,
-    AgenticQuestionHandler,
     AnalysisError,
     ExecutionError,
     SynthesisError,
     UnifiedAgenticHandler,
-    get_agentic_handler,
     get_unified_handler,
     reset_agentic_handler,
 )
@@ -137,11 +128,9 @@ from elle.cli.agentic.loop import (
     run_for_incident,
 )
 from elle.cli.agentic.models import (
-    # NEW models
     ActionRequest,
     ActionType,
     AgenticIntent,
-    # LEGACY models (still supported)
     AgenticResponse,
     CapabilityCall,
     EvaluationResult,
@@ -149,9 +138,6 @@ from elle.cli.agentic.models import (
     ExecutionEvidence,
     ExecutionPlan,
     ExecutionResult,
-    GatheredEvidence,
-    GatherPlan,
-    GatherResult,
     InformationCategory,
     InformationNeed,
     ParallelGroup,
@@ -179,11 +165,6 @@ from elle.cli.agentic.retrieval_pipeline import (
     get_retrieval_pipeline,
     reset_retrieval_pipeline,
     retrieve_context,
-)
-from elle.cli.agentic.selector import (
-    CapabilitySelector,
-    get_selector,
-    reset_selector,
 )
 from elle.cli.agentic.synthesizer import (
     ResponseSynthesizer,
@@ -288,34 +269,18 @@ __all__ = [
     "reset_capability_planner",
     "reset_plan_executor",
     # ==========================================================================
-    # LEGACY (backwards compatible)
+    # Supporting Models
     # ==========================================================================
-    # Models (LEGACY)
     "InformationCategory",
     "InformationNeed",
     "CapabilityCall",
-    "GatheredEvidence",
-    "GatherPlan",
-    "GatherResult",
     "AgenticResponse",
-    # Components (LEGACY)
+    # Supporting Components
     "InformationNeedAnalyzer",
-    "CapabilitySelector",
-    "GatherExecutor",
-    "SufficiencyEvaluator",
     "ResponseSynthesizer",
-    "AgenticQuestionHandler",
-    # Factory functions (LEGACY)
     "get_analyzer",
-    "get_selector",
-    "get_executor",
-    "get_evaluator",
     "get_synthesizer",
-    "get_agentic_handler",
-    # Reset functions (LEGACY)
     "reset_analyzer",
-    "reset_selector",
-    "reset_executor",
     "reset_evaluator",
     "reset_synthesizer",
     "reset_agentic_handler",

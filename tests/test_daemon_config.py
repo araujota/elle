@@ -56,11 +56,8 @@ class TestConfig:
 
     def test_default_config(self):
         config = Config()
-        assert config.db_path == Path("/var/lib/elle/elle.db")
         assert config.log_level == "INFO"
-        assert config.journal_enabled is True
-        assert config.kernel_enabled is True
-        assert config.probes_enabled is True
+        assert config.database.dbname == "elle"
 
     def test_nested_configs(self):
         config = Config()
@@ -86,7 +83,6 @@ class TestConfigLoading:
         toml_content = """
 [daemon]
 log_level = "DEBUG"
-journal_enabled = false
 
 [daemon.probes]
 memory_interval = 10
@@ -101,7 +97,6 @@ port = 9999
         try:
             config = load_config(config_path)
             assert config.log_level == "DEBUG"
-            assert config.journal_enabled is False
             assert config.probes.memory_interval == 10
             assert config.api.port == 9999
         finally:

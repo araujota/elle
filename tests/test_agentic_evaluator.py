@@ -1,34 +1,26 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 
+from elle.cli.agentic.evaluator import (
+    GoalEvaluator,
+    get_goal_evaluator,
+    reset_evaluator,
+)
 from elle.cli.agentic.models import (
     ActionRequest,
     ActionType,
     AgenticIntent,
     CapabilityCall,
-    EvaluationResult,
     EvaluationStatus,
     ExecutionEvidence,
     ExecutionPlan,
     ExecutionResult,
-    GatheredEvidence,
-    GatherPlan,
-    GatherResult,
     InformationNeed,
     ParallelGroup,
 )
-from elle.cli.agentic.evaluator import (
-    GoalEvaluator,
-    SufficiencyEvaluator,
-    get_evaluator,
-    get_goal_evaluator,
-    reset_evaluator,
-)
-
 
 # =============================================================================
 # Helpers
@@ -103,27 +95,20 @@ class TestSingletons:
     def teardown_method(self) -> None:
         reset_evaluator()
 
-    def test_get_evaluator(self) -> None:
-        ev = get_evaluator()
-        assert isinstance(ev, SufficiencyEvaluator)
-
-    def test_get_evaluator_same(self) -> None:
-        a = get_evaluator()
-        b = get_evaluator()
-        assert a is b
-
     def test_get_goal_evaluator(self) -> None:
         ev = get_goal_evaluator()
         assert isinstance(ev, GoalEvaluator)
 
-    def test_reset_clears_both(self) -> None:
-        a = get_evaluator()
+    def test_get_goal_evaluator_same(self) -> None:
+        a = get_goal_evaluator()
         b = get_goal_evaluator()
+        assert a is b
+
+    def test_reset_clears(self) -> None:
+        a = get_goal_evaluator()
         reset_evaluator()
-        c = get_evaluator()
-        d = get_goal_evaluator()
-        assert a is not c
-        assert b is not d
+        b = get_goal_evaluator()
+        assert a is not b
 
 
 # =============================================================================
@@ -314,160 +299,3 @@ class TestFindMatchingEvidence:
         assert len(matched) == 0
 
 
-# =============================================================================
-# SufficiencyEvaluator
-# =============================================================================
-
-
-def _make_gathered_evidence(**kwargs: Any) -> GatheredEvidence:
-    defaults: dict[str, Any] = {
-        "capability": "service.status",
-        "args": {"service": "nginx"},
-        "success": True,
-        "output": "active",
-        "duration_ms": 100,
-    }
-    defaults.update(kwargs)
-    return GatheredEvidence(**defaults)
-
-
-def _make_gather_result(
-    evidence: list[GatheredEvidence],
-    needs: list[InformationNeed] | None = None,
-    sufficient: bool = True,
-) -> GatherResult:
-    if needs is None:
-        needs = [_make_need()]
-    calls = [CapabilityCall(capability="service.status", args={"service": "nginx"}, purpose="check")]
-    plan = GatherPlan(needs=tuple(needs), calls=tuple(calls), estimated_duration_ms=100)
-    return GatherResult(
-        plan=plan,
-        evidence=tuple(evidence),
-        sufficient=sufficient,
-    )
-
-
-class TestSufficiencyEvaluator:
-    def test_no_evidence(self) -> None:
-        ev = SufficiencyEvaluator()
-        result = _make_gather_result([], needs=[_make_need()])
-        assert ev.evaluate(result) is False
-
-    def test_no_successful_evidence(self) -> None:
-        ev = SufficiencyEvaluator()
-        evidence = [_make_gathered_evidence(success=False, error="fail")]
-        result = _make_gather_result(evidence)
-        assert ev.evaluate(result) is False
-
-    def test_successful_no_needs(self) -> None:
-        ev = SufficiencyEvaluator()
-        evidence = [_make_gathered_evidence(success=True)]
-        result = _make_gather_result(evidence, needs=[])
-        assert ev.evaluate(result) is True
-
-    def test_need_satisfied(self) -> None:
-        ev = SufficiencyEvaluator()
-        need = _make_need(category="service", target="nginx")
-        evidence = [_make_gathered_evidence(capability="service.status", success=True)]
-        result = _make_gather_result(evidence, needs=[need])
-        assert ev.evaluate(result) is True
-
-    def test_need_not_satisfied(self) -> None:
-        ev = SufficiencyEvaluator()
-        need = _make_need(category="file", target="/etc/hosts")
-        evidence = [_make_gathered_evidence(capability="service.status", success=True)]
-        result = _make_gather_result(evidence, needs=[need])
-        assert ev.evaluate(result) is False
-
-
-# =============================================================================
-# SufficiencyEvaluator - identify_gaps
-# =============================================================================
-
-
-class TestIdentifyGaps:
-    def test_no_gaps(self) -> None:
-        ev = SufficiencyEvaluator()
-        need = _make_need(category="service")
-        evidence = [_make_gathered_evidence(capability="service.status", success=True)]
-        result = _make_gather_result(evidence, needs=[need])
-        gaps = ev.identify_gaps("what is nginx status?", result)
-        assert len(gaps) == 0
-
-    def test_with_gaps(self) -> None:
-        ev = SufficiencyEvaluator()
-        need = _make_need(category="file", target="/etc/hosts")
-        evidence = [_make_gathered_evidence(capability="service.status", success=True)]
-        result = _make_gather_result(evidence, needs=[need])
-        gaps = ev.identify_gaps("show /etc/hosts", result)
-        assert len(gaps) == 1
-        assert gaps[0].category == "file"
-
-    def test_no_needs_no_gaps(self) -> None:
-        ev = SufficiencyEvaluator()
-        evidence = [_make_gathered_evidence(success=True)]
-        result = _make_gather_result(evidence, needs=[])
-        gaps = ev.identify_gaps("test", result)
-        assert len(gaps) == 0
-
-
-# =============================================================================
-# SufficiencyEvaluator - get_unsatisfied_aspects
-# =============================================================================
-
-
-class TestGetUnsatisfiedAspects:
-    def test_all_satisfied(self) -> None:
-        ev = SufficiencyEvaluator()
-        need = _make_need(category="service")
-        evidence = [_make_gathered_evidence(capability="service.status", success=True)]
-        result = _make_gather_result(evidence, needs=[need])
-        unsatisfied = ev.get_unsatisfied_aspects(result)
-        assert len(unsatisfied) == 0
-
-    def test_unsatisfied_with_aspects(self) -> None:
-        ev = SufficiencyEvaluator()
-        need = _make_need(category="file", target="/etc/hosts", aspects=("content",))
-        evidence = [_make_gathered_evidence(capability="service.status", success=True)]
-        result = _make_gather_result(evidence, needs=[need])
-        unsatisfied = ev.get_unsatisfied_aspects(result)
-        assert len(unsatisfied) >= 1
-        assert "file" in unsatisfied[0]
-
-    def test_error_evidence_included(self) -> None:
-        ev = SufficiencyEvaluator()
-        need = _make_need(category="service")
-        evidence = [
-            _make_gathered_evidence(capability="service.status", success=True),
-            _make_gathered_evidence(capability="service.logs", success=False, error="permission denied"),
-        ]
-        result = _make_gather_result(evidence, needs=[need])
-        unsatisfied = ev.get_unsatisfied_aspects(result)
-        # The need is satisfied but error evidence is included
-        assert any("permission denied" in u for u in unsatisfied)
-
-
-# =============================================================================
-# SufficiencyEvaluator - _get_matching_capabilities
-# =============================================================================
-
-
-class TestGetMatchingCapabilities:
-    def test_service(self) -> None:
-        ev = SufficiencyEvaluator()
-        need = _make_need(category="service")
-        caps = ev._get_matching_capabilities(need)
-        assert "service.status" in caps
-        assert "service.logs" in caps
-
-    def test_docker(self) -> None:
-        ev = SufficiencyEvaluator()
-        need = _make_need(category="docker", target="")
-        caps = ev._get_matching_capabilities(need)
-        assert "docker.list" in caps
-
-    def test_unknown_category(self) -> None:
-        ev = SufficiencyEvaluator()
-        need = InformationNeed(category="system", target="", aspects=("info",))
-        caps = ev._get_matching_capabilities(need)
-        assert "system.info" in caps

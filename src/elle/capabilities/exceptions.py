@@ -65,34 +65,6 @@ class CapabilityExecutionError(CapabilityError):
         super().__init__(message)
 
 
-class CapabilityVerificationError(CapabilityError):
-    """Raised when capability verification fails."""
-
-    def __init__(
-        self,
-        message: str,
-        actual_state: dict[str, object] | None = None,
-        expected_state: dict[str, object] | None = None,
-    ) -> None:
-        self.actual_state = actual_state
-        self.expected_state = expected_state
-        super().__init__(message)
-
-
-class CapabilityRollbackError(CapabilityError):
-    """Raised when capability rollback fails."""
-
-    def __init__(
-        self,
-        message: str,
-        rolled_back: list[str] | None = None,
-        failed: list[str] | None = None,
-    ) -> None:
-        self.rolled_back = rolled_back or []
-        self.failed = failed or []
-        super().__init__(message)
-
-
 class CapabilityRegistrationError(CapabilityError):
     """Raised when capability registration fails."""
 

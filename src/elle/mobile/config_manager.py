@@ -109,14 +109,6 @@ class ConfigManager:
         return {
             "daemon": {
                 "log_level": config.log_level,
-                "journal_enabled": config.journal_enabled,
-                "kernel_enabled": config.kernel_enabled,
-                "probes_enabled": config.probes_enabled,
-                "ebpf_enabled": config.ebpf_enabled,
-                "docker_enabled": config.docker_enabled,
-                "inotify_enabled": config.inotify_enabled,
-                "wireguard_enabled": config.wireguard_enabled,
-                "port_probe_enabled": config.port_probe_enabled,
                 "port_probe_interval": config.port_probe_interval,
                 "capability_versioning_enabled": config.capability_versioning_enabled,
                 "capability_bootstrap_enabled": config.capability_bootstrap_enabled,

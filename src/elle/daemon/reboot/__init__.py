@@ -10,7 +10,7 @@ Safety Principles:
 - GRUB fallback to known-good config on boot failure
 - Maximum 3 verification retries before declaring failure
 - 60-second user intervention window before auto-rollback
-- All state persisted to SQLite (survives crashes)
+- All state persisted to PostgreSQL (survives crashes)
 
 Public API:
 
@@ -134,11 +134,7 @@ from elle.daemon.reboot.models import (
 
 # Schema
 from elle.daemon.reboot.schema import (
-    DB_PATH,
     ensure_schema,
-    get_connection,
-    get_db_path,
-    init_reboot_schema,
 )
 
 # Store (CRUD)
@@ -184,7 +180,6 @@ __all__ = [
     "AUTO_ROLLBACK_DELAY_SEC",
     "CRITICAL_MOUNT_POINTS",
     "CRITICAL_SERVICES",
-    "DB_PATH",
     "DISK_SPACE_REQUIREMENTS",
     "DMESG_ERROR_PATTERNS",
     "JOURNAL_ERROR_PATTERNS",
@@ -210,9 +205,6 @@ __all__ = [
     "RebootManagerError",
     # Schema
     "ensure_schema",
-    "get_connection",
-    "get_db_path",
-    "init_reboot_schema",
     # Store
     "add_verification",
     "cancel_intent",

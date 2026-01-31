@@ -10,7 +10,6 @@ commit/rollback automatically.
 
 from __future__ import annotations
 
-import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any, cast
@@ -36,31 +35,7 @@ from elle.daemon.incidents.models import (
 )
 from elle.daemon.incidents.schema import PG_SCHEMA
 from elle.storage.engine import get_conn
-
-
-def _serialize_datetime(dt: datetime) -> str:
-    """Serialize datetime to ISO format string."""
-    return dt.isoformat()
-
-
-def _parse_datetime(s: str) -> datetime:
-    """Parse ISO format string to datetime."""
-    return datetime.fromisoformat(s)
-
-
-def _json_dumps(obj: Any) -> str:
-    """Serialize object to JSON string."""
-    return json.dumps(obj, default=str)
-
-
-def _json_loads(s: str | None) -> Any:
-    """Parse JSON string, returning empty dict/list on None."""
-    if not s:
-        return {}
-    if isinstance(s, (dict, list)):
-        return s
-    return json.loads(s)
-
+from elle.storage.helpers import json_dumps, json_loads, parse_datetime, serialize_datetime
 
 # =============================================================================
 # Incident CRUD
@@ -129,27 +104,27 @@ def create_incident_draft(
             """,
             (
                 incident.incident_id,
-                _serialize_datetime(incident.created_at),
-                _serialize_datetime(incident.updated_at),
+                serialize_datetime(incident.created_at),
+                serialize_datetime(incident.updated_at),
                 incident.domain,
                 incident.severity,
                 incident.status,
                 incident.title,
                 incident.summary,
-                _json_dumps(list(incident.symptoms)),
-                _json_dumps(list(incident.suspected_causes)),
+                json_dumps(list(incident.symptoms)),
+                json_dumps(list(incident.suspected_causes)),
                 incident.root_cause,
-                _json_dumps(list(incident.event_ids)),
-                _json_dumps(list(incident.log_snippets)),
-                _json_dumps(incident.metrics),
-                _json_dumps(incident.decision),
-                _json_dumps([safe_model_dump(p) for p in incident.preconditions]),
+                json_dumps(list(incident.event_ids)),
+                json_dumps(list(incident.log_snippets)),
+                json_dumps(incident.metrics),
+                json_dumps(incident.decision),
+                json_dumps([safe_model_dump(p) for p in incident.preconditions]),
                 incident.outcome,
-                _json_dumps(list(incident.verification_steps)),
+                json_dumps(list(incident.verification_steps)),
                 incident.time_to_mitigate_sec,
                 incident.time_to_resolve_sec,
-                _json_dumps(safe_model_dump(incident.fingerprint)),
-                _json_dumps(list(incident.tags)),
+                json_dumps(safe_model_dump(incident.fingerprint)),
+                json_dumps(list(incident.tags)),
                 incident.confidence,
                 incident.trigger_source,
                 incident.trigger_command,
@@ -196,7 +171,7 @@ def update_incident(
     def _do_update(c: psycopg.Connection) -> IncidentReport | None:
         # Build update statement dynamically
         updates = ["updated_at = %s"]
-        values: list[Any] = [_serialize_datetime(datetime.now(timezone.utc))]
+        values: list[Any] = [serialize_datetime(datetime.now(timezone.utc))]
 
         if status is not None:
             updates.append("status = %s")
@@ -206,34 +181,34 @@ def update_incident(
             values.append(summary)
         if symptoms is not None:
             updates.append("symptoms_json = %s")
-            values.append(_json_dumps(symptoms))
+            values.append(json_dumps(symptoms))
         if suspected_causes is not None:
             updates.append("suspected_causes_json = %s")
-            values.append(_json_dumps(suspected_causes))
+            values.append(json_dumps(suspected_causes))
         if root_cause is not None:
             updates.append("root_cause = %s")
             values.append(root_cause)
         if event_ids is not None:
             updates.append("event_ids_json = %s")
-            values.append(_json_dumps(event_ids))
+            values.append(json_dumps(event_ids))
         if log_snippets is not None:
             updates.append("log_snippets_json = %s")
-            values.append(_json_dumps(log_snippets))
+            values.append(json_dumps(log_snippets))
         if metrics is not None:
             updates.append("metrics_json = %s")
-            values.append(_json_dumps(metrics))
+            values.append(json_dumps(metrics))
         if decision is not None:
             updates.append("decision_json = %s")
-            values.append(_json_dumps(decision))
+            values.append(json_dumps(decision))
         if preconditions is not None:
             updates.append("preconditions_json = %s")
-            values.append(_json_dumps([safe_model_dump(p) for p in preconditions]))
+            values.append(json_dumps([safe_model_dump(p) for p in preconditions]))
         if outcome is not None:
             updates.append("outcome = %s")
             values.append(outcome)
         if verification_steps is not None:
             updates.append("verification_steps_json = %s")
-            values.append(_json_dumps(verification_steps))
+            values.append(json_dumps(verification_steps))
         if time_to_mitigate_sec is not None:
             updates.append("time_to_mitigate_sec = %s")
             values.append(time_to_mitigate_sec)
@@ -242,10 +217,10 @@ def update_incident(
             values.append(time_to_resolve_sec)
         if fingerprint is not None:
             updates.append("fingerprint_json = %s")
-            values.append(_json_dumps(safe_model_dump(fingerprint)))
+            values.append(json_dumps(safe_model_dump(fingerprint)))
         if tags is not None:
             updates.append("tags_json = %s")
-            values.append(_json_dumps(tags))
+            values.append(json_dumps(tags))
         if confidence is not None:
             updates.append("confidence = %s")
             values.append(confidence)
@@ -366,22 +341,22 @@ def delete_incident(
 
 def _row_to_incident(row: dict) -> IncidentReport:
     """Convert a database row to an IncidentReport."""
-    preconditions_data = _json_loads(row["preconditions_json"])
+    preconditions_data = json_loads(row["preconditions_json"])
     preconditions = tuple(
         Precondition(**p) if isinstance(p, dict) else p
         for p in (preconditions_data if isinstance(preconditions_data, list) else [])
     )
 
-    fingerprint_data = _json_loads(row["fingerprint_json"])
+    fingerprint_data = json_loads(row["fingerprint_json"])
     fingerprint = Fingerprint(**fingerprint_data) if fingerprint_data else Fingerprint()
 
     created_at = row["created_at"]
     if isinstance(created_at, str):
-        created_at = _parse_datetime(created_at)
+        created_at = parse_datetime(created_at)
 
     updated_at = row["updated_at"]
     if isinstance(updated_at, str):
-        updated_at = _parse_datetime(updated_at)
+        updated_at = parse_datetime(updated_at)
 
     return IncidentReport(
         incident_id=row["id"],
@@ -392,20 +367,20 @@ def _row_to_incident(row: dict) -> IncidentReport:
         status=row["status"],
         title=row["title"],
         summary=row["summary"] or "",
-        symptoms=tuple(_json_loads(row["symptoms_json"]) or []),
-        suspected_causes=tuple(_json_loads(row["suspected_causes_json"]) or []),
+        symptoms=tuple(json_loads(row["symptoms_json"]) or []),
+        suspected_causes=tuple(json_loads(row["suspected_causes_json"]) or []),
         root_cause=row["root_cause"],
-        event_ids=tuple(_json_loads(row["event_ids_json"]) or []),
-        log_snippets=tuple(_json_loads(row["log_snippets_json"]) or []),
-        metrics=_json_loads(row["metrics_json"]) or {},
-        decision=_json_loads(row["decision_json"]) or {},
+        event_ids=tuple(json_loads(row["event_ids_json"]) or []),
+        log_snippets=tuple(json_loads(row["log_snippets_json"]) or []),
+        metrics=json_loads(row["metrics_json"]) or {},
+        decision=json_loads(row["decision_json"]) or {},
         preconditions=preconditions,
         outcome=row["outcome"],
-        verification_steps=tuple(_json_loads(row["verification_steps_json"]) or []),
+        verification_steps=tuple(json_loads(row["verification_steps_json"]) or []),
         time_to_mitigate_sec=row["time_to_mitigate_sec"],
         time_to_resolve_sec=row["time_to_resolve_sec"],
         fingerprint=fingerprint,
-        tags=tuple(_json_loads(row["tags_json"]) or []),
+        tags=tuple(json_loads(row["tags_json"]) or []),
         confidence=row["confidence"],
         trigger_source=row["trigger_source"],
         trigger_command=row["trigger_command"],
@@ -443,7 +418,7 @@ def get_prepared_plan(
         if not plan_json:
             return None
 
-        return cast(dict[str, Any] | None, _json_loads(plan_json))
+        return cast(dict[str, Any] | None, json_loads(plan_json))
 
 
 # =============================================================================
@@ -520,13 +495,13 @@ def append_action(
                 action.step_index,
                 action.kind,
                 action.command,
-                _json_dumps(action.payload),
+                json_dumps(action.payload),
                 action.exit_code,
                 action.stdout,
                 action.stderr,
                 action.success,
                 action.privileged,
-                _serialize_datetime(action.created_at),
+                serialize_datetime(action.created_at),
                 action.duration_ms,
             ),
         ).fetchone()
@@ -578,7 +553,7 @@ def _row_to_action(row: dict) -> IncidentAction:
     """Convert a database row to an IncidentAction."""
     created_at = row["created_at"]
     if isinstance(created_at, str):
-        created_at = _parse_datetime(created_at)
+        created_at = parse_datetime(created_at)
 
     return IncidentAction(
         id=row["id"],
@@ -586,7 +561,7 @@ def _row_to_action(row: dict) -> IncidentAction:
         step_index=row["step_index"],
         kind=row["kind"],
         command=row["command"],
-        payload=_json_loads(row["payload_json"]) or {},
+        payload=json_loads(row["payload_json"]) or {},
         exit_code=row["exit_code"],
         stdout=row["stdout"],
         stderr=row["stderr"],
@@ -637,8 +612,8 @@ def attach_snapshot(
             (
                 incident_id,
                 which,
-                _json_dumps(safe_model_dump(snapshot)),
-                _serialize_datetime(now),
+                json_dumps(safe_model_dump(snapshot)),
+                serialize_datetime(now),
             ),
         ).fetchone()
 
@@ -708,7 +683,7 @@ def get_snapshots(
 
 def _row_to_snapshot(row: dict) -> IncidentSnapshot:
     """Convert a database row to an IncidentSnapshot."""
-    snapshot_data = _json_loads(row["snapshot_json"])
+    snapshot_data = json_loads(row["snapshot_json"])
 
     # Handle tuple fields that may have been serialized as lists
     if "cpu_load" in snapshot_data and isinstance(snapshot_data["cpu_load"], list):
@@ -728,11 +703,11 @@ def _row_to_snapshot(row: dict) -> IncidentSnapshot:
 
     # Parse collected_at if present
     if "collected_at" in snapshot_data and isinstance(snapshot_data["collected_at"], str):
-        snapshot_data["collected_at"] = _parse_datetime(snapshot_data["collected_at"])
+        snapshot_data["collected_at"] = parse_datetime(snapshot_data["collected_at"])
 
     created_at = row["created_at"]
     if isinstance(created_at, str):
-        created_at = _parse_datetime(created_at)
+        created_at = parse_datetime(created_at)
 
     return IncidentSnapshot(
         id=row["id"],
@@ -830,7 +805,7 @@ def upsert_embedding(
                 incident_id,
                 embedding,
                 model,
-                _serialize_datetime(datetime.now(timezone.utc)),
+                serialize_datetime(datetime.now(timezone.utc)),
             ),
         )
 
@@ -1033,9 +1008,9 @@ def store_decision_record(
     """
     with get_conn(schema=PG_SCHEMA) as conn:
         # Serialize nested models
-        confidence_json = _json_dumps(safe_model_dump(decision_record.confidence))
-        provenance_json = _json_dumps(safe_model_dump(decision_record.provenance))
-        planned_commands_json = _json_dumps(list(decision_record.planned_commands))
+        confidence_json = json_dumps(safe_model_dump(decision_record.confidence))
+        provenance_json = json_dumps(safe_model_dump(decision_record.provenance))
+        planned_commands_json = json_dumps(list(decision_record.planned_commands))
 
         conn.execute(
             """
@@ -1059,7 +1034,7 @@ def store_decision_record(
                 confidence_json,
                 provenance_json,
                 planned_commands_json,
-                _serialize_datetime(decision_record.decided_at),
+                serialize_datetime(decision_record.decided_at),
             ),
         )
 
@@ -1090,19 +1065,19 @@ def get_decision_record(
 def _row_to_decision_record(row: dict) -> DecisionRecord:
     """Convert a database row to a DecisionRecord."""
     # Parse confidence
-    confidence_data = _json_loads(row["confidence_json"])
+    confidence_data = json_loads(row["confidence_json"])
     confidence = ConfidenceBreakdown(**confidence_data) if confidence_data else ConfidenceBreakdown(overall=0.0)
 
     # Parse provenance
-    provenance_data = _json_loads(row["provenance_json"])
+    provenance_data = json_loads(row["provenance_json"])
     provenance = _parse_provenance(provenance_data)
 
     # Parse planned commands
-    planned_commands = tuple(_json_loads(row["planned_commands_json"]) or [])
+    planned_commands = tuple(json_loads(row["planned_commands_json"]) or [])
 
     decided_at = row["decided_at"]
     if isinstance(decided_at, str):
-        decided_at = _parse_datetime(decided_at)
+        decided_at = parse_datetime(decided_at)
 
     return DecisionRecord(
         chosen_approach=row["chosen_approach"],
@@ -1171,7 +1146,7 @@ def store_config_state(
         config_state: The config file state.
     """
     with get_conn(schema=PG_SCHEMA) as conn:
-        mtime_str = _serialize_datetime(config_state.mtime) if config_state.mtime else None
+        mtime_str = serialize_datetime(config_state.mtime) if config_state.mtime else None
 
         conn.execute(
             """
@@ -1242,7 +1217,7 @@ def _row_to_config_state(row: dict) -> ConfigFileState:
     if row["mtime"]:
         mtime_val = row["mtime"]
         if isinstance(mtime_val, str):
-            mtime = _parse_datetime(mtime_val)
+            mtime = parse_datetime(mtime_val)
         else:
             mtime = mtime_val
 
@@ -1324,8 +1299,8 @@ def attach_telemetry_snapshot(
             (
                 incident_id,
                 which,
-                _json_dumps(safe_model_dump(snapshot)),
-                _serialize_datetime(snapshot.collected_at),
+                json_dumps(safe_model_dump(snapshot)),
+                serialize_datetime(snapshot.collected_at),
             ),
         )
 
@@ -1357,7 +1332,7 @@ def get_telemetry_snapshot(
         if not row:
             return None
 
-        data = _json_loads(row["snapshot_json"])
+        data = json_loads(row["snapshot_json"])
         return _parse_telemetry_snapshot(data)
 
     if conn is not None:
@@ -1386,7 +1361,7 @@ def get_telemetry_snapshots(
 
         result: dict[str, Any] = {}
         for row in rows:
-            data = _json_loads(row["snapshot_json"])
+            data = json_loads(row["snapshot_json"])
             snapshot = _parse_telemetry_snapshot(data)
             if snapshot:
                 result[row["which"]] = snapshot
@@ -1466,7 +1441,7 @@ def _parse_telemetry_snapshot(data: dict[str, Any]) -> TelemetrySnapshotModel | 
         collected_at = datetime.now(timezone.utc)
         if "collected_at" in data:
             if isinstance(data["collected_at"], str):
-                collected_at = _parse_datetime(data["collected_at"])
+                collected_at = parse_datetime(data["collected_at"])
             elif isinstance(data["collected_at"], datetime):
                 collected_at = data["collected_at"]
 
@@ -1508,7 +1483,7 @@ def attach_control_surface_snapshot(
     """
     with get_conn(schema=PG_SCHEMA) as conn:
         # Store surface hashes as JSON for indexing
-        surface_hashes = _json_dumps(snapshot.surface_hashes())
+        surface_hashes = json_dumps(snapshot.surface_hashes())
 
         conn.execute(
             """
@@ -1523,9 +1498,9 @@ def attach_control_surface_snapshot(
             (
                 incident_id,
                 which,
-                _json_dumps(safe_model_dump(snapshot)),
+                json_dumps(safe_model_dump(snapshot)),
                 surface_hashes,
-                _serialize_datetime(snapshot.collected_at),
+                serialize_datetime(snapshot.collected_at),
             ),
         )
 
@@ -1555,7 +1530,7 @@ def get_control_surface_snapshot(
         if not row:
             return None
 
-        data = _json_loads(row["snapshot_json"])
+        data = json_loads(row["snapshot_json"])
         return _parse_control_surface_snapshot(data)
 
 
@@ -1578,7 +1553,7 @@ def get_control_surface_snapshots(
 
         result: dict[str, Any] = {}
         for row in rows:
-            data = _json_loads(row["snapshot_json"])
+            data = json_loads(row["snapshot_json"])
             snapshot = _parse_control_surface_snapshot(data)
             if snapshot:
                 result[row["which"]] = snapshot
@@ -1615,7 +1590,7 @@ def get_surface_hashes(
         if not row:
             return None
 
-        return cast(dict[str, str] | None, _json_loads(row["surface_hashes"]))
+        return cast(dict[str, str] | None, json_loads(row["surface_hashes"]))
 
     if conn is not None:
         return _do_get(conn)
@@ -1655,7 +1630,7 @@ def _parse_control_surface_snapshot(data: dict[str, Any]) -> ControlSurfaceSnaps
         for c in configs_data:
             # Handle mtime
             if "mtime" in c and c["mtime"] and isinstance(c["mtime"], str):
-                c["mtime"] = _parse_datetime(c["mtime"])
+                c["mtime"] = parse_datetime(c["mtime"])
             configs_list.append(ConfigFileSurface(**c))
         configs = tuple(configs_list)
 
@@ -1682,7 +1657,7 @@ def _parse_control_surface_snapshot(data: dict[str, Any]) -> ControlSurfaceSnaps
         collected_at = datetime.now(timezone.utc)
         if "collected_at" in data:
             if isinstance(data["collected_at"], str):
-                collected_at = _parse_datetime(data["collected_at"])
+                collected_at = parse_datetime(data["collected_at"])
             elif isinstance(data["collected_at"], datetime):
                 collected_at = data["collected_at"]
 

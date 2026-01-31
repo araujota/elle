@@ -10,8 +10,8 @@ import logging
 
 from elle.cli.agentic.models import (
     AgenticResponse,
-    GatheredEvidence,
-    GatherResult,
+    ExecutionEvidence,
+    ExecutionResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -82,7 +82,7 @@ class ResponseSynthesizer:
     async def synthesize(
         self,
         question: str,
-        result: GatherResult,
+        result: ExecutionResult,
     ) -> AgenticResponse:
         """Synthesize evidence into a response.
 
@@ -146,7 +146,7 @@ class ResponseSynthesizer:
     async def _synthesize_with_llm(
         self,
         question: str,
-        evidence: tuple[GatheredEvidence, ...],
+        evidence: tuple[ExecutionEvidence, ...],
     ) -> str | None:
         """Synthesize using LLM.
 
@@ -195,7 +195,7 @@ Instructions:
     def _synthesize_with_rules(
         self,
         question: str,
-        evidence: tuple[GatheredEvidence, ...],
+        evidence: tuple[ExecutionEvidence, ...],
     ) -> str:
         """Synthesize using rule-based formatting.
 
@@ -218,7 +218,7 @@ Instructions:
 
         return "\n\n".join(parts)
 
-    def _format_evidence(self, evidence: tuple[GatheredEvidence, ...]) -> str:
+    def _format_evidence(self, evidence: tuple[ExecutionEvidence, ...]) -> str:
         """Format evidence for LLM prompt.
 
         Args:
@@ -234,12 +234,12 @@ Instructions:
             if ev.args:
                 args_str = ", ".join(f"{k}={v}" for k, v in ev.args.items())
                 section += f" ({args_str})"
-            section += f"\n{ev.output or '(no output)'}"
+            section += f"\n{ev.output_text or ev.output or '(no output)'}"
             sections.append(section)
 
         return "\n\n".join(sections)
 
-    def _format_evidence_item(self, evidence: GatheredEvidence) -> str:
+    def _format_evidence_item(self, evidence: ExecutionEvidence) -> str:
         """Format a single evidence item for display.
 
         Args:
@@ -248,11 +248,12 @@ Instructions:
         Returns:
             Formatted string.
         """
-        if not evidence.output:
+        output_str = evidence.output_text or (str(evidence.output) if evidence.output else None)
+        if not output_str:
             return ""
 
         capability = evidence.capability
-        output = evidence.output.strip()
+        output = output_str.strip()
 
         # Truncate very long outputs
         if len(output) > 1000:
@@ -346,7 +347,7 @@ Instructions:
 
             return output[:200]
 
-    def _calculate_confidence(self, result: GatherResult) -> float:
+    def _calculate_confidence(self, result: ExecutionResult) -> float:
         """Calculate confidence in the answer.
 
         Args:
@@ -364,8 +365,8 @@ Instructions:
         # Base confidence on success rate
         success_rate = successful / total if total > 0 else 0.0
 
-        # Adjust based on sufficiency
-        if result.sufficient:
+        # Adjust based on success
+        if result.all_succeeded:
             return min(1.0, success_rate + 0.1)
         else:
             return max(0.0, success_rate - 0.2)
@@ -373,7 +374,7 @@ Instructions:
     def _generate_suggestions(
         self,
         question: str,
-        result: GatherResult,
+        result: ExecutionResult,
     ) -> tuple[str, ...]:
         """Generate follow-up suggestions.
 

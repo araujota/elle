@@ -148,8 +148,6 @@ from elle.daemon.incidents.retriever import (
 )
 from elle.daemon.incidents.schema import (
     ensure_schema,
-    get_connection,
-    init_incident_schema,
 )
 from elle.daemon.incidents.service import (
     IncidentVaultService,
@@ -265,9 +263,7 @@ __all__ = [
     "get_service",
     "reset_service",
     # Schema
-    "init_incident_schema",
     "ensure_schema",
-    "get_connection",
     # V4: Telemetry snapshots
     "TelemetrySnapshot",
     "CPUPressure",

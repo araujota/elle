@@ -8,7 +8,6 @@ Storage backend: PostgreSQL via psycopg (schema ``telemetry``).
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -16,30 +15,10 @@ import psycopg
 
 from elle.daemon.telemetry.models import ProbeResult, TelemetryEvent
 from elle.storage.engine import get_conn
+from elle.storage.helpers import json_dumps, json_loads, parse_datetime, serialize_datetime
 
 PG_SCHEMA = "telemetry"
 
-
-def _serialize_datetime(dt: datetime) -> str:
-    """Serialize datetime to ISO format."""
-    return dt.isoformat()
-
-
-def _parse_datetime(s: str) -> datetime:
-    """Parse ISO format string to datetime."""
-    return datetime.fromisoformat(s)
-
-
-def _json_dumps(obj: Any) -> str:
-    """Serialize object to JSON."""
-    return json.dumps(obj, default=str)
-
-
-def _json_loads(s: str | None) -> Any:
-    """Parse JSON string."""
-    if not s:
-        return {}
-    return json.loads(s)
 
 
 # =============================================================================
@@ -73,14 +52,14 @@ def insert_event(
             """,
             (
                 event.event_id,
-                _serialize_datetime(event.ts),
+                serialize_datetime(event.ts),
                 event.source,
                 event.severity,
                 event.category,
                 event.message,
                 event.entity,
                 event.fingerprint,
-                _json_dumps(event.raw),
+                json_dumps(event.raw),
             ),
         )
         row = cursor.fetchone()
@@ -125,14 +104,14 @@ def insert_events_batch(
                 """,
                 (
                     event.event_id,
-                    _serialize_datetime(event.ts),
+                    serialize_datetime(event.ts),
                     event.source,
                     event.severity,
                     event.category,
                     event.message,
                     event.entity,
                     event.fingerprint,
-                    _json_dumps(event.raw),
+                    json_dumps(event.raw),
                 ),
             )
             inserted += cursor.rowcount
@@ -241,10 +220,10 @@ def query_events(
 
         if since:
             query += " AND ts >= %s"
-            params.append(_serialize_datetime(since))
+            params.append(serialize_datetime(since))
         if until:
             query += " AND ts <= %s"
-            params.append(_serialize_datetime(until))
+            params.append(serialize_datetime(until))
         if category:
             query += " AND category = %s"
             params.append(category)
@@ -338,7 +317,7 @@ def count_events(
 
         if since:
             query += " AND ts >= %s"
-            params.append(_serialize_datetime(since))
+            params.append(serialize_datetime(since))
         if category:
             query += " AND category = %s"
             params.append(category)
@@ -378,7 +357,7 @@ def count_events_by_category(
 
         if since:
             query += " WHERE ts >= %s"
-            params.append(_serialize_datetime(since))
+            params.append(serialize_datetime(since))
 
         query += " GROUP BY category"
 
@@ -416,7 +395,7 @@ def get_recent_fingerprints(
             SELECT DISTINCT fingerprint FROM events
             WHERE ts >= %s AND fingerprint IS NOT NULL
             """,
-            (_serialize_datetime(since),),
+            (serialize_datetime(since),),
         )
 
         return {row["fingerprint"] for row in cursor.fetchall()}
@@ -447,7 +426,7 @@ def delete_old_events(
         cursor = c.cursor()
         cursor.execute(
             "DELETE FROM events WHERE ts < %s",
-            (_serialize_datetime(cutoff),),
+            (serialize_datetime(cutoff),),
         )
         return cursor.rowcount
 
@@ -462,7 +441,7 @@ def _row_to_event(row: dict) -> TelemetryEvent:
     """Convert a database row to TelemetryEvent."""
     ts = row["ts"]
     if isinstance(ts, str):
-        ts = _parse_datetime(ts)
+        ts = parse_datetime(ts)
 
     return TelemetryEvent(
         event_id=row["event_id"],
@@ -473,7 +452,7 @@ def _row_to_event(row: dict) -> TelemetryEvent:
         message=row["message"],
         entity=row["entity"],
         fingerprint=row["fingerprint"],
-        raw=_json_loads(row["raw"]),
+        raw=json_loads(row["raw"]),
     )
 
 
@@ -507,9 +486,9 @@ def insert_probe_result(
             """,
             (
                 result.probe_name,
-                _serialize_datetime(result.ts),
+                serialize_datetime(result.ts),
                 result.success,
-                _json_dumps(result.data),
+                json_dumps(result.data),
                 result.error,
             ),
         )
@@ -555,13 +534,13 @@ def get_latest_probe_result(
 
         ts = row["ts"]
         if isinstance(ts, str):
-            ts = _parse_datetime(ts)
+            ts = parse_datetime(ts)
 
         return ProbeResult(
             probe_name=row["probe_name"],
             ts=ts,
             success=bool(row["success"]),
-            data=_json_loads(row["data"]),
+            data=json_loads(row["data"]),
             error=row["error"],
         )
 
@@ -591,7 +570,7 @@ def delete_old_probe_results(
         cursor = c.cursor()
         cursor.execute(
             "DELETE FROM probe_results WHERE ts < %s",
-            (_serialize_datetime(cutoff),),
+            (serialize_datetime(cutoff),),
         )
         return cursor.rowcount
 

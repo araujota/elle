@@ -8,7 +8,6 @@ Storage backend: PostgreSQL via psycopg (schema ``reactive``).
 
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from typing import Any
 
@@ -30,30 +29,10 @@ from elle.reactive.models import (
     Trigger,
 )
 from elle.storage.engine import get_conn
+from elle.storage.helpers import json_dumps, json_loads, parse_datetime, serialize_datetime
 
 PG_SCHEMA = "reactive"
 
-
-def _serialize_datetime(dt: datetime) -> str:
-    """Serialize datetime to ISO format string."""
-    return dt.isoformat()
-
-
-def _parse_datetime(s: str) -> datetime:
-    """Parse ISO format string to datetime."""
-    return datetime.fromisoformat(s)
-
-
-def _json_dumps(obj: Any) -> str:
-    """Serialize object to JSON string."""
-    return json.dumps(obj, default=str)
-
-
-def _json_loads(s: str | None) -> Any:
-    """Parse JSON string, returning empty dict/list on None."""
-    if not s:
-        return {}
-    return json.loads(s)
 
 
 # =============================================================================
@@ -94,15 +73,15 @@ def create_function(
                 func.name,
                 func.description,
                 func.enabled,
-                _serialize_datetime(func.created_at),
-                _serialize_datetime(func.updated_at),
+                serialize_datetime(func.created_at),
+                serialize_datetime(func.updated_at),
                 func.created_by,
-                _json_dumps(safe_model_dump(func.trigger)),
-                _json_dumps(safe_model_dump(func.condition)) if func.condition else None,
-                _json_dumps([safe_model_dump(a) for a in func.actions]),
-                _json_dumps(safe_model_dump(func.policy)),
-                _json_dumps({k: safe_model_dump(v) for k, v in func.state.items()}) if func.state else None,
-                _json_dumps(list(func.tags)) if func.tags else None,
+                json_dumps(safe_model_dump(func.trigger)),
+                json_dumps(safe_model_dump(func.condition)) if func.condition else None,
+                json_dumps([safe_model_dump(a) for a in func.actions]),
+                json_dumps(safe_model_dump(func.policy)),
+                json_dumps({k: safe_model_dump(v) for k, v in func.state.items()}) if func.state else None,
+                json_dumps(list(func.tags)) if func.tags else None,
                 func.source_prompt,
             ),
         )
@@ -145,7 +124,7 @@ def update_function(
     def _run(c: psycopg.Connection) -> ReactiveFunction | None:  # type: ignore[type-arg]
         # Build update statement dynamically
         updates = ["updated_at = %s"]
-        values: list[Any] = [_serialize_datetime(datetime.utcnow())]
+        values: list[Any] = [serialize_datetime(datetime.utcnow())]
 
         if name is not None:
             updates.append("name = %s")
@@ -158,22 +137,22 @@ def update_function(
             values.append(enabled)
         if trigger is not None:
             updates.append("trigger_json = %s")
-            values.append(_json_dumps(safe_model_dump(trigger)))
+            values.append(json_dumps(safe_model_dump(trigger)))
         if condition is not None:
             updates.append("condition_json = %s")
-            values.append(_json_dumps(safe_model_dump(condition)))
+            values.append(json_dumps(safe_model_dump(condition)))
         if actions is not None:
             updates.append("actions_json = %s")
-            values.append(_json_dumps([safe_model_dump(a) for a in actions]))
+            values.append(json_dumps([safe_model_dump(a) for a in actions]))
         if policy is not None:
             updates.append("policy_json = %s")
-            values.append(_json_dumps(safe_model_dump(policy)))
+            values.append(json_dumps(safe_model_dump(policy)))
         if state is not None:
             updates.append("state_json = %s")
-            values.append(_json_dumps({k: safe_model_dump(v) for k, v in state.items()}))
+            values.append(json_dumps({k: safe_model_dump(v) for k, v in state.items()}))
         if tags is not None:
             updates.append("tags_json = %s")
-            values.append(_json_dumps(list(tags)))
+            values.append(json_dumps(list(tags)))
 
         values.append(function_id)
 
@@ -483,41 +462,41 @@ def delete_function_by_name(
 def _row_to_function(row: dict) -> ReactiveFunction:
     """Convert a database row to a ReactiveFunction."""
     # Parse trigger
-    trigger_data = _json_loads(row["trigger_json"])
+    trigger_data = json_loads(row["trigger_json"])
     trigger = _parse_trigger(trigger_data)
 
     # Parse condition
     condition = None
     if row["condition_json"]:
-        condition_data = _json_loads(row["condition_json"])
+        condition_data = json_loads(row["condition_json"])
         if condition_data:
             condition = Condition(**condition_data)
 
     # Parse actions
-    actions_data = _json_loads(row["actions_json"]) or []
+    actions_data = json_loads(row["actions_json"]) or []
     actions = tuple(ActionSpec(**a) for a in actions_data)
 
     # Parse policy
-    policy_data = _json_loads(row["policy_json"]) or {}
+    policy_data = json_loads(row["policy_json"]) or {}
     # Handle allowed_hours tuple
     if "allowed_hours" in policy_data and isinstance(policy_data["allowed_hours"], list):
         policy_data["allowed_hours"] = tuple(policy_data["allowed_hours"])
     policy = PolicySpec(**policy_data) if policy_data else PolicySpec()
 
     # Parse state probes
-    state_data = _json_loads(row["state_json"]) or {}
+    state_data = json_loads(row["state_json"]) or {}
     state_map = {k: StateProbe(**v) for k, v in state_data.items()}
 
     # Parse tags
-    tags = tuple(_json_loads(row["tags_json"]) or [])
+    tags = tuple(json_loads(row["tags_json"]) or [])
 
     created_at = row["created_at"]
     if isinstance(created_at, str):
-        created_at = _parse_datetime(created_at)
+        created_at = parse_datetime(created_at)
 
     updated_at = row["updated_at"]
     if isinstance(updated_at, str):
-        updated_at = _parse_datetime(updated_at)
+        updated_at = parse_datetime(updated_at)
 
     return ReactiveFunction(
         id=row["id"],
@@ -594,12 +573,12 @@ def record_execution(
                 record.id,
                 record.function_id,
                 record.function_name,
-                _serialize_datetime(record.triggered_at),
-                _json_dumps(record.trigger_event) if record.trigger_event else None,
+                serialize_datetime(record.triggered_at),
+                json_dumps(record.trigger_event) if record.trigger_event else None,
                 record.condition_result,
                 record.condition_explanation,
-                _json_dumps(list(record.actions_executed)),
-                _json_dumps([safe_model_dump(r) for r in record.actions_results]),
+                json_dumps(list(record.actions_executed)),
+                json_dumps([safe_model_dump(r) for r in record.actions_results]),
                 record.success,
                 record.error,
                 record.execution_time_ms,
@@ -695,22 +674,22 @@ def get_recent_executions(
 def _row_to_execution(row: dict) -> ExecutionRecord:
     """Convert a database row to an ExecutionRecord."""
     # Parse actions_results
-    actions_results_data = _json_loads(row["actions_results_json"]) or []
+    actions_results_data = json_loads(row["actions_results_json"]) or []
     actions_results = tuple(ActionResult(**r) for r in actions_results_data)
 
     triggered_at = row["triggered_at"]
     if isinstance(triggered_at, str):
-        triggered_at = _parse_datetime(triggered_at)
+        triggered_at = parse_datetime(triggered_at)
 
     return ExecutionRecord(
         id=row["id"],
         function_id=row["function_id"],
         function_name=row["function_name"],
         triggered_at=triggered_at,
-        trigger_event=_json_loads(row["trigger_event_json"]) if row["trigger_event_json"] else None,
+        trigger_event=json_loads(row["trigger_event_json"]) if row["trigger_event_json"] else None,
         condition_result=bool(row["condition_result"]),
         condition_explanation=row["condition_explanation"] or "",
-        actions_executed=tuple(_json_loads(row["actions_executed_json"]) or []),
+        actions_executed=tuple(json_loads(row["actions_executed_json"]) or []),
         actions_results=actions_results,
         success=bool(row["success"]),
         error=row["error"],
@@ -750,11 +729,11 @@ def get_rate_limit_state(
 
         state_dict: dict[str, Any] = {}
         for row in cursor.fetchall():
-            state_dict[row["key"]] = _json_loads(row["value_json"])
+            state_dict[row["key"]] = json_loads(row["value_json"])
 
         last_execution = None
         if state_dict.get("last_execution"):
-            last_execution = _parse_datetime(state_dict["last_execution"])
+            last_execution = parse_datetime(state_dict["last_execution"])
 
         return RateLimitState(
             function_id=function_id,
@@ -789,11 +768,11 @@ def update_rate_limit_state(
 
     def _run(c: psycopg.Connection) -> None:  # type: ignore[type-arg]
         cursor = c.cursor()
-        now = _serialize_datetime(datetime.utcnow())
+        now = serialize_datetime(datetime.utcnow())
 
         # Upsert each state key
         state_items = [
-            ("last_execution", _serialize_datetime(last_execution)),
+            ("last_execution", serialize_datetime(last_execution)),
             ("daily_executions", daily_executions),
             ("daily_reset_date", daily_reset_date),
         ]
@@ -806,7 +785,7 @@ def update_rate_limit_state(
                 ON CONFLICT (function_id, key) DO UPDATE
                 SET value_json = EXCLUDED.value_json, updated_at = EXCLUDED.updated_at
                 """,
-                (function_id, key, _json_dumps(value), now),
+                (function_id, key, json_dumps(value), now),
             )
 
     if conn is not None:
@@ -841,7 +820,7 @@ def set_function_state(
             ON CONFLICT (function_id, key) DO UPDATE
             SET value_json = EXCLUDED.value_json, updated_at = EXCLUDED.updated_at
             """,
-            (function_id, key, _json_dumps(value), _serialize_datetime(datetime.utcnow())),
+            (function_id, key, json_dumps(value), serialize_datetime(datetime.utcnow())),
         )
 
     if conn is not None:
@@ -882,7 +861,7 @@ def get_function_state(
         if not row:
             return None
 
-        return _json_loads(row["value_json"])
+        return json_loads(row["value_json"])
 
     if conn is not None:
         return _run(conn)
@@ -952,7 +931,7 @@ def get_execution_count(
 
         if since:
             query += " AND triggered_at >= %s"
-            params.append(_serialize_datetime(since))
+            params.append(serialize_datetime(since))
 
         cursor = c.cursor()
         cursor.execute(query, params)

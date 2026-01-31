@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Any
 
 import psycopg
 
@@ -21,6 +20,7 @@ from elle.daemon.incidents.narrative import (
 )
 from elle.daemon.incidents.schema import PG_SCHEMA
 from elle.storage.engine import get_conn
+from elle.storage.helpers import json_dumps, json_loads
 
 # Schema additions for storing narratives
 NARRATIVES_TABLE = """
@@ -50,21 +50,6 @@ def _ensure_narrative_schema(conn: psycopg.Connection) -> None:  # type: ignore[
     cursor.execute(NARRATIVES_INDEX)
     conn.commit()
 
-
-def _json_dumps(obj: Any) -> str:
-    """Serialize to JSON."""
-    import json
-
-    return json.dumps(obj, default=str)
-
-
-def _json_loads(s: str | None) -> Any:
-    """Parse JSON."""
-    import json
-
-    if not s:
-        return []
-    return json.loads(s)
 
 
 class NarrativeBuilder:
@@ -431,10 +416,10 @@ Focus on:
                     narrative.chain.chain_id,
                     incident_id,
                     narrative.summary,
-                    _json_dumps(list(narrative.timeline)),
+                    json_dumps(list(narrative.timeline)),
                     narrative.explanation,
-                    _json_dumps(list(narrative.keywords)),
-                    _json_dumps(safe_model_dump(narrative.chain)),
+                    json_dumps(list(narrative.keywords)),
+                    json_dumps(safe_model_dump(narrative.chain)),
                     narrative.generated_at.isoformat(),
                     narrative.model_used,
                 ),
@@ -466,7 +451,7 @@ def get_narrative(
             return None
 
         # Parse chain from JSON
-        chain_data = _json_loads(row["chain_json"])
+        chain_data = json_loads(row["chain_json"])
 
         # Reconstruct CausalLink objects
         links = []
@@ -503,9 +488,9 @@ def get_narrative(
         return Narrative(
             chain=chain,
             summary=row["summary"],
-            timeline=tuple(_json_loads(row["timeline_json"])),
+            timeline=tuple(json_loads(row["timeline_json"])),
             explanation=row["explanation"],
-            keywords=tuple(_json_loads(row["keywords_json"])),
+            keywords=tuple(json_loads(row["keywords_json"])),
             generated_at=datetime.fromisoformat(row["generated_at"]),
             model_used=row["model_used"],
         )

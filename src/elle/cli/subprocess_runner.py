@@ -421,7 +421,7 @@ def _run_capture(
     """Run command and capture all output."""
     result = subprocess.run(
         command,
-        shell=True,
+        shell=True,  # nosec B602 - commands validated through denylist before execution
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -469,7 +469,7 @@ def _run_streaming(
 
     process = subprocess.Popen(
         command,
-        shell=True,
+        shell=True,  # nosec B602 - commands validated through denylist before execution
         cwd=cwd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

@@ -6,12 +6,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from elle.cli.agentic.models import (
+    AgenticIntent,
     AgenticResponse,
     CapabilityCall,
-    GatheredEvidence,
-    GatherPlan,
-    GatherResult,
+    ExecutionEvidence,
+    ExecutionPlan,
+    ExecutionResult,
     InformationNeed,
+    ParallelGroup,
 )
 from elle.cli.agentic.synthesizer import (
     FOLLOW_UP_SUGGESTIONS,
@@ -19,7 +21,6 @@ from elle.cli.agentic.synthesizer import (
     get_synthesizer,
     reset_synthesizer,
 )
-
 
 # =============================================================================
 # Helpers
@@ -36,29 +37,35 @@ def _make_need(**kwargs: Any) -> InformationNeed:
     return InformationNeed(**defaults)
 
 
-def _make_evidence(**kwargs: Any) -> GatheredEvidence:
+def _make_evidence(**kwargs: Any) -> ExecutionEvidence:
     defaults: dict[str, Any] = {
         "capability": "service.status",
         "args": {"service": "nginx"},
         "success": True,
-        "output": "ActiveState=active\nSubState=running",
+        "output_text": "ActiveState=active\nSubState=running",
         "duration_ms": 100,
     }
     defaults.update(kwargs)
-    return GatheredEvidence(**defaults)
+    return ExecutionEvidence(**defaults)
 
 
-def _make_gather_result(
-    evidence: list[GatheredEvidence],
-    sufficient: bool = True,
-) -> GatherResult:
-    calls = [CapabilityCall(capability="service.status", args={"service": "nginx"}, purpose="check")]
-    needs = [_make_need()]
-    plan = GatherPlan(needs=tuple(needs), calls=tuple(calls), estimated_duration_ms=100)
-    return GatherResult(
+def _make_execution_result(
+    evidence: list[ExecutionEvidence],
+) -> ExecutionResult:
+    intent = AgenticIntent(
+        information_needs=(_make_need(),),
+        goal_summary="test",
+    )
+    call = CapabilityCall(capability="service.status", args={"service": "nginx"}, purpose="check")
+    plan = ExecutionPlan(
+        parallel_groups=(ParallelGroup(calls=(call,)),),
+        intent=intent,
+        estimated_duration_ms=100,
+    )
+    return ExecutionResult(
         plan=plan,
         evidence=tuple(evidence),
-        sufficient=sufficient,
+        total_duration_ms=100,
     )
 
 
@@ -114,7 +121,7 @@ class TestSynthesizeNoEvidence:
     @pytest.mark.asyncio
     async def test_no_evidence(self) -> None:
         s = ResponseSynthesizer(use_llm=False)
-        result = _make_gather_result([])
+        result = _make_execution_result([])
         response = await s.synthesize("what is nginx status?", result)
         assert isinstance(response, AgenticResponse)
         assert "couldn't gather" in response.answer
@@ -123,8 +130,8 @@ class TestSynthesizeNoEvidence:
     @pytest.mark.asyncio
     async def test_all_failed(self) -> None:
         s = ResponseSynthesizer(use_llm=False)
-        evidence = [_make_evidence(success=False, output=None, error="connection refused")]
-        result = _make_gather_result(evidence)
+        evidence = [_make_evidence(success=False, output_text=None, error="connection refused")]
+        result = _make_execution_result(evidence)
         response = await s.synthesize("check nginx", result)
         assert "couldn't retrieve" in response.answer
         assert "connection refused" in response.answer
@@ -140,7 +147,7 @@ class TestSynthesizeWithLlm:
     async def test_llm_success(self) -> None:
         s = ResponseSynthesizer(use_llm=True)
         evidence = [_make_evidence()]
-        result = _make_gather_result(evidence)
+        result = _make_execution_result(evidence)
 
         mock_llm = MagicMock()
         mock_llm.is_available.return_value = True
@@ -157,7 +164,7 @@ class TestSynthesizeWithLlm:
     async def test_llm_not_available(self) -> None:
         s = ResponseSynthesizer(use_llm=True)
         evidence = [_make_evidence()]
-        result = _make_gather_result(evidence)
+        result = _make_execution_result(evidence)
 
         mock_llm = MagicMock()
         mock_llm.is_available.return_value = False
@@ -171,7 +178,7 @@ class TestSynthesizeWithLlm:
     async def test_llm_exception(self) -> None:
         s = ResponseSynthesizer(use_llm=True)
         evidence = [_make_evidence()]
-        result = _make_gather_result(evidence)
+        result = _make_execution_result(evidence)
 
         mock_llm = MagicMock()
         mock_llm.is_available.return_value = True
@@ -186,7 +193,7 @@ class TestSynthesizeWithLlm:
     async def test_llm_empty_content(self) -> None:
         s = ResponseSynthesizer(use_llm=True)
         evidence = [_make_evidence()]
-        result = _make_gather_result(evidence)
+        result = _make_execution_result(evidence)
 
         mock_llm = MagicMock()
         mock_llm.is_available.return_value = True
@@ -212,9 +219,9 @@ class TestSynthesizeRules:
         evidence = [_make_evidence(
             capability="service.status",
             args={"service": "nginx"},
-            output="ActiveState=active\nSubState=running\nMainPID=1234\nDescription=Nginx web server",
+            output_text="ActiveState=active\nSubState=running\nMainPID=1234\nDescription=Nginx web server",
         )]
-        result = _make_gather_result(evidence)
+        result = _make_execution_result(evidence)
         response = await s.synthesize("is nginx running?", result)
         assert "nginx" in response.answer
         assert "active" in response.answer
@@ -225,9 +232,9 @@ class TestSynthesizeRules:
         evidence = [_make_evidence(
             capability="package.info",
             args={"package": "curl"},
-            output="install ok installed 7.81.0",
+            output_text="install ok installed 7.81.0",
         )]
-        result = _make_gather_result(evidence)
+        result = _make_execution_result(evidence)
         response = await s.synthesize("is curl installed?", result)
         assert "curl" in response.answer
         assert "installed" in response.answer
@@ -238,9 +245,9 @@ class TestSynthesizeRules:
         evidence = [_make_evidence(
             capability="package.info",
             args={"package": "foo"},
-            output="deinstall ok not-installed",
+            output_text="deinstall ok not-installed",
         )]
-        result = _make_gather_result(evidence)
+        result = _make_execution_result(evidence)
         response = await s.synthesize("is foo installed?", result)
         assert "not installed" in response.answer
 
@@ -250,9 +257,9 @@ class TestSynthesizeRules:
         evidence = [_make_evidence(
             capability="package.info",
             args={"package": "vim"},
-            output="Package: vim\nVersion: 9.0\nDescription: Vi IMproved",
+            output_text="Package: vim\nVersion: 9.0\nDescription: Vi IMproved",
         )]
-        result = _make_gather_result(evidence)
+        result = _make_execution_result(evidence)
         response = await s.synthesize("what version of vim?", result)
         assert "vim" in response.answer
         assert "9.0" in response.answer
@@ -263,9 +270,9 @@ class TestSynthesizeRules:
         evidence = [_make_evidence(
             capability="docker.list",
             args={},
-            output="NAME  STATUS  IMAGE\napp   Up      myimage",
+            output_text="NAME  STATUS  IMAGE\napp   Up      myimage",
         )]
-        result = _make_gather_result(evidence)
+        result = _make_execution_result(evidence)
         response = await s.synthesize("list containers", result)
         assert "Docker containers" in response.answer
 
@@ -275,9 +282,9 @@ class TestSynthesizeRules:
         evidence = [_make_evidence(
             capability="network.listeners",
             args={},
-            output="tcp  LISTEN  0.0.0.0:80",
+            output_text="tcp  LISTEN  0.0.0.0:80",
         )]
-        result = _make_gather_result(evidence)
+        result = _make_execution_result(evidence)
         response = await s.synthesize("listening ports", result)
         assert "Listening ports" in response.answer
 
@@ -287,9 +294,9 @@ class TestSynthesizeRules:
         evidence = [_make_evidence(
             capability="system.resources",
             args={},
-            output="Mem: 16G total",
+            output_text="Mem: 16G total",
         )]
-        result = _make_gather_result(evidence)
+        result = _make_execution_result(evidence)
         response = await s.synthesize("memory usage", result)
         assert "System resources" in response.answer
 
@@ -299,9 +306,9 @@ class TestSynthesizeRules:
         evidence = [_make_evidence(
             capability="file.read",
             args={"path": "/etc/hosts"},
-            output="127.0.0.1 localhost",
+            output_text="127.0.0.1 localhost",
         )]
-        result = _make_gather_result(evidence)
+        result = _make_execution_result(evidence)
         response = await s.synthesize("show /etc/hosts", result)
         assert "127.0.0.1" in response.answer
 
@@ -312,17 +319,17 @@ class TestSynthesizeRules:
         evidence = [_make_evidence(
             capability="file.read",
             args={},
-            output=long_output,
+            output_text=long_output,
         )]
-        result = _make_gather_result(evidence)
+        result = _make_execution_result(evidence)
         response = await s.synthesize("read big file", result)
         assert response.answer.endswith("...")
 
     @pytest.mark.asyncio
     async def test_empty_output_filtered(self) -> None:
         s = ResponseSynthesizer(use_llm=False)
-        evidence = [_make_evidence(output="")]
-        result = _make_gather_result(evidence)
+        evidence = [_make_evidence(output_text="")]
+        result = _make_execution_result(evidence)
         response = await s.synthesize("test", result)
         assert "No information" in response.answer
 
@@ -335,7 +342,7 @@ class TestSynthesizeRules:
 class TestFormatEvidence:
     def test_with_args(self) -> None:
         s = ResponseSynthesizer()
-        ev = _make_evidence(args={"service": "nginx"}, output="active")
+        ev = _make_evidence(args={"service": "nginx"}, output_text="active")
         result = s._format_evidence((ev,))
         assert "[service.status]" in result
         assert "service=nginx" in result
@@ -343,7 +350,7 @@ class TestFormatEvidence:
 
     def test_no_output(self) -> None:
         s = ResponseSynthesizer()
-        ev = _make_evidence(output=None)
+        ev = _make_evidence(output_text=None)
         result = s._format_evidence((ev,))
         assert "(no output)" in result
 
@@ -356,25 +363,25 @@ class TestFormatEvidence:
 class TestCalculateConfidence:
     def test_no_evidence(self) -> None:
         s = ResponseSynthesizer()
-        result = _make_gather_result([])
+        result = _make_execution_result([])
         assert s._calculate_confidence(result) == 0.0
 
     def test_all_success_sufficient(self) -> None:
         s = ResponseSynthesizer()
         evidence = [_make_evidence(success=True)]
-        result = _make_gather_result(evidence, sufficient=True)
+        result = _make_execution_result(evidence)
         conf = s._calculate_confidence(result)
         assert conf > 0.5
 
-    def test_mixed_not_sufficient(self) -> None:
+    def test_mixed_results(self) -> None:
         s = ResponseSynthesizer()
         evidence = [
             _make_evidence(success=True),
             _make_evidence(success=False, error="fail"),
         ]
-        result = _make_gather_result(evidence, sufficient=False)
+        result = _make_execution_result(evidence)
         conf = s._calculate_confidence(result)
-        # success_rate = 0.5, not sufficient: 0.5 - 0.2 = 0.3
+        # success_rate = 0.5, not all_succeeded: 0.5 - 0.2 = 0.3
         assert conf == pytest.approx(0.3, abs=0.01)
 
 
@@ -387,7 +394,7 @@ class TestGenerateSuggestions:
     def test_service_status_suggestions(self) -> None:
         s = ResponseSynthesizer()
         evidence = [_make_evidence(capability="service.status", args={"service": "nginx"})]
-        result = _make_gather_result(evidence)
+        result = _make_execution_result(evidence)
         suggestions = s._generate_suggestions("check nginx", result)
         assert len(suggestions) >= 1
         assert "nginx" in suggestions[0]
@@ -395,7 +402,7 @@ class TestGenerateSuggestions:
     def test_no_suggestions_for_failed(self) -> None:
         s = ResponseSynthesizer()
         evidence = [_make_evidence(success=False, error="fail")]
-        result = _make_gather_result(evidence)
+        result = _make_execution_result(evidence)
         suggestions = s._generate_suggestions("check", result)
         assert len(suggestions) == 0
 
@@ -407,14 +414,14 @@ class TestGenerateSuggestions:
             _make_evidence(capability="file.read", args={"path": "/etc/hosts"}),
             _make_evidence(capability="docker.list", args={}),
         ]
-        result = _make_gather_result(evidence)
+        result = _make_execution_result(evidence)
         suggestions = s._generate_suggestions("check all", result)
         assert len(suggestions) <= 3
 
     def test_suggestion_without_target(self) -> None:
         s = ResponseSynthesizer()
         evidence = [_make_evidence(capability="docker.list", args={})]
-        result = _make_gather_result(evidence)
+        result = _make_execution_result(evidence)
         suggestions = s._generate_suggestions("list containers", result)
         assert len(suggestions) >= 1
 

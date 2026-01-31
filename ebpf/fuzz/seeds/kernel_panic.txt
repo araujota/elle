@@ -1,0 +1,4 @@
+Kernel panic - not syncing: Fatal exception in interrupt
+CPU: 0 PID: 1234 Comm: kworker/0:1 Not tainted 6.5.0-44-generic #44-Ubuntu
+Call Trace:
+ dump_stack_lvl+0x48/0x70

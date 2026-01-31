@@ -19,27 +19,20 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-# Legacy imports for backwards compatibility
-from elle.cli.agentic.analyzer import InformationNeedAnalyzer, get_analyzer
 from elle.cli.agentic.evaluator import (
     GoalEvaluator,
-    SufficiencyEvaluator,
-    get_evaluator,
     get_goal_evaluator,
 )
-from elle.cli.agentic.executor import GatherExecutor, get_executor
 from elle.cli.agentic.intent_analyzer import IntentAnalyzer, get_intent_analyzer
 from elle.cli.agentic.models import (
     AgenticIntent,
     AgenticResponse,
     EvaluationStatus,
     ExecutionEvidence,
-    GatheredEvidence,
-    GatherResult,
+    ExecutionResult,
 )
 from elle.cli.agentic.plan_executor import PlanExecutor, get_plan_executor
 from elle.cli.agentic.planner import CapabilityPlanner, get_capability_planner
-from elle.cli.agentic.selector import CapabilitySelector, get_selector
 from elle.cli.agentic.synthesizer import ResponseSynthesizer, get_synthesizer
 
 logger = logging.getLogger(__name__)
@@ -222,46 +215,34 @@ class UnifiedAgenticHandler:
         Returns:
             AgenticResponse with synthesized answer.
         """
-        # Convert ExecutionEvidence to GatheredEvidence for synthesizer
-        # (backwards compatibility with existing synthesizer)
-        gathered_evidence = tuple(
-            GatheredEvidence(
-                capability=e.capability,
-                args=e.args,
-                success=e.success,
-                output=e.output_text or (str(e.output) if e.output else None),
-                error=e.error,
-                duration_ms=e.duration_ms,
-                timestamp=e.timestamp,
-            )
-            for e in evidence
-        )
+        # Build an ExecutionResult for the synthesizer
+        from elle.cli.agentic.models import CapabilityCall, ExecutionPlan, ParallelGroup
 
-        # Build a GatherResult for the synthesizer
-        from elle.cli.agentic.models import CapabilityCall, GatherPlan
-
-        calls = tuple(
-            CapabilityCall(
-                capability=e.capability,
-                args=e.args,
-                purpose=f"Executed {e.capability}",
-            )
-            for e in evidence
-        )
-
-        gather_result = GatherResult(
-            plan=GatherPlan(
-                needs=intent.information_needs,
-                calls=calls,
-                estimated_duration_ms=sum(e.duration_ms for e in evidence),
+        total_ms = sum(e.duration_ms for e in evidence)
+        exec_result = ExecutionResult(
+            plan=ExecutionPlan(
+                intent=intent,
+                parallel_groups=(
+                    ParallelGroup(
+                        calls=tuple(
+                            CapabilityCall(
+                                capability=e.capability,
+                                args=e.args,
+                                purpose=f"Executed {e.capability}",
+                            )
+                            for e in evidence
+                        ),
+                    ),
+                ) if evidence else (),
+                rationale="Accumulated from agentic loop",
+                estimated_duration_ms=total_ms,
             ),
-            evidence=gathered_evidence,
-            sufficient=evaluation.status == EvaluationStatus.SATISFIED if evaluation else False,
-            missing=evaluation.gaps if evaluation else (),
+            evidence=evidence,
+            total_duration_ms=total_ms,
         )
 
         # Use the synthesizer to generate the answer
-        synth_response = await self.synthesizer.synthesize(user_input, gather_result)
+        synth_response = await self.synthesizer.synthesize(user_input, exec_result)
 
         # Build actions_taken summary
         actions_taken: list[str] = []
@@ -276,7 +257,7 @@ class UnifiedAgenticHandler:
 
         return AgenticResponse(
             answer=synth_response.answer,
-            evidence=gathered_evidence,  # Return as GatheredEvidence for compatibility
+            evidence=evidence,
             confidence=synth_response.confidence,
             follow_up_suggestions=synth_response.follow_up_suggestions,
             intent=intent,
@@ -298,165 +279,10 @@ class UnifiedAgenticHandler:
 
 
 # =============================================================================
-# AgenticQuestionHandler (Legacy - Backwards Compatible)
-# =============================================================================
-
-
-class AgenticQuestionHandler:
-    """Handles system questions agentically.
-
-    Orchestrates the analysis → selection → execution → synthesis pipeline
-    to answer questions by actually gathering system information.
-
-    DEPRECATED: Use UnifiedAgenticHandler for new code. This is kept for
-    backwards compatibility.
-    """
-
-    def __init__(
-        self,
-        analyzer: InformationNeedAnalyzer | None = None,
-        selector: CapabilitySelector | None = None,
-        executor: GatherExecutor | None = None,
-        evaluator: SufficiencyEvaluator | None = None,
-        synthesizer: ResponseSynthesizer | None = None,
-        max_iterations: int = 2,
-    ) -> None:
-        """Initialize the handler.
-
-        Args:
-            analyzer: Information need analyzer (uses default if None).
-            selector: Capability selector (uses default if None).
-            executor: Gather executor (uses default if None).
-            evaluator: Sufficiency evaluator (uses default if None).
-            synthesizer: Response synthesizer (uses default if None).
-            max_iterations: Maximum gather-evaluate iterations.
-        """
-        self.analyzer = analyzer or get_analyzer()
-        self.selector = selector or get_selector()
-        self.executor = executor or get_executor()
-        self.evaluator = evaluator or get_evaluator()
-        self.synthesizer = synthesizer or get_synthesizer()
-        self.max_iterations = max_iterations
-
-    async def handle(self, question: str) -> AgenticResponse:
-        """Handle a system question agentically.
-
-        Args:
-            question: The user's question.
-
-        Returns:
-            AgenticResponse with the answer and evidence.
-        """
-        logger.debug(f"Handling question: {question[:100]}")
-
-        # 1. Analyze what information is needed
-        needs = self.analyzer.analyze(question)
-
-        if not needs:
-            logger.debug("No information needs identified")
-            return AgenticResponse(
-                answer="I couldn't determine what information you're asking about. Could you rephrase your question?",
-                evidence=(),
-                confidence=0.0,
-                follow_up_suggestions=(),
-            )
-
-        logger.debug(f"Identified {len(needs)} information needs")
-
-        # 2. Select capabilities to gather information
-        plan = self.selector.select(needs)
-
-        if not plan.calls:
-            logger.debug("No capabilities selected")
-            return AgenticResponse(
-                answer="I don't have the ability to gather that information. "
-                "This may be outside my current capabilities.",
-                evidence=(),
-                confidence=0.0,
-                follow_up_suggestions=(),
-            )
-
-        logger.debug(f"Selected {len(plan.calls)} capabilities")
-
-        # 3. Execute and gather evidence (with retry loop)
-        result: GatherResult | None = None
-
-        for iteration in range(self.max_iterations):
-            logger.debug(f"Gather iteration {iteration + 1}/{self.max_iterations}")
-
-            result = await self.executor.execute(plan)
-
-            # 4. Check if sufficient
-            if result.sufficient:
-                logger.debug("Evidence is sufficient")
-                break
-
-            # 5. Try to identify gaps and gather more
-            if iteration < self.max_iterations - 1:
-                additional_needs = self.evaluator.identify_gaps(question, result)
-
-                if not additional_needs:
-                    logger.debug("No additional needs identified")
-                    break
-
-                logger.debug(f"Identified {len(additional_needs)} additional needs")
-                plan = self.selector.select(additional_needs)
-
-                if not plan.calls:
-                    logger.debug("No additional capabilities available")
-                    break
-
-        if result is None:
-            return AgenticResponse(
-                answer="I encountered an error while gathering information.",
-                evidence=(),
-                confidence=0.0,
-                follow_up_suggestions=(),
-            )
-
-        # 6. Synthesize response
-        logger.debug("Synthesizing response")
-        response = await self.synthesizer.synthesize(question, result)
-
-        logger.debug(f"Generated response with confidence {response.confidence:.2f}")
-        return response
-
-    def can_handle(self, question: str) -> bool:
-        """Check if this handler can handle a question.
-
-        A question can be handled if it matches patterns that indicate
-        a request for system information.
-
-        Args:
-            question: The question to check.
-
-        Returns:
-            True if the handler can potentially handle this question.
-        """
-        needs = self.analyzer.analyze(question)
-        return len(needs) > 0
-
-
-# =============================================================================
 # Module-level singletons
 # =============================================================================
 
-_handler: AgenticQuestionHandler | None = None
 _unified_handler: UnifiedAgenticHandler | None = None
-
-
-def get_agentic_handler() -> AgenticQuestionHandler:
-    """Get the shared legacy handler instance.
-
-    Returns:
-        The AgenticQuestionHandler singleton.
-
-    DEPRECATED: Use get_unified_handler() for new code.
-    """
-    global _handler
-    if _handler is None:
-        _handler = AgenticQuestionHandler()
-    return _handler
 
 
 def get_unified_handler() -> UnifiedAgenticHandler:
@@ -472,9 +298,8 @@ def get_unified_handler() -> UnifiedAgenticHandler:
 
 
 def reset_agentic_handler() -> None:
-    """Reset all shared handler instances."""
-    global _handler, _unified_handler
-    _handler = None
+    """Reset the shared handler instance."""
+    global _unified_handler
     _unified_handler = None
 
 

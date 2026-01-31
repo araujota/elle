@@ -26,6 +26,7 @@ from elle.daemon.telemetry.trends import (
     TrendWindow,
 )
 from elle.storage.engine import get_conn
+from elle.storage.helpers import parse_datetime, serialize_datetime
 
 
 @contextmanager
@@ -98,15 +99,6 @@ def ensure_aggregation_schema(conn: psycopg.Connection) -> None:
         cursor.execute(index)
     conn.commit()
 
-
-def _serialize_datetime(dt: datetime) -> str:
-    """Serialize datetime to ISO format."""
-    return dt.isoformat()
-
-
-def _parse_datetime(s: str) -> datetime:
-    """Parse ISO format string to datetime."""
-    return datetime.fromisoformat(s)
 
 
 # =============================================================================
@@ -313,7 +305,7 @@ def record_metric(
             INSERT INTO metric_samples (metric, value, ts)
             VALUES (%s, %s, %s)
             """,
-            (metric, value, _serialize_datetime(ts)),
+            (metric, value, serialize_datetime(ts)),
         )
         c.commit()
 
@@ -337,7 +329,7 @@ def record_metrics_batch(
         if ts is None:
             ts = datetime.utcnow()
 
-        ts_str = _serialize_datetime(ts)
+        ts_str = serialize_datetime(ts)
         cursor = c.cursor()
 
         for metric, value in metrics.items():
@@ -501,7 +493,7 @@ class TrendAggregator:
                 SELECT AVG(value), COUNT(*) FROM metric_samples
                 WHERE metric = %s AND ts >= %s
                 """,
-                (metric, _serialize_datetime(cutoff)),
+                (metric, serialize_datetime(cutoff)),
             )
             row = cursor.fetchone()
             if row and row[0] is not None:
@@ -683,7 +675,7 @@ class TrendAggregator:
             baseline_mean=row["baseline_mean"],
             baseline_stddev=row["baseline_stddev"],
             samples=row["samples"],
-            updated_at=_parse_datetime(row["updated_at"]),
+            updated_at=parse_datetime(row["updated_at"]),
         )
 
     def _update_baseline(
@@ -715,7 +707,7 @@ class TrendAggregator:
                 SET baseline_mean = %s, baseline_stddev = %s, samples = %s, updated_at = %s
                 WHERE metric = %s
                 """,
-                (new_mean, new_stddev, new_samples, _serialize_datetime(datetime.utcnow()), metric),
+                (new_mean, new_stddev, new_samples, serialize_datetime(datetime.utcnow()), metric),
             )
         else:
             # First sample
@@ -724,7 +716,7 @@ class TrendAggregator:
                 INSERT INTO metric_baselines (metric, baseline_mean, baseline_stddev, samples, updated_at)
                 VALUES (%s, %s, %s, %s, %s)
                 """,
-                (metric, current_value, 0.0, 1, _serialize_datetime(datetime.utcnow())),
+                (metric, current_value, 0.0, 1, serialize_datetime(datetime.utcnow())),
             )
 
         conn.commit()
@@ -780,7 +772,7 @@ class TrendAggregator:
                     FROM metric_samples
                     WHERE metric = %s AND ts >= %s
                     """,
-                    (metric, _serialize_datetime(cutoff)),
+                    (metric, serialize_datetime(cutoff)),
                 )
                 row = cursor.fetchone()
                 if row and row[0] is not None:
@@ -796,7 +788,7 @@ class TrendAggregator:
                                       sample_count = EXCLUDED.sample_count,
                                       computed_at = EXCLUDED.computed_at
                         """,
-                        (metric, window, row[0], row[1], row[2], row[3], _serialize_datetime(now)),
+                        (metric, window, row[0], row[1], row[2], row[3], serialize_datetime(now)),
                     )
 
         conn.commit()
@@ -899,7 +891,7 @@ def cleanup_old_samples(
         cursor = c.cursor()
         cursor.execute(
             "DELETE FROM metric_samples WHERE ts < %s",
-            (_serialize_datetime(cutoff),),
+            (serialize_datetime(cutoff),),
         )
         deleted: int = cursor.rowcount
         c.commit()

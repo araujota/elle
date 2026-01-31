@@ -202,7 +202,7 @@ def _create_action_callback(
             try:
                 subprocess.Popen(
                     action.command,
-                    shell=True,
+                    shell=True,  # nosec B602 - notification action commands from trusted config
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )

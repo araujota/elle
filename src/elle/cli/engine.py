@@ -1895,7 +1895,7 @@ Validates package operations before execution to detect potential issues.
         try:
             process = subprocess.Popen(
                 command,
-                shell=True,
+                shell=True,  # nosec B602 - user-initiated shell passthrough, denylist enforced
                 cwd=session.cwd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,

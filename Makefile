@@ -6,7 +6,8 @@
         venv run run-daemon dist \
         build-ebpf clean-ebpf install-ebpf \
         build-probed clean-probed install-probed \
-        build-collectors clean-collectors install-collectors
+        build-collectors clean-collectors install-collectors \
+        bandit clang-tidy valgrind fuzz fuzz-run chaos docs-api
 
 # Default target
 help:
@@ -25,6 +26,13 @@ help:
 	@echo "  make format        Format code (ruff)"
 	@echo "  make typecheck     Run type checker (mypy)"
 	@echo "  make check         Run all checks (lint, typecheck, test)"
+	@echo "  make bandit        Run Bandit security linter"
+	@echo "  make clang-tidy    Run clang-tidy static analysis on C code"
+	@echo "  make valgrind      Run C test harnesses under Valgrind"
+	@echo "  make fuzz          Build AFL++ fuzz harnesses"
+	@echo "  make fuzz-run      Run AFL++ fuzz targets (5 min each)"
+	@echo "  make chaos         Run chaos/fault-injection tests"
+	@echo "  make docs-api      Build Sphinx API documentation"
 	@echo ""
 	@echo "C Collectors:"
 	@echo "  make build-ebpf       Build C-based eBPF collector"
@@ -175,8 +183,67 @@ typecheck:
 	mypy src/
 
 # Run all checks
-check: lint format-check typecheck test
+check: lint format-check typecheck bandit test
 	@echo "All checks passed!"
+
+# =============================================================================
+# Security & Static Analysis
+# =============================================================================
+
+# Run Bandit security linter
+bandit:
+	bandit -c bandit.yaml -r src/
+
+# Run clang-tidy static analysis on C daemons
+clang-tidy:
+	@echo "Running clang-tidy on telemetryd..."
+	find ebpf/telemetryd -name '*.c' ! -path '*/ebpf/*' | \
+		xargs clang-tidy --config-file=.clang-tidy \
+		-- -D_GNU_SOURCE -I ebpf/telemetryd -I ebpf/telemetryd/normalize \
+		$$(pkg-config --cflags jansson libpcre2-8 openssl libsystemd 2>/dev/null)
+	@echo "Running clang-tidy on probed..."
+	find ebpf/probed -name '*.c' | \
+		xargs clang-tidy --config-file=.clang-tidy \
+		-- -D_GNU_SOURCE -I ebpf/probed -I ebpf/probed/probes \
+		$$(pkg-config --cflags jansson libsystemd openssl 2>/dev/null)
+	@echo "Running clang-tidy on gpud..."
+	find ebpf/gpud -name '*.c' | \
+		xargs clang-tidy --config-file=.clang-tidy \
+		-- -D_GNU_SOURCE -I ebpf/gpud \
+		$$(pkg-config --cflags jansson openssl 2>/dev/null)
+
+# =============================================================================
+# C Testing (Valgrind & Fuzz)
+# =============================================================================
+
+# Run C test harnesses under Valgrind
+valgrind:
+	$(MAKE) -C ebpf/tests valgrind
+
+# Build AFL++ fuzz harnesses
+fuzz:
+	$(MAKE) -C ebpf/fuzz all
+
+# Run AFL++ fuzz targets (5 minutes each)
+fuzz-run:
+	$(MAKE) -C ebpf/fuzz run
+
+# =============================================================================
+# Chaos Testing
+# =============================================================================
+
+# Run chaos/fault-injection tests
+chaos:
+	pytest tests/chaos/ -v --timeout=60 -x
+
+# =============================================================================
+# API Documentation (Sphinx)
+# =============================================================================
+
+# Build Sphinx API documentation
+docs-api:
+	sphinx-build -W -b html docs/api docs/api/_build/html
+	@echo "API docs built: docs/api/_build/html/index.html"
 
 # =============================================================================
 # Debian Packaging

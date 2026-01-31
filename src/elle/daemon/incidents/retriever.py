@@ -35,9 +35,7 @@ from elle.daemon.incidents.models import (
 from elle.daemon.incidents.preconditions import evaluate_preconditions
 from elle.daemon.incidents.schema import ensure_schema
 from elle.daemon.incidents.store import (
-    _parse_datetime,
     _row_to_incident,
-    get_all_embeddings,
 )
 from elle.storage.engine import get_conn
 

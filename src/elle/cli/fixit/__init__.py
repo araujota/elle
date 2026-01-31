@@ -2,7 +2,7 @@
 
 The fixit module provides intelligent error analysis when commands fail:
 1. Builds context from session state, Man Vault, and Incident Vault
-2. Analyzes failures using LLM (with rule-based fallback)
+2. Analyzes failures using LLM
 3. Verifies suggested fixes for safety
 4. Presents results via interactive UI or text renderer
 5. Records outcomes to Incident Vault for learning
@@ -29,12 +29,6 @@ Usage (programmatic):
 """
 
 # Models
-# Fallback
-from elle.cli.fixit.fallback import (
-    analyze_with_fallback,
-    detect_error_category,
-)
-
 # Interactive UI
 from elle.cli.fixit.interactive import (
     FixitInteractive,
@@ -115,7 +109,4 @@ __all__ = [
     "filter_safe_suggestions",
     "verify_analysis",
     "verify_command",
-    # Fallback
-    "analyze_with_fallback",
-    "detect_error_category",
 ]

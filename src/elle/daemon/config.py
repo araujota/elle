@@ -201,18 +201,6 @@ class Config:
     llm: DaemonLLMConfig = field(default_factory=DaemonLLMConfig)
     cloud_sync: CloudSyncConfig = field(default_factory=CloudSyncConfig)
 
-    # Feature flags
-    journal_enabled: bool = True
-    kernel_enabled: bool = True
-    probes_enabled: bool = True
-    ebpf_enabled: bool = True
-
-    # New telemetry source flags
-    docker_enabled: bool = True  # Docker events watcher
-    inotify_enabled: bool = True  # File change monitoring via inotify
-    wireguard_enabled: bool = True  # WireGuard handshake monitoring
-    port_probe_enabled: bool = True  # Port listener detection probe
-
     # Inotify configuration
     inotify_watch_paths: tuple[str, ...] = (
         "/root/.ssh/authorized_keys",
@@ -399,42 +387,6 @@ def load_config(config_path: Path | None = None) -> Config:
         event_queue_size=queues_section.get("event_queue_size", 5000),
     )
 
-    # Feature flags
-    journal_enabled = _get_env(
-        "JOURNAL_ENABLED",
-        daemon_section.get("journal_enabled", True),
-    )
-    kernel_enabled = _get_env(
-        "KERNEL_ENABLED",
-        daemon_section.get("kernel_enabled", True),
-    )
-    probes_enabled = _get_env(
-        "PROBES_ENABLED",
-        daemon_section.get("probes_enabled", True),
-    )
-    ebpf_enabled = _get_env(
-        "EBPF_ENABLED",
-        daemon_section.get("ebpf_enabled", True),
-    )
-
-    # New telemetry source flags
-    docker_enabled = _get_env(
-        "DOCKER_ENABLED",
-        daemon_section.get("docker_enabled", True),
-    )
-    inotify_enabled = _get_env(
-        "INOTIFY_ENABLED",
-        daemon_section.get("inotify_enabled", True),
-    )
-    wireguard_enabled = _get_env(
-        "WIREGUARD_ENABLED",
-        daemon_section.get("wireguard_enabled", True),
-    )
-    port_probe_enabled = _get_env(
-        "PORT_PROBE_ENABLED",
-        daemon_section.get("port_probe_enabled", True),
-    )
-
     # Inotify watch paths
     inotify_section = _deep_get(data, "daemon", "inotify", default={})
     inotify_watch_paths = inotify_section.get(
@@ -560,18 +512,10 @@ def load_config(config_path: Path | None = None) -> Config:
         api_auth=api_auth,
         correlation=correlation,
         queues=queues,
-        journal_enabled=journal_enabled,
-        kernel_enabled=kernel_enabled,
-        probes_enabled=probes_enabled,
         ebpf=ebpf,
-        ebpf_enabled=ebpf_enabled,
         mobile=mobile,
         llm=llm_config,
         cloud_sync=cloud_sync,
-        docker_enabled=docker_enabled,
-        inotify_enabled=inotify_enabled,
-        wireguard_enabled=wireguard_enabled,
-        port_probe_enabled=port_probe_enabled,
         inotify_watch_paths=inotify_watch_paths,
         port_probe_interval=port_probe_interval,
         capability_versioning_enabled=capability_versioning_enabled,

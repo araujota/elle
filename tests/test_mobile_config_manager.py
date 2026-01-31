@@ -31,14 +31,6 @@ class TestConfigManager:
         # Create a mock config
         mock_config = MagicMock()
         mock_config.log_level = "INFO"
-        mock_config.journal_enabled = True
-        mock_config.kernel_enabled = True
-        mock_config.probes_enabled = True
-        mock_config.ebpf_enabled = True
-        mock_config.docker_enabled = True
-        mock_config.inotify_enabled = True
-        mock_config.wireguard_enabled = True
-        mock_config.port_probe_enabled = True
         mock_config.port_probe_interval = 60
         mock_config.capability_versioning_enabled = True
         mock_config.capability_bootstrap_enabled = True

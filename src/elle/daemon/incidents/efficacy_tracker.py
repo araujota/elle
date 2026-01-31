@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime
-from typing import Any
 
 import psycopg
 
@@ -27,34 +26,7 @@ from elle.daemon.incidents.models import (
 )
 from elle.daemon.incidents.schema import PG_SCHEMA
 from elle.storage.engine import get_conn
-
-
-
-def _serialize_datetime(dt: datetime) -> str:
-    """Serialize datetime to ISO format string."""
-    return dt.isoformat()
-
-
-def _parse_datetime(s: str) -> datetime:
-    """Parse ISO format string to datetime."""
-    return datetime.fromisoformat(s)
-
-
-def _json_dumps(obj: Any) -> str:
-    """Serialize object to JSON string."""
-    import json
-
-    return json.dumps(obj, default=str)
-
-
-def _json_loads(s: str | None) -> Any:
-    """Parse JSON string."""
-    import json
-
-    if not s:
-        return []
-    return json.loads(s)
-
+from elle.storage.helpers import json_dumps, json_loads, parse_datetime, serialize_datetime
 
 # =============================================================================
 # Core tracking functions
@@ -122,7 +94,7 @@ def _update_domain_efficacy(
         partial = row["partial_count"] + (1 if outcome == "partial" else 0)
         no_change = row["no_change_count"] + (1 if outcome == "no_change" else 0)
         worse = row["worse_count"] + (1 if outcome == "worse" else 0)
-        last_updated = _parse_datetime(row["last_updated"])
+        last_updated = parse_datetime(row["last_updated"])
     else:
         # New record
         total = 1
@@ -158,7 +130,7 @@ def _update_domain_efficacy(
             no_change,
             worse,
             success_rate,
-            _serialize_datetime(now),
+            serialize_datetime(now),
         ),
     )
 
@@ -184,7 +156,7 @@ def _update_entity_efficacy(
         partial = row["partial_count"] + (1 if outcome == "partial" else 0)
         no_change = row["no_change_count"] + (1 if outcome == "no_change" else 0)
         worse = row["worse_count"] + (1 if outcome == "worse" else 0)
-        last_updated = _parse_datetime(row["last_updated"])
+        last_updated = parse_datetime(row["last_updated"])
     else:
         total = 1
         improved = 1 if outcome == "improved" else 0
@@ -218,7 +190,7 @@ def _update_entity_efficacy(
             no_change,
             worse,
             success_rate,
-            _serialize_datetime(now),
+            serialize_datetime(now),
         ),
     )
 
@@ -249,7 +221,7 @@ def _update_approach_efficacy(
         partial = row["partial_count"] + (1 if outcome == "partial" else 0)
         no_change = row["no_change_count"] + (1 if outcome == "no_change" else 0)
         worse = row["worse_count"] + (1 if outcome == "worse" else 0)
-        last_used = _parse_datetime(row["last_used"])
+        last_used = parse_datetime(row["last_used"])
 
         # Update average time to resolve
         old_avg = row["avg_time_to_resolve_sec"]
@@ -296,7 +268,7 @@ def _update_approach_efficacy(
             approach_signature,
             domain,
             precondition_summary,
-            _json_dumps(list(key_commands)),
+            json_dumps(list(key_commands)),
             total,
             improved,
             partial,
@@ -304,7 +276,7 @@ def _update_approach_efficacy(
             worse,
             success_rate,
             avg_time,
-            _serialize_datetime(now),
+            serialize_datetime(now),
         ),
     )
 
@@ -495,7 +467,7 @@ def get_domain_efficacy(
             no_change_count=row["no_change_count"],
             worse_count=row["worse_count"],
             success_rate=row["success_rate"],
-            last_updated=_parse_datetime(row["last_updated"]),
+            last_updated=parse_datetime(row["last_updated"]),
         )
 
 
@@ -529,7 +501,7 @@ def get_entity_efficacy(
             no_change_count=row["no_change_count"],
             worse_count=row["worse_count"],
             success_rate=row["success_rate"],
-            last_updated=_parse_datetime(row["last_updated"]),
+            last_updated=parse_datetime(row["last_updated"]),
         )
 
 
@@ -559,7 +531,7 @@ def get_approach_efficacy(
             approach_signature=row["approach_signature"],
             domain=row["domain"],
             precondition_summary=row["precondition_summary"] or "",
-            key_commands=tuple(_json_loads(row["key_commands_json"])),
+            key_commands=tuple(json_loads(row["key_commands_json"])),
             total_uses=row["total_uses"],
             improved_count=row["improved_count"],
             partial_count=row["partial_count"],
@@ -567,7 +539,7 @@ def get_approach_efficacy(
             worse_count=row["worse_count"],
             success_rate=row["success_rate"],
             avg_time_to_resolve_sec=row["avg_time_to_resolve_sec"],
-            last_used=_parse_datetime(row["last_used"]),
+            last_used=parse_datetime(row["last_used"]),
         )
 
 
@@ -643,7 +615,7 @@ def get_all_domain_efficacy() -> list[DomainEfficacy]:
                     no_change_count=row["no_change_count"],
                     worse_count=row["worse_count"],
                     success_rate=row["success_rate"],
-                    last_updated=_parse_datetime(row["last_updated"]),
+                    last_updated=parse_datetime(row["last_updated"]),
                 )
             )
 
@@ -700,7 +672,7 @@ def get_efficacy_stats() -> EfficacyStats:
                     no_change_count=row["no_change_count"],
                     worse_count=row["worse_count"],
                     success_rate=row["success_rate"],
-                    last_updated=_parse_datetime(row["last_updated"]),
+                    last_updated=parse_datetime(row["last_updated"]),
                 )
             )
 
@@ -720,7 +692,7 @@ def get_efficacy_stats() -> EfficacyStats:
                     approach_signature=row["approach_signature"],
                     domain=row["domain"],
                     precondition_summary=row["precondition_summary"] or "",
-                    key_commands=tuple(_json_loads(row["key_commands_json"])),
+                    key_commands=tuple(json_loads(row["key_commands_json"])),
                     total_uses=row["total_uses"],
                     improved_count=row["improved_count"],
                     partial_count=row["partial_count"],
@@ -728,7 +700,7 @@ def get_efficacy_stats() -> EfficacyStats:
                     worse_count=row["worse_count"],
                     success_rate=row["success_rate"],
                     avg_time_to_resolve_sec=row["avg_time_to_resolve_sec"],
-                    last_used=_parse_datetime(row["last_used"]),
+                    last_used=parse_datetime(row["last_used"]),
                 )
             )
 

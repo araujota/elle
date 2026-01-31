@@ -279,78 +279,6 @@ class ExecutionPlan(BaseModel):
         return tuple(calls)
 
 
-# =============================================================================
-# Legacy GatherPlan (kept for backwards compatibility)
-# =============================================================================
-
-
-class GatherPlan(BaseModel):
-    """Plan for gathering information to answer a question.
-
-    Contains the analyzed needs and the capability calls selected
-    to satisfy those needs.
-
-    DEPRECATED: Use ExecutionPlan for new code. This is kept for
-    backwards compatibility with the legacy analyzer/selector.
-    """
-
-    model_config = ConfigDict(frozen=True)
-
-    needs: tuple[InformationNeed, ...] = Field(
-        description="Information needs identified from the question",
-    )
-    calls: tuple[CapabilityCall, ...] = Field(
-        description="Capability calls to execute",
-    )
-    estimated_duration_ms: int = Field(
-        default=0,
-        ge=0,
-        description="Estimated total execution time in milliseconds",
-    )
-
-
-# =============================================================================
-# Evidence Gathering
-# =============================================================================
-
-
-class GatheredEvidence(BaseModel):
-    """Evidence collected from a capability execution.
-
-    Captures the complete result of executing a single capability,
-    including timing information for performance tracking.
-    """
-
-    model_config = ConfigDict(frozen=True)
-
-    capability: str = Field(
-        description="Capability that was executed",
-    )
-    args: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Arguments used for execution",
-    )
-    success: bool = Field(
-        description="Whether the capability executed successfully",
-    )
-    output: str | None = Field(
-        default=None,
-        description="String representation of the output",
-    )
-    error: str | None = Field(
-        default=None,
-        description="Error message if failed",
-    )
-    duration_ms: int = Field(
-        ge=0,
-        description="Execution time in milliseconds",
-    )
-    timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        description="When the capability was executed",
-    )
-
-
 class ExecutionEvidence(BaseModel):
     """Evidence from capability execution via the real CapabilityExecutor.
 
@@ -417,32 +345,6 @@ class ExecutionEvidence(BaseModel):
     policy_effect: str | None = Field(
         default=None,
         description="Policy effect that was applied",
-    )
-
-
-class GatherResult(BaseModel):
-    """Result of executing a gather plan.
-
-    Contains all evidence collected and an assessment of whether
-    it's sufficient to answer the original question.
-
-    DEPRECATED: Use ExecutionResult for new code.
-    """
-
-    model_config = ConfigDict(frozen=True)
-
-    plan: GatherPlan = Field(
-        description="The plan that was executed",
-    )
-    evidence: tuple[GatheredEvidence, ...] = Field(
-        description="All evidence collected",
-    )
-    sufficient: bool = Field(
-        description="Whether gathered evidence is sufficient to answer",
-    )
-    missing: tuple[str, ...] = Field(
-        default_factory=tuple,
-        description="What information we couldn't determine",
     )
 
 
@@ -545,7 +447,6 @@ class AgenticResponse(BaseModel):
     the synthesized answer, supporting evidence, and suggestions
     for follow-up actions.
 
-    Works with both the legacy GatheredEvidence and new ExecutionEvidence.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -553,7 +454,7 @@ class AgenticResponse(BaseModel):
     answer: str = Field(
         description="Natural language answer/summary of what was done",
     )
-    evidence: tuple[GatheredEvidence | ExecutionEvidence, ...] = Field(
+    evidence: tuple[ExecutionEvidence, ...] = Field(
         description="Evidence from capability executions",
     )
     confidence: float = Field(

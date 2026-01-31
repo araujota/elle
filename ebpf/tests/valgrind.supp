@@ -1,0 +1,104 @@
+# Valgrind suppression file for ELLE C test harnesses
+#
+# Suppresses known reachable allocations in third-party libraries
+# that are not actual leaks but initialization-time allocations
+# freed at process exit.
+
+# PCRE2 JIT compiler allocates executable memory that appears
+# as "still reachable" at exit. This is by design.
+{
+   pcre2_jit_compile_reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:pcre2_jit_compile_8
+}
+
+{
+   pcre2_jit_stack_reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:pcre2_jit_stack_create_8
+}
+
+{
+   pcre2_compile_reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:pcre2_compile_8
+}
+
+# OpenSSL one-time initialization allocates global state
+# that is intentionally never freed.
+{
+   openssl_init_reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:OPENSSL_init_crypto
+}
+
+{
+   openssl_init_ssl_reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:OPENSSL_init_ssl
+}
+
+{
+   openssl_evp_reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:EVP_MD_fetch
+}
+
+{
+   openssl_sha256_reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:EVP_DigestInit_ex
+}
+
+# OpenSSL error state uses thread-local storage that
+# may appear as reachable at exit.
+{
+   openssl_err_reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:ERR_get_state
+}
+
+# GnuTLS/libcrypto global init (if linked transitively)
+{
+   libcrypto_global_init
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   obj:*/libcrypto.so*
+}
+
+# dlopen/dlclose may leave reachable allocations
+{
+   dl_open_reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:_dl_open
+}
+
+# jansson: json_loads may allocate internal state
+# that is freed by json_decref but appears as
+# reachable if last reference is on stack at exit.
+{
+   jansson_lex_reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:json_loads
+}

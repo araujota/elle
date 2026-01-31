@@ -1,0 +1,1 @@
+Out of memory: Killed process 1234 (python3) total-vm:1024000kB, anon-rss:900000kB, file-rss:1234kB, shmem-rss:0kB, UID:1000 pgtables:2048kB oom_score_adj:0

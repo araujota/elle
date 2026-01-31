@@ -750,11 +750,11 @@ class FixitService:
             analysis = self._analyze_with_llm(context)
 
         if analysis is None:
-            # Use fallback
-            from elle.cli.fixit.fallback import analyze_with_fallback
+            import logging
 
-            analysis = analyze_with_fallback(context)
-            used_fallback = True
+            logging.getLogger(__name__).info(
+                "LLM unavailable; cannot analyze command failure"
+            )
 
         if analysis:
             result = FixitResult(

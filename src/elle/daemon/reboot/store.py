@@ -8,7 +8,6 @@ Storage backend: PostgreSQL via psycopg (schema ``reboot``).
 
 from __future__ import annotations
 
-import json
 import uuid
 from datetime import datetime
 from typing import Any
@@ -27,32 +26,9 @@ from elle.daemon.reboot.models import (
     RebootStatus,
 )
 from elle.storage.engine import get_conn
+from elle.storage.helpers import json_dumps, json_loads, parse_datetime, serialize_datetime
 
 PG_SCHEMA = "reboot"
-
-
-def _serialize_datetime(dt: datetime) -> str:
-    """Serialize datetime to ISO format string."""
-    return dt.isoformat()
-
-
-def _parse_datetime(s: str | None) -> datetime | None:
-    """Parse ISO format string to datetime."""
-    if not s:
-        return None
-    return datetime.fromisoformat(s)
-
-
-def _json_dumps(obj: Any) -> str:
-    """Serialize object to JSON string."""
-    return json.dumps(obj, default=str)
-
-
-def _json_loads(s: str | None) -> Any:
-    """Parse JSON string, returning empty dict/list on None."""
-    if not s:
-        return {}
-    return json.loads(s)
 
 
 # =============================================================================
@@ -121,20 +97,20 @@ def create_intent(
             (
                 intent_id,
                 incident_id,
-                _serialize_datetime(now),
-                _serialize_datetime(now),
+                serialize_datetime(now),
+                serialize_datetime(now),
                 goal,
                 task_description,
                 reason,
                 reason_detail,
-                _json_dumps(session_history or []),
-                _json_dumps(plan_json or {}),
+                json_dumps(session_history or []),
+                json_dumps(plan_json or {}),
                 "pending",
-                _json_dumps(pre_snapshot_json or {}),
+                json_dumps(pre_snapshot_json or {}),
                 boot_id,
                 grub_entry,
                 grub_default_saved,
-                _json_dumps(safe_model_dump(grub_state)) if grub_state else None,
+                json_dumps(safe_model_dump(grub_state)) if grub_state else None,
                 "{}",
                 0,
                 "unknown",
@@ -367,7 +343,7 @@ def list_recent_intents(
             result.append(
                 RebootIntentSummary(
                     id=row["id"],
-                    created_at=_parse_datetime(row["created_at"]) if isinstance(row["created_at"], str) else row["created_at"],
+                    created_at=parse_datetime(row["created_at"]) if isinstance(row["created_at"], str) else row["created_at"],
                     goal=row["goal"],
                     reason=row["reason"],
                     status=row["status"],
@@ -418,7 +394,7 @@ def update_intent_status(
         now = datetime.utcnow()
 
         updates = ["updated_at = %s", "status = %s"]
-        values: list[Any] = [_serialize_datetime(now), status]
+        values: list[Any] = [serialize_datetime(now), status]
 
         if outcome is not None:
             updates.append("outcome = %s")
@@ -431,7 +407,7 @@ def update_intent_status(
             values.append(new_boot_id)
         if post_snapshot_json is not None:
             updates.append("post_snapshot_json = %s")
-            values.append(_json_dumps(post_snapshot_json))
+            values.append(json_dumps(post_snapshot_json))
         if verification_attempts is not None:
             updates.append("verification_attempts = %s")
             values.append(verification_attempts)
@@ -439,7 +415,7 @@ def update_intent_status(
         # Update last_verification_at for verifying status
         if status == "verifying":
             updates.append("last_verification_at = %s")
-            values.append(_serialize_datetime(now))
+            values.append(serialize_datetime(now))
 
         values.append(intent_id)
 
@@ -489,7 +465,7 @@ def mark_rebooting(
             SET updated_at = %s, status = %s, boot_id = %s
             WHERE id = %s
             """,
-            (_serialize_datetime(now), "rebooting", boot_id, intent_id),
+            (serialize_datetime(now), "rebooting", boot_id, intent_id),
         )
 
         if cursor.rowcount == 0:
@@ -530,7 +506,7 @@ def cancel_intent(
             SET updated_at = %s, status = 'cancelled'
             WHERE id = %s AND status = 'pending'
             """,
-            (_serialize_datetime(now), intent_id),
+            (serialize_datetime(now), intent_id),
         )
 
         if cursor.rowcount == 0:
@@ -579,7 +555,7 @@ def _row_to_intent(
     verifications: list[PendingVerification],
 ) -> RebootIntent:
     """Convert a database row to a RebootIntent."""
-    grub_state_data = _json_loads(row["grub_state_json"])
+    grub_state_data = json_loads(row["grub_state_json"])
     grub_state = None
     if grub_state_data:
         # Handle tuple fields
@@ -587,21 +563,21 @@ def _row_to_intent(
             grub_state_data["entries"] = tuple(grub_state_data["entries"])
         grub_state = GRUBState(**grub_state_data)
 
-    session_history = _json_loads(row["session_history_json"]) or []
+    session_history = json_loads(row["session_history_json"]) or []
     if isinstance(session_history, list):
         session_history = tuple(session_history)
 
     created_at = row["created_at"]
     if isinstance(created_at, str):
-        created_at = _parse_datetime(created_at)
+        created_at = parse_datetime(created_at)
 
     updated_at = row["updated_at"]
     if isinstance(updated_at, str):
-        updated_at = _parse_datetime(updated_at)
+        updated_at = parse_datetime(updated_at)
 
     last_verification_at = row["last_verification_at"]
     if isinstance(last_verification_at, str):
-        last_verification_at = _parse_datetime(last_verification_at)
+        last_verification_at = parse_datetime(last_verification_at)
 
     return RebootIntent(
         id=row["id"],
@@ -613,14 +589,14 @@ def _row_to_intent(
         reason=row["reason"],
         reason_detail=row["reason_detail"],
         session_history=session_history,
-        plan_json=_json_loads(row["plan_json"]) or {},
+        plan_json=json_loads(row["plan_json"]) or {},
         status=row["status"],
-        pre_snapshot_json=_json_loads(row["pre_snapshot_json"]) or {},
+        pre_snapshot_json=json_loads(row["pre_snapshot_json"]) or {},
         boot_id=row["boot_id"],
         grub_entry=row["grub_entry"],
         grub_default_saved=row["grub_default_saved"],
         grub_state=grub_state,
-        post_snapshot_json=_json_loads(row["post_snapshot_json"]) or {},
+        post_snapshot_json=json_loads(row["post_snapshot_json"]) or {},
         new_boot_id=row["new_boot_id"],
         verification_attempts=row["verification_attempts"],
         last_verification_at=last_verification_at,
@@ -791,7 +767,7 @@ def update_verification_result(
             WHERE id = %s
             """,
             (
-                _serialize_datetime(now),
+                serialize_datetime(now),
                 exit_code,
                 stdout[:4096] if stdout else None,  # Truncate
                 stderr[:4096] if stderr else None,  # Truncate
@@ -859,7 +835,7 @@ def _row_to_verification(row: dict) -> PendingVerification:
     """Convert a database row to a PendingVerification."""
     executed_at = row["executed_at"]
     if isinstance(executed_at, str):
-        executed_at = _parse_datetime(executed_at)
+        executed_at = parse_datetime(executed_at)
 
     return PendingVerification(
         id=row["id"],
@@ -960,9 +936,9 @@ def get_reboot_status(
             oldest_val = row["oldest"]
             newest_val = row["newest"]
             if oldest_val:
-                oldest = _parse_datetime(oldest_val) if isinstance(oldest_val, str) else oldest_val
+                oldest = parse_datetime(oldest_val) if isinstance(oldest_val, str) else oldest_val
             if newest_val:
-                newest = _parse_datetime(newest_val) if isinstance(newest_val, str) else newest_val
+                newest = parse_datetime(newest_val) if isinstance(newest_val, str) else newest_val
 
         return RebootStatus(
             total_intents=total,
@@ -1031,7 +1007,7 @@ def _list_recent_intents_inner(
     for row in cursor.fetchall():
         created_at = row["created_at"]
         if isinstance(created_at, str):
-            created_at = _parse_datetime(created_at)
+            created_at = parse_datetime(created_at)
         result.append(
             RebootIntentSummary(
                 id=row["id"],

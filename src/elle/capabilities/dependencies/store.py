@@ -7,13 +7,10 @@ Storage backend: PostgreSQL via psycopg (schema ``deps``).
 
 from __future__ import annotations
 
-import json
 import logging
 import uuid
 from datetime import datetime
 from typing import cast
-
-import psycopg
 
 from elle.capabilities.dependencies.models import (
     DependencyPreference,
@@ -21,37 +18,12 @@ from elle.capabilities.dependencies.models import (
     PreferenceChoice,
 )
 from elle.storage.engine import get_conn
+from elle.storage.helpers import json_dumps, json_loads, parse_datetime, serialize_datetime
 
 logger = logging.getLogger(__name__)
 
 PG_SCHEMA = "deps"
 
-
-# =============================================================================
-# Helper Functions
-# =============================================================================
-
-
-def _serialize_datetime(dt: datetime) -> str:
-    """Serialize datetime to ISO format string."""
-    return dt.isoformat()
-
-
-def _parse_datetime(s: str) -> datetime:
-    """Parse ISO format string to datetime."""
-    return datetime.fromisoformat(s)
-
-
-def _json_dumps(obj: object) -> str:
-    """Serialize object to JSON string."""
-    return json.dumps(obj, default=str)
-
-
-def _json_loads(s: str | None) -> object:
-    """Parse JSON string to object."""
-    if not s:
-        return {}
-    return json.loads(s)
 
 
 # =============================================================================
@@ -137,10 +109,10 @@ class DependencyPreferenceStore:
             if row:
                 created_at = row["created_at"]
                 if isinstance(created_at, str):
-                    created_at = _parse_datetime(created_at)
+                    created_at = parse_datetime(created_at)
                 updated_at = row["updated_at"]
                 if isinstance(updated_at, str):
-                    updated_at = _parse_datetime(updated_at)
+                    updated_at = parse_datetime(updated_at)
                 return DependencyPreference(
                     dependency=row["dependency"],
                     preference=row["preference"],
@@ -179,11 +151,11 @@ class DependencyPreferenceStore:
                     SET preference = %s, updated_at = %s
                     WHERE dependency = %s
                     """,
-                    (preference, _serialize_datetime(now), dependency),
+                    (preference, serialize_datetime(now), dependency),
                 )
                 created_at_val = row["created_at"]
                 if isinstance(created_at_val, str):
-                    created_at = _parse_datetime(created_at_val)
+                    created_at = parse_datetime(created_at_val)
                 else:
                     created_at = created_at_val
             else:
@@ -194,7 +166,7 @@ class DependencyPreferenceStore:
                         (dependency, preference, created_at, updated_at)
                     VALUES (%s, %s, %s, %s)
                     """,
-                    (dependency, preference, _serialize_datetime(now), _serialize_datetime(now)),
+                    (dependency, preference, serialize_datetime(now), serialize_datetime(now)),
                 )
                 created_at = now
 
@@ -249,10 +221,10 @@ class DependencyPreferenceStore:
             for row in cursor.fetchall():
                 created_at = row["created_at"]
                 if isinstance(created_at, str):
-                    created_at = _parse_datetime(created_at)
+                    created_at = parse_datetime(created_at)
                 updated_at = row["updated_at"]
                 if isinstance(updated_at, str):
-                    updated_at = _parse_datetime(updated_at)
+                    updated_at = parse_datetime(updated_at)
                 results.append(
                     DependencyPreference(
                         dependency=row["dependency"],
@@ -290,10 +262,10 @@ class DependencyPreferenceStore:
                 (
                     record_id,
                     result.dependency,
-                    _json_dumps(list(result.installed_packages)),
+                    json_dumps(list(result.installed_packages)),
                     result.success,
                     result.error_message,
-                    _serialize_datetime(result.installed_at),
+                    serialize_datetime(result.installed_at),
                     result.duration_sec,
                 ),
             )
@@ -343,10 +315,10 @@ class DependencyPreferenceStore:
 
             results: list[InstallationResult] = []
             for row in cursor.fetchall():
-                packages = _json_loads(row["packages_json"])
+                packages = json_loads(row["packages_json"])
                 installed_at = row["installed_at"]
                 if isinstance(installed_at, str):
-                    installed_at = _parse_datetime(installed_at)
+                    installed_at = parse_datetime(installed_at)
                 results.append(
                     InstallationResult(
                         success=bool(row["success"]),
@@ -388,7 +360,7 @@ class DependencyPreferenceStore:
                   AND installed_at > %s
                 LIMIT 1
                 """,
-                (dependency, _serialize_datetime(cutoff)),
+                (dependency, serialize_datetime(cutoff)),
             )
 
             return cursor.fetchone() is not None

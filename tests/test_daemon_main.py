@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -18,27 +17,15 @@ from elle.daemon.main import (
 )
 from elle.daemon.telemetry.models import DaemonStatus, TelemetryEvent
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 def _test_config(tmp_path: Path) -> Config:
-    """Create a Config suitable for testing, using tmp_path for DBs."""
+    """Create a Config suitable for testing."""
     return Config(
-        db_path=tmp_path / "elle.db",
-        incidents_db_path=tmp_path / "incidents.db",
-        manvault_db_path=tmp_path / "manvault.db",
         api=ApiConfig(enabled=False),
         queues=QueueConfig(raw_queue_size=100, event_queue_size=50),
-        journal_enabled=False,
-        kernel_enabled=False,
-        probes_enabled=False,
-        ebpf_enabled=False,
-        docker_enabled=False,
-        inotify_enabled=False,
-        wireguard_enabled=False,
-        port_probe_enabled=False,
         capability_versioning_enabled=False,
         capability_bootstrap_enabled=False,
         auto_learn_new_packages=False,
@@ -140,12 +127,15 @@ class TestGetStatus:
 # ---------------------------------------------------------------------------
 
 class TestInitDatabase:
-    def test_init_creates_db(self, daemon, tmp_path):
+    @patch("elle.common.db.init_all_schemas")
+    @patch("elle.storage.engine.configure_pool")
+    def test_init_calls_schemas(self, mock_pool, mock_schemas, daemon):
         daemon._init_database()
-        assert daemon.config.db_path.parent.exists()
+        mock_schemas.assert_called_once()
 
-    @patch("elle.daemon.main.init_all_schemas", side_effect=RuntimeError("DB error"))
-    def test_init_db_error_logged(self, mock_init, daemon, caplog):
+    @patch("elle.common.db.init_all_schemas", side_effect=RuntimeError("DB error"))
+    @patch("elle.storage.engine.configure_pool")
+    def test_init_db_error_logged(self, mock_pool, mock_init, daemon, caplog):
         with caplog.at_level(logging.ERROR):
             daemon._init_database()
         assert "Failed to initialize database" in caplog.text
@@ -487,7 +477,6 @@ class TestRunApi:
         mock_server.serve = AsyncMock(side_effect=asyncio.CancelledError)
         mock_uvicorn.Server.return_value = mock_server
         mock_uvicorn.Config = MagicMock()
-        mock_app_mod = MagicMock()
         with patch.dict("sys.modules", {"uvicorn": mock_uvicorn}):
             with patch("elle.daemon.api.app.create_app", return_value=MagicMock()):
                 await daemon._run_api()

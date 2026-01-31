@@ -362,6 +362,334 @@ jobs:
           retention-days: 7
 
   # ============================================================================
+  # Security - Bandit Python Security Linter
+  # ============================================================================
+  security:
+    name: Bandit Security Scan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install Bandit
+        run: pip install "bandit[toml]>=1.7"
+
+      - name: Run Bandit
+        run: bandit -c bandit.yaml -r src/ -f json -o bandit-report.json || true
+
+      - name: Check for findings
+        run: |
+          if [ -f bandit-report.json ]; then
+            ISSUES=$(python3 -c "import json; r=json.load(open('bandit-report.json')); print(len(r.get('results', [])))")
+            echo "Bandit found $ISSUES issue(s)"
+            if [ "$ISSUES" -gt 0 ]; then
+              python3 -c "
+          import json
+          r = json.load(open('bandit-report.json'))
+          for issue in r.get('results', []):
+              print(f\"::error file={issue['filename']},line={issue['line_number']}::{issue['issue_text']} [{issue['test_id']}]\")
+          "
+              exit 1
+            fi
+          fi
+
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-report
+          path: bandit-report.json
+          retention-days: 7
+
+  # ============================================================================
+  # C Build - Dual Compiler (gcc + clang)
+  # ============================================================================
+  c-build:
+    name: C Build (${{ matrix.compiler }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ${{ matrix.compiler }} \
+            libjansson-dev \
+            libpcre2-dev \
+            libssl-dev \
+            libsystemd-dev \
+            pkg-config
+
+      - name: Build telemetryd
+        run: make -C ebpf/telemetryd clean all CC=${{ matrix.compiler }}
+
+      - name: Build probed
+        run: make -C ebpf/probed clean all CC=${{ matrix.compiler }}
+
+      - name: Build gpud
+        run: make -C ebpf/gpud clean all CC=${{ matrix.compiler }}
+
+  # ============================================================================
+  # C Static Analysis - clang-tidy
+  # ============================================================================
+  c-static-analysis:
+    name: Clang-Tidy Analysis
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang-tidy \
+            libjansson-dev \
+            libpcre2-dev \
+            libssl-dev \
+            libsystemd-dev \
+            pkg-config
+
+      - name: Run clang-tidy on telemetryd
+        run: |
+          find ebpf/telemetryd -name '*.c' ! -path '*/ebpf/*' | \
+            xargs clang-tidy --config-file=.clang-tidy \
+            -- -D_GNU_SOURCE -I ebpf/telemetryd -I ebpf/telemetryd/normalize \
+            $(pkg-config --cflags jansson libpcre2-8 openssl libsystemd 2>/dev/null)
+
+      - name: Run clang-tidy on probed
+        run: |
+          find ebpf/probed -name '*.c' | \
+            xargs clang-tidy --config-file=.clang-tidy \
+            -- -D_GNU_SOURCE -I ebpf/probed -I ebpf/probed/probes \
+            $(pkg-config --cflags jansson libsystemd openssl 2>/dev/null)
+
+      - name: Run clang-tidy on gpud
+        run: |
+          find ebpf/gpud -name '*.c' | \
+            xargs clang-tidy --config-file=.clang-tidy \
+            -- -D_GNU_SOURCE -I ebpf/gpud \
+            $(pkg-config --cflags jansson openssl 2>/dev/null)
+
+  # ============================================================================
+  # Valgrind - Memory Checking
+  # ============================================================================
+  valgrind:
+    name: Valgrind Memory Check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc \
+            valgrind \
+            libjansson-dev \
+            libpcre2-dev \
+            libssl-dev \
+            libsystemd-dev \
+            pkg-config
+
+      - name: Build test harnesses
+        run: make -C ebpf/tests valgrind-harnesses
+
+      - name: Run Valgrind on test_normalizer
+        run: |
+          valgrind --leak-check=full --error-exitcode=1 --track-origins=yes \
+            --show-leak-kinds=all --errors-for-leak-kinds=definite,possible \
+            --suppressions=ebpf/tests/valgrind.supp \
+            ebpf/tests/build/test_normalizer
+
+      - name: Run Valgrind on test_dedup
+        run: |
+          valgrind --leak-check=full --error-exitcode=1 --track-origins=yes \
+            --show-leak-kinds=all --errors-for-leak-kinds=definite,possible \
+            --suppressions=ebpf/tests/valgrind.supp \
+            ebpf/tests/build/test_dedup
+
+      - name: Run Valgrind on test_json
+        run: |
+          valgrind --leak-check=full --error-exitcode=1 --track-origins=yes \
+            --show-leak-kinds=all --errors-for-leak-kinds=definite,possible \
+            --suppressions=ebpf/tests/valgrind.supp \
+            ebpf/tests/build/test_json
+
+      - name: Run Valgrind on test_fingerprint
+        run: |
+          valgrind --leak-check=full --error-exitcode=1 --track-origins=yes \
+            --show-leak-kinds=all --errors-for-leak-kinds=definite,possible \
+            --suppressions=ebpf/tests/valgrind.supp \
+            ebpf/tests/build/test_fingerprint
+
+  # ============================================================================
+  # Fuzz Testing - AFL++
+  # ============================================================================
+  fuzz:
+    name: AFL++ Fuzz Testing
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            afl++ \
+            libjansson-dev \
+            libpcre2-dev \
+            libssl-dev \
+            libsystemd-dev \
+            pkg-config
+
+      - name: Build fuzz harnesses
+        run: make -C ebpf/fuzz all
+
+      - name: Fuzz category_detect (5 min)
+        run: |
+          mkdir -p ebpf/fuzz/findings/fuzz_category
+          timeout 300 afl-fuzz \
+            -i ebpf/fuzz/seeds \
+            -o ebpf/fuzz/findings/fuzz_category \
+            -V 300 \
+            -- ebpf/fuzz/build/fuzz_category 2>&1 | tail -20 || true
+
+      - name: Fuzz fingerprint_compute (5 min)
+        run: |
+          mkdir -p ebpf/fuzz/findings/fuzz_fingerprint
+          timeout 300 afl-fuzz \
+            -i ebpf/fuzz/seeds \
+            -o ebpf/fuzz/findings/fuzz_fingerprint \
+            -V 300 \
+            -- ebpf/fuzz/build/fuzz_fingerprint 2>&1 | tail -20 || true
+
+      - name: Fuzz normalizer_process (5 min)
+        run: |
+          mkdir -p ebpf/fuzz/findings/fuzz_normalizer
+          timeout 300 afl-fuzz \
+            -i ebpf/fuzz/seeds \
+            -o ebpf/fuzz/findings/fuzz_normalizer \
+            -V 300 \
+            -- ebpf/fuzz/build/fuzz_normalizer 2>&1 | tail -20 || true
+
+      - name: Fuzz dedup_check (5 min)
+        run: |
+          mkdir -p ebpf/fuzz/findings/fuzz_dedup
+          timeout 300 afl-fuzz \
+            -i ebpf/fuzz/seeds \
+            -o ebpf/fuzz/findings/fuzz_dedup \
+            -V 300 \
+            -- ebpf/fuzz/build/fuzz_dedup 2>&1 | tail -20 || true
+
+      - name: Check for crashes
+        run: |
+          FAIL=0
+          for target in fuzz_category fuzz_fingerprint fuzz_normalizer fuzz_dedup; do
+            CRASH_DIR="ebpf/fuzz/findings/$target/default/crashes"
+            if [ -d "$CRASH_DIR" ] && [ "$(ls -A "$CRASH_DIR" 2>/dev/null)" ]; then
+              echo "::error::CRASHES FOUND in $target!"
+              ls -la "$CRASH_DIR"
+              FAIL=1
+            else
+              echo "$target: No crashes found."
+            fi
+          done
+          if [ $FAIL -eq 1 ]; then
+            exit 1
+          fi
+
+      - name: Upload fuzz findings
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fuzz-findings
+          path: ebpf/fuzz/findings/
+          retention-days: 7
+
+  # ============================================================================
+  # Chaos Testing - Fault Injection
+  # ============================================================================
+  chaos:
+    name: Chaos Tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libaugeas-dev augeas-tools
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,api]"
+
+      - name: Run chaos tests
+        run: pytest tests/chaos/ -v --timeout=60 -x --junitxml=chaos-results.xml
+
+      - name: Upload chaos test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chaos-results
+          path: chaos-results.xml
+          retention-days: 7
+
+  # ============================================================================
+  # Documentation - Sphinx API Docs
+  # ============================================================================
+  docs:
+    name: Sphinx Docs Build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libaugeas-dev augeas-tools
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,api,docs]"
+
+      - name: Build Sphinx docs
+        run: sphinx-build -W -b html docs/api docs/api/_build/html
+
+      - name: Upload docs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: api-docs
+          path: docs/api/_build/html/
+          retention-days: 7
+
+  # ============================================================================
   # SonarQube Analysis (commented out - enable when available)
   # ============================================================================
   # sonarqube:
@@ -396,22 +724,49 @@ jobs:
   ci-success:
     name: CI Success
     runs-on: ubuntu-24.04
-    needs: [lint, test, build, lintian, piuparts, autopkgtest-qemu]
+    needs:
+      - lint
+      - test
+      - security
+      - c-build
+      - c-static-analysis
+      - valgrind
+      - fuzz
+      - chaos
+      - docs
+      - build
+      - lintian
+      - piuparts
+      - autopkgtest-qemu
     if: always()
     steps:
       - name: Check all jobs
         run: |
           echo "=== CI Summary ==="
-          echo "Lint: ${{ needs.lint.result }}"
-          echo "Test: ${{ needs.test.result }}"
-          echo "Build: ${{ needs.build.result }}"
-          echo "Lintian: ${{ needs.lintian.result }}"
-          echo "piuparts: ${{ needs.piuparts.result }}"
-          echo "autopkgtest: ${{ needs.autopkgtest-qemu.result }}"
+          echo "Lint:             ${{ needs.lint.result }}"
+          echo "Test:             ${{ needs.test.result }}"
+          echo "Security:         ${{ needs.security.result }}"
+          echo "C Build:          ${{ needs.c-build.result }}"
+          echo "C Static Analysis: ${{ needs.c-static-analysis.result }}"
+          echo "Valgrind:         ${{ needs.valgrind.result }}"
+          echo "Fuzz:             ${{ needs.fuzz.result }}"
+          echo "Chaos:            ${{ needs.chaos.result }}"
+          echo "Docs:             ${{ needs.docs.result }}"
+          echo "Build:            ${{ needs.build.result }}"
+          echo "Lintian:          ${{ needs.lintian.result }}"
+          echo "piuparts:         ${{ needs.piuparts.result }}"
+          echo "autopkgtest:      ${{ needs.autopkgtest-qemu.result }}"
 
           # Fail if any required job failed
           if [[ "${{ needs.lint.result }}" == "failure" ]] || \
              [[ "${{ needs.test.result }}" == "failure" ]] || \
+             [[ "${{ needs.security.result }}" == "failure" ]] || \
+             [[ "${{ needs.c-build.result }}" == "failure" ]] || \
+             [[ "${{ needs.c-static-analysis.result }}" == "failure" ]] || \
+             [[ "${{ needs.valgrind.result }}" == "failure" ]] || \
+             [[ "${{ needs.fuzz.result }}" == "failure" ]] || \
+             [[ "${{ needs.chaos.result }}" == "failure" ]] || \
+             [[ "${{ needs.docs.result }}" == "failure" ]] || \
              [[ "${{ needs.build.result }}" == "failure" ]] || \
              [[ "${{ needs.lintian.result }}" == "failure" ]] || \
              [[ "${{ needs.piuparts.result }}" == "failure" ]] || \

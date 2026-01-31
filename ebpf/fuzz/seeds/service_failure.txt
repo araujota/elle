@@ -1,0 +1,3 @@
+systemd[1]: nginx.service: Main process exited, code=exited, status=1/FAILURE
+systemd[1]: nginx.service: Failed with result 'exit-code'.
+systemd[1]: Failed to start A high performance web server and reverse proxy server.

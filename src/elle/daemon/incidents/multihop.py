@@ -28,11 +28,7 @@ from elle.daemon.incidents.narrative import (
     SearchHop,
 )
 from elle.daemon.incidents.retriever import search as incident_search
-
-
-def _parse_datetime(s: str) -> datetime:
-    """Parse ISO format string to datetime."""
-    return datetime.fromisoformat(s)
+from elle.storage.helpers import parse_datetime
 
 
 class MultiHopSearch:
@@ -340,7 +336,7 @@ class MultiHopSearch:
         if isinstance(ts, datetime):
             return ts
         if isinstance(ts, str):
-            return _parse_datetime(ts)
+            return parse_datetime(ts)
         return datetime.utcnow()
 
     def _build_chains(

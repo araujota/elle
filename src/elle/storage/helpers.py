@@ -13,9 +13,9 @@ from typing import Any
 
 
 def json_dumps(obj: Any) -> str:
-    """Serialize *obj* to a compact JSON string.
+    """Serialize *obj* to a JSON string.
 
-    Handles datetime objects by converting to ISO 8601.
+    Non-serializable objects are converted via ``str()``.
 
     Args:
         obj: Any JSON-serializable object.
@@ -23,22 +23,26 @@ def json_dumps(obj: Any) -> str:
     Returns:
         JSON string.
     """
-    return json.dumps(obj, default=_json_default, separators=(",", ":"))
+    return json.dumps(obj, default=str)
 
 
 def json_loads(raw: str | None) -> Any:
     """Deserialize a JSON string.
 
-    Returns *None* for empty / null input instead of raising.
+    Returns an empty dict for empty / null input instead of raising.
+    Passes through ``dict`` and ``list`` objects unchanged (useful when
+    the DB driver has already decoded JSONB columns).
 
     Args:
-        raw: JSON string or None.
+        raw: JSON string, pre-parsed dict/list, or None.
 
     Returns:
-        Parsed Python object, or None.
+        Parsed Python object, or ``{}``.
     """
     if not raw:
-        return None
+        return {}
+    if isinstance(raw, (dict, list)):
+        return raw
     return json.loads(raw)
 
 
@@ -90,11 +94,3 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _json_default(obj: Any) -> str:
-    """Default handler for ``json.dumps``.
-
-    Converts datetime objects to ISO 8601 strings.
-    """
-    if isinstance(obj, datetime):
-        return serialize_datetime(obj) or ""
-    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")

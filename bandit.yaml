@@ -1,0 +1,22 @@
+# Bandit security linter configuration
+# https://bandit.readthedocs.io/en/latest/config.html
+
+skips:
+  # B404: import_subprocess - too noisy for a system administration tool
+  # that legitimately needs subprocess for safe command execution
+  - B404
+
+# Only report medium+ severity and confidence
+severity: MEDIUM
+confidence: MEDIUM
+
+# Scan paths
+targets:
+  - src/
+
+# Exclude test files from security scanning
+exclude_dirs:
+  - tests
+  - .venv
+  - build
+  - dist

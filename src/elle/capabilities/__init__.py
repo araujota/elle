@@ -47,8 +47,6 @@ from elle.capabilities.exceptions import (
     CapabilityInputError,
     CapabilityNotFoundError,
     CapabilityRegistrationError,
-    CapabilityRollbackError,
-    CapabilityVerificationError,
 )
 
 # Executor
@@ -116,8 +114,6 @@ __all__ = [
     "CapabilityInputError",
     "CapabilityNotFoundError",
     "CapabilityRegistrationError",
-    "CapabilityRollbackError",
-    "CapabilityVerificationError",
     # Registry
     "CapabilityRegistry",
     "get_registry",
