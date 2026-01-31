@@ -124,7 +124,7 @@ int disk_probe_run(struct normalizer *norm, struct telem_socket *sock, void *ctx
         if (used_pct > ctx->warning_pct) {
             struct telem_event evt;
             char message[512];
-            char entity[128];
+            char entity[280];
             char *json_str;
             bool emit;
 
@@ -161,7 +161,7 @@ int disk_probe_run(struct normalizer *norm, struct telem_socket *sock, void *ctx
             if (inode_pct > ctx->inode_warning_pct) {
                 struct telem_event inode_evt;
                 char inode_msg[512];
-                char inode_entity[128];
+                char inode_entity[280];
                 char *inode_json;
                 bool inode_emit;
 
@@ -213,8 +213,8 @@ int disk_probe_run(struct normalizer *norm, struct telem_socket *sock, void *ctx
 
             if (is_readonly) {
                 struct telem_event ro_evt;
-                char ro_msg[256];
-                char ro_entity[128];
+                char ro_msg[576];
+                char ro_entity[280];
                 char *ro_json;
                 bool ro_emit;
 

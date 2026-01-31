@@ -39,25 +39,6 @@ static bool file_exists(const char *path)
     return stat(path, &st) == 0;
 }
 
-static int read_file_line(const char *path, char *buf, size_t len)
-{
-    FILE *f = fopen(path, "r");
-    if (!f)
-        return -1;
-
-    if (!fgets(buf, len, f)) {
-        fclose(f);
-        return -1;
-    }
-
-    /* Strip newline */
-    size_t l = strlen(buf);
-    if (l > 0 && buf[l-1] == '\n')
-        buf[l-1] = '\0';
-
-    fclose(f);
-    return 0;
-}
 
 static char *find_latest_kernel_in_boot(void)
 {
