@@ -161,8 +161,9 @@ static void test_statistics(void)
     normalizer_process(n, TELEM_SRC_JOURNAL, 3,
                        "Out of memory: killed process 1", NULL, NULL, 0, &evt);
 
-    uint64_t processed = 0, deduplicated = 0, by_category = 0;
-    normalizer_get_stats(n, &processed, &deduplicated, &by_category);
+    uint64_t processed = 0, deduplicated = 0;
+    uint64_t by_category[TELEM_CAT_OTHER + 1] = {0};
+    normalizer_get_stats(n, &processed, &deduplicated, by_category);
 
     assert(processed == 3);
     assert(deduplicated == 1);

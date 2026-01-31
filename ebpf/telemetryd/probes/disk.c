@@ -91,7 +91,7 @@ int disk_probe_run(struct normalizer *norm, struct telem_socket *sock, void *ctx
     while (fgets(line, sizeof(line), f)) {
         char device[256], mount[256], fstype[64], options[256];
         struct statvfs stat;
-        uint64_t total, free, used;
+        uint64_t total, avail, used;
         double used_pct;
 
         /* Parse mount line: device mountpoint fstype options dump pass */
@@ -112,12 +112,12 @@ int disk_probe_run(struct normalizer *norm, struct telem_socket *sock, void *ctx
 
         /* Calculate usage */
         total = (uint64_t)stat.f_blocks * stat.f_frsize;
-        free = (uint64_t)stat.f_bavail * stat.f_frsize;
+        avail = (uint64_t)stat.f_bavail * stat.f_frsize;
 
         if (total == 0)
             continue;
 
-        used = total - free;
+        used = total - avail;
         used_pct = (double)used / (double)total;
 
         /* Check threshold */
@@ -132,7 +132,7 @@ int disk_probe_run(struct normalizer *norm, struct telem_socket *sock, void *ctx
                      "Disk space low on %s: %.1f%% used (free: %lu GB, total: %lu GB)",
                      mount,
                      used_pct * 100.0,
-                     free / (1024 * 1024 * 1024),
+                     avail / (1024 * 1024 * 1024),
                      total / (1024 * 1024 * 1024));
 
             snprintf(entity, sizeof(entity), "mount:%s", mount);

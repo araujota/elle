@@ -35,8 +35,12 @@ class TestSocketDisconnect:
         """TelemetrydWatcher should attempt reconnection after disconnect."""
         from elle.daemon.telemetry.telemetryd_watcher import TelemetrydWatcher
 
+        from unittest.mock import MagicMock
+
         with fault.socket_disconnect():
-            watcher = TelemetrydWatcher()
+            watcher = TelemetrydWatcher(
+                event_queue=MagicMock(), shutdown=asyncio.Event(),
+            )
             assert not watcher.connected
             # Watcher should have reconnect logic, not crash
 

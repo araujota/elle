@@ -461,22 +461,25 @@ jobs:
 
       - name: Run clang-tidy on telemetryd
         run: |
-          find ebpf/telemetryd -name '*.c' ! -path '*/ebpf/*' | \
-            xargs clang-tidy --config-file=.clang-tidy \
+          FILES=$(find ebpf/telemetryd -name '*.c' ! -path '*/ebpf/*')
+          [ -n "$FILES" ] && \
+            clang-tidy --config-file=.clang-tidy $FILES \
             -- -D_GNU_SOURCE -I ebpf/telemetryd -I ebpf/telemetryd/normalize \
             $(pkg-config --cflags jansson libpcre2-8 openssl libsystemd 2>/dev/null)
 
       - name: Run clang-tidy on probed
         run: |
-          find ebpf/probed -name '*.c' | \
-            xargs clang-tidy --config-file=.clang-tidy \
+          FILES=$(find ebpf/probed -name '*.c')
+          [ -n "$FILES" ] && \
+            clang-tidy --config-file=.clang-tidy $FILES \
             -- -D_GNU_SOURCE -I ebpf/probed -I ebpf/probed/probes \
             $(pkg-config --cflags jansson libsystemd openssl 2>/dev/null)
 
       - name: Run clang-tidy on gpud
         run: |
-          find ebpf/gpud -name '*.c' | \
-            xargs clang-tidy --config-file=.clang-tidy \
+          FILES=$(find ebpf/gpud -name '*.c')
+          [ -n "$FILES" ] && \
+            clang-tidy --config-file=.clang-tidy $FILES \
             -- -D_GNU_SOURCE -I ebpf/gpud \
             $(pkg-config --cflags jansson openssl 2>/dev/null)
 

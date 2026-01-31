@@ -111,9 +111,9 @@ static struct container_state *get_or_create_container(struct docker_watcher *w,
 
     c = &w->containers[w->num_containers++];
     memset(c, 0, sizeof(*c));
-    strncpy(c->name, name, sizeof(c->name) - 1);
+    snprintf(c->name, sizeof(c->name), "%s", name);
     if (id)
-        strncpy(c->id, id, sizeof(c->id) - 1);
+        snprintf(c->id, sizeof(c->id), "%s", id);
 
     return c;
 }
