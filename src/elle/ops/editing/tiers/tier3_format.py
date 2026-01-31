@@ -147,7 +147,7 @@ class Tier3Format(BaseTier):
             try:
                 import xml.etree.ElementTree as ET  # nosec B405
 
-                _safe_xml_fromstring(content)
+                _safe_xml_fromstring(content)  # nosec B314
                 return ValidationResult(passed=True, method="xml.etree")
             except ET.ParseError as e:
                 return ValidationResult(
@@ -357,7 +357,7 @@ class Tier3Format(BaseTier):
             # Python fallback
             import xml.etree.ElementTree as ET  # nosec B405
 
-            root = _safe_xml_fromstring(content)
+            root = _safe_xml_fromstring(content)  # nosec B314
 
             if operation.kind == "set" and operation.path and operation.value is not None:
                 # Simple XPath support

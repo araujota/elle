@@ -18,6 +18,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+
 def _validate_runtime_dir(raw_path: str) -> Path | None:
     """Validate that a runtime directory path is safe to use.
 
