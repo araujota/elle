@@ -118,7 +118,7 @@ static int scan_cgroup_slice(const char *slice_path, struct cgroup_snapshot *sna
 
         /* Read memory stats */
         {
-            char mem_path[512];
+            char mem_path[544];
             snprintf(mem_path, sizeof(mem_path), "%s/memory.current", path);
             snap->mem_current = read_cgroup_uint(mem_path);
 
@@ -131,7 +131,7 @@ static int scan_cgroup_slice(const char *slice_path, struct cgroup_snapshot *sna
 
         /* Read CPU stats */
         {
-            char cpu_path[512];
+            char cpu_path[544];
             snprintf(cpu_path, sizeof(cpu_path), "%s/cpu.stat", path);
             snap->nr_periods = read_cgroup_key(cpu_path, "nr_periods");
             snap->nr_throttled = read_cgroup_key(cpu_path, "nr_throttled");
@@ -140,7 +140,7 @@ static int scan_cgroup_slice(const char *slice_path, struct cgroup_snapshot *sna
 
         /* Read PID stats */
         {
-            char pids_path[512];
+            char pids_path[544];
             snprintf(pids_path, sizeof(pids_path), "%s/pids.current", path);
             snap->pids_current = read_cgroup_uint(pids_path);
 
@@ -186,16 +186,16 @@ int cgroup_probe_run(struct normalizer *norm, struct telem_socket *sock, void *c
         if (mem_pct > ctx->mem_critical_pct) {
             struct telem_event evt;
             char message[512];
-            char entity[128];
+            char entity[144];
             char *json_str;
             bool emit;
 
             snprintf(message, sizeof(message),
-                     "CRITICAL: Cgroup %s memory at %.1f%% (%lu/%lu MB)",
+                     "CRITICAL: Cgroup %.127s memory at %.1f%% (%lu/%lu MB)",
                      snap->name, mem_pct,
                      (unsigned long)(snap->mem_current / (1024UL * 1024UL)),
                      (unsigned long)(snap->mem_max / (1024UL * 1024UL)));
-            snprintf(entity, sizeof(entity), "cgroup:%s", snap->name);
+            snprintf(entity, sizeof(entity), "cgroup:%.127s", snap->name);
 
             emit = normalizer_process_prenormalized(norm,
                 TELEM_SRC_PROBE, TELEM_SEV_CRITICAL, TELEM_CAT_OOM,
@@ -211,16 +211,16 @@ int cgroup_probe_run(struct normalizer *norm, struct telem_socket *sock, void *c
         } else if (mem_pct > ctx->mem_warning_pct) {
             struct telem_event evt;
             char message[512];
-            char entity[128];
+            char entity[144];
             char *json_str;
             bool emit;
 
             snprintf(message, sizeof(message),
-                     "Cgroup %s memory pressure: %.1f%% (%lu/%lu MB)",
+                     "Cgroup %.127s memory pressure: %.1f%% (%lu/%lu MB)",
                      snap->name, mem_pct,
                      (unsigned long)(snap->mem_current / (1024UL * 1024UL)),
                      (unsigned long)(snap->mem_max / (1024UL * 1024UL)));
-            snprintf(entity, sizeof(entity), "cgroup:%s", snap->name);
+            snprintf(entity, sizeof(entity), "cgroup:%.127s", snap->name);
 
             emit = normalizer_process_prenormalized(norm,
                 TELEM_SRC_PROBE, TELEM_SEV_WARNING, TELEM_CAT_OOM,
@@ -241,16 +241,16 @@ int cgroup_probe_run(struct normalizer *norm, struct telem_socket *sock, void *c
             if (prev && snap->oom_kills > prev->oom_kills) {
                 struct telem_event evt;
                 char message[512];
-                char entity[128];
+                char entity[144];
                 char *json_str;
                 bool emit;
 
                 snprintf(message, sizeof(message),
-                         "OOM kills in cgroup %s: %lu new (total: %lu)",
+                         "OOM kills in cgroup %.127s: %lu new (total: %lu)",
                          snap->name,
                          (unsigned long)(snap->oom_kills - prev->oom_kills),
                          (unsigned long)snap->oom_kills);
-                snprintf(entity, sizeof(entity), "cgroup:%s", snap->name);
+                snprintf(entity, sizeof(entity), "cgroup:%.127s", snap->name);
 
                 emit = normalizer_process_prenormalized(norm,
                     TELEM_SRC_PROBE, TELEM_SEV_ERROR, TELEM_CAT_OOM,
@@ -270,14 +270,14 @@ int cgroup_probe_run(struct normalizer *norm, struct telem_socket *sock, void *c
         if (throttle_pct > ctx->throttle_warning_pct) {
             struct telem_event evt;
             char message[512];
-            char entity[128];
+            char entity[144];
             char *json_str;
             bool emit;
 
             snprintf(message, sizeof(message),
-                     "CPU throttling in cgroup %s: %.1f%% periods throttled",
+                     "CPU throttling in cgroup %.127s: %.1f%% periods throttled",
                      snap->name, throttle_pct);
-            snprintf(entity, sizeof(entity), "cgroup:%s", snap->name);
+            snprintf(entity, sizeof(entity), "cgroup:%.127s", snap->name);
 
             emit = normalizer_process_prenormalized(norm,
                 TELEM_SRC_PROBE, TELEM_SEV_WARNING, TELEM_CAT_SERVICE,

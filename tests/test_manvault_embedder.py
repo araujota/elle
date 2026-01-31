@@ -186,7 +186,6 @@ class TestManVaultEmbedder:
         chunk = ManChunk(id=42, doc_id=1, chunk_index=0, text="hello")
         with (
             patch("elle.daemon.manvault.embedder.get_conn") as mock_conn,
-
             patch("elle.daemon.manvault.embedder.get_embedding", return_value=[0.1]),
         ):
             mock_c = MagicMock()
@@ -201,7 +200,6 @@ class TestManVaultEmbedder:
         chunk = ManChunk(id=42, doc_id=1, chunk_index=0, text="hello")
         with (
             patch("elle.daemon.manvault.embedder.get_conn") as mock_conn,
-
             patch("elle.daemon.manvault.embedder.get_embedding", return_value=None),
             patch("elle.daemon.manvault.embedder.upsert_embedding"),
         ):
@@ -219,7 +217,6 @@ class TestManVaultEmbedder:
         chunk = ManChunk(id=42, doc_id=1, chunk_index=0, text="hello")
         with (
             patch("elle.daemon.manvault.embedder.get_conn") as mock_conn,
-
             patch("elle.daemon.manvault.embedder.get_embedding", return_value=None),
         ):
             mock_c = MagicMock()
@@ -232,7 +229,6 @@ class TestManVaultEmbedder:
         e = ManVaultEmbedder(client=mock_client, model="m")
         with (
             patch("elle.daemon.manvault.embedder.get_conn") as mock_conn,
-
             patch("elle.daemon.manvault.embedder.get_chunks_for_doc", return_value=[]),
         ):
             mock_c = MagicMock()
@@ -251,7 +247,6 @@ class TestManVaultEmbedder:
         ]
         with (
             patch("elle.daemon.manvault.embedder.get_conn") as mock_conn,
-
             patch("elle.daemon.manvault.embedder.get_chunks_for_doc", return_value=chunks),
             patch("elle.daemon.manvault.embedder.get_embedding", return_value=None),
             patch("elle.daemon.manvault.embedder.upsert_embeddings_batch"),
@@ -267,7 +262,6 @@ class TestManVaultEmbedder:
         chunks = [ManChunk(id=1, doc_id=1, chunk_index=0, text="hello")]
         with (
             patch("elle.daemon.manvault.embedder.get_conn") as mock_conn,
-
             patch("elle.daemon.manvault.embedder.get_chunks_for_doc", return_value=chunks),
             patch("elle.daemon.manvault.embedder.get_embedding", return_value=[0.1]),
         ):
@@ -281,7 +275,6 @@ class TestManVaultEmbedder:
         e = ManVaultEmbedder(client=mock_client, model="m")
         with (
             patch("elle.daemon.manvault.embedder.get_conn") as mock_conn,
-
             patch("elle.daemon.manvault.embedder.get_chunks_without_embeddings", return_value=[]),
         ):
             mock_c = MagicMock()
@@ -304,7 +297,6 @@ class TestManVaultEmbedder:
 
         with (
             patch("elle.daemon.manvault.embedder.get_conn") as mock_conn,
-
             patch("elle.daemon.manvault.embedder.get_chunks_without_embeddings", side_effect=fake_get_chunks),
             patch("elle.daemon.manvault.embedder.upsert_embeddings_batch"),
         ):
@@ -329,7 +321,6 @@ class TestManVaultEmbedder:
         progress_calls = []
         with (
             patch("elle.daemon.manvault.embedder.get_conn") as mock_conn,
-
             patch("elle.daemon.manvault.embedder.get_chunks_without_embeddings", side_effect=fake_get_chunks),
             patch("elle.daemon.manvault.embedder.upsert_embeddings_batch"),
         ):
