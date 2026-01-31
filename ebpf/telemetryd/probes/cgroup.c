@@ -193,8 +193,8 @@ int cgroup_probe_run(struct normalizer *norm, struct telem_socket *sock, void *c
             snprintf(message, sizeof(message),
                      "CRITICAL: Cgroup %s memory at %.1f%% (%lu/%lu MB)",
                      snap->name, mem_pct,
-                     (unsigned long)(snap->mem_current / (1024 * 1024)),
-                     (unsigned long)(snap->mem_max / (1024 * 1024)));
+                     (unsigned long)(snap->mem_current / (1024UL * 1024UL)),
+                     (unsigned long)(snap->mem_max / (1024UL * 1024UL)));
             snprintf(entity, sizeof(entity), "cgroup:%s", snap->name);
 
             emit = normalizer_process_prenormalized(norm,
@@ -218,8 +218,8 @@ int cgroup_probe_run(struct normalizer *norm, struct telem_socket *sock, void *c
             snprintf(message, sizeof(message),
                      "Cgroup %s memory pressure: %.1f%% (%lu/%lu MB)",
                      snap->name, mem_pct,
-                     (unsigned long)(snap->mem_current / (1024 * 1024)),
-                     (unsigned long)(snap->mem_max / (1024 * 1024)));
+                     (unsigned long)(snap->mem_current / (1024UL * 1024UL)),
+                     (unsigned long)(snap->mem_max / (1024UL * 1024UL)));
             snprintf(entity, sizeof(entity), "cgroup:%s", snap->name);
 
             emit = normalizer_process_prenormalized(norm,

@@ -131,8 +131,8 @@ int ioperf_probe_run(struct normalizer *norm, struct telem_socket *sock, void *c
                 unsigned long d_wr_ticks = wr_ticks - prev->wr_ticks;
                 unsigned long d_io_ticks = io_ticks - prev->io_ticks;
 
-                double read_lat = (d_rd_ios > 0) ? (double)d_rd_ticks / d_rd_ios : 0.0;
-                double write_lat = (d_wr_ios > 0) ? (double)d_wr_ticks / d_wr_ios : 0.0;
+                double read_lat = (d_rd_ios > 0) ? (double)d_rd_ticks / (double)d_rd_ios : 0.0;
+                double write_lat = (d_wr_ios > 0) ? (double)d_wr_ticks / (double)d_wr_ios : 0.0;
                 double io_util = (double)d_io_ticks / interval_ms * 100.0;
 
                 /* Check latency thresholds */

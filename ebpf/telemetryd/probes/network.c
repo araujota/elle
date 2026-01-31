@@ -61,7 +61,7 @@ static int read_sysfs_str(const char *path, char *buf, size_t len)
 
     f = fopen(path, "r");
     if (f) {
-        if (fgets(buf, len, f)) {
+        if (fgets(buf, (int)len, f)) {
             /* Remove trailing newline */
             size_t l = strlen(buf);
             if (l > 0 && buf[l-1] == '\n')

@@ -87,7 +87,7 @@ static void normalize_message(const char *message, char *out, size_t out_len)
         }
 
         /* Convert to lowercase and copy */
-        out[j++] = tolower(c);
+        out[j++] = (char)tolower((unsigned char)c);
     }
 
     out[j] = '\0';
@@ -101,8 +101,8 @@ static void sha256_to_hex16(const unsigned char *hash, char *out)
 {
     static const char hex[] = "0123456789abcdef";
     for (int i = 0; i < 8; i++) {  /* Only first 8 bytes = 16 hex chars */
-        out[i * 2] = hex[(hash[i] >> 4) & 0xf];
-        out[i * 2 + 1] = hex[hash[i] & 0xf];
+        out[(size_t)i * 2] = hex[(hash[i] >> 4) & 0xf];
+        out[(size_t)i * 2 + 1] = hex[hash[i] & 0xf];
     }
     out[16] = '\0';
 }

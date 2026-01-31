@@ -182,7 +182,7 @@ static int get_process_for_inode(unsigned long inode, pid_t *out_pid, char *out_
                     snprintf(comm_path, sizeof(comm_path), "/proc/%d/comm", pid);
                     f = fopen(comm_path, "r");
                     if (f) {
-                        if (fgets(out_comm, comm_len, f)) {
+                        if (fgets(out_comm, (int)comm_len, f)) {
                             size_t l = strlen(out_comm);
                             if (l > 0 && out_comm[l-1] == '\n')
                                 out_comm[l-1] = '\0';

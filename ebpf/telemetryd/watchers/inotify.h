@@ -16,7 +16,7 @@
 #define INOTIFY_MAX_WATCHES 64
 
 /* Maximum content to cache for diff (64KB) */
-#define INOTIFY_MAX_CONTENT (64 * 1024)
+#define INOTIFY_MAX_CONTENT (64L * 1024)
 
 /* Opaque inotify watcher handle */
 struct inotify_watcher;

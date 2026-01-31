@@ -300,8 +300,8 @@ bool entity_extract(const char *message, telem_category_t category,
 
             /* Extract capture group */
             PCRE2_SIZE *ovector = pcre2_get_ovector_pointer(rules[i].match_data);
-            PCRE2_SIZE start = ovector[rules[i].capture_group * 2];
-            PCRE2_SIZE end = ovector[rules[i].capture_group * 2 + 1];
+            PCRE2_SIZE start = ovector[(PCRE2_SIZE)rules[i].capture_group * 2];
+            PCRE2_SIZE end = ovector[(PCRE2_SIZE)rules[i].capture_group * 2 + 1];
 
             if (start == PCRE2_UNSET || end == PCRE2_UNSET)
                 continue;

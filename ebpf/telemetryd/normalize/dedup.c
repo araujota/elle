@@ -184,7 +184,7 @@ struct dedup_window *dedup_create(int window_sec, size_t capacity)
 
     /* Allocate hash table (use ~1.3x capacity for good load factor) */
     w->num_buckets = w->capacity + (w->capacity >> 2);
-    w->buckets = calloc(w->num_buckets, sizeof(struct hash_bucket *));
+    w->buckets = (struct hash_bucket **)calloc(w->num_buckets, sizeof(struct hash_bucket *));
     if (!w->buckets) {
         free(w->ring);
         free(w);
@@ -209,7 +209,7 @@ void dedup_destroy(struct dedup_window *w)
         }
     }
 
-    free(w->buckets);
+    free((void *)w->buckets);
     free(w->ring);
     free(w);
 }

@@ -133,8 +133,8 @@ int disk_probe_run(struct normalizer *norm, struct telem_socket *sock, void *ctx
                      "Disk space low on %s: %.1f%% used (free: %" PRIu64 " GB, total: %" PRIu64 " GB)",
                      mount,
                      used_pct * 100.0,
-                     avail / (1024ULL * 1024ULL * 1024ULL),
-                     total / (1024ULL * 1024ULL * 1024ULL));
+                     avail / ((uint64_t)1024 * 1024 * 1024),
+                     total / ((uint64_t)1024 * 1024 * 1024));
 
             snprintf(entity, sizeof(entity), "mount:%s", mount);
 
