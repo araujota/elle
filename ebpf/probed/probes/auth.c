@@ -62,8 +62,8 @@ static void add_failure(struct auth_probe_ctx *ctx,
 {
     struct auth_failure_entry *entry = &ctx->failures[ctx->failures_idx];
 
-    snprintf(entry->source, sizeof(entry->source), "%s", source ? source : "unknown");
-    snprintf(entry->user, sizeof(entry->user), "%s", user ? user : "unknown");
+    snprintf(entry->source, sizeof(entry->source), "%.*s", (int)(sizeof(entry->source) - 1), source ? source : "unknown");
+    snprintf(entry->user, sizeof(entry->user), "%.*s", (int)(sizeof(entry->user) - 1), user ? user : "unknown");
     entry->ts_ns = ts_ns;
 
     ctx->failures_idx = (ctx->failures_idx + 1) % ctx->failures_capacity;
@@ -103,13 +103,13 @@ static void aggregate_failures(struct auth_probe_ctx *ctx, uint64_t now_ns,
             }
         }
         if (!found && source_count < 64) {
-            snprintf(sources[source_count], sizeof(sources[0]), "%s", entry->source);
+            snprintf(sources[source_count], sizeof(sources[0]), "%.*s", (int)(sizeof(sources[0]) - 1), entry->source);
             source_count++;
         }
 
         /* Copy last user/source */
-        snprintf(last_user, 32, "%s", entry->user);
-        snprintf(last_source, 64, "%s", entry->source);
+        snprintf(last_user, 32, "%.*s", (int)(32 - 1), entry->user);
+        snprintf(last_source, 64, "%.*s", (int)(64 - 1), entry->source);
     }
 
     *unique_sources = source_count;
@@ -147,7 +147,7 @@ static void track_source_failure(struct auth_probe_ctx *ctx,
         }
     }
 
-    snprintf(ctx->source_tracker[idx].ip, sizeof(ctx->source_tracker[0].ip), "%s", source);
+    snprintf(ctx->source_tracker[idx].ip, sizeof(ctx->source_tracker[0].ip), "%.*s", (int)(sizeof(ctx->source_tracker[0].ip) - 1), source);
     ctx->source_tracker[idx].failure_count = 1;
     ctx->source_tracker[idx].first_seen_ns = now_ns;
     ctx->source_tracker[idx].last_seen_ns = now_ns;
@@ -169,7 +169,7 @@ static void detect_brute_force(struct auth_probe_ctx *ctx, uint64_t now_ns)
             entry->failure_count > 5) {
             ctx->brute_force_detected = true;
             snprintf(ctx->brute_force_source, sizeof(ctx->brute_force_source),
-                     "%s", entry->ip);
+                     "%.*s", (int)(sizeof(ctx->brute_force_source) - 1), entry->ip);
             ctx->brute_force_count = entry->failure_count;
             break;  /* Report first detected */
         }

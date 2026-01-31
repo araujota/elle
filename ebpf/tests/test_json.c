@@ -44,13 +44,13 @@ static struct telem_event make_event(telem_category_t cat,
     evt.source = src;
 
     if (message)
-        snprintf(evt.message, sizeof(evt.message), "%s", message);
+        snprintf(evt.message, sizeof(evt.message), "%.*s", (int)(sizeof(evt.message) - 1), message);
     if (entity) {
-        snprintf(evt.entity, sizeof(evt.entity), "%s", entity);
+        snprintf(evt.entity, sizeof(evt.entity), "%.*s", (int)(sizeof(evt.entity) - 1), entity);
         evt.has_entity = true;
     }
     if (fingerprint)
-        snprintf(evt.fingerprint, sizeof(evt.fingerprint), "%s", fingerprint);
+        snprintf(evt.fingerprint, sizeof(evt.fingerprint), "%.*s", (int)(sizeof(evt.fingerprint) - 1), fingerprint);
 
     return evt;
 }

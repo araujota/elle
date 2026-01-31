@@ -76,8 +76,8 @@ static struct edac_error_state *find_or_create_state(
 
     struct edac_error_state *state = &ctx->edac_state[ctx->edac_state_count++];
     memset(state, 0, sizeof(*state));
-    snprintf(state->mc, sizeof(state->mc), "%s", mc);
-    snprintf(state->csrow, sizeof(state->csrow), "%s", csrow);
+    snprintf(state->mc, sizeof(state->mc), "%.*s", (int)(sizeof(state->mc) - 1), mc);
+    snprintf(state->csrow, sizeof(state->csrow), "%.*s", (int)(sizeof(state->csrow) - 1), csrow);
 
     return state;
 }
@@ -160,8 +160,8 @@ static int scan_edac_mc(struct hardware_probe_ctx *ctx,
             evt.ts_ns = get_timestamp_ns();
             snprintf(evt.subsystem, sizeof(evt.subsystem), "%s", "memory");
             snprintf(evt.error_type, sizeof(evt.error_type), "%s", "correctable");
-            snprintf(evt.mc, sizeof(evt.mc), "%s", mc_name);
-            snprintf(evt.csrow, sizeof(evt.csrow), "%s", entry->d_name);
+            snprintf(evt.mc, sizeof(evt.mc), "%.*s", (int)(sizeof(evt.mc) - 1), mc_name);
+            snprintf(evt.csrow, sizeof(evt.csrow), "%.*s", (int)(sizeof(evt.csrow) - 1), entry->d_name);
 
             snprintf(evt.device, sizeof(evt.device), "%s/%s", mc_name, entry->d_name);
 
@@ -185,8 +185,8 @@ static int scan_edac_mc(struct hardware_probe_ctx *ctx,
             evt.ts_ns = get_timestamp_ns();
             snprintf(evt.subsystem, sizeof(evt.subsystem), "%s", "memory");
             snprintf(evt.error_type, sizeof(evt.error_type), "%s", "uncorrectable");
-            snprintf(evt.mc, sizeof(evt.mc), "%s", mc_name);
-            snprintf(evt.csrow, sizeof(evt.csrow), "%s", entry->d_name);
+            snprintf(evt.mc, sizeof(evt.mc), "%.*s", (int)(sizeof(evt.mc) - 1), mc_name);
+            snprintf(evt.csrow, sizeof(evt.csrow), "%.*s", (int)(sizeof(evt.csrow) - 1), entry->d_name);
 
             snprintf(evt.device, sizeof(evt.device), "%s/%s", mc_name, entry->d_name);
 

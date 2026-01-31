@@ -71,7 +71,7 @@ static struct unit_restart_state *find_or_create_unit_state(
 
     struct unit_restart_state *state = &ctx->tracked_units[ctx->tracked_units_count++];
     memset(state, 0, sizeof(*state));
-    snprintf(state->unit, sizeof(state->unit), "%s", unit);
+    snprintf(state->unit, sizeof(state->unit), "%.*s", (int)(sizeof(state->unit) - 1), unit);
 
     return state;
 }
@@ -116,7 +116,7 @@ static int query_unit_state(sd_bus *bus, const char *unit,
 
     memset(evt, 0, sizeof(*evt));
     evt->ts_ns = get_timestamp_ns();
-    snprintf(evt->unit, sizeof(evt->unit), "%s", unit);
+    snprintf(evt->unit, sizeof(evt->unit), "%.*s", (int)(sizeof(evt->unit) - 1), unit);
 
     /* Get unit object path */
     r = sd_bus_call_method(
@@ -156,7 +156,7 @@ static int query_unit_state(sd_bus *bus, const char *unit,
         &active_state);
 
     if (r >= 0 && active_state) {
-        snprintf(evt->active_state, sizeof(evt->active_state), "%s", active_state);
+        snprintf(evt->active_state, sizeof(evt->active_state), "%.*s", (int)(sizeof(evt->active_state) - 1), active_state);
         free(active_state);
     }
     sd_bus_error_free(&error);
@@ -173,7 +173,7 @@ static int query_unit_state(sd_bus *bus, const char *unit,
         &sub_state);
 
     if (r >= 0 && sub_state) {
-        snprintf(evt->sub_state, sizeof(evt->sub_state), "%s", sub_state);
+        snprintf(evt->sub_state, sizeof(evt->sub_state), "%.*s", (int)(sizeof(evt->sub_state) - 1), sub_state);
         free(sub_state);
     }
     sd_bus_error_free(&error);
@@ -192,7 +192,7 @@ static int query_unit_state(sd_bus *bus, const char *unit,
             &result);
 
         if (r >= 0 && result) {
-            snprintf(evt->result, sizeof(evt->result), "%s", result);
+            snprintf(evt->result, sizeof(evt->result), "%.*s", (int)(sizeof(evt->result) - 1), result);
             free(result);
         }
         sd_bus_error_free(&error);

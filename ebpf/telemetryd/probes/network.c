@@ -92,7 +92,7 @@ static struct iface_errors *get_or_create_prev(struct network_probe_ctx *ctx, co
         return NULL;
 
     prev = &ctx->prev[ctx->num_prev++];
-    snprintf(prev->name, sizeof(prev->name), "%s", name);
+    snprintf(prev->name, sizeof(prev->name), "%.*s", (int)(sizeof(prev->name) - 1), name);
     prev->rx_errors = 0;
     prev->tx_errors = 0;
     return prev;
@@ -119,7 +119,7 @@ int network_probe_run(struct normalizer *norm, struct telem_socket *sock, void *
         uint64_t rx_dropped = 0, tx_dropped = 0, rx_packets = 0, tx_packets = 0;
         struct iface_errors *prev;
         char name[32];
-        snprintf(name, sizeof(name), "%s", entry->d_name);
+        snprintf(name, sizeof(name), "%.*s", (int)(sizeof(name) - 1), entry->d_name);
 
         /* Skip . and .. */
         if (name[0] == '.')

@@ -113,7 +113,7 @@ static int scan_cgroup_slice(const char *slice_path, struct cgroup_snapshot *sna
             continue;
 
         snap = &snaps[*count];
-        snprintf(snap->name, sizeof(snap->name), "%s", entry->d_name);
+        snprintf(snap->name, sizeof(snap->name), "%.*s", (int)(sizeof(snap->name) - 1), entry->d_name);
 
         /* Read memory stats */
         {

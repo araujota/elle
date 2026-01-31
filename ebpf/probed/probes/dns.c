@@ -74,7 +74,7 @@ static int parse_resolv_conf(struct dns_probe_ctx *ctx)
         char ns[64];
         if (sscanf(line, "nameserver %63s", ns) == 1) {
             snprintf(ctx->resolvers[ctx->resolver_count],
-                     sizeof(ctx->resolvers[0]), "%s", ns);
+                     sizeof(ctx->resolvers[0]), "%.*s", (int)(sizeof(ctx->resolvers[0]) - 1), ns);
             ctx->resolver_count++;
         }
     }
@@ -101,8 +101,8 @@ struct dns_probe_ctx *dns_probe_create_ctx(const struct probed_config *cfg)
     /* Copy test domains */
     ctx->test_domain_count = cfg->dns_test_domain_count;
     for (int i = 0; i < ctx->test_domain_count; i++) {
-        snprintf(ctx->test_domains[i], sizeof(ctx->test_domains[0]), "%s",
-                 cfg->dns_test_domains[i]);
+        snprintf(ctx->test_domains[i], sizeof(ctx->test_domains[0]), "%.*s",
+                 (int)(sizeof(ctx->test_domains[0]) - 1), cfg->dns_test_domains[i]);
     }
 
     /* Parse resolvers */
@@ -188,8 +188,8 @@ static int dns_query(const char *resolver, const char *domain,
 
     memset(evt, 0, sizeof(*evt));
     evt->ts_ns = get_timestamp_ns();
-    snprintf(evt->resolver, sizeof(evt->resolver), "%s", resolver);
-    snprintf(evt->query, sizeof(evt->query), "%s", domain);
+    snprintf(evt->resolver, sizeof(evt->resolver), "%.*s", (int)(sizeof(evt->resolver) - 1), resolver);
+    snprintf(evt->query, sizeof(evt->query), "%.*s", (int)(sizeof(evt->query) - 1), domain);
 
     /* Build query */
     query_len = build_dns_query(domain, query, sizeof(query));

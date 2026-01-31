@@ -128,7 +128,7 @@ static int parse_args(int argc, char *argv[])
     while ((opt = getopt_long(argc, argv, "s:d:vh", long_options, &option_index)) != -1) {
         switch (opt) {
         case 's':
-            snprintf(config.socket_path, sizeof(config.socket_path), "%s", optarg);
+            snprintf(config.socket_path, sizeof(config.socket_path), "%.*s", (int)(sizeof(config.socket_path) - 1), optarg);
             break;
         case 'd':
             config.dedupe_window_sec = (int)strtol(optarg, NULL, 10);
