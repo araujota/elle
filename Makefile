@@ -64,7 +64,7 @@ PIP := pip
 VENV := .venv
 VENV_BIN := $(VENV)/bin
 PACKAGE := elle
-VERSION := $(shell $(PYTHON) -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+VERSION := $(shell grep -m1 '^version' pyproject.toml | cut -d'"' -f2)
 
 # Debian packaging
 DEB_NAME := elle_$(VERSION)-1_all.deb
@@ -297,7 +297,7 @@ build-deb: clean-deb build-wheel
 	@echo "Section: admin" >> $(DEB_STAGING)/DEBIAN/control
 	@echo "Priority: optional" >> $(DEB_STAGING)/DEBIAN/control
 	@echo "Architecture: all" >> $(DEB_STAGING)/DEBIAN/control
-	@echo "Depends: python3 (>= 3.11), python3-pip, python3-httpx, python3-ruamel.yaml, python3-rich, python3-prompt-toolkit, python3-toml, libaugeas0, augeas-tools, adduser" >> $(DEB_STAGING)/DEBIAN/control
+	@echo "Depends: python3 (>= 3.10), python3-pip, python3-httpx, python3-ruamel.yaml, python3-rich, python3-prompt-toolkit, python3-toml, libaugeas0, augeas-tools, adduser" >> $(DEB_STAGING)/DEBIAN/control
 	@echo "Recommends: ollama, python3-fastapi, python3-uvicorn" >> $(DEB_STAGING)/DEBIAN/control
 	@echo "Suggests: python3-bcc" >> $(DEB_STAGING)/DEBIAN/control
 	@echo "Maintainer: ELLE Contributors <elle@example.com>" >> $(DEB_STAGING)/DEBIAN/control
