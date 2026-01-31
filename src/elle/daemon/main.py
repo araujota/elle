@@ -254,7 +254,7 @@ class ElledDaemon:
                     asyncio.gather(*self._tasks, return_exceptions=True),
                     timeout=5.0,
                 )
-            except TimeoutError:
+            except (TimeoutError, asyncio.TimeoutError):
                 logger.warning("Some tasks did not stop in time")
 
         # Stop watchers explicitly

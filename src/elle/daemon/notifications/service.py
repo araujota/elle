@@ -815,7 +815,7 @@ class NotificationService:
                 result = await send_async(notification)
                 self._add_to_history(notification, result)
 
-            except TimeoutError:
+            except (TimeoutError, asyncio.TimeoutError):
                 continue
             except asyncio.CancelledError:
                 break

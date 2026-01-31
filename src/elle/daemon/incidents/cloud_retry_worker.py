@@ -112,7 +112,7 @@ class CloudRetryWorker:
                         timeout=self._poll_interval,
                     )
                     break  # Shutdown was set
-                except TimeoutError:
+                except (TimeoutError, asyncio.TimeoutError):
                     pass
 
                 # Run health check if interval elapsed

@@ -402,7 +402,7 @@ class ModelWarmupService:
                         )
                         # Event was set, time to shut down
                         break
-                    except TimeoutError:
+                    except (TimeoutError, asyncio.TimeoutError):
                         # Timeout expired, time to warm up
                         pass
                 else:

@@ -121,7 +121,7 @@ class ManVaultService:
             try:
                 # Wait for task to finish with timeout
                 await asyncio.wait_for(self._task, timeout=5.0)
-            except TimeoutError:
+            except (TimeoutError, asyncio.TimeoutError):
                 logger.warning("ManVault service stop timed out, cancelling")
                 self._task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):

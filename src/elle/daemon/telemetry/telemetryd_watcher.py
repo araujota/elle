@@ -349,7 +349,7 @@ class TelemetrydWatcher:
             else:
                 logger.warning(f"systemctl restart failed with code {proc.returncode}")
 
-        except TimeoutError:
+        except (TimeoutError, asyncio.TimeoutError):
             logger.warning("systemctl restart timed out")
         except Exception as e:
             logger.warning(f"Failed to restart telemetryd service: {e}")
@@ -453,7 +453,7 @@ class TelemetrydWatcher:
                 # Read events
                 await self._read_events()
 
-            except TimeoutError:
+            except (TimeoutError, asyncio.TimeoutError):
                 continue
             except asyncio.CancelledError:
                 break
@@ -491,7 +491,7 @@ class TelemetrydWatcher:
                     logger.warning(f"Invalid JSON from telemetryd: {e}")
                     self._total_errors += 1
 
-            except TimeoutError:
+            except (TimeoutError, asyncio.TimeoutError):
                 continue
             except Exception as e:
                 logger.error(f"Read error: {e}")

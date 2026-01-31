@@ -112,7 +112,7 @@ class EventRouter:
             try:
                 # Use timeout to allow periodic check of _running flag
                 event = await asyncio.wait_for(queue.get(), timeout=1.0)
-            except TimeoutError:
+            except (TimeoutError, asyncio.TimeoutError):
                 continue
             except asyncio.CancelledError:
                 break

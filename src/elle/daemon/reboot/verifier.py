@@ -686,7 +686,7 @@ async def check_network_connectivity(
         try:
             await asyncio.wait_for(proc.wait(), timeout=timeout)
             return proc.returncode == 0
-        except TimeoutError:
+        except (TimeoutError, asyncio.TimeoutError):
             proc.kill()
             await proc.wait()
             return False

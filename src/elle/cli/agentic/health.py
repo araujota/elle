@@ -287,7 +287,7 @@ class LLMCallTracker:
                 timeout=self.config.llm_timeout_seconds,
             )
             return result
-        except TimeoutError as e:
+        except (TimeoutError, asyncio.TimeoutError) as e:
             self._timed_out = True
             self._error = f"LLM call timed out after {self.config.llm_timeout_seconds}s"
             raise LoopTimeoutError(
@@ -353,7 +353,7 @@ class ToolCallTracker:
                 timeout=self.config.tool_timeout_seconds,
             )
             return result
-        except TimeoutError as e:
+        except (TimeoutError, asyncio.TimeoutError) as e:
             self._timed_out = True
             self._error = f"Tool '{self.tool_name}' timed out after {self.config.tool_timeout_seconds}s"
             raise LoopTimeoutError(

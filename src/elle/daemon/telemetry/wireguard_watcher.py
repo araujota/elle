@@ -100,7 +100,7 @@ class WireguardWatcher:
                     timeout=self._poll_interval,
                 )
                 break
-            except TimeoutError:
+            except (TimeoutError, asyncio.TimeoutError):
                 continue
 
         self._running = False
@@ -220,7 +220,7 @@ class WireguardWatcher:
         except FileNotFoundError:
             logger.debug("WireGuard tools not installed")
             return None
-        except TimeoutError:
+        except (TimeoutError, asyncio.TimeoutError):
             logger.warning("WireGuard command timed out")
             return None
         except Exception as e:

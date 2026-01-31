@@ -199,7 +199,7 @@ class MobileClientConnection:
             try:
                 event = await asyncio.wait_for(self.queue.get(), timeout=30.0)
                 yield event.to_sse()
-            except TimeoutError:
+            except (TimeoutError, asyncio.TimeoutError):
                 # Send heartbeat to keep connection alive
                 heartbeat = MobileNotificationEvent(
                     event_type=MobileEventType.HEARTBEAT,

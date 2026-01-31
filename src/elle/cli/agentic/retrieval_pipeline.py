@@ -274,7 +274,7 @@ class UnifiedRetrievalPipeline:
                 ),
                 timeout=retrieval_timeout,
             )
-        except TimeoutError:
+        except (TimeoutError, asyncio.TimeoutError):
             logger.warning(f"Retrieval pipeline timed out after {retrieval_timeout}s")
             results = ((), (), ())
 
