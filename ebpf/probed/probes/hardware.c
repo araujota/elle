@@ -105,7 +105,7 @@ static int scan_edac_mc(struct hardware_probe_ctx *ctx,
                         struct probed_socket *sock,
                         const char *mc_name)
 {
-    char mc_path[256];
+    char mc_path[320];
     DIR *dir;
     struct dirent *entry;
 
@@ -123,7 +123,7 @@ static int scan_edac_mc(struct hardware_probe_ctx *ctx,
         }
 
         /* Read CE count */
-        char ce_path[512];
+        char ce_path[608];
         snprintf(ce_path, sizeof(ce_path), "%s/%s/ce_count",
                  mc_path, entry->d_name);
 
@@ -136,7 +136,7 @@ static int scan_edac_mc(struct hardware_probe_ctx *ctx,
         }
 
         /* Read UE count */
-        char ue_path[512];
+        char ue_path[608];
         snprintf(ue_path, sizeof(ue_path), "%s/%s/ue_count",
                  mc_path, entry->d_name);
 
@@ -163,7 +163,7 @@ static int scan_edac_mc(struct hardware_probe_ctx *ctx,
             snprintf(evt.mc, sizeof(evt.mc), "%.*s", (int)(sizeof(evt.mc) - 1), mc_name);
             snprintf(evt.csrow, sizeof(evt.csrow), "%.*s", (int)(sizeof(evt.csrow) - 1), entry->d_name);
 
-            snprintf(evt.device, sizeof(evt.device), "%s/%s", mc_name, entry->d_name);
+            snprintf(evt.device, sizeof(evt.device), "%.31s/%.31s", mc_name, entry->d_name);
 
             evt.error_count = ce_count;
             evt.prev_count = state->ce_count;
@@ -188,7 +188,7 @@ static int scan_edac_mc(struct hardware_probe_ctx *ctx,
             snprintf(evt.mc, sizeof(evt.mc), "%.*s", (int)(sizeof(evt.mc) - 1), mc_name);
             snprintf(evt.csrow, sizeof(evt.csrow), "%.*s", (int)(sizeof(evt.csrow) - 1), entry->d_name);
 
-            snprintf(evt.device, sizeof(evt.device), "%s/%s", mc_name, entry->d_name);
+            snprintf(evt.device, sizeof(evt.device), "%.31s/%.31s", mc_name, entry->d_name);
 
             evt.error_count = ue_count;
             evt.prev_count = state->ue_count;
