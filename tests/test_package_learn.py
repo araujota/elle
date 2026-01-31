@@ -1286,7 +1286,7 @@ class TestLearnPackageInternal:
         ):
             mock_llm_cls.return_value.generate_json.return_value = caps_json
             mock_spec_cls.return_value = mock_spec_cls_instance
-            result = run_async(_learn_package("ffmpeg", dry_run=True))
+            run_async(_learn_package("ffmpeg", dry_run=True))
             # The source_command should have been injected
             call_kwargs = mock_spec_cls.call_args[1]
             assert call_kwargs["source_command"] == "ffmpeg"
@@ -1337,7 +1337,7 @@ class TestLearnPackageInternal:
         ):
             mock_llm_cls.return_value.generate_json.return_value = caps_json
             mock_spec_cls.return_value = mock_spec_instance
-            result = run_async(_learn_package("test", dry_run=True))
+            run_async(_learn_package("test", dry_run=True))
             # Should have added constraints
             call_kwargs = mock_spec_cls.call_args[1]
             assert call_kwargs["input_fields"][0]["constraints"] == {}

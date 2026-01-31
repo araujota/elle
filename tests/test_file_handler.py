@@ -714,7 +714,7 @@ class TestRollbackMechanism:
             description="Non-atomic test",
             atomic=False,
         )
-        result = handler.execute(request)
+        handler.execute(request)
         # First op succeeded, second failed, but no rollback
         assert dest1.exists()
 

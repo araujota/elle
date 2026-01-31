@@ -14,8 +14,7 @@ Covers:
 from __future__ import annotations
 
 import json
-import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -38,7 +37,6 @@ from elle.cli.agentic.retrieval_pipeline import (
     RetrievalContext,
 )
 from elle.cli.agentic.unified_input import AgenticInput, InputSource
-
 
 # =============================================================================
 # Helpers

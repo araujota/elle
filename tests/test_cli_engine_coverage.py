@@ -2052,7 +2052,7 @@ class TestPolicyPreviewAndJustification:
 
         # Create a fake intent value that won't match any case
         # We can test through _route_intent with an unmatched enum
-        fake_ir = _intent(Intent.SHELL_PASSTHROUGH)
+        _intent(Intent.SHELL_PASSTHROUGH)
         # Override the intent to something not in the match block
         # (by testing the default case branch via process)
         sr = SubprocessResult(
@@ -3177,7 +3177,7 @@ class TestTracedCommand:
         engine = Engine(classifier=MagicMock())
         session = _make_session()
 
-        sr = SubprocessResult(
+        SubprocessResult(
             command="ls",
             exit_code=0,
             stdout="files",
@@ -3251,7 +3251,6 @@ class TestTracedCommand:
         assert "not available" in result.output.lower()
 
     def test_trace_start_trace_fails(self) -> None:
-        from elle.daemon.telemetry.ebpf.syscall_models import SyscallTrace
 
         engine = Engine(classifier=MagicMock())
         session = _make_session()

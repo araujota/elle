@@ -8,7 +8,6 @@ import pytest
 
 from elle.ops.augeas.validators import (
     ApacheValidator,
-    ConfigValidator,
     CronValidator,
     FstabValidator,
     HostsValidator,
@@ -676,7 +675,6 @@ class TestValidateConfig:
                 return_value=ValidationResult(valid=True, validator="mock")
             )
             # Make validate a coroutine
-            import asyncio
 
             async def mock_validate(fp):
                 return ValidationResult(valid=True, validator="mock")

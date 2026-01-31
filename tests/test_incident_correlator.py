@@ -472,7 +472,7 @@ class TestCorrelationKeyExtended:
         """Missing message key still produces a valid correlation key."""
         event = {}
         key = corr._get_correlation_key(event)
-        assert "other:none" == key
+        assert key == "other:none"
 
     def test_entity_key_is_sorted(self, corr):
         """Entities in the key are sorted for consistency."""

@@ -21,7 +21,6 @@ from elle.cli.fixit.renderer import (
 )
 from elle.cli.terminal.renderer import Colors
 
-
 # ---------------------------------------------------------------------------
 # Helpers for building mock objects
 # ---------------------------------------------------------------------------

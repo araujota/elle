@@ -1714,7 +1714,6 @@ class TestStartOllama:
 
     def test_both_systemctl_fail_popen_succeeds(self, wizard):
         """When both systemctl fail but Popen succeeds."""
-        import subprocess as sp
 
         def mock_run(cmd, **kwargs):
             raise FileNotFoundError("systemctl not found")
@@ -1896,7 +1895,7 @@ class TestSetupModels:
 
         with (
             patch.dict("sys.modules", {"elle.rag.constants": mock_rag}),
-            patch.object(wizard, "_setup_models_async", return_value=True) as mock_async,
+            patch.object(wizard, "_setup_models_async", return_value=True),
             patch("asyncio.get_event_loop") as mock_loop,
         ):
             mock_loop.return_value.run_until_complete.return_value = True
@@ -2170,7 +2169,6 @@ class TestPullModelWithProgress:
     @pytest.mark.asyncio
     async def test_pull_exception(self, wizard):
         """Test pull when an exception occurs."""
-        from unittest.mock import AsyncMock
 
         progress = MagicMock()
 

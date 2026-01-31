@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 # Mock psycopg at import time since templates module transitively imports schema
 # which imports psycopg
 mock_pg = MagicMock()

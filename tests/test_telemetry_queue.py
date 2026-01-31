@@ -500,7 +500,7 @@ class TestPriorityQueue:
         """get_stats returns correct stats."""
         await pq.put("a", priority="critical")
         await pq.put("b", priority="normal")
-        item = await pq.get(timeout=0.1)
+        await pq.get(timeout=0.1)
 
         stats = pq.get_stats()
         assert stats.name == "prio"

@@ -8,15 +8,6 @@ from unittest.mock import patch
 
 import pytest
 
-from elle.rag.ollama_client import (
-    DEFAULT_HOST,
-    DEFAULT_KEEP_ALIVE,
-    DEFAULT_MAX_TOKENS,
-    DEFAULT_NUM_CTX,
-    DEFAULT_TEMPERATURE,
-    DEFAULT_TIMEOUT,
-    OllamaConfig,
-)
 from elle.rag.llm_config import (
     ElleLLMConfig,
     LLMFallbackConfig,
@@ -25,6 +16,15 @@ from elle.rag.llm_config import (
     _load_toml,
     _merge_dict,
     load_elle_llm_config,
+)
+from elle.rag.ollama_client import (
+    DEFAULT_HOST,
+    DEFAULT_KEEP_ALIVE,
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_NUM_CTX,
+    DEFAULT_TEMPERATURE,
+    DEFAULT_TIMEOUT,
+    OllamaConfig,
 )
 
 

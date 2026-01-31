@@ -6,7 +6,7 @@ import asyncio
 import json
 from datetime import datetime
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -18,7 +18,6 @@ from elle.daemon.notifications.mobile_push import (
     _map_category_to_event_type,
     get_mobile_notifier,
 )
-
 
 # =============================================================================
 # Helpers
@@ -281,8 +280,7 @@ class TestMobileClientConnection:
     @pytest.mark.asyncio
     async def test_events_heartbeat_on_timeout(self) -> None:
         """events() sends heartbeat when queue.get times out."""
-        client = MobileClientConnection("dev-1", "Test")
-        events_list = []
+        MobileClientConnection("dev-1", "Test")
 
         # The events() method uses asyncio.wait_for with timeout=30s.
         # We can't easily patch that without breaking the test itself.

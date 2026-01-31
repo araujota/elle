@@ -5,19 +5,18 @@ from __future__ import annotations
 import time
 from collections.abc import Iterator
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
 
 from elle.rag.providers.base import LLMProvider, ProviderResponse
 from elle.rag.providers.fallback_provider import (
-    FallbackProvider,
-    _is_retriable,
     _NO_FALLBACK_CODES,
     _RETRIABLE_CODES,
+    FallbackProvider,
+    _is_retriable,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -163,9 +162,9 @@ class TestFallbackProviderProperties:
 class TestFallbackProviderGenerate:
     """Tests for FallbackProvider.generate()."""
 
-    _gen_kwargs = dict(
-        model="m", max_tokens=100, temperature=0.5, timeout=30.0,
-    )
+    _gen_kwargs = {
+        "model": "m", "max_tokens": 100, "temperature": 0.5, "timeout": 30.0,
+    }
 
     def test_primary_success(self) -> None:
         primary = StubProvider("p")
@@ -274,9 +273,9 @@ class TestFallbackProviderGenerate:
 class TestFallbackProviderChat:
     """Tests for FallbackProvider.chat()."""
 
-    _chat_kwargs = dict(
-        model="m", max_tokens=100, temperature=0.5, timeout=30.0,
-    )
+    _chat_kwargs = {
+        "model": "m", "max_tokens": 100, "temperature": 0.5, "timeout": 30.0,
+    }
     _msgs: list[dict[str, Any]] = [{"role": "user", "content": "hi"}]
 
     def test_primary_success(self) -> None:
@@ -322,9 +321,9 @@ class TestFallbackProviderChat:
 class TestFallbackProviderStreamChat:
     """Tests for FallbackProvider.stream_chat()."""
 
-    _stream_kwargs = dict(
-        model="m", max_tokens=100, temperature=0.5, timeout=30.0,
-    )
+    _stream_kwargs = {
+        "model": "m", "max_tokens": 100, "temperature": 0.5, "timeout": 30.0,
+    }
     _msgs: list[dict[str, Any]] = [{"role": "user", "content": "hi"}]
 
     def test_primary_stream_success(self) -> None:

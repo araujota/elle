@@ -1251,7 +1251,7 @@ class TestConnectivityModels:
         check = ConnectivityCheck(name="Test", passed=True, result="OK")
         try:
             check.name = "Modified"  # type: ignore[misc]
-            assert False, "Should not be able to modify frozen model"
+            raise AssertionError("Should not be able to modify frozen model")
         except Exception:
             pass
 

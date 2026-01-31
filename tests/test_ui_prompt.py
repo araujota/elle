@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from prompt_toolkit.formatted_text import FormattedText
-
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+from prompt_toolkit.formatted_text import FormattedText
 
 from elle.cli.ui.prompt import (
     SLASH_COMMANDS,
@@ -708,7 +707,7 @@ class TestPromptEnvVarBatchEdge:
         specs = [
             {"name": "VAR1", "required": True, "description": "This is var1"},
         ]
-        results = prompt.prompt_env_var_batch(specs)
+        prompt.prompt_env_var_batch(specs)
         captured = capsys.readouterr()
         assert "This is var1" in captured.out
 

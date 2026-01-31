@@ -7,8 +7,14 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from elle.cli.terminal.incident_renderer import (
+    DOMAIN_ICONS,
+    OUTCOME_BADGES,
+    SEVERITY_COLORS,
+    STATUS_BADGES,
+    Color,
     _format_duration,
     _pad,
+    _snapshot_to_markdown,
     _time_ago,
     _truncate,
     render_incident_detail,
@@ -16,12 +22,6 @@ from elle.cli.terminal.incident_renderer import (
     render_incident_markdown,
     render_search_results,
     render_snapshot_diff,
-    _snapshot_to_markdown,
-    Color,
-    DOMAIN_ICONS,
-    OUTCOME_BADGES,
-    SEVERITY_COLORS,
-    STATUS_BADGES,
 )
 from elle.daemon.incidents.models import (
     Fingerprint,

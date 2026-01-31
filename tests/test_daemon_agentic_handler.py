@@ -25,7 +25,6 @@ from elle.daemon.incidents.agentic_handler import (
     reset_agentic_handler,
 )
 
-
 # =============================================================================
 # Helpers
 # =============================================================================
@@ -52,7 +51,7 @@ def _make_loop_result(**overrides: Any) -> MagicMock:
     result.response = overrides.get("response", "Issue resolved")
     result.execution_id = overrides.get("execution_id", "exec-abc123")
     result.tool_call_count = overrides.get("tool_call_count", 3)
-    result.error = overrides.get("error", None)
+    result.error = overrides.get("error")
     return result
 
 
@@ -85,7 +84,7 @@ class TestConfigFunctions:
         with patch.dict(os.environ, {AUTO_REMEDIATE_VAR: "yes"}):
             assert is_auto_remediate_enabled() is True
 
-    def test_auto_remediate_enabled_TRUE_case_insensitive(self) -> None:
+    def test_auto_remediate_enabled_true_case_insensitive(self) -> None:
         """Auto-remediate is case-insensitive."""
         with patch.dict(os.environ, {AUTO_REMEDIATE_VAR: "TRUE"}):
             assert is_auto_remediate_enabled() is True
@@ -453,7 +452,7 @@ class TestOnIncidentCreated:
 
         with patch.dict(os.environ, {AGENTIC_HANDLER_VAR: "true"}):
             with patch.object(handler, "_get_incident_info", return_value=incident_info):
-                with patch.object(handler, "handle_incident", new_callable=AsyncMock) as mock_handle:
+                with patch.object(handler, "handle_incident", new_callable=AsyncMock):
                     # asyncio.create_task is used internally, we need a running loop
                     await handler.on_incident_created("inc-001")
                     # The task is created but may not have run yet - just verify the method doesn't crash

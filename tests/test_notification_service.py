@@ -738,7 +738,7 @@ class TestExecuteForecastPlan:
                 create=True,
                 side_effect=ImportError("no httpx"),
             ),
-            patch("elle.daemon.notifications.service._open_elle_repl") as mock_open,
+            patch("elle.daemon.notifications.service._open_elle_repl"),
         ):
             # When httpx import fails, should fallback
             _execute_forecast_plan("inc-456")
@@ -785,7 +785,6 @@ class TestUrgencyToLibnotify:
 
 class TestSendWithLibnotify:
     def test_libnotify_success_used(self):
-        from elle.daemon.notifications.service import _send_via_libnotify
 
         with (
             patch("elle.daemon.notifications.service._gi_available", True),
