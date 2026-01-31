@@ -25,13 +25,13 @@ from typing import Any
 import psycopg
 
 try:
-    import structlog
+    import structlog  # type: ignore[import-not-found]
 
     logger = structlog.get_logger()
 except ImportError:
     import logging
 
-    logger = logging.getLogger(__name__)  # type: ignore[assignment]
+    logger = logging.getLogger(__name__)
 
 from elle.common.pydantic_compat import safe_model_dump
 from elle.daemon.incidents.models import (

@@ -18,13 +18,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 try:
-    import structlog
+    import structlog  # type: ignore[import-not-found]
 
     logger = structlog.get_logger()
 except ImportError:
     import logging
 
-    logger = logging.getLogger(__name__)  # type: ignore[assignment]
+    logger = logging.getLogger(__name__)
 
 from pydantic import BaseModel, ConfigDict, Field
 
