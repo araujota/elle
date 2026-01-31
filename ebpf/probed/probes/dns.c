@@ -188,8 +188,8 @@ static int dns_query(const char *resolver, const char *domain,
 
     memset(evt, 0, sizeof(*evt));
     evt->ts_ns = get_timestamp_ns();
-    strncpy(evt->resolver, resolver, sizeof(evt->resolver) - 1);
-    strncpy(evt->query, domain, sizeof(evt->query) - 1);
+    snprintf(evt->resolver, sizeof(evt->resolver), "%s", resolver);
+    snprintf(evt->query, sizeof(evt->query), "%s", domain);
 
     /* Build query */
     query_len = build_dns_query(domain, query, sizeof(query));

@@ -62,8 +62,8 @@ static void add_failure(struct auth_probe_ctx *ctx,
 {
     struct auth_failure_entry *entry = &ctx->failures[ctx->failures_idx];
 
-    strncpy(entry->source, source ? source : "unknown", sizeof(entry->source) - 1);
-    strncpy(entry->user, user ? user : "unknown", sizeof(entry->user) - 1);
+    snprintf(entry->source, sizeof(entry->source), "%s", source ? source : "unknown");
+    snprintf(entry->user, sizeof(entry->user), "%s", user ? user : "unknown");
     entry->ts_ns = ts_ns;
 
     ctx->failures_idx = (ctx->failures_idx + 1) % ctx->failures_capacity;
