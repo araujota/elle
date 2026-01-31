@@ -1,6 +1,6 @@
 """Tests for incident rendering utilities."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -49,23 +49,23 @@ class TestTimeAgo:
     """Tests for time ago formatting."""
 
     def test_just_now(self):
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         assert _time_ago(now) == "just now"
 
     def test_minutes_ago(self):
-        past = datetime.now(UTC) - timedelta(minutes=5)
+        past = datetime.now(timezone.utc) - timedelta(minutes=5)
         assert _time_ago(past) == "5m ago"
 
     def test_hours_ago(self):
-        past = datetime.now(UTC) - timedelta(hours=3)
+        past = datetime.now(timezone.utc) - timedelta(hours=3)
         assert _time_ago(past) == "3h ago"
 
     def test_days_ago(self):
-        past = datetime.now(UTC) - timedelta(days=2)
+        past = datetime.now(timezone.utc) - timedelta(days=2)
         assert _time_ago(past) == "2d ago"
 
     def test_older_shows_date(self):
-        past = datetime.now(UTC) - timedelta(days=10)
+        past = datetime.now(timezone.utc) - timedelta(days=10)
         result = _time_ago(past)
         assert "-" in result  # ISO format date
 
@@ -105,8 +105,8 @@ class TestRenderIncidentList:
                 severity="error",
                 status="resolved",
                 outcome="improved",
-                created_at=datetime.now(UTC) - timedelta(hours=2),
-                updated_at=datetime.now(UTC) - timedelta(hours=1),
+                created_at=datetime.now(timezone.utc) - timedelta(hours=2),
+                updated_at=datetime.now(timezone.utc) - timedelta(hours=1),
             ),
             IncidentReport(
                 incident_id="xyz789abc012",
@@ -115,8 +115,8 @@ class TestRenderIncidentList:
                 severity="warning",
                 status="open",
                 outcome="unknown",
-                created_at=datetime.now(UTC) - timedelta(days=1),
-                updated_at=datetime.now(UTC) - timedelta(days=1),
+                created_at=datetime.now(timezone.utc) - timedelta(days=1),
+                updated_at=datetime.now(timezone.utc) - timedelta(days=1),
             ),
         ]
 
@@ -187,8 +187,8 @@ class TestRenderIncidentDetail:
                 swap_pressure=0.80,
                 cpu_pressure=2.5,
             ),
-            created_at=datetime.now(UTC) - timedelta(hours=6),
-            updated_at=datetime.now(UTC) - timedelta(hours=5),
+            created_at=datetime.now(timezone.utc) - timedelta(hours=6),
+            updated_at=datetime.now(timezone.utc) - timedelta(hours=5),
         )
 
     @pytest.fixture
@@ -270,8 +270,8 @@ class TestRenderIncidentMarkdown:
             symptoms=("Connection timeouts", "Packet loss"),
             root_cause="DNS resolver misconfiguration",
             verification_steps=("Ping test passed", "DNS resolution works"),
-            created_at=datetime.now(UTC),
-            updated_at=datetime.now(UTC),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
         )
 
     def test_markdown_has_title(self, incident_for_export):
@@ -429,8 +429,8 @@ class TestRenderSearchResults:
             severity="warning",
             status="resolved",
             outcome="improved",
-            created_at=datetime.now(UTC),
-            updated_at=datetime.now(UTC),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
         )
         results = [(incident, 0.85)]
         output = render_search_results("disk", results)

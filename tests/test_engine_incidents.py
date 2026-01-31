@@ -1,6 +1,6 @@
 """Tests for engine incident handling."""
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pytest
@@ -34,8 +34,8 @@ class TestEngineIncidentCommands:
                 severity="error",
                 status="resolved",
                 outcome="improved",
-                created_at=datetime.now(UTC),
-                updated_at=datetime.now(UTC),
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
             ),
             IncidentReport(
                 incident_id="xyz789abc012",
@@ -44,8 +44,8 @@ class TestEngineIncidentCommands:
                 severity="warning",
                 status="open",
                 outcome="unknown",
-                created_at=datetime.now(UTC),
-                updated_at=datetime.now(UTC),
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
             ),
         ]
 

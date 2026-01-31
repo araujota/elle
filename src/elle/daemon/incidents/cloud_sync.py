@@ -17,7 +17,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-import structlog
+try:
+    import structlog
+
+    logger = structlog.get_logger()
+except ImportError:
+    import logging
+
+    logger = logging.getLogger(__name__)  # type: ignore[assignment]
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from elle.daemon.incidents.anonymize import AnonymizedIncidentReport
@@ -33,7 +41,6 @@ try:
 except ImportError:
     HTTPX_AVAILABLE = False
 
-logger = structlog.get_logger()
 
 
 class CloudIncidentMatch(BaseModel):

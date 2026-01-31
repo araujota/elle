@@ -1,6 +1,6 @@
 """Tests for OpenAI-compatible chat completions API endpoints."""
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -29,7 +29,7 @@ def mock_daemon(tmp_path):
         ),
     )
     daemon.get_status.return_value = DaemonStatus(
-        started_at=datetime.now(UTC),
+        started_at=datetime.now(timezone.utc),
         uptime_sec=100,
         pid=12345,
         journal_active=True,

@@ -1,6 +1,6 @@
 """Tests for API authentication middleware."""
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -72,7 +72,7 @@ class TestApiKey:
             key_hash="sha256hash",
             name="Test Key",
             allowed_modes=(ExecutionMode.READONLY,),
-            created_at=datetime.now(UTC),
+            created_at=datetime.now(timezone.utc),
         )
         assert key.key_id == "abc123"
         assert key.name == "Test Key"
@@ -85,7 +85,7 @@ class TestApiKey:
             key_hash="sha256hash",
             name="Revoked Key",
             allowed_modes=(ExecutionMode.READONLY,),
-            created_at=datetime.now(UTC),
+            created_at=datetime.now(timezone.utc),
             revoked=True,
         )
         assert key.revoked is True
