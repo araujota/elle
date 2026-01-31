@@ -53,7 +53,7 @@ char *gpud_json_event(const struct gpud_event *evt)
         return NULL;
 
     /* Timestamp (nanoseconds) */
-    json_object_set_new(obj, "ts", json_integer(evt->ts_ns));
+    json_object_set_new(obj, "ts", json_integer((json_int_t)evt->ts_ns));
 
     /* Source - always "gpu" */
     json_object_set_new(obj, "source", json_string("gpu"));
@@ -88,20 +88,20 @@ char *gpud_json_event(const struct gpud_event *evt)
 
         /* Memory in MB for readability */
         json_object_set_new(raw, "mem_used_mb",
-                            json_integer(dev->mem_used_bytes / (1024 * 1024)));
+                            json_integer((json_int_t)(dev->mem_used_bytes / (1024ULL * 1024ULL))));
         json_object_set_new(raw, "mem_total_mb",
-                            json_integer(dev->mem_total_bytes / (1024 * 1024)));
+                            json_integer((json_int_t)(dev->mem_total_bytes / (1024ULL * 1024ULL))));
         json_object_set_new(raw, "mem_pct", json_integer(dev->mem_pct));
 
         json_object_set_new(raw, "util_pct", json_integer(dev->util_gpu_pct));
         json_object_set_new(raw, "temp_c", json_integer(dev->temp_c));
 
         /* Power in watts */
-        json_object_set_new(raw, "power_w", json_integer(dev->power_mw / 1000));
+        json_object_set_new(raw, "power_w", json_integer((json_int_t)(dev->power_mw / 1000)));
 
-        json_object_set_new(raw, "throttle_reasons", json_integer(dev->throttle_reasons));
+        json_object_set_new(raw, "throttle_reasons", json_integer((json_int_t)dev->throttle_reasons));
         json_object_set_new(raw, "ecc_errors",
-                            json_integer(dev->ecc_errors_corrected + dev->ecc_errors_uncorrected));
+                            json_integer((json_int_t)(dev->ecc_errors_corrected + dev->ecc_errors_uncorrected)));
 
         /* Processes */
         processes = json_array();
@@ -112,7 +112,7 @@ char *gpud_json_event(const struct gpud_event *evt)
                     json_object_set_new(proc, "pid", json_integer(dev->processes[i].pid));
                     json_object_set_new(proc, "name", json_string(dev->processes[i].name));
                     json_object_set_new(proc, "mem_mb",
-                                        json_integer(dev->processes[i].mem_bytes / (1024 * 1024)));
+                                        json_integer((json_int_t)(dev->processes[i].mem_bytes / (1024ULL * 1024ULL))));
                     json_array_append_new(processes, proc);
                 }
             }

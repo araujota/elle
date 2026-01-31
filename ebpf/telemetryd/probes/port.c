@@ -120,10 +120,10 @@ static int hex_to_ip(const char *hex, char *out, size_t out_len, bool *is_wildca
             }
         }
         if (all_zero) {
-            strcpy(out, "::");
+            snprintf(out, out_len, "::");
             *is_wildcard = true;
         } else {
-            strcpy(out, "[IPv6]");
+            snprintf(out, out_len, "[IPv6]");
         }
     } else {
         return -1;
@@ -157,7 +157,7 @@ static int get_process_for_inode(unsigned long inode, pid_t *out_pid, char *out_
         if (pid_entry->d_name[0] < '0' || pid_entry->d_name[0] > '9')
             continue;
 
-        pid = atoi(pid_entry->d_name);
+        pid = (pid_t)strtol(pid_entry->d_name, NULL, 10);
         snprintf(fd_path, sizeof(fd_path), "/proc/%d/fd", pid);
 
         fd_dir = opendir(fd_path);
@@ -266,7 +266,7 @@ static int scan_proc_net(const char *path, int proto,
         /* Get process info */
         get_process_for_inode(inode, &l->pid, l->comm, sizeof(l->comm));
         if (!l->comm[0])
-            strcpy(l->comm, "unknown");
+            snprintf(l->comm, sizeof(l->comm), "unknown");
 
         (*count)++;
     }

@@ -47,7 +47,7 @@ char *telem_json_event_with_raw(const struct telem_event *evt, json_t *raw_json)
         return NULL;
 
     /* Timestamp (nanoseconds) */
-    json_object_set_new(obj, "ts", json_integer(evt->ts_ns));
+    json_object_set_new(obj, "ts", json_integer((json_int_t)evt->ts_ns));
 
     /* Source */
     json_object_set_new(obj, "source", json_string(source_to_str(evt->source)));

@@ -7,6 +7,7 @@
  */
 
 #include <stdio.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -67,7 +68,7 @@ static int parse_meminfo(struct meminfo *info)
         char key[64];
 
         /* Parse "Key: value kB" format */
-        if (sscanf(line, "%63[^:]: %lu", key, &value) != 2)
+        if (sscanf(line, "%63[^:]: %" SCNu64, key, &value) != 2)
             continue;
 
         if (strcmp(key, "MemTotal") == 0)
@@ -116,7 +117,7 @@ int memory_probe_run(struct normalizer *norm, struct telem_socket *sock, void *c
     /* Check memory threshold */
     if (mem_pressure > ctx->warning_pct) {
         snprintf(message, sizeof(message),
-                 "High memory pressure: %.1f%% used (available: %lu MB, total: %lu MB)",
+                 "High memory pressure: %.1f%% used (available: %" PRIu64 " MB, total: %" PRIu64 " MB)",
                  mem_pressure * 100.0,
                  info.mem_available_kb / 1024,
                  info.mem_total_kb / 1024);
@@ -146,7 +147,7 @@ int memory_probe_run(struct normalizer *norm, struct telem_socket *sock, void *c
 
         if (swap_pressure > ctx->swap_warning) {
             snprintf(message, sizeof(message),
-                     "High swap usage: %.1f%% used (used: %lu MB, total: %lu MB)",
+                     "High swap usage: %.1f%% used (used: %" PRIu64 " MB, total: %" PRIu64 " MB)",
                      swap_pressure * 100.0,
                      swap_used_kb / 1024,
                      info.swap_total_kb / 1024);

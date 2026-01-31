@@ -199,7 +199,7 @@ int journal_watcher_process(struct journal_watcher *w,
 
         /* Get PRIORITY */
         const char *priority_str = get_field(w->journal, "PRIORITY", priority_buf, sizeof(priority_buf));
-        int priority = priority_str ? atoi(priority_str) : 6;  /* Default: info */
+        int priority = priority_str ? (int)strtol(priority_str, NULL, 10) : 6;  /* Default: info */
 
         /* Get optional fields */
         const char *systemd_unit = get_field(w->journal, "_SYSTEMD_UNIT",

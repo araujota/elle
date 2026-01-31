@@ -131,7 +131,7 @@ static int parse_args(int argc, char *argv[])
             strncpy(config.socket_path, optarg, sizeof(config.socket_path) - 1);
             break;
         case 'd':
-            config.dedupe_window_sec = atoi(optarg);
+            config.dedupe_window_sec = (int)strtol(optarg, NULL, 10);
             if (config.dedupe_window_sec < 1 || config.dedupe_window_sec > 3600) {
                 fprintf(stderr, "ERROR: Invalid dedupe window (must be 1-3600)\n");
                 return -1;

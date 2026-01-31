@@ -32,7 +32,7 @@ static uint32_t hash_string(const char *s)
 {
     uint32_t h = 5381;
     int c;
-    while ((c = *s++))
+    while ((c = (unsigned char)*s++))
         h = ((h << 5) + h) + c;
     return h;
 }

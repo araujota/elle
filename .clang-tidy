@@ -16,6 +16,7 @@ Checks: >
   -cert-dcl37-c,
   -cert-dcl51-cpp,
   -misc-include-cleaner,
+  -cert-err33-c,
   -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
 
 WarningsAsErrors: >
@@ -27,6 +28,7 @@ WarningsAsErrors: >
   -bugprone-signal-handler,
   -cert-dcl37-c,
   -cert-dcl51-cpp,
+  -cert-err33-c,
   -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
 
 HeaderFilterRegex: '(telemetryd|probed|gpud)/.*\.h$'

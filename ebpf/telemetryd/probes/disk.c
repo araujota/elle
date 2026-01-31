@@ -7,6 +7,7 @@
  */
 
 #include <stdio.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/statvfs.h>
@@ -129,11 +130,11 @@ int disk_probe_run(struct normalizer *norm, struct telem_socket *sock, void *ctx
             bool emit;
 
             snprintf(message, sizeof(message),
-                     "Disk space low on %s: %.1f%% used (free: %lu GB, total: %lu GB)",
+                     "Disk space low on %s: %.1f%% used (free: %" PRIu64 " GB, total: %" PRIu64 " GB)",
                      mount,
                      used_pct * 100.0,
-                     avail / (1024 * 1024 * 1024),
-                     total / (1024 * 1024 * 1024));
+                     avail / (1024ULL * 1024ULL * 1024ULL),
+                     total / (1024ULL * 1024ULL * 1024ULL));
 
             snprintf(entity, sizeof(entity), "mount:%s", mount);
 
@@ -258,7 +259,7 @@ int disk_probe_run(struct normalizer *norm, struct telem_socket *sock, void *ctx
                 char key[64];
                 uint64_t val;
 
-                if (sscanf(vmstat_line, "%63s %lu", key, &val) != 2)
+                if (sscanf(vmstat_line, "%63s %" SCNu64, key, &val) != 2)
                     continue;
 
                 if (strcmp(key, "pgpgin") == 0)

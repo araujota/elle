@@ -384,7 +384,7 @@ int inotify_watcher_process(struct inotify_watcher *w,
             char *diff = NULL;
             if (we->cache_content && (event->mask & IN_MODIFY)) {
                 /* Read new content */
-                size_t new_len;
+                size_t new_len = 0;
                 char *new_content = read_file_content(we->path, &new_len);
 
                 /* Generate diff */

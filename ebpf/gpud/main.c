@@ -105,23 +105,23 @@ static int parse_args(int argc, char *argv[])
             strncpy(config.socket_path, optarg, sizeof(config.socket_path) - 1);
             break;
         case 'i':
-            config.interval_ms = atoi(optarg);
+            config.interval_ms = (int)strtol(optarg, NULL, 10);
             if (config.interval_ms < 100 || config.interval_ms > 60000) {
                 fprintf(stderr, "ERROR: Invalid interval (must be 100-60000ms)\n");
                 return -1;
             }
             break;
         case 'T':
-            config.temp_warning = atoi(optarg);
+            config.temp_warning = (int)strtol(optarg, NULL, 10);
             break;
         case 't':
-            config.temp_critical = atoi(optarg);
+            config.temp_critical = (int)strtol(optarg, NULL, 10);
             break;
         case 'M':
-            config.mem_warning = atoi(optarg);
+            config.mem_warning = (int)strtol(optarg, NULL, 10);
             break;
         case 'm':
-            config.mem_critical = atoi(optarg);
+            config.mem_critical = (int)strtol(optarg, NULL, 10);
             break;
         case 'S':
             config.emit_status = false;

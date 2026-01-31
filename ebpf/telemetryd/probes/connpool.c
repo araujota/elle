@@ -112,6 +112,7 @@ int connpool_probe_run(struct normalizer *norm, struct telem_socket *sock, void 
             case TCP_FIN_WAIT2:   tcp_fin_wait2++;   break;
             case TCP_TIME_WAIT:   tcp_time_wait++;   break;
             case TCP_CLOSE_WAIT:  tcp_close_wait++;  break;
+            default: break;
             }
         }
     }

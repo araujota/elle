@@ -7,6 +7,7 @@
  */
 
 #include <stdio.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
@@ -46,7 +47,7 @@ static uint64_t read_sysfs_uint(const char *path)
 
     f = fopen(path, "r");
     if (f) {
-        if (fscanf(f, "%lu", &value) != 1)
+        if (fscanf(f, "%" SCNu64, &value) != 1)
             value = 0;
         fclose(f);
     }

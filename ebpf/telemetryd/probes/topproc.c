@@ -174,9 +174,13 @@ int topproc_probe_run(struct normalizer *norm, struct telem_socket *sock, void *
         if (!isdigit((unsigned char)entry->d_name[0]))
             continue;
 
-        pid = atoi(entry->d_name);
-        if (pid <= 0)
-            continue;
+        {
+            char *endptr;
+            long val = strtol(entry->d_name, &endptr, 10);
+            if (endptr == entry->d_name || val <= 0)
+                continue;
+            pid = (int)val;
+        }
 
         if (read_proc_stat(pid, &ps) < 0)
             continue;

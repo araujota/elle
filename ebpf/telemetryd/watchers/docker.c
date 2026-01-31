@@ -213,7 +213,7 @@ static int process_event_json(struct docker_watcher *w, const char *json_str,
                 if (json_is_integer(ec))
                     exit_code = (int)json_integer_value(ec);
                 else if (json_is_string(ec))
-                    exit_code = atoi(json_string_value(ec));
+                    exit_code = (int)strtol(json_string_value(ec), NULL, 10);
             }
         }
     }

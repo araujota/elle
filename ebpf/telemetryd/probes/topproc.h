@@ -17,11 +17,11 @@
 #define TOPPROC_TOP_N       5
 
 struct proc_stats {
-    int pid;
-    char name[64];
     unsigned long utime;
     unsigned long stime;
     long rss_pages;
+    char name[64];
+    int pid;
     char state;
 };
 

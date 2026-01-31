@@ -142,7 +142,6 @@ static inline const char *category_to_str(telem_category_t cat)
     case TELEM_CAT_PKG:          return "pkg";
     case TELEM_CAT_DOCKER:       return "docker";
     case TELEM_CAT_KERNEL_PANIC: return "kernel_panic";
-    case TELEM_CAT_OTHER:        return "other";
     default:                     return "other";
     }
 }

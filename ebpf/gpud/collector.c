@@ -59,11 +59,11 @@ static void compute_fingerprint(const char *message, const char *entity, char *f
     const char *str;
 
     for (str = message; *str; str++)
-        hash = ((hash << 5) + hash) + *str;
+        hash = ((hash << 5) + hash) + (unsigned char)*str;
 
     if (entity) {
         for (str = entity; *str; str++)
-            hash = ((hash << 5) + hash) + *str;
+            hash = ((hash << 5) + hash) + (unsigned char)*str;
     }
 
     snprintf(fp, GPUD_MAX_FINGERPRINT, "%016lx", hash);
@@ -323,16 +323,16 @@ int gpud_collector_poll(struct gpud_collector *collector, struct gpud_client *cl
             snprintf(msg, sizeof(msg),
                      "GPU %u (%s) memory CRITICAL at %u%% (%.1f/%.1f GB)",
                      i, dev->name, dev->mem_pct,
-                     (double)dev->mem_used_bytes / (1024 * 1024 * 1024),
-                     (double)dev->mem_total_bytes / (1024 * 1024 * 1024));
+                     (double)dev->mem_used_bytes / (1024.0 * 1024.0 * 1024.0),
+                     (double)dev->mem_total_bytes / (1024.0 * 1024.0 * 1024.0));
             emit_event(collector, client, dev, GPUD_SEV_CRITICAL, msg);
             events_emitted++;
         } else if (dev->mem_pct >= (unsigned int)collector->config.mem_warning) {
             snprintf(msg, sizeof(msg),
                      "GPU %u (%s) memory at %u%% (%.1f/%.1f GB)",
                      i, dev->name, dev->mem_pct,
-                     (double)dev->mem_used_bytes / (1024 * 1024 * 1024),
-                     (double)dev->mem_total_bytes / (1024 * 1024 * 1024));
+                     (double)dev->mem_used_bytes / (1024.0 * 1024.0 * 1024.0),
+                     (double)dev->mem_total_bytes / (1024.0 * 1024.0 * 1024.0));
             emit_event(collector, client, dev, GPUD_SEV_WARNING, msg);
             events_emitted++;
         }
