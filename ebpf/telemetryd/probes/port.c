@@ -165,7 +165,7 @@ static int get_process_for_inode(unsigned long inode, pid_t *out_pid, char *out_
             continue;
 
         while ((fd_entry = readdir(fd_dir)) != NULL) {
-            char fd_link[256], resolved[128];
+            char fd_link[512], resolved[128];
             ssize_t len;
 
             snprintf(fd_link, sizeof(fd_link), "%s/%s", fd_path, fd_entry->d_name);

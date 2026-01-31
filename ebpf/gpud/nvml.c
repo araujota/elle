@@ -29,18 +29,18 @@ static const char *nvml_lib_paths[] = {
 
 #define LOAD_FUNC(api, name) \
     do { \
-        api->name = dlsym(api->handle, "nvml" #name); \
-        if (!api->name) { \
+        (api)->name = dlsym((api)->handle, "nvml" #name); \
+        if (!(api)->name) { \
             gpud_log_debug("Failed to load nvml" #name ": %s", dlerror()); \
         } \
     } while (0)
 
 #define LOAD_FUNC_REQUIRED(api, name) \
     do { \
-        api->name = dlsym(api->handle, "nvml" #name); \
-        if (!api->name) { \
+        (api)->name = dlsym((api)->handle, "nvml" #name); \
+        if (!(api)->name) { \
             gpud_log_error("Required function nvml" #name " not found"); \
-            nvml_unload(api); \
+            nvml_unload((api)); \
             return NULL; \
         } \
     } while (0)

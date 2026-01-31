@@ -34,7 +34,7 @@ static void get_process_name(unsigned int pid, char *name, size_t len)
     snprintf(path, sizeof(path), "/proc/%u/comm", pid);
     f = fopen(path, "r");
     if (f) {
-        if (fgets(name, len, f)) {
+        if (fgets(name, (int)len, f)) {
             /* Remove trailing newline */
             char *nl = strchr(name, '\n');
             if (nl)

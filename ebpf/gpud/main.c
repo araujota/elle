@@ -215,7 +215,7 @@ int main(int argc, char *argv[])
         }
 
         /* Sleep until next poll (interruptible) */
-        int timeout_ms = (next_poll - now) / 1000000;
+        int timeout_ms = (int)((next_poll - now) / 1000000);
         if (timeout_ms > 0) {
             poll(NULL, 0, timeout_ms > 1000 ? 1000 : timeout_ms);
         }

@@ -1,6 +1,5 @@
 """Tests for ELLE Mobile Gateway elevation management."""
 
-from contextlib import contextmanager
 from datetime import datetime
 from unittest.mock import MagicMock
 
@@ -13,7 +12,7 @@ from elle.mobile.elevation import (
     format_ttl,
     parse_ttl,
 )
-from elle.mobile.models import DeviceStatus, Elevation, MobileRole, PairedDevice
+from elle.mobile.models import DeviceStatus, MobileRole, PairedDevice
 from elle.mobile.store import MobileStore
 
 
