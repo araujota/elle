@@ -22,25 +22,24 @@ exclude:
   - README.md
   - node_modules
   - vendor
+  - api
 
 # Navigation
 nav:
   - title: Home
     url: /
     icon: home
-  - title: Quick Start
-    url: /install
+  - title: Installation
+    url: https://github.com/araujota/elle/wiki/Installation
     icon: rocket_launch
-  - title: Documentation
-    url: /docs
+  - title: Wiki
+    url: https://github.com/araujota/elle/wiki
     icon: menu_book
-  - title: Hardware
-    url: /docs/hardware
-    icon: memory
 
 # GitHub
 github_repo: https://github.com/araujota/elle
 github_sponsor: https://github.com/sponsors/araujota
+github_wiki: https://github.com/araujota/elle/wiki
 
 # Defaults
 defaults:

@@ -481,6 +481,7 @@ class ElledDaemon:
                 )
 
                 if not events:
+                    await asyncio.sleep(0.05)
                     continue
 
                 # Store events (uses connection pool internally)
