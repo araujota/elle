@@ -774,9 +774,7 @@ class TestApplyAugeas:
     async def test_apply_augeas(self, tmp_path):
         ctrl = self._make_controller()
         mock_engine = MagicMock()
-        mock_engine.get_changes.return_value = [
-            AugeasChange(path="/p", old_value="o", new_value="n", operation="set")
-        ]
+        mock_engine.get_changes.return_value = [AugeasChange(path="/p", old_value="o", new_value="n", operation="set")]
 
         with patch("elle.ops.augeas.engine.AugeasEngine", return_value=mock_engine):
             req = AugeasEditRequest(
@@ -843,10 +841,13 @@ class TestExecuteIncidentRecording:
             mock_val.return_value = MagicMock(valid=True, output="ok", error=None)
 
             # Force ImportError for incident store
-            with patch.dict("sys.modules", {
-                "elle.daemon.incidents.semantic_diff": None,
-                "elle.daemon.incidents.store": None,
-            }):
+            with patch.dict(
+                "sys.modules",
+                {
+                    "elle.daemon.incidents.semantic_diff": None,
+                    "elle.daemon.incidents.store": None,
+                },
+            ):
                 req = AugeasEditRequest(
                     file_path=str(f),
                     description="test",
@@ -881,10 +882,13 @@ class TestExecuteIncidentRecording:
             mock_store.append_action.side_effect = RuntimeError("store error")
             mock_semantic = MagicMock()
             with (
-                patch.dict("sys.modules", {
-                    "elle.daemon.incidents.store": mock_store,
-                    "elle.daemon.incidents.semantic_diff": mock_semantic,
-                }),
+                patch.dict(
+                    "sys.modules",
+                    {
+                        "elle.daemon.incidents.store": mock_store,
+                        "elle.daemon.incidents.semantic_diff": mock_semantic,
+                    },
+                ),
             ):
                 req = AugeasEditRequest(
                     file_path=str(f),

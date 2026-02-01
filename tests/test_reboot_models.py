@@ -325,12 +325,8 @@ class TestFailureDiagnostics:
             intent_reason_detail="Security CVE patch",
             commands_before_reboot=("apt update", "apt upgrade"),
             config_changes=("/etc/default/grub",),
-            failed_checks=(
-                {"check_type": "command", "check_command": "uname -r", "stderr": "wrong version"},
-            ),
-            passed_checks=(
-                {"check_type": "service_active", "check_command": "ssh"},
-            ),
+            failed_checks=({"check_type": "command", "check_command": "uname -r", "stderr": "wrong version"},),
+            passed_checks=({"check_type": "service_active", "check_command": "ssh"},),
             kernel_version="6.8.0-generic",
             previous_kernel="6.5.0-generic",
             boot_mode="UEFI",
@@ -395,9 +391,7 @@ class TestFailureDiagnostics:
 
     def test_to_llm_context_with_failed_check_no_stderr(self):
         diag = self._make_diagnostics(
-            failed_checks=(
-                {"check_type": "service_active", "check_command": "nginx"},
-            ),
+            failed_checks=({"check_type": "service_active", "check_command": "nginx"},),
         )
         ctx = diag.to_llm_context()
         assert "Failed Verification Checks" in ctx

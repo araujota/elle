@@ -67,9 +67,7 @@ class TestOllamaResponse:
         assert resp.duration_ms is None
 
     def test_duration_ms_zero(self) -> None:
-        resp = OllamaResponse(
-            content="", model="m", done=True, total_duration_ns=0
-        )
+        resp = OllamaResponse(content="", model="m", done=True, total_duration_ns=0)
         assert resp.duration_ms == 0.0
 
 
@@ -271,7 +269,8 @@ class TestOllamaClientGenerate:
         client._client.post.return_value = mock_resp
 
         client.generate(
-            "m", "prompt",
+            "m",
+            "prompt",
             max_tokens=500,
             temperature=0.9,
             keep_alive="1h",
@@ -333,7 +332,9 @@ class TestOllamaClientGenerateJson:
         client = OllamaClient()
         bad_resp = OllamaResponse(content="not json", model="m", done=True)
         good_resp = OllamaResponse(
-            content=json.dumps({"ok": True}), model="m", done=True,
+            content=json.dumps({"ok": True}),
+            model="m",
+            done=True,
         )
         with patch.object(client, "generate", side_effect=[bad_resp, good_resp]):
             result = client.generate_json("m", "prompt")
@@ -362,7 +363,8 @@ class TestOllamaClientGenerateJson:
             return_value=OllamaResponse(content=json_str, model="m", done=True),
         ) as mock_gen:
             client.generate_json(
-                "m", "prompt",
+                "m",
+                "prompt",
                 system="sys",
                 max_tokens=200,
                 temperature=0.3,
@@ -370,7 +372,8 @@ class TestOllamaClientGenerateJson:
                 num_ctx=16384,
             )
         mock_gen.assert_called_once_with(
-            "m", "prompt",
+            "m",
+            "prompt",
             system="sys",
             json_mode=True,
             max_tokens=200,

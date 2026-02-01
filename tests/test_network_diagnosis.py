@@ -840,8 +840,7 @@ class TestCheckPing:
     def test_successful_ping(self, mock_run):
         mock_run.return_value = (
             0,
-            "PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data.\n"
-            "64 bytes from 8.8.8.8: icmp_seq=1 ttl=64 time=12.3 ms\n",
+            "PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data.\n64 bytes from 8.8.8.8: icmp_seq=1 ttl=64 time=12.3 ms\n",
             "",
         )
         result = _check_ping("8.8.8.8")
@@ -930,19 +929,15 @@ class TestDiagnoseConnectivityExtended:
     @patch("elle.cli.network.diagnosis._check_route")
     @patch("elle.cli.network.diagnosis._check_dns")
     def test_firewall_failure_adds_suggestion_with_port(self, mock_dns, mock_route, mock_fw):
-        mock_dns.return_value = ConnectivityCheck(
-            name="DNS", passed=True, result="OK", details={"ips": ["1.2.3.4"]}
-        )
-        mock_route.return_value = ConnectivityCheck(
-            name="Route", passed=True, result="OK", details={}
-        )
-        mock_fw.return_value = ConnectivityCheck(
-            name="Firewall", passed=False, result="Blocked", details={}
-        )
+        mock_dns.return_value = ConnectivityCheck(name="DNS", passed=True, result="OK", details={"ips": ["1.2.3.4"]})
+        mock_route.return_value = ConnectivityCheck(name="Route", passed=True, result="OK", details={})
+        mock_fw.return_value = ConnectivityCheck(name="Firewall", passed=False, result="Blocked", details={})
         # Mock the TCP check to also fail
         with patch("elle.cli.network.diagnosis._check_tcp_connection") as mock_tcp:
             mock_tcp.return_value = ConnectivityCheck(
-                name="TCP", passed=False, result="Failed",
+                name="TCP",
+                passed=False,
+                result="Failed",
                 details={"error_code": 110, "target": "1.2.3.4", "port": 443},
             )
             diagnosis = diagnose_connectivity("example.com", port=443)
@@ -953,19 +948,11 @@ class TestDiagnoseConnectivityExtended:
     @patch("elle.cli.network.diagnosis._check_route")
     @patch("elle.cli.network.diagnosis._check_dns")
     def test_firewall_failure_adds_suggestion_without_port(self, mock_dns, mock_route, mock_fw):
-        mock_dns.return_value = ConnectivityCheck(
-            name="DNS", passed=True, result="OK", details={"ips": ["1.2.3.4"]}
-        )
-        mock_route.return_value = ConnectivityCheck(
-            name="Route", passed=True, result="OK", details={}
-        )
-        mock_fw.return_value = ConnectivityCheck(
-            name="Firewall", passed=False, result="Blocked", details={}
-        )
+        mock_dns.return_value = ConnectivityCheck(name="DNS", passed=True, result="OK", details={"ips": ["1.2.3.4"]})
+        mock_route.return_value = ConnectivityCheck(name="Route", passed=True, result="OK", details={})
+        mock_fw.return_value = ConnectivityCheck(name="Firewall", passed=False, result="Blocked", details={})
         with patch("elle.cli.network.diagnosis._check_ping") as mock_ping:
-            mock_ping.return_value = ConnectivityCheck(
-                name="Ping", passed=False, result="Failed", details={}
-            )
+            mock_ping.return_value = ConnectivityCheck(name="Ping", passed=False, result="Failed", details={})
             diagnosis = diagnose_connectivity("example.com")
         assert any("ufw status verbose" in s for s in diagnosis.suggestions)
 
@@ -975,22 +962,24 @@ class TestDiagnoseConnectivityExtended:
     @patch("elle.cli.network.diagnosis._check_dns")
     def test_tcp_refused_localhost(self, mock_dns, mock_route, mock_fw, mock_tcp):
         mock_dns.return_value = ConnectivityCheck(
-            name="DNS", passed=True, result="OK",
+            name="DNS",
+            passed=True,
+            result="OK",
             details={"ips": ["127.0.0.1"]},
         )
-        mock_route.return_value = ConnectivityCheck(
-            name="Route", passed=True, result="OK", details={}
-        )
-        mock_fw.return_value = ConnectivityCheck(
-            name="Firewall", passed=True, result="OK", details={}
-        )
+        mock_route.return_value = ConnectivityCheck(name="Route", passed=True, result="OK", details={})
+        mock_fw.return_value = ConnectivityCheck(name="Firewall", passed=True, result="OK", details={})
         mock_tcp.return_value = ConnectivityCheck(
-            name="TCP", passed=False, result="Refused",
+            name="TCP",
+            passed=False,
+            result="Refused",
             details={"error_code": 111, "target": "127.0.0.1", "port": 8080},
         )
         with patch("elle.cli.network.diagnosis._check_listening") as mock_listen:
             mock_listen.return_value = ConnectivityCheck(
-                name="Local Port", passed=False, result="Nothing listening",
+                name="Local Port",
+                passed=False,
+                result="Nothing listening",
                 details={"listening": False},
             )
             diagnosis = diagnose_connectivity("127.0.0.1", port=8080)
@@ -1004,17 +993,17 @@ class TestDiagnoseConnectivityExtended:
     @patch("elle.cli.network.diagnosis._check_dns")
     def test_tcp_refused_remote(self, mock_dns, mock_route, mock_fw, mock_tcp):
         mock_dns.return_value = ConnectivityCheck(
-            name="DNS", passed=True, result="OK",
+            name="DNS",
+            passed=True,
+            result="OK",
             details={"ips": ["8.8.8.8"]},
         )
-        mock_route.return_value = ConnectivityCheck(
-            name="Route", passed=True, result="OK", details={}
-        )
-        mock_fw.return_value = ConnectivityCheck(
-            name="Firewall", passed=True, result="OK", details={}
-        )
+        mock_route.return_value = ConnectivityCheck(name="Route", passed=True, result="OK", details={})
+        mock_fw.return_value = ConnectivityCheck(name="Firewall", passed=True, result="OK", details={})
         mock_tcp.return_value = ConnectivityCheck(
-            name="TCP", passed=False, result="Refused",
+            name="TCP",
+            passed=False,
+            result="Refused",
             details={"error_code": 111, "target": "8.8.8.8", "port": 80},
         )
         diagnosis = diagnose_connectivity("8.8.8.8", port=80)
@@ -1026,17 +1015,13 @@ class TestDiagnoseConnectivityExtended:
     @patch("elle.cli.network.diagnosis._check_route")
     @patch("elle.cli.network.diagnosis._check_dns")
     def test_tcp_timeout_error_code(self, mock_dns, mock_route, mock_fw, mock_tcp):
-        mock_dns.return_value = ConnectivityCheck(
-            name="DNS", passed=True, result="OK", details={"ips": ["8.8.8.8"]}
-        )
-        mock_route.return_value = ConnectivityCheck(
-            name="Route", passed=True, result="OK", details={}
-        )
-        mock_fw.return_value = ConnectivityCheck(
-            name="Firewall", passed=True, result="OK", details={}
-        )
+        mock_dns.return_value = ConnectivityCheck(name="DNS", passed=True, result="OK", details={"ips": ["8.8.8.8"]})
+        mock_route.return_value = ConnectivityCheck(name="Route", passed=True, result="OK", details={})
+        mock_fw.return_value = ConnectivityCheck(name="Firewall", passed=True, result="OK", details={})
         mock_tcp.return_value = ConnectivityCheck(
-            name="TCP", passed=False, result="Timed out",
+            name="TCP",
+            passed=False,
+            result="Timed out",
             details={"error_code": 110},
         )
         diagnosis = diagnose_connectivity("8.8.8.8", port=443)
@@ -1047,17 +1032,13 @@ class TestDiagnoseConnectivityExtended:
     @patch("elle.cli.network.diagnosis._check_route")
     @patch("elle.cli.network.diagnosis._check_dns")
     def test_tcp_no_route_error_code(self, mock_dns, mock_route, mock_fw, mock_tcp):
-        mock_dns.return_value = ConnectivityCheck(
-            name="DNS", passed=True, result="OK", details={"ips": ["8.8.8.8"]}
-        )
-        mock_route.return_value = ConnectivityCheck(
-            name="Route", passed=True, result="OK", details={}
-        )
-        mock_fw.return_value = ConnectivityCheck(
-            name="Firewall", passed=True, result="OK", details={}
-        )
+        mock_dns.return_value = ConnectivityCheck(name="DNS", passed=True, result="OK", details={"ips": ["8.8.8.8"]})
+        mock_route.return_value = ConnectivityCheck(name="Route", passed=True, result="OK", details={})
+        mock_fw.return_value = ConnectivityCheck(name="Firewall", passed=True, result="OK", details={})
         mock_tcp.return_value = ConnectivityCheck(
-            name="TCP", passed=False, result="No route",
+            name="TCP",
+            passed=False,
+            result="No route",
             details={"error_code": 113},
         )
         diagnosis = diagnose_connectivity("8.8.8.8", port=443)
@@ -1068,17 +1049,13 @@ class TestDiagnoseConnectivityExtended:
     @patch("elle.cli.network.diagnosis._check_route")
     @patch("elle.cli.network.diagnosis._check_dns")
     def test_tcp_network_unreachable(self, mock_dns, mock_route, mock_fw, mock_tcp):
-        mock_dns.return_value = ConnectivityCheck(
-            name="DNS", passed=True, result="OK", details={"ips": ["8.8.8.8"]}
-        )
-        mock_route.return_value = ConnectivityCheck(
-            name="Route", passed=True, result="OK", details={}
-        )
-        mock_fw.return_value = ConnectivityCheck(
-            name="Firewall", passed=True, result="OK", details={}
-        )
+        mock_dns.return_value = ConnectivityCheck(name="DNS", passed=True, result="OK", details={"ips": ["8.8.8.8"]})
+        mock_route.return_value = ConnectivityCheck(name="Route", passed=True, result="OK", details={})
+        mock_fw.return_value = ConnectivityCheck(name="Firewall", passed=True, result="OK", details={})
         mock_tcp.return_value = ConnectivityCheck(
-            name="TCP", passed=False, result="Unreachable",
+            name="TCP",
+            passed=False,
+            result="Unreachable",
             details={"error_code": 101},
         )
         diagnosis = diagnose_connectivity("8.8.8.8", port=443)
@@ -1089,17 +1066,13 @@ class TestDiagnoseConnectivityExtended:
     @patch("elle.cli.network.diagnosis._check_route")
     @patch("elle.cli.network.diagnosis._check_dns")
     def test_tcp_unknown_error(self, mock_dns, mock_route, mock_fw, mock_tcp):
-        mock_dns.return_value = ConnectivityCheck(
-            name="DNS", passed=True, result="OK", details={"ips": ["8.8.8.8"]}
-        )
-        mock_route.return_value = ConnectivityCheck(
-            name="Route", passed=True, result="OK", details={}
-        )
-        mock_fw.return_value = ConnectivityCheck(
-            name="Firewall", passed=True, result="OK", details={}
-        )
+        mock_dns.return_value = ConnectivityCheck(name="DNS", passed=True, result="OK", details={"ips": ["8.8.8.8"]})
+        mock_route.return_value = ConnectivityCheck(name="Route", passed=True, result="OK", details={})
+        mock_fw.return_value = ConnectivityCheck(name="Firewall", passed=True, result="OK", details={})
         mock_tcp.return_value = ConnectivityCheck(
-            name="TCP", passed=False, result="Unknown",
+            name="TCP",
+            passed=False,
+            result="Unknown",
             details={"error_code": 999},
         )
         diagnosis = diagnose_connectivity("8.8.8.8", port=443)
@@ -1110,17 +1083,13 @@ class TestDiagnoseConnectivityExtended:
     @patch("elle.cli.network.diagnosis._check_route")
     @patch("elle.cli.network.diagnosis._check_dns")
     def test_tcp_no_error_code_in_details(self, mock_dns, mock_route, mock_fw, mock_tcp):
-        mock_dns.return_value = ConnectivityCheck(
-            name="DNS", passed=True, result="OK", details={"ips": ["8.8.8.8"]}
-        )
-        mock_route.return_value = ConnectivityCheck(
-            name="Route", passed=True, result="OK", details={}
-        )
-        mock_fw.return_value = ConnectivityCheck(
-            name="Firewall", passed=True, result="OK", details={}
-        )
+        mock_dns.return_value = ConnectivityCheck(name="DNS", passed=True, result="OK", details={"ips": ["8.8.8.8"]})
+        mock_route.return_value = ConnectivityCheck(name="Route", passed=True, result="OK", details={})
+        mock_fw.return_value = ConnectivityCheck(name="Firewall", passed=True, result="OK", details={})
         mock_tcp.return_value = ConnectivityCheck(
-            name="TCP", passed=False, result="Timeout",
+            name="TCP",
+            passed=False,
+            result="Timeout",
             details={},
         )
         diagnosis = diagnose_connectivity("8.8.8.8", port=443)
@@ -1131,18 +1100,10 @@ class TestDiagnoseConnectivityExtended:
     @patch("elle.cli.network.diagnosis._check_route")
     @patch("elle.cli.network.diagnosis._check_dns")
     def test_ping_success_no_port(self, mock_dns, mock_route, mock_fw, mock_ping):
-        mock_dns.return_value = ConnectivityCheck(
-            name="DNS", passed=True, result="OK", details={"ips": ["8.8.8.8"]}
-        )
-        mock_route.return_value = ConnectivityCheck(
-            name="Route", passed=True, result="OK", details={}
-        )
-        mock_fw.return_value = ConnectivityCheck(
-            name="Firewall", passed=True, result="OK", details={}
-        )
-        mock_ping.return_value = ConnectivityCheck(
-            name="Ping", passed=True, result="OK (10ms)", details={}
-        )
+        mock_dns.return_value = ConnectivityCheck(name="DNS", passed=True, result="OK", details={"ips": ["8.8.8.8"]})
+        mock_route.return_value = ConnectivityCheck(name="Route", passed=True, result="OK", details={})
+        mock_fw.return_value = ConnectivityCheck(name="Firewall", passed=True, result="OK", details={})
+        mock_ping.return_value = ConnectivityCheck(name="Ping", passed=True, result="OK (10ms)", details={})
         diagnosis = diagnose_connectivity("8.8.8.8")
         assert diagnosis.reachable
         assert "reachable" in diagnosis.summary
@@ -1152,18 +1113,10 @@ class TestDiagnoseConnectivityExtended:
     @patch("elle.cli.network.diagnosis._check_route")
     @patch("elle.cli.network.diagnosis._check_dns")
     def test_ping_failure_no_port(self, mock_dns, mock_route, mock_fw, mock_ping):
-        mock_dns.return_value = ConnectivityCheck(
-            name="DNS", passed=True, result="OK", details={"ips": ["8.8.8.8"]}
-        )
-        mock_route.return_value = ConnectivityCheck(
-            name="Route", passed=True, result="OK", details={}
-        )
-        mock_fw.return_value = ConnectivityCheck(
-            name="Firewall", passed=True, result="OK", details={}
-        )
-        mock_ping.return_value = ConnectivityCheck(
-            name="Ping", passed=False, result="No response", details={}
-        )
+        mock_dns.return_value = ConnectivityCheck(name="DNS", passed=True, result="OK", details={"ips": ["8.8.8.8"]})
+        mock_route.return_value = ConnectivityCheck(name="Route", passed=True, result="OK", details={})
+        mock_fw.return_value = ConnectivityCheck(name="Firewall", passed=True, result="OK", details={})
+        mock_ping.return_value = ConnectivityCheck(name="Ping", passed=False, result="No response", details={})
         diagnosis = diagnose_connectivity("8.8.8.8")
         assert not diagnosis.reachable
         assert diagnosis.likely_cause == "Host not responding to ping"
@@ -1174,18 +1127,18 @@ class TestDiagnoseConnectivityExtended:
     @patch("elle.cli.network.diagnosis._check_route")
     @patch("elle.cli.network.diagnosis._check_dns")
     def test_failure_summary_includes_suggestions(self, mock_dns, mock_route, mock_fw, mock_tcp):
-        mock_dns.return_value = ConnectivityCheck(
-            name="DNS", passed=True, result="OK", details={"ips": ["8.8.8.8"]}
-        )
-        mock_route.return_value = ConnectivityCheck(
-            name="Route", passed=True, result="OK", details={}
-        )
+        mock_dns.return_value = ConnectivityCheck(name="DNS", passed=True, result="OK", details={"ips": ["8.8.8.8"]})
+        mock_route.return_value = ConnectivityCheck(name="Route", passed=True, result="OK", details={})
         mock_fw.return_value = ConnectivityCheck(
-            name="Firewall", passed=False, result="Blocked",
+            name="Firewall",
+            passed=False,
+            result="Blocked",
             details={},
         )
         mock_tcp.return_value = ConnectivityCheck(
-            name="TCP", passed=False, result="Refused",
+            name="TCP",
+            passed=False,
+            result="Refused",
             details={"error_code": 111},
         )
         diagnosis = diagnose_connectivity("example.com", port=443)
@@ -1198,13 +1151,13 @@ class TestDiagnoseConnectivityExtended:
     @patch("elle.cli.network.diagnosis._check_dns")
     def test_dns_resolves_with_is_ip_target(self, mock_dns):
         mock_dns.return_value = ConnectivityCheck(
-            name="DNS", passed=True, result="OK",
+            name="DNS",
+            passed=True,
+            result="OK",
             details={"ip": "10.0.0.1", "is_ip": True},
         )
         with patch("elle.cli.network.diagnosis._check_route") as mock_route:
-            mock_route.return_value = ConnectivityCheck(
-                name="Route", passed=False, result="No route", details={}
-            )
+            mock_route.return_value = ConnectivityCheck(name="Route", passed=False, result="No route", details={})
             diagnosis = diagnose_connectivity("10.0.0.1")
         # When ips not in details, target itself is used
         assert not diagnosis.reachable
@@ -1214,26 +1167,22 @@ class TestDiagnoseConnectivityExtended:
     @patch("elle.cli.network.diagnosis._check_firewall")
     @patch("elle.cli.network.diagnosis._check_route")
     @patch("elle.cli.network.diagnosis._check_dns")
-    def test_localhost_with_port_checks_listening(
-        self, mock_dns, mock_route, mock_fw, mock_listen, mock_tcp
-    ):
+    def test_localhost_with_port_checks_listening(self, mock_dns, mock_route, mock_fw, mock_listen, mock_tcp):
         mock_dns.return_value = ConnectivityCheck(
-            name="DNS", passed=True, result="OK",
+            name="DNS",
+            passed=True,
+            result="OK",
             details={"ips": ["127.0.0.1"]},
         )
-        mock_route.return_value = ConnectivityCheck(
-            name="Route", passed=True, result="OK", details={}
-        )
-        mock_fw.return_value = ConnectivityCheck(
-            name="Firewall", passed=True, result="OK", details={}
-        )
+        mock_route.return_value = ConnectivityCheck(name="Route", passed=True, result="OK", details={})
+        mock_fw.return_value = ConnectivityCheck(name="Firewall", passed=True, result="OK", details={})
         mock_listen.return_value = ConnectivityCheck(
-            name="Local Port", passed=True, result="Listening",
+            name="Local Port",
+            passed=True,
+            result="Listening",
             details={"listening": True},
         )
-        mock_tcp.return_value = ConnectivityCheck(
-            name="TCP", passed=True, result="Connected", details={}
-        )
+        mock_tcp.return_value = ConnectivityCheck(name="TCP", passed=True, result="Connected", details={})
         diagnosis = diagnose_connectivity("127.0.0.1", port=8080)
         assert diagnosis.reachable
         mock_listen.assert_called_once_with(8080)

@@ -992,7 +992,18 @@ class TestLearnPackageInternal:
         mock_validation = MagicMock()
         mock_validation.overall_passed = True
 
-        caps_json = {"capabilities": [{"name": "nginx.restart", "description": "x", "risk_level": "low", "command_template": "cmd", "source_command": "nginx", "side_effects": []}]}
+        caps_json = {
+            "capabilities": [
+                {
+                    "name": "nginx.restart",
+                    "description": "x",
+                    "risk_level": "low",
+                    "command_template": "cmd",
+                    "source_command": "nginx",
+                    "side_effects": [],
+                }
+            ]
+        }
 
         with (
             patch("elle.capabilities.autogen.discover_binary", return_value=None),
@@ -1033,7 +1044,18 @@ class TestLearnPackageInternal:
         mock_validation.overall_passed = False
         mock_validation.stages = [mock_stage]
 
-        caps_json = {"capabilities": [{"name": "nginx.restart", "description": "x", "risk_level": "low", "command_template": "cmd", "source_command": "nginx", "side_effects": []}]}
+        caps_json = {
+            "capabilities": [
+                {
+                    "name": "nginx.restart",
+                    "description": "x",
+                    "risk_level": "low",
+                    "command_template": "cmd",
+                    "source_command": "nginx",
+                    "side_effects": [],
+                }
+            ]
+        }
 
         with (
             patch("elle.capabilities.autogen.discover_binary", return_value=None),
@@ -1067,7 +1089,18 @@ class TestLearnPackageInternal:
         mock_spec = MagicMock()
         mock_spec.name = "nginx.restart"
 
-        caps_json = {"capabilities": [{"name": "nginx.restart", "description": "x", "risk_level": "low", "command_template": "cmd", "source_command": "nginx", "side_effects": []}]}
+        caps_json = {
+            "capabilities": [
+                {
+                    "name": "nginx.restart",
+                    "description": "x",
+                    "risk_level": "low",
+                    "command_template": "cmd",
+                    "source_command": "nginx",
+                    "side_effects": [],
+                }
+            ]
+        }
 
         with (
             patch("elle.capabilities.autogen.discover_binary", return_value=None),
@@ -1098,7 +1131,18 @@ class TestLearnPackageInternal:
         mock_composer = MagicMock()
         mock_composer.compose.return_value = "prompt"
 
-        caps_json = {"capabilities": [{"name": "nginx.restart", "description": "x", "risk_level": "low", "command_template": "cmd", "source_command": "nginx", "side_effects": []}]}
+        caps_json = {
+            "capabilities": [
+                {
+                    "name": "nginx.restart",
+                    "description": "x",
+                    "risk_level": "low",
+                    "command_template": "cmd",
+                    "source_command": "nginx",
+                    "side_effects": [],
+                }
+            ]
+        }
 
         with (
             patch("elle.capabilities.autogen.discover_binary", return_value=None),
@@ -1142,7 +1186,18 @@ class TestLearnPackageInternal:
         mock_store = MagicMock()
         mock_store.save.side_effect = RuntimeError("DB full")
 
-        caps_json = {"capabilities": [{"name": "nginx.restart", "description": "x", "risk_level": "low", "command_template": "cmd", "source_command": "nginx", "side_effects": []}]}
+        caps_json = {
+            "capabilities": [
+                {
+                    "name": "nginx.restart",
+                    "description": "x",
+                    "risk_level": "low",
+                    "command_template": "cmd",
+                    "source_command": "nginx",
+                    "side_effects": [],
+                }
+            ]
+        }
 
         with (
             patch("elle.capabilities.autogen.discover_binary", return_value=mock_binary),
@@ -1192,7 +1247,18 @@ class TestLearnPackageInternal:
 
         mock_store = MagicMock()
 
-        caps_json = {"capabilities": [{"name": "nginx.restart", "description": "x", "risk_level": "low", "command_template": "cmd", "source_command": "nginx", "side_effects": []}]}
+        caps_json = {
+            "capabilities": [
+                {
+                    "name": "nginx.restart",
+                    "description": "x",
+                    "risk_level": "low",
+                    "command_template": "cmd",
+                    "source_command": "nginx",
+                    "side_effects": [],
+                }
+            ]
+        }
 
         with (
             patch("elle.capabilities.autogen.discover_binary", return_value=mock_binary),

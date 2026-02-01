@@ -198,10 +198,7 @@ class TestDropAllTables:
 
         # Should drop: function_state, execution_history, reactive_functions, _meta
         assert conn.execute.call_count == 4
-        dropped = [
-            conn.execute.call_args_list[i][0][0]
-            for i in range(4)
-        ]
+        dropped = [conn.execute.call_args_list[i][0][0] for i in range(4)]
         assert any("function_state" in d for d in dropped)
         assert any("execution_history" in d for d in dropped)
         assert any("reactive_functions" in d for d in dropped)

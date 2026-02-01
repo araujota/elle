@@ -721,10 +721,13 @@ class TestExecuteForecastPlan:
         mock_client = MagicMock()
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=False)
-        with patch.dict("sys.modules", {"httpx": MagicMock()}) as _, patch(
-            "elle.daemon.notifications.service.httpx",
-            create=True,
-        ) as mock_httpx:
+        with (
+            patch.dict("sys.modules", {"httpx": MagicMock()}) as _,
+            patch(
+                "elle.daemon.notifications.service.httpx",
+                create=True,
+            ) as mock_httpx,
+        ):
             mock_httpx.Client.return_value = mock_client
             # Should not raise
             _execute_forecast_plan("inc-123")
@@ -785,7 +788,6 @@ class TestUrgencyToLibnotify:
 
 class TestSendWithLibnotify:
     def test_libnotify_success_used(self):
-
         with (
             patch("elle.daemon.notifications.service._gi_available", True),
             patch("elle.daemon.notifications.service._push_to_mobile"),

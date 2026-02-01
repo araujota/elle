@@ -444,7 +444,11 @@ class TestNginxValidatorValidate:
         assert validator.name == "nginx"
         assert "nginx" in validator.domains
         with patch.object(validator, "_run_command") as mock_run:
-            mock_run.return_value = (0, "", "nginx: the configuration file syntax is ok\nnginx: configuration file test is successful")
+            mock_run.return_value = (
+                0,
+                "",
+                "nginx: the configuration file syntax is ok\nnginx: configuration file test is successful",
+            )
             result = await validator.validate("/etc/nginx/nginx.conf")
             assert result.valid is True
 
@@ -671,9 +675,7 @@ class TestValidateConfig:
         """validate_config should dispatch to the correct validator."""
         with patch("elle.ops.augeas.validators.get_validator") as mock_get:
             mock_validator = MagicMock()
-            mock_validator.validate = MagicMock(
-                return_value=ValidationResult(valid=True, validator="mock")
-            )
+            mock_validator.validate = MagicMock(return_value=ValidationResult(valid=True, validator="mock"))
             # Make validate a coroutine
 
             async def mock_validate(fp):

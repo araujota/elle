@@ -163,7 +163,10 @@ class TestFallbackProviderGenerate:
     """Tests for FallbackProvider.generate()."""
 
     _gen_kwargs = {
-        "model": "m", "max_tokens": 100, "temperature": 0.5, "timeout": 30.0,
+        "model": "m",
+        "max_tokens": 100,
+        "temperature": 0.5,
+        "timeout": 30.0,
     }
 
     def test_primary_success(self) -> None:
@@ -274,7 +277,10 @@ class TestFallbackProviderChat:
     """Tests for FallbackProvider.chat()."""
 
     _chat_kwargs = {
-        "model": "m", "max_tokens": 100, "temperature": 0.5, "timeout": 30.0,
+        "model": "m",
+        "max_tokens": 100,
+        "temperature": 0.5,
+        "timeout": 30.0,
     }
     _msgs: list[dict[str, Any]] = [{"role": "user", "content": "hi"}]
 
@@ -322,7 +328,10 @@ class TestFallbackProviderStreamChat:
     """Tests for FallbackProvider.stream_chat()."""
 
     _stream_kwargs = {
-        "model": "m", "max_tokens": 100, "temperature": 0.5, "timeout": 30.0,
+        "model": "m",
+        "max_tokens": 100,
+        "temperature": 0.5,
+        "timeout": 30.0,
     }
     _msgs: list[dict[str, Any]] = [{"role": "user", "content": "hi"}]
 

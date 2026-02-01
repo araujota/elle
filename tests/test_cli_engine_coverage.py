@@ -1926,7 +1926,7 @@ class TestPolicyModuleImportError:
             # Simplest approach: manually test the branch by triggering import failure
             # Reset to None and use a side_effect on __import__
             mod._policy_module = None
-            original_import = __builtins__.__import__ if hasattr(__builtins__, '__import__') else __import__
+            original_import = __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
 
             def failing_import(name, *args, **kwargs):
                 if name == "elle.policy" or (name == "elle" and args and args[0] and "policy" in str(args[0])):
@@ -3251,7 +3251,6 @@ class TestTracedCommand:
         assert "not available" in result.output.lower()
 
     def test_trace_start_trace_fails(self) -> None:
-
         engine = Engine(classifier=MagicMock())
         session = _make_session()
 
@@ -3531,7 +3530,8 @@ class TestExplainCommandWithTrace:
                 {"elle.daemon.telemetry.ebpf.syscall_explainer": explainer_mod},
             ),
             patch.object(
-                type(session), "has_trace",
+                type(session),
+                "has_trace",
                 new_callable=lambda: property(lambda self: True),
             ),
         ):
@@ -3748,9 +3748,7 @@ class TestManReindex:
 
         mock_client = MagicMock()
         mock_client.is_daemon_available = AsyncMock(return_value=True)
-        mock_client.trigger_manvault_reindex = AsyncMock(
-            return_value=(True, "Started")
-        )
+        mock_client.trigger_manvault_reindex = AsyncMock(return_value=(True, "Started"))
 
         daemon_client_mod = MagicMock()
         daemon_client_mod.get_daemon_client.return_value = mock_client

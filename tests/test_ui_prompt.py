@@ -581,9 +581,7 @@ class TestPromptEnvVarEdge:
         """When sensitive with saved value and empty input, uses saved."""
         prompt = EllePrompt()
         with patch("getpass.getpass", return_value=""):
-            value, from_saved = prompt.prompt_env_var(
-                "MY_SECRET", sensitive=True, saved_value="old_secret"
-            )
+            value, from_saved = prompt.prompt_env_var("MY_SECRET", sensitive=True, saved_value="old_secret")
         assert value == "old_secret"
         assert from_saved is True
 

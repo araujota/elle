@@ -383,11 +383,14 @@ class TestDiscoverAllBinaries:
 
         mock_scan.return_value = ["tool"]
         mock_discover.return_value = InstalledBinary(
-            name="tool", path="/usr/bin/tool", man_available=False,
+            name="tool",
+            path="/usr/bin/tool",
+            man_available=False,
         )
 
         result = discover_all_binaries(
-            directories=["/usr/bin"], require_man=False,
+            directories=["/usr/bin"],
+            require_man=False,
         )
         assert len(result.binaries) == 1
 
@@ -400,12 +403,13 @@ class TestDiscoverAllBinaries:
 
         mock_scan.return_value = ["a", "b", "c", "d"]
         mock_discover.side_effect = [
-            InstalledBinary(name=n, path=f"/usr/bin/{n}", man_available=True)
-            for n in ["a", "b", "c", "d"]
+            InstalledBinary(name=n, path=f"/usr/bin/{n}", man_available=True) for n in ["a", "b", "c", "d"]
         ]
 
         result = discover_all_binaries(
-            directories=["/usr/bin"], require_man=True, limit=2,
+            directories=["/usr/bin"],
+            require_man=True,
+            limit=2,
         )
         assert len(result.binaries) == 2
 
@@ -419,11 +423,14 @@ class TestDiscoverAllBinaries:
         # Both dirs have "ls"
         mock_scan.side_effect = [["ls"], ["ls"]]
         mock_discover.return_value = InstalledBinary(
-            name="ls", path="/usr/bin/ls", man_available=True,
+            name="ls",
+            path="/usr/bin/ls",
+            man_available=True,
         )
 
         result = discover_all_binaries(
-            directories=["/usr/bin", "/bin"], require_man=True,
+            directories=["/usr/bin", "/bin"],
+            require_man=True,
         )
         assert len(result.binaries) == 1
         # discover_binary called once due to dedup
@@ -439,7 +446,8 @@ class TestDiscoverAllBinaries:
         mock_discover.return_value = None
 
         result = discover_all_binaries(
-            directories=["/usr/bin"], require_man=False,
+            directories=["/usr/bin"],
+            require_man=False,
         )
         assert len(result.binaries) == 0
         assert result.total_scanned == 1

@@ -879,8 +879,7 @@ class TestLoadSetupStateTomlFallback:
     def test_tomllib_import_error_falls_back_to_toml(self, tmp_config):
         _, config_file, _ = tmp_config
         config_file.write_text(
-            '[setup]\ncompleted = true\nversion = "1.0.0"\n\n'
-            "[setup.preferences]\nsafety_level = \"standard\"\n"
+            '[setup]\ncompleted = true\nversion = "1.0.0"\n\n[setup.preferences]\nsafety_level = "standard"\n'
         )
 
         with patch("elle.cli.setup.wizard.USER_CONFIG_FILE", config_file):
@@ -1219,9 +1218,7 @@ class TestCheckEnvironmentAdditional:
 
     def test_config_dir_exists_check(self, wizard, mock_console):
         """When config directory already exists."""
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": True, "models": ["m1"]}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": True, "models": ["m1"]})
         wizard._check_telemetryd_running = MagicMock(return_value=True)
         wizard._check_daemon_running = MagicMock(return_value=True)
 
@@ -1233,9 +1230,7 @@ class TestCheckEnvironmentAdditional:
 
     def test_config_dir_does_not_exist(self, wizard, mock_console):
         """When config directory does not exist yet."""
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": True, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": True, "models": []})
         wizard._check_telemetryd_running = MagicMock(return_value=True)
         wizard._check_daemon_running = MagicMock(return_value=True)
 
@@ -1262,9 +1257,7 @@ class TestCheckEnvironmentAdditional:
 
     def test_ollama_installed_not_running_start_failure(self, wizard, mock_console):
         """When Ollama is installed but fails to start."""
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": False, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": False, "models": []})
         wizard._check_telemetryd_running = MagicMock(return_value=False)
         wizard._check_daemon_running = MagicMock(return_value=False)
         wizard._start_ollama = MagicMock(return_value=False)
@@ -1276,9 +1269,7 @@ class TestCheckEnvironmentAdditional:
 
     def test_ollama_installed_user_declines_start(self, wizard, mock_console):
         """User declines to start Ollama when it is installed."""
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": False, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": False, "models": []})
         wizard._check_telemetryd_running = MagicMock(return_value=False)
         wizard._check_daemon_running = MagicMock(return_value=False)
         # First confirm = decline start, second = continue without
@@ -1289,17 +1280,11 @@ class TestCheckEnvironmentAdditional:
 
     def test_daemons_not_running_user_starts_them(self, wizard, mock_console):
         """When daemons not running and Ollama is running, user starts daemons."""
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": True, "models": ["m1"]}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": True, "models": ["m1"]})
         wizard._check_telemetryd_running = MagicMock(return_value=False)
         wizard._check_daemon_running = MagicMock(return_value=False)
-        wizard._start_telemetryd = MagicMock(
-            return_value={"success": True, "method": "systemd", "error": None}
-        )
-        wizard._start_daemon = MagicMock(
-            return_value={"success": True, "method": "systemd", "error": None}
-        )
+        wizard._start_telemetryd = MagicMock(return_value={"success": True, "method": "systemd", "error": None})
+        wizard._start_daemon = MagicMock(return_value={"success": True, "method": "systemd", "error": None})
         wizard.prompt.prompt_confirm.return_value = True
 
         result = wizard._check_environment(can_go_back=False)
@@ -1309,17 +1294,13 @@ class TestCheckEnvironmentAdditional:
 
     def test_daemons_not_running_start_fails(self, wizard, mock_console):
         """When starting daemons fails."""
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": True, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": True, "models": []})
         wizard._check_telemetryd_running = MagicMock(return_value=False)
         wizard._check_daemon_running = MagicMock(return_value=False)
         wizard._start_telemetryd = MagicMock(
             return_value={"success": False, "method": "none", "error": "not available"}
         )
-        wizard._start_daemon = MagicMock(
-            return_value={"success": False, "method": "none", "error": "not available"}
-        )
+        wizard._start_daemon = MagicMock(return_value={"success": False, "method": "none", "error": "not available"})
         wizard.prompt.prompt_confirm.return_value = True
 
         result = wizard._check_environment(can_go_back=False)
@@ -1327,14 +1308,10 @@ class TestCheckEnvironmentAdditional:
 
     def test_only_telemetryd_not_running(self, wizard, mock_console):
         """When only telemetryd is not running and ollama is running."""
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": True, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": True, "models": []})
         wizard._check_telemetryd_running = MagicMock(return_value=False)
         wizard._check_daemon_running = MagicMock(return_value=True)
-        wizard._start_telemetryd = MagicMock(
-            return_value={"success": True, "method": "systemd", "error": None}
-        )
+        wizard._start_telemetryd = MagicMock(return_value={"success": True, "method": "systemd", "error": None})
         wizard.prompt.prompt_confirm.return_value = True
 
         result = wizard._check_environment(can_go_back=False)
@@ -1342,14 +1319,10 @@ class TestCheckEnvironmentAdditional:
 
     def test_only_daemon_not_running(self, wizard, mock_console):
         """When only the Python daemon is not running and ollama is running."""
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": True, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": True, "models": []})
         wizard._check_telemetryd_running = MagicMock(return_value=True)
         wizard._check_daemon_running = MagicMock(return_value=False)
-        wizard._start_daemon = MagicMock(
-            return_value={"success": True, "method": "systemd", "error": None}
-        )
+        wizard._start_daemon = MagicMock(return_value={"success": True, "method": "systemd", "error": None})
         wizard.prompt.prompt_confirm.return_value = True
 
         result = wizard._check_environment(can_go_back=False)
@@ -1357,9 +1330,7 @@ class TestCheckEnvironmentAdditional:
 
     def test_ollama_not_installed_cancel(self, wizard, mock_console):
         """When Ollama is not installed and user cancels."""
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": False, "running": False, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": False, "running": False, "models": []})
         wizard._check_telemetryd_running = MagicMock(return_value=False)
         wizard._check_daemon_running = MagicMock(return_value=False)
         wizard.prompt.prompt_confirm.return_value = False
@@ -1532,9 +1503,7 @@ class TestStartServices:
     def test_all_services_running(self, wizard, mock_console):
         """When all services are already running."""
         wizard.prompt.prompt_confirm.return_value = True
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": True, "models": ["m1"]}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": True, "models": ["m1"]})
         wizard._setup_models = MagicMock(return_value=True)
         wizard._check_telemetryd_running = MagicMock(return_value=True)
         wizard._check_daemon_running = MagicMock(return_value=True)
@@ -1548,13 +1517,9 @@ class TestStartServices:
     def test_ollama_not_installed(self, wizard, mock_console):
         """When Ollama is not installed during service start."""
         wizard.prompt.prompt_confirm.return_value = True
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": False, "running": False, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": False, "running": False, "models": []})
         wizard._check_telemetryd_running = MagicMock(return_value=True)
-        wizard._start_daemon = MagicMock(
-            return_value={"success": True, "method": "systemd", "error": None}
-        )
+        wizard._start_daemon = MagicMock(return_value={"success": True, "method": "systemd", "error": None})
 
         result = wizard._start_services()
         assert result is False
@@ -1562,15 +1527,11 @@ class TestStartServices:
     def test_ollama_installed_start_success(self, wizard, mock_console):
         """When Ollama needs to be started and succeeds."""
         wizard.prompt.prompt_confirm.return_value = True
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": False, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": False, "models": []})
         wizard._start_ollama = MagicMock(return_value=True)
         wizard._setup_models = MagicMock(return_value=True)
         wizard._check_telemetryd_running = MagicMock(return_value=True)
-        wizard._start_daemon = MagicMock(
-            return_value={"success": True, "method": "systemd", "error": None}
-        )
+        wizard._start_daemon = MagicMock(return_value={"success": True, "method": "systemd", "error": None})
 
         result = wizard._start_services()
         assert result is True
@@ -1579,14 +1540,10 @@ class TestStartServices:
     def test_ollama_installed_start_failure(self, wizard, mock_console):
         """When Ollama start fails."""
         wizard.prompt.prompt_confirm.return_value = True
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": False, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": False, "models": []})
         wizard._start_ollama = MagicMock(return_value=False)
         wizard._check_telemetryd_running = MagicMock(return_value=True)
-        wizard._start_daemon = MagicMock(
-            return_value={"success": True, "method": "systemd", "error": None}
-        )
+        wizard._start_daemon = MagicMock(return_value={"success": True, "method": "systemd", "error": None})
 
         result = wizard._start_services()
         assert result is False
@@ -1594,14 +1551,10 @@ class TestStartServices:
     def test_model_setup_failure(self, wizard, mock_console):
         """When model setup fails."""
         wizard.prompt.prompt_confirm.return_value = True
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": True, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": True, "models": []})
         wizard._setup_models = MagicMock(return_value=False)
         wizard._check_telemetryd_running = MagicMock(return_value=True)
-        wizard._start_daemon = MagicMock(
-            return_value={"success": True, "method": "systemd", "error": None}
-        )
+        wizard._start_daemon = MagicMock(return_value={"success": True, "method": "systemd", "error": None})
 
         result = wizard._start_services()
         assert result is False
@@ -1610,13 +1563,9 @@ class TestStartServices:
         """When Ollama is not running, skip model setup."""
         wizard.prompt.prompt_confirm.return_value = True
         # Ollama check returns running=False (and remains that way)
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": False, "running": False, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": False, "running": False, "models": []})
         wizard._check_telemetryd_running = MagicMock(return_value=True)
-        wizard._start_daemon = MagicMock(
-            return_value={"success": True, "method": "systemd", "error": None}
-        )
+        wizard._start_daemon = MagicMock(return_value={"success": True, "method": "systemd", "error": None})
 
         result = wizard._start_services()
         # Should not call _setup_models since ollama not running
@@ -1625,17 +1574,13 @@ class TestStartServices:
     def test_telemetryd_start_failure(self, wizard, mock_console):
         """When telemetryd fails to start."""
         wizard.prompt.prompt_confirm.return_value = True
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": True, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": True, "models": []})
         wizard._setup_models = MagicMock(return_value=True)
         wizard._check_telemetryd_running = MagicMock(return_value=False)
         wizard._start_telemetryd = MagicMock(
             return_value={"success": False, "method": "none", "error": "not installed"}
         )
-        wizard._start_daemon = MagicMock(
-            return_value={"success": True, "method": "systemd", "error": None}
-        )
+        wizard._start_daemon = MagicMock(return_value={"success": True, "method": "systemd", "error": None})
 
         result = wizard._start_services()
         assert result is False
@@ -1643,17 +1588,11 @@ class TestStartServices:
     def test_telemetryd_start_success(self, wizard, mock_console):
         """When telemetryd starts successfully."""
         wizard.prompt.prompt_confirm.return_value = True
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": True, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": True, "models": []})
         wizard._setup_models = MagicMock(return_value=True)
         wizard._check_telemetryd_running = MagicMock(return_value=False)
-        wizard._start_telemetryd = MagicMock(
-            return_value={"success": True, "method": "systemd", "error": None}
-        )
-        wizard._start_daemon = MagicMock(
-            return_value={"success": True, "method": "systemd", "error": None}
-        )
+        wizard._start_telemetryd = MagicMock(return_value={"success": True, "method": "systemd", "error": None})
+        wizard._start_daemon = MagicMock(return_value={"success": True, "method": "systemd", "error": None})
 
         result = wizard._start_services()
         assert result is True
@@ -1661,14 +1600,10 @@ class TestStartServices:
     def test_daemon_start_failure(self, wizard, mock_console):
         """When daemon fails to start."""
         wizard.prompt.prompt_confirm.return_value = True
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": True, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": True, "models": []})
         wizard._setup_models = MagicMock(return_value=True)
         wizard._check_telemetryd_running = MagicMock(return_value=True)
-        wizard._start_daemon = MagicMock(
-            return_value={"success": False, "method": "none", "error": "not available"}
-        )
+        wizard._start_daemon = MagicMock(return_value={"success": False, "method": "none", "error": "not available"})
 
         result = wizard._start_services()
         assert result is False
@@ -1995,9 +1930,7 @@ class TestSetupModelsAsync:
         """When model warmup fails but model was pulled."""
         from unittest.mock import AsyncMock
 
-        mock_warmup_result = MagicMock(
-            success=False, duration_ms=0, error="warmup failed"
-        )
+        mock_warmup_result = MagicMock(success=False, duration_ms=0, error="warmup failed")
 
         mock_warmup_service = MagicMock()
         mock_warmup_service.list_models = AsyncMock(return_value=["test-model"])
@@ -2019,9 +1952,7 @@ class TestSetupModelsAsync:
         import asyncio as _asyncio
         from unittest.mock import AsyncMock
 
-        mock_warmup_result = MagicMock(
-            success=False, model="test-model", message="Warmup timed out", error="timeout"
-        )
+        mock_warmup_result = MagicMock(success=False, model="test-model", message="Warmup timed out", error="timeout")
 
         mock_warmup_service = MagicMock()
         mock_warmup_service.list_models = AsyncMock(return_value=["test-model"])
@@ -2316,9 +2247,7 @@ class TestStartTelemetryd:
         wizard._check_telemetryd_running = MagicMock(return_value=True)
 
         mock_polkit = MagicMock()
-        mock_polkit.start_service_sync.return_value = MagicMock(
-            success=True, error=None, authorized=True
-        )
+        mock_polkit.start_service_sync.return_value = MagicMock(success=True, error=None, authorized=True)
 
         with (
             patch("subprocess.run", return_value=mock_status),
@@ -2336,9 +2265,7 @@ class TestStartTelemetryd:
         wizard._check_telemetryd_running = MagicMock(return_value=False)
 
         mock_polkit = MagicMock()
-        mock_polkit.start_service_sync.return_value = MagicMock(
-            success=True, error=None, authorized=True
-        )
+        mock_polkit.start_service_sync.return_value = MagicMock(success=True, error=None, authorized=True)
 
         with (
             patch("subprocess.run", return_value=mock_status),
@@ -2373,9 +2300,7 @@ class TestStartTelemetryd:
         mock_status = MagicMock(returncode=3)
 
         mock_polkit = MagicMock()
-        mock_polkit.start_service_sync.return_value = MagicMock(
-            success=False, error="Some error\n", authorized=True
-        )
+        mock_polkit.start_service_sync.return_value = MagicMock(success=False, error="Some error\n", authorized=True)
 
         with (
             patch("subprocess.run", return_value=mock_status),
@@ -2391,9 +2316,7 @@ class TestStartTelemetryd:
         mock_status = MagicMock(returncode=3)
 
         mock_polkit = MagicMock()
-        mock_polkit.start_service_sync.return_value = MagicMock(
-            success=False, error=None, authorized=True
-        )
+        mock_polkit.start_service_sync.return_value = MagicMock(success=False, error=None, authorized=True)
 
         with (
             patch("subprocess.run", return_value=mock_status),
@@ -2496,9 +2419,7 @@ class TestStartDaemon:
         mock_status = MagicMock(returncode=3)
 
         mock_polkit = MagicMock()
-        mock_polkit.start_service_sync.return_value = MagicMock(
-            success=True, error=None, authorized=True
-        )
+        mock_polkit.start_service_sync.return_value = MagicMock(success=True, error=None, authorized=True)
 
         with (
             patch("subprocess.run", return_value=mock_status),
@@ -2514,9 +2435,7 @@ class TestStartDaemon:
         mock_status = MagicMock(returncode=3)
 
         mock_polkit = MagicMock()
-        mock_polkit.start_service_sync.return_value = MagicMock(
-            success=False, error="denied", authorized=False
-        )
+        mock_polkit.start_service_sync.return_value = MagicMock(success=False, error="denied", authorized=False)
 
         with (
             patch("subprocess.run", return_value=mock_status),
@@ -2550,9 +2469,7 @@ class TestStartDaemon:
         mock_status = MagicMock(returncode=3)
 
         mock_polkit = MagicMock()
-        mock_polkit.start_service_sync.return_value = MagicMock(
-            success=False, error=None, authorized=True
-        )
+        mock_polkit.start_service_sync.return_value = MagicMock(success=False, error=None, authorized=True)
 
         with (
             patch("subprocess.run", return_value=mock_status),
@@ -2769,9 +2686,7 @@ class TestShowCompletion:
 
     def test_all_services_running(self, wizard, mock_console):
         """When all services are running at completion."""
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": True, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": True, "models": []})
         wizard._check_daemon_running = MagicMock(return_value=True)
         wizard._check_telemetryd_running = MagicMock(return_value=True)
 
@@ -2781,9 +2696,7 @@ class TestShowCompletion:
 
     def test_no_services_running(self, wizard, mock_console):
         """When no services are running at completion."""
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": False, "running": False, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": False, "running": False, "models": []})
         wizard._check_daemon_running = MagicMock(return_value=False)
         wizard._check_telemetryd_running = MagicMock(return_value=False)
 
@@ -2792,9 +2705,7 @@ class TestShowCompletion:
 
     def test_ollama_installed_not_running(self, wizard, mock_console):
         """When Ollama is installed but not running at completion."""
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": False, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": False, "models": []})
         wizard._check_daemon_running = MagicMock(return_value=True)
         wizard._check_telemetryd_running = MagicMock(return_value=True)
 
@@ -2803,9 +2714,7 @@ class TestShowCompletion:
 
     def test_ollama_not_installed(self, wizard, mock_console):
         """When Ollama is not installed at completion."""
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": False, "running": False, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": False, "running": False, "models": []})
         wizard._check_daemon_running = MagicMock(return_value=True)
         wizard._check_telemetryd_running = MagicMock(return_value=True)
 
@@ -2814,9 +2723,7 @@ class TestShowCompletion:
 
     def test_daemon_not_running(self, wizard, mock_console):
         """When daemon is not running at completion."""
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": True, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": True, "models": []})
         wizard._check_daemon_running = MagicMock(return_value=False)
         wizard._check_telemetryd_running = MagicMock(return_value=True)
 
@@ -2825,9 +2732,7 @@ class TestShowCompletion:
 
     def test_telemetryd_not_running(self, wizard, mock_console):
         """When telemetryd is not running at completion."""
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": True, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": True, "models": []})
         wizard._check_daemon_running = MagicMock(return_value=True)
         wizard._check_telemetryd_running = MagicMock(return_value=False)
 
@@ -2838,9 +2743,7 @@ class TestShowCompletion:
         """When convenient mode is configured and polkit was set up."""
         wizard.prefs.privilege_level = PrivilegeLevel.CONVENIENT
         wizard.prefs.polkit_configured = True
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": True, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": True, "models": []})
         wizard._check_daemon_running = MagicMock(return_value=True)
         wizard._check_telemetryd_running = MagicMock(return_value=True)
 
@@ -2851,9 +2754,7 @@ class TestShowCompletion:
         """When convenient mode but polkit was not configured."""
         wizard.prefs.privilege_level = PrivilegeLevel.CONVENIENT
         wizard.prefs.polkit_configured = False
-        wizard._check_ollama = MagicMock(
-            return_value={"installed": True, "running": True, "models": []}
-        )
+        wizard._check_ollama = MagicMock(return_value={"installed": True, "running": True, "models": []})
         wizard._check_daemon_running = MagicMock(return_value=True)
         wizard._check_telemetryd_running = MagicMock(return_value=True)
 

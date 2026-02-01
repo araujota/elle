@@ -586,12 +586,8 @@ class TestRenderDomainSummary:
             _make_cap_spec(name="file.read", domain="file", risk="none"),
         ]
         mock_reg.return_value.list_all.return_value = caps
-        mock_engine.return_value.store.get_preferences.return_value = _make_prefs_enum(
-            AutonomyLevel.LOW_RISK
-        )
-        mock_engine.return_value.get_autonomy_status.return_value = _make_autonomy_status(
-            can_run=True
-        )
+        mock_engine.return_value.store.get_preferences.return_value = _make_prefs_enum(AutonomyLevel.LOW_RISK)
+        mock_engine.return_value.get_autonomy_status.return_value = _make_autonomy_status(can_run=True)
 
         result = _render_domain_summary()
         assert isinstance(result, str)
@@ -604,9 +600,7 @@ class TestRenderDomainSummary:
         from elle.cli.capabilities_commands import AutonomyLevel, _render_domain_summary
 
         mock_reg.return_value.list_all.return_value = []
-        mock_engine.return_value.store.get_preferences.return_value = _make_prefs_enum(
-            AutonomyLevel.LOW_RISK
-        )
+        mock_engine.return_value.store.get_preferences.return_value = _make_prefs_enum(AutonomyLevel.LOW_RISK)
 
         result = _render_domain_summary()
         assert isinstance(result, str)
@@ -653,9 +647,7 @@ class TestRenderDomainCapabilities:
         mock_reg.return_value.list_by_domain.return_value = caps
 
         stats = _make_exec_stats(total=10, success=9, failed=1)
-        mock_engine.return_value.get_autonomy_status.return_value = _make_autonomy_status(
-            can_run=True, stats=stats
-        )
+        mock_engine.return_value.get_autonomy_status.return_value = _make_autonomy_status(can_run=True, stats=stats)
 
         result = _render_domain_capabilities("service")
         assert isinstance(result, str)
@@ -726,9 +718,7 @@ class TestRenderCapabilityDetail:
             side_effects=(effect,),
         )
         stats = _make_exec_stats(total=0, success=0, failed=0)
-        mock_engine.return_value.get_autonomy_status.return_value = _make_autonomy_status(
-            can_run=False, stats=stats
-        )
+        mock_engine.return_value.get_autonomy_status.return_value = _make_autonomy_status(can_run=False, stats=stats)
 
         result = _render_capability_detail(spec)
         assert isinstance(result, str)

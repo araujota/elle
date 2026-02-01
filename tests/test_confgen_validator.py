@@ -97,10 +97,7 @@ class TestValidatePath:
         v = ConfigValidator()
         r = _result(target_path="/etc/myapp/config.yaml")
         val = v.validate(r)
-        path_errors = [
-            i for i in val.issues
-            if i.severity == "error" and "path" in i.message.lower()
-        ]
+        path_errors = [i for i in val.issues if i.severity == "error" and "path" in i.message.lower()]
         assert len(path_errors) == 0
 
 
@@ -176,10 +173,7 @@ class TestValidateContent:
         )
         val = v.validate(r)
         # Should not have yaml syntax errors
-        syntax_errors = [
-            i for i in val.issues
-            if i.severity == "error" and "syntax" in i.message.lower()
-        ]
+        syntax_errors = [i for i in val.issues if i.severity == "error" and "syntax" in i.message.lower()]
         assert len(syntax_errors) == 0
 
     def test_invalid_json_content(self) -> None:
@@ -192,10 +186,7 @@ class TestValidateContent:
         v = ConfigValidator()
         r = _result(generated_content='{"key": "value"}', file_type="json")
         val = v.validate(r)
-        syntax_errors = [
-            i for i in val.issues
-            if i.severity == "error" and "syntax" in i.message.lower()
-        ]
+        syntax_errors = [i for i in val.issues if i.severity == "error" and "syntax" in i.message.lower()]
         assert len(syntax_errors) == 0
 
     def test_invalid_toml_content(self) -> None:
@@ -211,10 +202,7 @@ class TestValidateContent:
             file_type="toml",
         )
         val = v.validate(r)
-        syntax_errors = [
-            i for i in val.issues
-            if i.severity == "error" and "syntax" in i.message.lower()
-        ]
+        syntax_errors = [i for i in val.issues if i.severity == "error" and "syntax" in i.message.lower()]
         assert len(syntax_errors) == 0
 
 
@@ -269,9 +257,7 @@ class TestValidateDomain:
         mock_handler = MagicMock()
         mock_handler.validate_operations.return_value = ConfigGenValidation(
             valid=True,
-            issues=(
-                ValidationIssue(severity="info", message="Domain check passed"),
-            ),
+            issues=(ValidationIssue(severity="info", message="Domain check passed"),),
         )
         op = _op(value="safe_value")
         r = _result(operations=(op,), domain="general")

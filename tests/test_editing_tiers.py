@@ -1067,7 +1067,7 @@ class TestTier2Structured:
         op = _op(kind="rm", path=".section.key")
         mock_toml = MagicMock()
         mock_toml.loads.return_value = {"section": {"key": "val", "other": 1}}
-        mock_toml.dumps.return_value = '[section]\nother = 1\n'
+        mock_toml.dumps.return_value = "[section]\nother = 1\n"
         with patch.dict("sys.modules", {"toml": mock_toml}):
             result = tier._apply_toml_edit(content, op)
         assert "other" in result
@@ -1214,9 +1214,7 @@ class TestTier2Structured:
             patch.object(
                 tier,
                 "validate_syntax",
-                return_value=ValidationResult(
-                    passed=False, method="json.loads", errors=("syntax error",)
-                ),
+                return_value=ValidationResult(passed=False, method="json.loads", errors=("syntax error",)),
             ),
             patch.dict(
                 "sys.modules",

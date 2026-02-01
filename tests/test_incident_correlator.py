@@ -436,9 +436,7 @@ class TestEntityExtractionExtended:
 
     def test_extract_no_duplicates(self, corr):
         """No duplicate entities in result."""
-        entities = corr._extract_entities(
-            "nginx.service failed, nginx.service restarted"
-        )
+        entities = corr._extract_entities("nginx.service failed, nginx.service restarted")
         # Count occurrences of nginx
         nginx_entities = [e for e in entities if "nginx" in e]
         # Should not have duplicates for same entity
@@ -520,9 +518,7 @@ class TestCreateIncidentFromEventsMocked:
     @patch("elle.daemon.incidents.correlator.create_incident_draft")
     @patch("elle.daemon.incidents.correlator.extract_fingerprint", return_value="fp-123")
     @patch("elle.daemon.incidents.correlator.collect_snapshot")
-    def test_single_event_creates_incident(
-        self, mock_snap, mock_fp, mock_create, mock_attach, mock_update, mock_link
-    ):
+    def test_single_event_creates_incident(self, mock_snap, mock_fp, mock_create, mock_attach, mock_update, mock_link):
         """Single event creates an incident."""
         mock_incident = MagicMock()
         mock_incident.incident_id = "inc-001"
@@ -543,9 +539,7 @@ class TestCreateIncidentFromEventsMocked:
     @patch("elle.daemon.incidents.correlator.create_incident_draft")
     @patch("elle.daemon.incidents.correlator.extract_fingerprint", return_value="fp-123")
     @patch("elle.daemon.incidents.correlator.collect_snapshot")
-    def test_no_entities_uses_anomaly_title(
-        self, mock_snap, mock_fp, mock_create, mock_attach, mock_update, mock_link
-    ):
+    def test_no_entities_uses_anomaly_title(self, mock_snap, mock_fp, mock_create, mock_attach, mock_update, mock_link):
         """Events with no entities produce 'Detected anomaly' title."""
         mock_incident = MagicMock()
         mock_incident.incident_id = "inc-002"
@@ -555,8 +549,9 @@ class TestCreateIncidentFromEventsMocked:
         events = [{"message": "Something random happened", "severity": "warning"}]
         corr._create_incident_from_events(events)
         call_kwargs = mock_create.call_args
-        assert "anomaly" in call_kwargs.kwargs.get("title", call_kwargs[1].get("title", "")).lower() or \
-               "anomaly" in str(call_kwargs)
+        assert "anomaly" in call_kwargs.kwargs.get(
+            "title", call_kwargs[1].get("title", "")
+        ).lower() or "anomaly" in str(call_kwargs)
 
     @patch("elle.daemon.incidents.correlator.link_events")
     @patch("elle.daemon.incidents.correlator.update_incident")
@@ -564,9 +559,7 @@ class TestCreateIncidentFromEventsMocked:
     @patch("elle.daemon.incidents.correlator.create_incident_draft")
     @patch("elle.daemon.incidents.correlator.extract_fingerprint", return_value="fp-123")
     @patch("elle.daemon.incidents.correlator.collect_snapshot")
-    def test_max_severity_selected(
-        self, mock_snap, mock_fp, mock_create, mock_attach, mock_update, mock_link
-    ):
+    def test_max_severity_selected(self, mock_snap, mock_fp, mock_create, mock_attach, mock_update, mock_link):
         """Highest severity among events is used for the incident."""
         mock_incident = MagicMock()
         mock_incident.incident_id = "inc-003"
@@ -588,9 +581,7 @@ class TestCreateIncidentFromEventsMocked:
     @patch("elle.daemon.incidents.correlator.create_incident_draft")
     @patch("elle.daemon.incidents.correlator.extract_fingerprint", return_value="fp-123")
     @patch("elle.daemon.incidents.correlator.collect_snapshot")
-    def test_events_without_ids_skip_link(
-        self, mock_snap, mock_fp, mock_create, mock_attach, mock_update, mock_link
-    ):
+    def test_events_without_ids_skip_link(self, mock_snap, mock_fp, mock_create, mock_attach, mock_update, mock_link):
         """Events without id field do not call link_events."""
         mock_incident = MagicMock()
         mock_incident.incident_id = "inc-004"
@@ -794,9 +785,7 @@ class TestCreateFromCommandFailureMocked:
     @patch("elle.daemon.incidents.correlator.create_incident_draft")
     @patch("elle.daemon.incidents.correlator.extract_fingerprint", return_value="fp-123")
     @patch("elle.daemon.incidents.correlator.collect_snapshot")
-    def test_long_stderr_truncated(
-        self, mock_snap, mock_fp, mock_create, mock_attach, mock_update, mock_link
-    ):
+    def test_long_stderr_truncated(self, mock_snap, mock_fp, mock_create, mock_attach, mock_update, mock_link):
         """Long stderr is truncated in symptoms and log_snippets."""
         mock_incident = MagicMock()
         mock_incident.incident_id = "inc-long"

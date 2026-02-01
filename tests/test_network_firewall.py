@@ -28,9 +28,7 @@ from elle.cli.network.firewall import (
 class TestRunCommand:
     def test_successful_command(self):
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=0, stdout="output", stderr=""
-            )
+            mock_run.return_value = MagicMock(returncode=0, stdout="output", stderr="")
             code, stdout, stderr = _run_command(["echo", "test"])
             assert code == 0
             assert stdout == "output"
@@ -38,9 +36,7 @@ class TestRunCommand:
 
     def test_failed_command(self):
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=1, stdout="", stderr="error"
-            )
+            mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="error")
             code, stdout, stderr = _run_command(["false"])
             assert code == 1
             assert stderr == "error"
@@ -61,9 +57,7 @@ class TestRunCommand:
             assert "not found" in stderr
 
     def test_generic_exception(self):
-        with patch(
-            "subprocess.run", side_effect=OSError("permission denied")
-        ):
+        with patch("subprocess.run", side_effect=OSError("permission denied")):
             code, stdout, stderr = _run_command(["test"])
             assert code == -1
             assert "permission denied" in stderr
@@ -91,9 +85,7 @@ class TestParseUfwRule:
         assert _parse_ufw_rule("22/tcp") is None
 
     def test_parse_allow_in_rule(self):
-        rule = _parse_ufw_rule(
-            "22/tcp                     ALLOW IN    Anywhere"
-        )
+        rule = _parse_ufw_rule("22/tcp                     ALLOW IN    Anywhere")
         assert rule is not None
         assert rule.port == 22
         assert rule.protocol == "tcp"
@@ -102,71 +94,53 @@ class TestParseUfwRule:
         assert rule.from_addr is None  # "Anywhere" becomes None
 
     def test_parse_deny_rule(self):
-        rule = _parse_ufw_rule(
-            "3306/tcp                   DENY IN     Anywhere"
-        )
+        rule = _parse_ufw_rule("3306/tcp                   DENY IN     Anywhere")
         assert rule is not None
         assert rule.port == 3306
         assert rule.action == "deny"
 
     def test_parse_reject_rule(self):
-        rule = _parse_ufw_rule(
-            "8080                       REJECT IN   Anywhere"
-        )
+        rule = _parse_ufw_rule("8080                       REJECT IN   Anywhere")
         assert rule is not None
         assert rule.port == 8080
         assert rule.action == "reject"
 
     def test_parse_limit_rule(self):
-        rule = _parse_ufw_rule(
-            "22/tcp                     LIMIT IN    Anywhere"
-        )
+        rule = _parse_ufw_rule("22/tcp                     LIMIT IN    Anywhere")
         assert rule is not None
         assert rule.action == "limit"
 
     def test_parse_out_direction(self):
-        rule = _parse_ufw_rule(
-            "80/tcp                     ALLOW OUT   Anywhere"
-        )
+        rule = _parse_ufw_rule("80/tcp                     ALLOW OUT   Anywhere")
         assert rule is not None
         assert rule.direction == "out"
 
     def test_parse_fwd_direction(self):
-        rule = _parse_ufw_rule(
-            "80/tcp                     ALLOW FWD   Anywhere"
-        )
+        rule = _parse_ufw_rule("80/tcp                     ALLOW FWD   Anywhere")
         assert rule is not None
         assert rule.direction == "both"
 
     def test_parse_rule_with_specific_from(self):
-        rule = _parse_ufw_rule(
-            "5432                       ALLOW IN    10.0.0.0/8"
-        )
+        rule = _parse_ufw_rule("5432                       ALLOW IN    10.0.0.0/8")
         assert rule is not None
         assert rule.port == 5432
         assert rule.from_addr == "10.0.0.0/8"
 
     def test_parse_rule_port_without_protocol(self):
-        rule = _parse_ufw_rule(
-            "5432                       ALLOW IN    Anywhere"
-        )
+        rule = _parse_ufw_rule("5432                       ALLOW IN    Anywhere")
         assert rule is not None
         assert rule.port == 5432
         assert rule.protocol is None
 
     def test_parse_rule_service_name(self):
         # Service names like "Apache" instead of port numbers
-        rule = _parse_ufw_rule(
-            "Apache                     ALLOW IN    Anywhere"
-        )
+        rule = _parse_ufw_rule("Apache                     ALLOW IN    Anywhere")
         assert rule is not None
         assert rule.port is None
         assert rule.protocol is None
 
     def test_parse_rule_invalid_port_in_slash_format(self):
-        rule = _parse_ufw_rule(
-            "notaport/tcp               ALLOW IN    Anywhere"
-        )
+        rule = _parse_ufw_rule("notaport/tcp               ALLOW IN    Anywhere")
         assert rule is not None
         assert rule.port is None
         assert rule.protocol == "tcp"

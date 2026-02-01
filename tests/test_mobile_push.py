@@ -125,7 +125,7 @@ class TestMobileNotificationEvent:
         # Extract JSON from SSE
         lines = sse.strip().split("\n")
         data_line = [l for l in lines if l.startswith("data: ")][0]
-        json_str = data_line[len("data: "):]
+        json_str = data_line[len("data: ") :]
         parsed = json.loads(json_str)
         assert parsed["title"] == "JSON Test"
         assert parsed["body"] == "body content"
@@ -261,6 +261,7 @@ class TestMobileClientConnection:
         await client.send(event)
 
         events_list = []
+
         # Close after a brief delay to allow the iteration to pick up the event
         async def close_later():
             await asyncio.sleep(0.1)
@@ -453,9 +454,7 @@ class TestMobilePushNotifier:
             category=NotificationCategory.INCIDENT_DETECTED,
             context_type="incident",
             context_id="inc-123",
-            actions=(
-                NotificationAction(id="view", label="View"),
-            ),
+            actions=(NotificationAction(id="view", label="View"),),
         )
 
         count = await notifier.push_notification(notification)

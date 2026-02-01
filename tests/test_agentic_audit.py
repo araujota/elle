@@ -275,27 +275,41 @@ class TestAuditRecord:
             input=inp,
             prior_incidents=(
                 IncidentMatch(
-                    incident_id="inc-1", title="t", summary="s", domain="net",
-                    outcome="resolved", outcome_weight=1.0, similarity_score=0.9, days_ago=1,
+                    incident_id="inc-1",
+                    title="t",
+                    summary="s",
+                    domain="net",
+                    outcome="resolved",
+                    outcome_weight=1.0,
+                    similarity_score=0.9,
+                    days_ago=1,
                 ),
             ),
-            man_vault_snippets=(
-                ManSnippet(name="nginx", section="8", snippet="web", score=0.9),
-            ),
+            man_vault_snippets=(ManSnippet(name="nginx", section="8", snippet="web", score=0.9),),
         )
         ctx2 = RetrievalContext(
             input=inp,
             prior_incidents=(
                 IncidentMatch(
-                    incident_id="inc-2", title="t2", summary="s2", domain="disk",
-                    outcome="partial", outcome_weight=0.5, similarity_score=0.7, days_ago=3,
+                    incident_id="inc-2",
+                    title="t2",
+                    summary="s2",
+                    domain="disk",
+                    outcome="partial",
+                    outcome_weight=0.5,
+                    similarity_score=0.7,
+                    days_ago=3,
                 ),
             ),
             capability_matches=(
                 CapabilityMatch(
-                    capability_name="service.restart", domain="service",
-                    description="Restart a service", risk_level="medium",
-                    match_score=0.8, success_rate=0.95, is_approved=True,
+                    capability_name="service.restart",
+                    domain="service",
+                    description="Restart a service",
+                    risk_level="medium",
+                    match_score=0.8,
+                    success_rate=0.95,
+                    is_approved=True,
                 ),
             ),
         )
@@ -310,8 +324,14 @@ class TestAuditRecord:
         """Provenance deduplicates incident IDs, man pages, and capabilities."""
         inp = _make_input()
         incident = IncidentMatch(
-            incident_id="inc-dup", title="t", summary="s", domain="net",
-            outcome="resolved", outcome_weight=1.0, similarity_score=0.9, days_ago=1,
+            incident_id="inc-dup",
+            title="t",
+            summary="s",
+            domain="net",
+            outcome="resolved",
+            outcome_weight=1.0,
+            similarity_score=0.9,
+            days_ago=1,
         )
         ctx1 = RetrievalContext(input=inp, prior_incidents=(incident,))
         ctx2 = RetrievalContext(input=inp, prior_incidents=(incident,))

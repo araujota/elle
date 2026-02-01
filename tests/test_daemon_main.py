@@ -602,6 +602,7 @@ class TestCorrelateEvents:
 class TestProcessorLoop:
     async def test_processor_no_queue_sleeps(self, daemon):
         daemon.event_queue = None
+
         # Set shutdown after a brief moment
         async def set_shutdown():
             await asyncio.sleep(0.2)
@@ -687,7 +688,9 @@ class TestProcessorLoop:
         daemon.event_queue = mock_queue
 
         with patch("elle.daemon.main.insert_events_batch", return_value=1):
-            with patch.object(daemon, "_correlate_events", new_callable=AsyncMock, side_effect=RuntimeError("corr fail")):
+            with patch.object(
+                daemon, "_correlate_events", new_callable=AsyncMock, side_effect=RuntimeError("corr fail")
+            ):
                 with patch.object(daemon, "_route_to_reactive", new_callable=AsyncMock):
                     with caplog.at_level(logging.ERROR):
                         await daemon._processor_loop()
@@ -711,7 +714,9 @@ class TestProcessorLoop:
 
         with patch("elle.daemon.main.insert_events_batch", return_value=1):
             with patch.object(daemon, "_correlate_events", new_callable=AsyncMock):
-                with patch.object(daemon, "_route_to_reactive", new_callable=AsyncMock, side_effect=RuntimeError("route fail")):
+                with patch.object(
+                    daemon, "_route_to_reactive", new_callable=AsyncMock, side_effect=RuntimeError("route fail")
+                ):
                     with caplog.at_level(logging.ERROR):
                         await daemon._processor_loop()
                     assert "Failed to route events" in caplog.text
@@ -770,7 +775,9 @@ class TestProcessorLoop:
         with patch("elle.daemon.main.insert_events_batch", return_value=1):
             with patch.object(daemon, "_correlate_events", new_callable=AsyncMock):
                 with patch.object(daemon, "_route_to_reactive", new_callable=AsyncMock):
-                    with patch.object(daemon, "_handle_package_event", new_callable=AsyncMock, side_effect=RuntimeError("pkg fail")):
+                    with patch.object(
+                        daemon, "_handle_package_event", new_callable=AsyncMock, side_effect=RuntimeError("pkg fail")
+                    ):
                         await daemon._processor_loop()
 
     async def test_processor_cancelled_error(self, daemon):
@@ -1430,8 +1437,12 @@ class TestStartExtended:
                                         mock_cq.return_value = (MagicMock(), MagicMock())
                                         with patch.object(daemon, "_processor_loop", new_callable=AsyncMock):
                                             with patch.object(daemon, "_run_api", new_callable=AsyncMock):
-                                                with patch.object(daemon, "_start_cloud_retry_worker", new_callable=AsyncMock):
-                                                    with patch.dict("sys.modules", {"elle.daemon.manvault.service": MagicMock()}):
+                                                with patch.object(
+                                                    daemon, "_start_cloud_retry_worker", new_callable=AsyncMock
+                                                ):
+                                                    with patch.dict(
+                                                        "sys.modules", {"elle.daemon.manvault.service": MagicMock()}
+                                                    ):
                                                         await daemon.start()
 
         # API task should be created
@@ -1468,9 +1479,15 @@ class TestStartExtended:
                                     with patch("elle.daemon.main.create_queues") as mock_cq:
                                         mock_cq.return_value = (MagicMock(), MagicMock())
                                         with patch.object(daemon, "_processor_loop", new_callable=AsyncMock):
-                                            with patch.object(daemon, "_start_capability_versioning", new_callable=AsyncMock) as mock_cv:
-                                                with patch.object(daemon, "_start_cloud_retry_worker", new_callable=AsyncMock):
-                                                    with patch.dict("sys.modules", {"elle.daemon.manvault.service": MagicMock()}):
+                                            with patch.object(
+                                                daemon, "_start_capability_versioning", new_callable=AsyncMock
+                                            ) as mock_cv:
+                                                with patch.object(
+                                                    daemon, "_start_cloud_retry_worker", new_callable=AsyncMock
+                                                ):
+                                                    with patch.dict(
+                                                        "sys.modules", {"elle.daemon.manvault.service": MagicMock()}
+                                                    ):
                                                         await daemon.start()
 
         mock_cv.assert_awaited_once()
@@ -1505,9 +1522,15 @@ class TestStartExtended:
                                     with patch("elle.daemon.main.create_queues") as mock_cq:
                                         mock_cq.return_value = (MagicMock(), MagicMock())
                                         with patch.object(daemon, "_processor_loop", new_callable=AsyncMock):
-                                            with patch.object(daemon, "_run_capability_bootstrap", new_callable=AsyncMock):
-                                                with patch.object(daemon, "_start_cloud_retry_worker", new_callable=AsyncMock):
-                                                    with patch.dict("sys.modules", {"elle.daemon.manvault.service": MagicMock()}):
+                                            with patch.object(
+                                                daemon, "_run_capability_bootstrap", new_callable=AsyncMock
+                                            ):
+                                                with patch.object(
+                                                    daemon, "_start_cloud_retry_worker", new_callable=AsyncMock
+                                                ):
+                                                    with patch.dict(
+                                                        "sys.modules", {"elle.daemon.manvault.service": MagicMock()}
+                                                    ):
                                                         await daemon.start()
 
         bootstrap_tasks = [t for t in daemon._tasks if t.get_name() == "capability_bootstrap"]
@@ -1540,8 +1563,12 @@ class TestStartExtended:
                                     with patch("elle.daemon.main.create_queues") as mock_cq:
                                         mock_cq.return_value = (MagicMock(), MagicMock())
                                         with patch.object(daemon, "_processor_loop", new_callable=AsyncMock):
-                                            with patch.object(daemon, "_start_cloud_retry_worker", new_callable=AsyncMock):
-                                                with patch.dict("sys.modules", {"elle.daemon.manvault.service": mock_manvault_mod}):
+                                            with patch.object(
+                                                daemon, "_start_cloud_retry_worker", new_callable=AsyncMock
+                                            ):
+                                                with patch.dict(
+                                                    "sys.modules", {"elle.daemon.manvault.service": mock_manvault_mod}
+                                                ):
                                                     with caplog.at_level(logging.WARNING):
                                                         await daemon.start()
 

@@ -430,6 +430,7 @@ class TestCollectPackageSurface:
     @patch("elle.daemon.incidents.control_surface.subprocess.run")
     def test_collect_packages_default(self, mock_run: MagicMock) -> None:
         """_collect_package_surface should use default packages."""
+
         # dpkg-query returns version for systemd, fails for others
         def run_side_effect(cmd, **kwargs):
             if cmd[0] == "dpkg-query":
@@ -530,6 +531,7 @@ class TestCollectNetworkControlSurface:
     @patch("elle.daemon.incidents.control_surface.Path")
     def test_network_networkmanager(self, mock_path_cls: MagicMock, mock_run: MagicMock) -> None:
         """Should detect NetworkManager."""
+
         # Create mock path instances
         def path_side_effect(path_str):
             mock_p = MagicMock()

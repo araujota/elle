@@ -513,9 +513,7 @@ class TestOnIncidentCreated:
 
         with patch.dict(os.environ, {AGENTIC_HANDLER_VAR: "true"}):
             with patch.object(handler, "_get_incident_info", return_value=incident_info):
-                with patch.object(
-                    handler, "_send_incident_notification", new_callable=AsyncMock
-                ) as mock_notify:
+                with patch.object(handler, "_send_incident_notification", new_callable=AsyncMock) as mock_notify:
                     await handler.on_incident_created("inc-001")
                     mock_notify.assert_awaited_once()
 
@@ -525,9 +523,7 @@ class TestOnIncidentCreated:
         handler = IncidentAgenticHandler(auto_remediate=True)
 
         with patch.dict(os.environ, {AGENTIC_HANDLER_VAR: "true"}):
-            with patch.object(
-                handler, "_get_incident_info", side_effect=RuntimeError("DB error")
-            ):
+            with patch.object(handler, "_get_incident_info", side_effect=RuntimeError("DB error")):
                 # Should not raise
                 await handler.on_incident_created("inc-001")
 
@@ -596,9 +592,7 @@ class TestSendNotification:
         incident_info = _make_incident_info(title="Disk full", severity="critical")
 
         with patch("elle.daemon.notifications.notify") as mock_notify:
-            await handler._send_notification(
-                "inc-001", incident_info, "Cleaned up temp files", False
-            )
+            await handler._send_notification("inc-001", incident_info, "Cleaned up temp files", False)
             mock_notify.assert_called_once()
             call_kwargs = mock_notify.call_args
             assert "CRITICAL" in call_kwargs.kwargs["title"]
@@ -611,9 +605,7 @@ class TestSendNotification:
         incident_info = _make_incident_info()
 
         with patch("elle.daemon.notifications.notify") as mock_notify:
-            await handler._send_notification(
-                "inc-001", incident_info, "Fixed", True
-            )
+            await handler._send_notification("inc-001", incident_info, "Fixed", True)
             body = mock_notify.call_args.kwargs["body"]
             assert "Auto-" in body
 

@@ -686,9 +686,7 @@ class TestWatchLoop:
             return False
 
         with patch.object(watcher, "_connect", side_effect=mock_connect):
-            with patch.object(
-                watcher, "_read_events", side_effect=RuntimeError("read error")
-            ):
+            with patch.object(watcher, "_read_events", side_effect=RuntimeError("read error")):
                 with patch.object(watcher, "_disconnect", new_callable=AsyncMock):
                     with patch("asyncio.sleep", new_callable=AsyncMock):
                         await watcher._watch_loop()
@@ -778,9 +776,7 @@ class TestCheckHealthExtended:
         watcher._reader = MagicMock()
         watcher._reader.at_eof.return_value = False
         watcher._connected = True
-        watcher._last_event_time = datetime.now(timezone.utc) - timedelta(
-            seconds=STALE_THRESHOLD + 10
-        )
+        watcher._last_event_time = datetime.now(timezone.utc) - timedelta(seconds=STALE_THRESHOLD + 10)
         with patch.object(watcher, "_send_ping", return_value=True):
             assert await watcher._check_health() is True
 
@@ -791,9 +787,7 @@ class TestCheckHealthExtended:
         watcher._reader = MagicMock()
         watcher._reader.at_eof.return_value = False
         watcher._connected = True
-        watcher._last_event_time = datetime.now(timezone.utc) - timedelta(
-            seconds=STALE_THRESHOLD + 10
-        )
+        watcher._last_event_time = datetime.now(timezone.utc) - timedelta(seconds=STALE_THRESHOLD + 10)
         with patch.object(watcher, "_send_ping", return_value=False):
             assert await watcher._check_health() is False
 
@@ -841,9 +835,7 @@ class TestHealthCheckLoop:
         watcher._running = True
         with patch("asyncio.sleep", new_callable=AsyncMock):
             with patch.object(watcher, "_check_health", side_effect=mock_check_health):
-                with patch.object(
-                    watcher, "_attempt_recovery", new_callable=AsyncMock
-                ) as mock_recover:
+                with patch.object(watcher, "_attempt_recovery", new_callable=AsyncMock) as mock_recover:
                     await watcher._health_check_loop()
         mock_recover.assert_called()
 
@@ -876,9 +868,7 @@ class TestStartExtended:
     async def test_start_available_then_cancelled(self, watcher):
         """start runs _watch_loop until CancelledError."""
         with patch.object(watcher, "check_available", return_value=True):
-            with patch.object(
-                watcher, "_watch_loop", side_effect=asyncio.CancelledError
-            ):
+            with patch.object(watcher, "_watch_loop", side_effect=asyncio.CancelledError):
                 with patch.object(watcher, "stop", new_callable=AsyncMock):
                     await watcher.start()
                     assert watcher._running is False  # stop() sets this
@@ -886,9 +876,7 @@ class TestStartExtended:
     async def test_start_available_then_error(self, watcher):
         """start handles exceptions from _watch_loop."""
         with patch.object(watcher, "check_available", return_value=True):
-            with patch.object(
-                watcher, "_watch_loop", side_effect=RuntimeError("loop error")
-            ):
+            with patch.object(watcher, "_watch_loop", side_effect=RuntimeError("loop error")):
                 with patch.object(watcher, "stop", new_callable=AsyncMock) as mock_stop:
                     await watcher.start()
                     mock_stop.assert_called_once()

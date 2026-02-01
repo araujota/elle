@@ -1505,9 +1505,7 @@ class TestStoreDecisionRecord:
         plan = _make_plan(title="Install nginx")
         context = PlanContext(
             request=TaskRequest(request="install nginx"),
-            man_docs=(
-                ManDocContext(name="nginx", section="8", snippet="snippet text", flags_used=()),
-            ),
+            man_docs=(ManDocContext(name="nginx", section="8", snippet="snippet text", flags_used=()),),
             prior_plans=(
                 PriorPlanContext(
                     incident_id="prior-1",

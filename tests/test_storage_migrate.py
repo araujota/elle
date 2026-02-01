@@ -125,9 +125,7 @@ class TestGetSchemaVersion:
 
         result = get_schema_version(conn, "test_schema")
         assert result == 3
-        conn.execute.assert_called_once_with(
-            "SELECT value FROM _meta WHERE key = 'schema_version'"
-        )
+        conn.execute.assert_called_once_with("SELECT value FROM _meta WHERE key = 'schema_version'")
 
     def test_returns_zero_when_no_row(self):
         conn = MagicMock()
@@ -237,10 +235,7 @@ class TestRunMigrations:
         run_migrations(conn, "s")
 
         # The execute calls should include INSERT INTO _meta for each version
-        insert_calls = [
-            c for c in conn.execute.call_args_list
-            if len(c[0]) >= 2 and isinstance(c[0][1], tuple)
-        ]
+        insert_calls = [c for c in conn.execute.call_args_list if len(c[0]) >= 2 and isinstance(c[0][1], tuple)]
         assert len(insert_calls) == 2
         assert insert_calls[0][0][1] == ("1",)
         assert insert_calls[1][0][1] == ("2",)
@@ -278,10 +273,7 @@ class TestRunAllMigrations:
 
         run_all_migrations(conn)
 
-        search_path_calls = [
-            c for c in conn.execute.call_args_list
-            if len(c[0]) >= 1 and "search_path" in str(c[0][0])
-        ]
+        search_path_calls = [c for c in conn.execute.call_args_list if len(c[0]) >= 1 and "search_path" in str(c[0][0])]
         assert len(search_path_calls) == 2
 
     def test_empty_registry(self):
