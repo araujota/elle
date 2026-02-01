@@ -1876,7 +1876,10 @@ class TestSetupModelsAsync:
         mock_warmup_mod = MagicMock()
         mock_warmup_mod.ModelWarmupService.return_value = mock_warmup_service
 
-        with patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}):
+        with (
+            patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}),
+            patch("elle.cli.setup.wizard.Progress"),
+        ):
             result = await wizard._setup_models_async("test-model")
 
         assert result is True
@@ -1900,6 +1903,7 @@ class TestSetupModelsAsync:
         with (
             patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}),
             patch.object(wizard, "_pull_model_with_progress", new_callable=AsyncMock, return_value=True),
+            patch("elle.cli.setup.wizard.Progress"),
         ):
             result = await wizard._setup_models_async("test-model")
 
@@ -1920,6 +1924,7 @@ class TestSetupModelsAsync:
         with (
             patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}),
             patch.object(wizard, "_pull_model_with_progress", new_callable=AsyncMock, return_value=False),
+            patch("elle.cli.setup.wizard.Progress"),
         ):
             result = await wizard._setup_models_async("test-model")
 
@@ -1940,7 +1945,10 @@ class TestSetupModelsAsync:
         mock_warmup_mod = MagicMock()
         mock_warmup_mod.ModelWarmupService.return_value = mock_warmup_service
 
-        with patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}):
+        with (
+            patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}),
+            patch("elle.cli.setup.wizard.Progress"),
+        ):
             result = await wizard._setup_models_async("test-model")
 
         # Returns True because model is available, just warmup failed
@@ -1978,6 +1986,7 @@ class TestSetupModelsAsync:
         with (
             patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}),
             patch("asyncio.wait_for", side_effect=mock_wait_for),
+            patch("elle.cli.setup.wizard.Progress"),
         ):
             result = await wizard._setup_models_async("test-model")
 
@@ -2000,7 +2009,10 @@ class TestSetupModelsAsync:
         mock_warmup_mod = MagicMock()
         mock_warmup_mod.ModelWarmupService.return_value = mock_warmup_service
 
-        with patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}):
+        with (
+            patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}),
+            patch("elle.cli.setup.wizard.Progress"),
+        ):
             result = await wizard._setup_models_async("test-model")
 
         assert result is True
@@ -2017,7 +2029,10 @@ class TestSetupModelsAsync:
         mock_warmup_mod = MagicMock()
         mock_warmup_mod.ModelWarmupService.return_value = mock_warmup_service
 
-        with patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}):
+        with (
+            patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}),
+            patch("elle.cli.setup.wizard.Progress"),
+        ):
             result = await wizard._setup_models_async("test-model")
 
         assert result is False

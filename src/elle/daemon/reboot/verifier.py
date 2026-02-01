@@ -98,6 +98,12 @@ async def run_command_check(
             proc.kill()
             await proc.wait()
             return (False, -1, "", f"Command timed out after {timeout}s")
+        finally:
+            # Close the subprocess transport while the event loop is still
+            # running to prevent "Event loop is closed" RuntimeError from
+            # BaseSubprocessTransport.__del__ during garbage collection.
+            if hasattr(proc, "_transport") and proc._transport is not None:
+                proc._transport.close()
 
         stdout = stdout_bytes.decode("utf-8", errors="replace")
         stderr = stderr_bytes.decode("utf-8", errors="replace")
