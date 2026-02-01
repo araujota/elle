@@ -67,9 +67,7 @@ def _make_spec(name="test.capability", source_command="test"):
         domain="file",
         risk_level="low",
         side_effects=("file_write",),
-        input_fields=(
-            InputFieldSpec(name="path", field_type="str", description="File path"),
-        ),
+        input_fields=(InputFieldSpec(name="path", field_type="str", description="File path"),),
         command_template="test {path}",
         source_command=source_command,
         confidence_score=0.8,
@@ -150,11 +148,13 @@ class TestRowToStored:
 
     def test_package_fields_present(self, store):
         """Package metadata fields are mapped when present in the row."""
-        row = _make_row({
-            "source_package": "nginx",
-            "package_version": "1.24.0",
-            "binary_path": "/usr/sbin/nginx",
-        })
+        row = _make_row(
+            {
+                "source_package": "nginx",
+                "package_version": "1.24.0",
+                "binary_path": "/usr/sbin/nginx",
+            }
+        )
         result = store._row_to_stored(row)
 
         assert result.source_package == "nginx"

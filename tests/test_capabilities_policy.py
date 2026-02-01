@@ -1,4 +1,5 @@
 """Tests for capabilities policy integration."""
+
 from __future__ import annotations
 
 import builtins
@@ -193,9 +194,7 @@ class TestCapabilityRequiresConfirmation:
         """An irreversible side effect triggers confirmation."""
         spec = _make_spec(
             risk="low",
-            side_effects=(
-                _make_side_effect(reversible=False),
-            ),
+            side_effects=(_make_side_effect(reversible=False),),
         )
         assert capability_requires_confirmation(spec) is True
 
@@ -204,9 +203,7 @@ class TestCapabilityRequiresConfirmation:
         spec = _make_spec(
             risk="low",
             requires_privilege=False,
-            side_effects=(
-                _make_side_effect(reversible=True),
-            ),
+            side_effects=(_make_side_effect(reversible=True),),
         )
         assert capability_requires_confirmation(spec) is False
 

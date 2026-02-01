@@ -2245,7 +2245,7 @@ class TestOsReleaseParsing:
     def test_os_release_pretty_name_found(self):
         """_get_system_context should parse PRETTY_NAME from /etc/os-release."""
         loop = AgenticLoop()
-        fake_content = "NAME=Ubuntu\nPRETTY_NAME=\"Ubuntu 22.04.4 LTS\"\nVERSION_ID=22.04\n"
+        fake_content = 'NAME=Ubuntu\nPRETTY_NAME="Ubuntu 22.04.4 LTS"\nVERSION_ID=22.04\n'
         from unittest.mock import mock_open
 
         with patch("builtins.open", mock_open(read_data=fake_content)):
@@ -2293,9 +2293,7 @@ class TestVerifyConfigInvalidSyntax:
                 )
 
         with patch.object(loop.tools, "execute", side_effect=mock_execute):
-            result = await loop._verify_config(
-                "ver-123", "call-456", "config.edit", {"path": "/etc/app/config.json"}
-            )
+            result = await loop._verify_config("ver-123", "call-456", "config.edit", {"path": "/etc/app/config.json"})
 
             assert result.passed is False
             assert "JSON syntax: INVALID" in result.evidence
@@ -2327,9 +2325,7 @@ class TestVerifyConfigInvalidSyntax:
                 )
 
         with patch.object(loop.tools, "execute", side_effect=mock_execute):
-            result = await loop._verify_config(
-                "ver-123", "call-456", "config.edit", {"path": "/etc/app/config.yml"}
-            )
+            result = await loop._verify_config("ver-123", "call-456", "config.edit", {"path": "/etc/app/config.yml"})
 
             assert result.passed is False
             assert "YAML syntax: INVALID" in result.evidence
@@ -2394,9 +2390,7 @@ class TestRunVerificationStrategyDomainRouting:
         mock_tool_call.id = "call_1"
         mock_result = ToolResult(tool_name="execute_capability", success=True, output="OK")
 
-        result = await loop._run_verification_strategy(
-            "file.read", {}, mock_result, mock_tool_call
-        )
+        result = await loop._run_verification_strategy("file.read", {}, mock_result, mock_tool_call)
         assert result is not None
         assert result.method == "non_mutating"
 
@@ -2408,9 +2402,7 @@ class TestRunVerificationStrategyDomainRouting:
         mock_tool_call.id = "call_1"
         mock_result = ToolResult(tool_name="execute_capability", success=True, output="OK")
 
-        result = await loop._run_verification_strategy(
-            "docker.list", {}, mock_result, mock_tool_call
-        )
+        result = await loop._run_verification_strategy("docker.list", {}, mock_result, mock_tool_call)
         assert result is not None
         assert result.method == "non_mutating"
 
@@ -2422,9 +2414,7 @@ class TestRunVerificationStrategyDomainRouting:
         mock_tool_call.id = "call_1"
         mock_result = ToolResult(tool_name="execute_capability", success=True, output="OK")
 
-        result = await loop._run_verification_strategy(
-            "package.info", {}, mock_result, mock_tool_call
-        )
+        result = await loop._run_verification_strategy("package.info", {}, mock_result, mock_tool_call)
         assert result is not None
         assert result.method == "non_mutating"
 
@@ -2436,9 +2426,7 @@ class TestRunVerificationStrategyDomainRouting:
         mock_tool_call.id = "call_1"
         mock_result = ToolResult(tool_name="execute_capability", success=True, output="OK")
 
-        result = await loop._run_verification_strategy(
-            "config.preview", {}, mock_result, mock_tool_call
-        )
+        result = await loop._run_verification_strategy("config.preview", {}, mock_result, mock_tool_call)
         assert result is not None
         assert result.method == "non_mutating"
 
@@ -2450,9 +2438,7 @@ class TestRunVerificationStrategyDomainRouting:
         mock_tool_call.id = "call_1"
         mock_result = ToolResult(tool_name="execute_capability", success=True, output="OK")
 
-        result = await loop._run_verification_strategy(
-            "network.diagnose", {}, mock_result, mock_tool_call
-        )
+        result = await loop._run_verification_strategy("network.diagnose", {}, mock_result, mock_tool_call)
         assert result is not None
         assert result.method == "non_mutating"
 

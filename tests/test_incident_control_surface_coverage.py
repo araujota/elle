@@ -410,9 +410,13 @@ class TestCollectControlSurface:
                             priv.return_value = PrivilegeSurface()
                             with patch("elle.daemon.incidents.control_surface._collect_network_control_surface") as net:
                                 net.return_value = NetworkControlSurface()
-                                with patch("elle.daemon.incidents.control_surface._collect_kernel_policy_surface") as kern:
+                                with patch(
+                                    "elle.daemon.incidents.control_surface._collect_kernel_policy_surface"
+                                ) as kern:
                                     kern.return_value = KernelPolicySurface()
-                                    with patch("elle.daemon.incidents.control_surface._collect_hardware_identity_surface") as hw:
+                                    with patch(
+                                        "elle.daemon.incidents.control_surface._collect_hardware_identity_surface"
+                                    ) as hw:
                                         hw.return_value = HardwareIdentitySurface()
                                         result = collect_control_surface(
                                             services=["nginx.service"],

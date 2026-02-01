@@ -79,22 +79,24 @@ class TestPlanLlmBranch:
 
         mock_llm = MagicMock()
         mock_llm.is_available.return_value = True
-        llm_response_json = json.dumps({
-            "calls": [
-                {
-                    "capability": "service.status",
-                    "args": {"service": "nginx"},
-                    "purpose": "Check status first",
-                    "depends_on": [],
-                },
-                {
-                    "capability": "service.restart",
-                    "args": {"service": "nginx"},
-                    "purpose": "Restart if needed",
-                    "depends_on": [0],
-                },
-            ]
-        })
+        llm_response_json = json.dumps(
+            {
+                "calls": [
+                    {
+                        "capability": "service.status",
+                        "args": {"service": "nginx"},
+                        "purpose": "Check status first",
+                        "depends_on": [],
+                    },
+                    {
+                        "capability": "service.restart",
+                        "args": {"service": "nginx"},
+                        "purpose": "Restart if needed",
+                        "depends_on": [0],
+                    },
+                ]
+            }
+        )
         mock_llm.generate.return_value = MagicMock(content=llm_response_json)
 
         with patch("elle.rag.llm.get_llm", return_value=mock_llm):
@@ -175,15 +177,17 @@ class TestPlanWithLlmSuccess:
         planner = CapabilityPlanner(use_llm_planning=True)
         intent = _make_mixed_intent()
 
-        valid_json = json.dumps({
-            "calls": [
-                {
-                    "capability": "service.status",
-                    "args": {"service": "nginx"},
-                    "purpose": "Check nginx status",
-                },
-            ]
-        })
+        valid_json = json.dumps(
+            {
+                "calls": [
+                    {
+                        "capability": "service.status",
+                        "args": {"service": "nginx"},
+                        "purpose": "Check nginx status",
+                    },
+                ]
+            }
+        )
 
         mock_llm = MagicMock()
         mock_llm.is_available.return_value = True
@@ -270,22 +274,24 @@ class TestParseLlmPlanCallError:
         """A call entry that causes a Pydantic/type error in CapabilityCall
         construction triggers the except branch (lines 589-590)."""
         planner = CapabilityPlanner()
-        content = json.dumps({
-            "calls": [
-                {
-                    "capability": "service.status",
-                    "args": {"service": "nginx"},
-                    "purpose": "check",
-                    "depends_on": "not_a_list",  # Should be a list -> tuple() fails
-                },
-                {
-                    "capability": "service.restart",
-                    "args": {"service": "nginx"},
-                    "purpose": "restart",
-                    "depends_on": [],
-                },
-            ]
-        })
+        content = json.dumps(
+            {
+                "calls": [
+                    {
+                        "capability": "service.status",
+                        "args": {"service": "nginx"},
+                        "purpose": "check",
+                        "depends_on": "not_a_list",  # Should be a list -> tuple() fails
+                    },
+                    {
+                        "capability": "service.restart",
+                        "args": {"service": "nginx"},
+                        "purpose": "restart",
+                        "depends_on": [],
+                    },
+                ]
+            }
+        )
         result = planner._parse_llm_plan(content)
         # The first call fails to parse, but the second should succeed
         assert result is not None
@@ -295,14 +301,16 @@ class TestParseLlmPlanCallError:
     def test_all_calls_fail_to_parse(self) -> None:
         """All call entries fail to parse -> returns None (empty list)."""
         planner = CapabilityPlanner()
-        content = json.dumps({
-            "calls": [
-                {
-                    "capability": "service.status",
-                    "args": {"service": "nginx"},
-                    "depends_on": "bad",
-                },
-            ]
-        })
+        content = json.dumps(
+            {
+                "calls": [
+                    {
+                        "capability": "service.status",
+                        "args": {"service": "nginx"},
+                        "depends_on": "bad",
+                    },
+                ]
+            }
+        )
         result = planner._parse_llm_plan(content)
         assert result is None

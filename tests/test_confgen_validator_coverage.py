@@ -98,10 +98,7 @@ class TestValidatePath:
         """Critical prefix /boot produces a warning."""
         result = _make_result(target_path="/boot/some-custom-file")
         validation = self.validator.validate(result)
-        assert any(
-            "Critical system path" in i.message and i.severity == "warning"
-            for i in validation.issues
-        )
+        assert any("Critical system path" in i.message and i.severity == "warning" for i in validation.issues)
 
     def test_critical_prefix_dev(self) -> None:
         """Critical prefix /dev produces a warning."""
@@ -138,10 +135,7 @@ class TestValidatePath:
         result = _make_result(target_path="/etc/myapp/config.yaml")
         validation = self.validator.validate(result)
         # Should not have path-related errors
-        path_errors = [
-            i for i in validation.issues
-            if i.severity == "error" and "path" in i.message.lower()
-        ]
+        path_errors = [i for i in validation.issues if i.severity == "error" and "path" in i.message.lower()]
         assert len(path_errors) == 0
 
 
@@ -252,10 +246,7 @@ class TestValidateOperations:
         op = ConfigOp(kind="set", path=".database.host", value="localhost")
         result = _make_result(operations=(op,))
         validation = self.validator.validate(result)
-        injection_issues = [
-            i for i in validation.issues
-            if "injection" in i.message.lower()
-        ]
+        injection_issues = [i for i in validation.issues if "injection" in i.message.lower()]
         assert len(injection_issues) == 0
 
 
@@ -277,10 +268,7 @@ class TestValidateContent:
             generated_content="key: value\nlist:\n  - item1\n  - item2\n",
         )
         validation = self.validator.validate(result)
-        syntax_errors = [
-            i for i in validation.issues
-            if i.severity == "error" and "yaml syntax" in i.message.lower()
-        ]
+        syntax_errors = [i for i in validation.issues if i.severity == "error" and "yaml syntax" in i.message.lower()]
         assert len(syntax_errors) == 0
 
     def test_invalid_yaml_content(self) -> None:
@@ -300,10 +288,7 @@ class TestValidateContent:
             generated_content='{"key": "value", "number": 42}',
         )
         validation = self.validator.validate(result)
-        json_errors = [
-            i for i in validation.issues
-            if i.severity == "error" and "json syntax" in i.message.lower()
-        ]
+        json_errors = [i for i in validation.issues if i.severity == "error" and "json syntax" in i.message.lower()]
         assert len(json_errors) == 0
 
     def test_invalid_json_content(self) -> None:
@@ -322,10 +307,7 @@ class TestValidateContent:
             generated_content='[section]\nkey = "value"\n',
         )
         validation = self.validator.validate(result)
-        toml_errors = [
-            i for i in validation.issues
-            if i.severity == "error" and "toml syntax" in i.message.lower()
-        ]
+        toml_errors = [i for i in validation.issues if i.severity == "error" and "toml syntax" in i.message.lower()]
         assert len(toml_errors) == 0
 
     def test_invalid_toml_content(self) -> None:
@@ -392,10 +374,7 @@ class TestValidateRollback:
             rollback_hint="Restore from backup",
         )
         validation = self.validator.validate(result)
-        rollback_warnings = [
-            i for i in validation.issues
-            if "rollback hint" in i.message.lower()
-        ]
+        rollback_warnings = [i for i in validation.issues if "rollback hint" in i.message.lower()]
         assert len(rollback_warnings) == 0
 
     def test_non_critical_path_no_rollback_warning(self) -> None:
@@ -405,10 +384,7 @@ class TestValidateRollback:
             rollback_hint=None,
         )
         validation = self.validator.validate(result)
-        rollback_warnings = [
-            i for i in validation.issues
-            if "rollback hint" in i.message.lower()
-        ]
+        rollback_warnings = [i for i in validation.issues if "rollback hint" in i.message.lower()]
         assert len(rollback_warnings) == 0
 
 

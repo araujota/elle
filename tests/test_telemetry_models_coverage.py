@@ -72,32 +72,20 @@ class TestComputeFingerprint:
 
     def test_fingerprint_strips_dates(self):
         """Dates like 2025-01-15 should be removed for normalization."""
-        fp1 = TelemetryEvent.compute_fingerprint(
-            "service", "nginx", "Error on 2025-01-15 at startup"
-        )
-        fp2 = TelemetryEvent.compute_fingerprint(
-            "service", "nginx", "Error on 2026-03-20 at startup"
-        )
+        fp1 = TelemetryEvent.compute_fingerprint("service", "nginx", "Error on 2025-01-15 at startup")
+        fp2 = TelemetryEvent.compute_fingerprint("service", "nginx", "Error on 2026-03-20 at startup")
         assert fp1 == fp2
 
     def test_fingerprint_strips_times(self):
         """Times like 12:30:45 should be removed for normalization."""
-        fp1 = TelemetryEvent.compute_fingerprint(
-            "auth", None, "Login failed at 08:15:30 from host"
-        )
-        fp2 = TelemetryEvent.compute_fingerprint(
-            "auth", None, "Login failed at 23:59:59 from host"
-        )
+        fp1 = TelemetryEvent.compute_fingerprint("auth", None, "Login failed at 08:15:30 from host")
+        fp2 = TelemetryEvent.compute_fingerprint("auth", None, "Login failed at 23:59:59 from host")
         assert fp1 == fp2
 
     def test_fingerprint_strips_numbers(self):
         """Bare numbers should be removed for normalization."""
-        fp1 = TelemetryEvent.compute_fingerprint(
-            "oom", "nginx", "killed process 1234 (score 500)"
-        )
-        fp2 = TelemetryEvent.compute_fingerprint(
-            "oom", "nginx", "killed process 5678 (score 900)"
-        )
+        fp1 = TelemetryEvent.compute_fingerprint("oom", "nginx", "killed process 1234 (score 500)")
+        fp2 = TelemetryEvent.compute_fingerprint("oom", "nginx", "killed process 5678 (score 900)")
         assert fp1 == fp2
 
     def test_fingerprint_different_categories_differ(self):

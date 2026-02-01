@@ -149,27 +149,21 @@ class TestTrendConfig:
 class TestComputeForecastUrgency:
     def test_no_thresholds_defined(self):
         """Metric without thresholds returns 'none'."""
-        urgency, tw, tc = compute_forecast_urgency(
-            "proc.zombie_count", 5.0, 1.0
-        )
+        urgency, tw, tc = compute_forecast_urgency("proc.zombie_count", 5.0, 1.0)
         assert urgency == "none"
         assert tw is None
         assert tc is None
 
     def test_none_urgency_low_value_low_rate(self):
         """Value far from thresholds with slow rate returns 'none'."""
-        urgency, tw, tc = compute_forecast_urgency(
-            "disk./.used_pct", 30.0, 0.001
-        )
+        urgency, tw, tc = compute_forecast_urgency("disk./.used_pct", 30.0, 0.001)
         assert urgency == "none"
 
     def test_prepare_urgency_approaching_warning(self):
         """Value approaching warning threshold within TIME_TO_WARNING_HOURS."""
         # warning = 80, rate = 5.0/hr, current = 70
         # time_to_warning = (80 - 70) / 5.0 = 2.0 hours < 24 hours
-        urgency, tw, tc = compute_forecast_urgency(
-            "disk./.used_pct", 70.0, 5.0
-        )
+        urgency, tw, tc = compute_forecast_urgency("disk./.used_pct", 70.0, 5.0)
         assert urgency == "prepare"
         assert tw is not None
         assert tw == pytest.approx(2.0)
@@ -178,52 +172,40 @@ class TestComputeForecastUrgency:
         """Value approaching critical threshold within TIME_TO_CRITICAL_HOURS."""
         # critical = 92, rate = 10.0/hr, current = 89
         # time_to_critical = (92 - 89) / 10.0 = 0.3 hours < 4 hours
-        urgency, tw, tc = compute_forecast_urgency(
-            "disk./.used_pct", 89.0, 10.0
-        )
+        urgency, tw, tc = compute_forecast_urgency("disk./.used_pct", 89.0, 10.0)
         assert urgency == "act_now"
         assert tc is not None
         assert tc == pytest.approx(0.3)
 
     def test_already_above_critical(self):
         """Value already above critical threshold returns 'act_now'."""
-        urgency, tw, tc = compute_forecast_urgency(
-            "disk./.used_pct", 95.0, 0.0
-        )
+        urgency, tw, tc = compute_forecast_urgency("disk./.used_pct", 95.0, 0.0)
         assert urgency == "act_now"
         assert tc == 0.0
 
     def test_already_above_warning_below_critical(self):
         """Value above warning but below critical returns 'prepare'."""
-        urgency, tw, tc = compute_forecast_urgency(
-            "disk./.used_pct", 85.0, 0.0
-        )
+        urgency, tw, tc = compute_forecast_urgency("disk./.used_pct", 85.0, 0.0)
         assert urgency == "prepare"
         assert tw == 0.0
 
     def test_negative_rate_no_urgency(self):
         """Negative (decreasing) rate means no threshold crossing."""
-        urgency, tw, tc = compute_forecast_urgency(
-            "disk./.used_pct", 70.0, -1.0
-        )
+        urgency, tw, tc = compute_forecast_urgency("disk./.used_pct", 70.0, -1.0)
         assert urgency == "none"
         assert tw is None
         assert tc is None
 
     def test_very_small_rate_treated_as_zero(self):
         """Rate below epsilon (0.001) is treated as zero."""
-        urgency, tw, tc = compute_forecast_urgency(
-            "disk./.used_pct", 70.0, 0.0005
-        )
+        urgency, tw, tc = compute_forecast_urgency("disk./.used_pct", 70.0, 0.0005)
         assert urgency == "none"
 
     def test_critical_takes_priority_over_warning(self):
         """When both warning and critical are within window, act_now wins."""
         # Both within window: critical = 92, rate = 30/hr, current = 90
         # time_to_critical = 2/30 = 0.067h < 4h -> act_now
-        urgency, tw, tc = compute_forecast_urgency(
-            "disk./.used_pct", 90.0, 30.0
-        )
+        urgency, tw, tc = compute_forecast_urgency("disk./.used_pct", 90.0, 30.0)
         assert urgency == "act_now"
 
 
@@ -234,9 +216,7 @@ class TestComputeForecastUrgency:
 
 class TestCreateForecastWithUrgency:
     def test_basic_forecast(self):
-        fc = create_forecast_with_urgency(
-            "disk./.used_pct", 50.0, 0.5, confidence=0.7
-        )
+        fc = create_forecast_with_urgency("disk./.used_pct", 50.0, 0.5, confidence=0.7)
         assert fc.metric == "disk./.used_pct"
         assert fc.current_value == 50.0
         assert fc.predicted_value_24h == pytest.approx(50.0 + 0.5 * 24)
@@ -247,34 +227,26 @@ class TestCreateForecastWithUrgency:
 
     def test_forecast_with_urgency_prepare(self):
         # current=75, rate=1.0 -> time_to_warning = (80-75)/1 = 5h < 24h
-        fc = create_forecast_with_urgency(
-            "disk./.used_pct", 75.0, 1.0
-        )
+        fc = create_forecast_with_urgency("disk./.used_pct", 75.0, 1.0)
         assert fc.urgency == "prepare"
         assert fc.will_cross_warning is True
         assert fc.time_to_warning_hours is not None
 
     def test_forecast_with_urgency_act_now(self):
         # current=91, rate=2.0 -> time_to_critical = (92-91)/2 = 0.5h < 4h
-        fc = create_forecast_with_urgency(
-            "disk./.used_pct", 91.0, 2.0
-        )
+        fc = create_forecast_with_urgency("disk./.used_pct", 91.0, 2.0)
         assert fc.urgency == "act_now"
         assert fc.will_cross_critical is True
         assert fc.time_to_critical_hours is not None
 
     def test_forecast_with_urgency_none(self):
-        fc = create_forecast_with_urgency(
-            "disk./.used_pct", 30.0, 0.0
-        )
+        fc = create_forecast_with_urgency("disk./.used_pct", 30.0, 0.0)
         assert fc.urgency == "none"
         assert fc.will_cross_warning is False
         assert fc.will_cross_critical is False
 
     def test_forecast_unknown_metric(self):
-        fc = create_forecast_with_urgency(
-            "unknown.metric", 50.0, 1.0
-        )
+        fc = create_forecast_with_urgency("unknown.metric", 50.0, 1.0)
         assert fc.urgency == "none"
         assert fc.warning_threshold is None
         assert fc.critical_threshold is None
@@ -285,9 +257,7 @@ class TestCreateForecastWithUrgency:
 
     def test_forecast_explicit_computed_at(self):
         ts = datetime(2025, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
-        fc = create_forecast_with_urgency(
-            "disk./.used_pct", 50.0, 0.0, computed_at=ts
-        )
+        fc = create_forecast_with_urgency("disk./.used_pct", 50.0, 0.0, computed_at=ts)
         assert fc.computed_at == ts
 
     def test_legacy_threshold_is_critical(self):

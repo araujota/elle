@@ -2108,27 +2108,15 @@ class TestAptHistoryEdgeCases:
     def test_apt_history_old_entry_skipped(self):
         """Entries older than 24h are skipped (line 465)."""
         # Use a date far in the past so it is before the cutoff
-        content = (
-            "Start-Date: 2020-01-01  00:00:00\n"
-            "Commandline: apt install old-pkg\n"
-            "Install: old-pkg (1.0)\n\n"
-        )
-        with patch.object(Path, "exists", return_value=True), patch.object(
-            Path, "read_text", return_value=content
-        ):
+        content = "Start-Date: 2020-01-01  00:00:00\nCommandline: apt install old-pkg\nInstall: old-pkg (1.0)\n\n"
+        with patch.object(Path, "exists", return_value=True), patch.object(Path, "read_text", return_value=content):
             result = _get_recent_apt_history()
         assert len(result) == 0
 
     def test_apt_history_bad_date_skipped(self):
         """Entries with unparseable dates are skipped (lines 467-468)."""
-        content = (
-            "Start-Date: not-a-date\n"
-            "Commandline: apt install bad\n"
-            "Install: bad (1.0)\n\n"
-        )
-        with patch.object(Path, "exists", return_value=True), patch.object(
-            Path, "read_text", return_value=content
-        ):
+        content = "Start-Date: not-a-date\nCommandline: apt install bad\nInstall: bad (1.0)\n\n"
+        with patch.object(Path, "exists", return_value=True), patch.object(Path, "read_text", return_value=content):
             result = _get_recent_apt_history()
         assert len(result) == 0
 
@@ -2136,14 +2124,8 @@ class TestAptHistoryEdgeCases:
         """Upgrade entries are parsed (lines 477-480)."""
         now = datetime.utcnow()
         date_str = now.strftime("%Y-%m-%d  %H:%M:%S")
-        content = (
-            f"Start-Date: {date_str}\n"
-            "Commandline: apt upgrade\n"
-            "Upgrade: openssl (3.0.1 => 3.0.2)\n\n"
-        )
-        with patch.object(Path, "exists", return_value=True), patch.object(
-            Path, "read_text", return_value=content
-        ):
+        content = f"Start-Date: {date_str}\nCommandline: apt upgrade\nUpgrade: openssl (3.0.1 => 3.0.2)\n\n"
+        with patch.object(Path, "exists", return_value=True), patch.object(Path, "read_text", return_value=content):
             result = _get_recent_apt_history()
         assert len(result) == 1
         assert result[0]["action"] == "upgrade"
@@ -2152,14 +2134,8 @@ class TestAptHistoryEdgeCases:
         """Remove entries are parsed (lines 482-485)."""
         now = datetime.utcnow()
         date_str = now.strftime("%Y-%m-%d  %H:%M:%S")
-        content = (
-            f"Start-Date: {date_str}\n"
-            "Commandline: apt remove nginx\n"
-            "Remove: nginx (1.18.0)\n\n"
-        )
-        with patch.object(Path, "exists", return_value=True), patch.object(
-            Path, "read_text", return_value=content
-        ):
+        content = f"Start-Date: {date_str}\nCommandline: apt remove nginx\nRemove: nginx (1.18.0)\n\n"
+        with patch.object(Path, "exists", return_value=True), patch.object(Path, "read_text", return_value=content):
             result = _get_recent_apt_history()
         assert len(result) == 1
         assert result[0]["action"] == "remove"
@@ -2346,10 +2322,7 @@ class TestDiskInfoEdgeCases:
 
     def test_disk_info_value_error_in_pct(self):
         """Non-numeric percentage triggers ValueError continue (lines 1286-1287)."""
-        df_output = (
-            "Mounted on  Use% Avail Source\n"
-            "/           abc%  120G  /dev/sda1\n"
-        )
+        df_output = "Mounted on  Use% Avail Source\n/           abc%  120G  /dev/sda1\n"
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = df_output
@@ -2551,11 +2524,7 @@ class TestAptHistoryParsing:
         """Parse Remove action from apt history (lines 481-485)."""
         now = datetime.utcnow()
         date_str = now.strftime("%Y-%m-%d  %H:%M:%S")
-        content = (
-            f"Start-Date: {date_str}\n"
-            "Commandline: apt remove nginx\n"
-            "Remove: nginx:amd64 (1.18.0-6ubuntu1)\n\n"
-        )
+        content = f"Start-Date: {date_str}\nCommandline: apt remove nginx\nRemove: nginx:amd64 (1.18.0-6ubuntu1)\n\n"
         with (
             patch.object(Path, "exists", return_value=True),
             patch.object(Path, "read_text", return_value=content),
@@ -2567,11 +2536,7 @@ class TestAptHistoryParsing:
 
     def test_apt_history_old_entry_skipped(self):
         """Entries older than 24 hours are skipped (line 464-465)."""
-        content = (
-            "Start-Date: 2020-01-01  00:00:00\n"
-            "Commandline: apt install old-pkg\n"
-            "Install: old-pkg (1.0)\n\n"
-        )
+        content = "Start-Date: 2020-01-01  00:00:00\nCommandline: apt install old-pkg\nInstall: old-pkg (1.0)\n\n"
         with (
             patch.object(Path, "exists", return_value=True),
             patch.object(Path, "read_text", return_value=content),
@@ -2581,11 +2546,7 @@ class TestAptHistoryParsing:
 
     def test_apt_history_bad_date_skipped(self):
         """Entries with unparseable dates are skipped (line 467-468)."""
-        content = (
-            "Start-Date: not-a-date\n"
-            "Commandline: apt install bad-date\n"
-            "Install: bad-date (1.0)\n\n"
-        )
+        content = "Start-Date: not-a-date\nCommandline: apt install bad-date\nInstall: bad-date (1.0)\n\n"
         with (
             patch.object(Path, "exists", return_value=True),
             patch.object(Path, "read_text", return_value=content),
@@ -3001,10 +2962,7 @@ class TestTcpRetransmitRateReturnValue:
 
     def test_tcp_retransmit_rate_zero_outsegs(self):
         """Zero OutSegs does not divide by zero (line 929 branch)."""
-        content = (
-            "Tcp: RtoAlgorithm OutSegs RetransSegs\n"
-            "Tcp: 1 0 0\n"
-        )
+        content = "Tcp: RtoAlgorithm OutSegs RetransSegs\nTcp: 1 0 0\n"
         with patch("builtins.open", mock_open(read_data=content)):
             result = _get_tcp_retransmit_rate()
 

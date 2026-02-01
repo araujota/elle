@@ -211,9 +211,7 @@ class TestEmbedderLazyLoadImportError:
 class TestExactMatchQueryInName:
     """Cover the query_lower in name_lower branch scoring 0.9."""
 
-    def test_partial_name_match_scores_0_9(
-        self, retriever: CapabilityRetriever, fake_rows: list[dict]
-    ) -> None:
+    def test_partial_name_match_scores_0_9(self, retriever: CapabilityRetriever, fake_rows: list[dict]) -> None:
         """Partial name match (query in name) should score 0.9 (line 334-335)."""
         with _patch_conn(fake_rows):
             results = retriever.search("service.re", search_type="exact")
@@ -235,28 +233,20 @@ class TestExactMatchQueryInName:
 class TestFTSErrorHandlers:
     """Cover FTS search psycopg error handlers."""
 
-    def test_fts_undefined_column_handled(
-        self, retriever: CapabilityRetriever
-    ) -> None:
+    def test_fts_undefined_column_handled(self, retriever: CapabilityRetriever) -> None:
         """UndefinedColumn error is caught gracefully (lines 399-400)."""
 
         @contextmanager
         def _error_conn(schema="public"):
             conn = MagicMock()
-            conn.execute.side_effect = psycopg.errors.UndefinedColumn(
-                "column search_tsv does not exist"
-            )
+            conn.execute.side_effect = psycopg.errors.UndefinedColumn("column search_tsv does not exist")
             yield conn
 
-        with patch(
-            "elle.capabilities.autogen.retriever.get_conn", _error_conn
-        ):
+        with patch("elle.capabilities.autogen.retriever.get_conn", _error_conn):
             results = retriever._search_fts("test", None, 5, False)
             assert results == []
 
-    def test_fts_generic_psycopg_error_handled(
-        self, retriever: CapabilityRetriever
-    ) -> None:
+    def test_fts_generic_psycopg_error_handled(self, retriever: CapabilityRetriever) -> None:
         """Generic psycopg.Error is caught gracefully (lines 401-402)."""
 
         @contextmanager
@@ -265,9 +255,7 @@ class TestFTSErrorHandlers:
             conn.execute.side_effect = psycopg.Error("connection lost")
             yield conn
 
-        with patch(
-            "elle.capabilities.autogen.retriever.get_conn", _error_conn
-        ):
+        with patch("elle.capabilities.autogen.retriever.get_conn", _error_conn):
             results = retriever._search_fts("test", None, 5, False)
             assert results == []
 
@@ -280,9 +268,7 @@ class TestFTSErrorHandlers:
 class TestSemanticSearchErrorHandlers:
     """Cover semantic search pgvector error handlers."""
 
-    def test_semantic_undefined_table_handled(
-        self, retriever: CapabilityRetriever
-    ) -> None:
+    def test_semantic_undefined_table_handled(self, retriever: CapabilityRetriever) -> None:
         """UndefinedTable error is caught gracefully (lines 451-452)."""
         mock_embedder = MagicMock()
         mock_embedder.embed.return_value = [0.1] * 768
@@ -291,20 +277,14 @@ class TestSemanticSearchErrorHandlers:
         @contextmanager
         def _error_conn(schema="public"):
             conn = MagicMock()
-            conn.execute.side_effect = psycopg.errors.UndefinedTable(
-                "table capability_embeddings does not exist"
-            )
+            conn.execute.side_effect = psycopg.errors.UndefinedTable("table capability_embeddings does not exist")
             yield conn
 
-        with patch(
-            "elle.capabilities.autogen.retriever.get_conn", _error_conn
-        ):
+        with patch("elle.capabilities.autogen.retriever.get_conn", _error_conn):
             results = retriever._search_semantic("test", None, 5, False)
             assert results == []
 
-    def test_semantic_generic_psycopg_error_handled(
-        self, retriever: CapabilityRetriever
-    ) -> None:
+    def test_semantic_generic_psycopg_error_handled(self, retriever: CapabilityRetriever) -> None:
         """Generic psycopg.Error is caught gracefully (lines 453-454)."""
         mock_embedder = MagicMock()
         mock_embedder.embed.return_value = [0.1] * 768
@@ -316,15 +296,11 @@ class TestSemanticSearchErrorHandlers:
             conn.execute.side_effect = psycopg.Error("connection error")
             yield conn
 
-        with patch(
-            "elle.capabilities.autogen.retriever.get_conn", _error_conn
-        ):
+        with patch("elle.capabilities.autogen.retriever.get_conn", _error_conn):
             results = retriever._search_semantic("test", None, 5, False)
             assert results == []
 
-    def test_semantic_results_collected(
-        self, retriever: CapabilityRetriever, fake_rows: list[dict]
-    ) -> None:
+    def test_semantic_results_collected(self, retriever: CapabilityRetriever, fake_rows: list[dict]) -> None:
         """Semantic search results are collected when embedder works (lines 257-259)."""
         mock_embedder = MagicMock()
         mock_embedder.embed.return_value = [0.1] * 768
@@ -347,9 +323,7 @@ class TestSemanticSearchErrorHandlers:
 class TestSuccessRateError:
     """Cover psycopg.Error during success rate query."""
 
-    def test_success_rate_returns_default_on_error(
-        self, retriever: CapabilityRetriever
-    ) -> None:
+    def test_success_rate_returns_default_on_error(self, retriever: CapabilityRetriever) -> None:
         """psycopg.Error falls back to default rate (lines 508-509)."""
 
         @contextmanager
@@ -358,9 +332,7 @@ class TestSuccessRateError:
             conn.execute.side_effect = psycopg.Error("db unavailable")
             yield conn
 
-        with patch(
-            "elle.capabilities.autogen.retriever.get_conn", _error_conn
-        ):
+        with patch("elle.capabilities.autogen.retriever.get_conn", _error_conn):
             rate = retriever._get_success_rate("service.restart")
 
         expected = retriever.PRIOR_SUCCESSES / retriever.PRIOR_TOTAL
@@ -375,9 +347,7 @@ class TestSuccessRateError:
 class TestRecordExecutionError:
     """Cover psycopg.Error during record_execution."""
 
-    def test_record_execution_error_silenced(
-        self, retriever: CapabilityRetriever
-    ) -> None:
+    def test_record_execution_error_silenced(self, retriever: CapabilityRetriever) -> None:
         """psycopg.Error during record_execution is logged, not raised (lines 591-592)."""
 
         @contextmanager
@@ -386,13 +356,9 @@ class TestRecordExecutionError:
             conn.execute.side_effect = psycopg.Error("insert failed")
             yield conn
 
-        with patch(
-            "elle.capabilities.autogen.retriever.get_conn", _error_conn
-        ):
+        with patch("elle.capabilities.autogen.retriever.get_conn", _error_conn):
             # Should not raise
-            retriever.record_execution(
-                "service.restart", True, incident_id="inc-1"
-            )
+            retriever.record_execution("service.restart", True, incident_id="inc-1")
 
 
 # =========================================================================
@@ -403,9 +369,7 @@ class TestRecordExecutionError:
 class TestUpdateEmbeddingError:
     """Cover generic exception during update_embedding."""
 
-    def test_update_embedding_generic_error(
-        self, retriever: CapabilityRetriever
-    ) -> None:
+    def test_update_embedding_generic_error(self, retriever: CapabilityRetriever) -> None:
         """Generic exception returns False (lines 651-653)."""
         with patch(
             "elle.capabilities.autogen.retriever.get_store",
@@ -414,14 +378,10 @@ class TestUpdateEmbeddingError:
             result = retriever.update_embedding("service.restart")
             assert result is False
 
-    def test_update_embedding_db_error_during_insert(
-        self, retriever: CapabilityRetriever
-    ) -> None:
+    def test_update_embedding_db_error_during_insert(self, retriever: CapabilityRetriever) -> None:
         """DB error during embedding insert returns False."""
         mock_stored = MagicMock()
-        mock_stored.spec_json = json.dumps(
-            {"description": "test", "domain": "service", "keywords": []}
-        )
+        mock_stored.spec_json = json.dumps({"description": "test", "domain": "service", "keywords": []})
 
         mock_embedder = MagicMock()
         mock_embedder.embed.return_value = [0.1] * 768
@@ -434,12 +394,8 @@ class TestUpdateEmbeddingError:
             yield conn
 
         with (
-            patch(
-                "elle.capabilities.autogen.retriever.get_store"
-            ) as mock_store,
-            patch(
-                "elle.capabilities.autogen.retriever.get_conn", _error_conn
-            ),
+            patch("elle.capabilities.autogen.retriever.get_store") as mock_store,
+            patch("elle.capabilities.autogen.retriever.get_conn", _error_conn),
         ):
             mock_store.return_value.get.return_value = mock_stored
             result = retriever.update_embedding("service.restart")
@@ -463,9 +419,7 @@ class TestHybridSemanticResultCollection:
         retriever._embedder = mock_embedder
 
         with _patch_conn(fake_rows):
-            results = retriever.search(
-                "restart service", search_type="hybrid"
-            )
+            results = retriever.search("restart service", search_type="hybrid")
 
         assert len(results) > 0
         # At least some should be hybrid (found in multiple tiers)
@@ -481,14 +435,10 @@ class TestHybridSemanticResultCollection:
 class TestFTSWithDomainFilter:
     """Cover FTS search with domain filter parameter."""
 
-    def test_fts_with_domain_filter(
-        self, retriever: CapabilityRetriever, fake_rows: list[dict]
-    ) -> None:
+    def test_fts_with_domain_filter(self, retriever: CapabilityRetriever, fake_rows: list[dict]) -> None:
         """FTS search with domain filter appends domain condition (lines 383-385)."""
         with _patch_conn(fake_rows):
-            results = retriever._search_fts(
-                "service", "service", 5, False
-            )
+            results = retriever._search_fts("service", "service", 5, False)
         # Should return results (fake conn doesn't filter by domain in FTS)
         # The important thing is the code path doesn't error
         assert isinstance(results, list)
@@ -502,16 +452,12 @@ class TestFTSWithDomainFilter:
 class TestSemanticWithDomainFilter:
     """Cover semantic search with domain filter parameter."""
 
-    def test_semantic_with_domain_filter(
-        self, retriever: CapabilityRetriever, fake_rows: list[dict]
-    ) -> None:
+    def test_semantic_with_domain_filter(self, retriever: CapabilityRetriever, fake_rows: list[dict]) -> None:
         """Semantic search with domain filter appends condition (lines 435-437)."""
         mock_embedder = MagicMock()
         mock_embedder.embed.return_value = [0.1] * 768
         retriever._embedder = mock_embedder
 
         with _patch_conn(fake_rows):
-            results = retriever._search_semantic(
-                "restart", "service", 5, False
-            )
+            results = retriever._search_semantic("restart", "service", 5, False)
         assert isinstance(results, list)

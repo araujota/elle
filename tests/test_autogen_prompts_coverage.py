@@ -23,6 +23,7 @@ from elle.capabilities.autogen.prompts import (
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 def _make_man_page(**kwargs) -> ParsedManPage:
     """Build a ParsedManPage with sensible defaults, overriding with kwargs."""
     defaults = {
@@ -134,10 +135,7 @@ class TestBuildGenerationPrompt:
 
     def test_flags_limit_to_20(self):
         """Only first 20 flags are included."""
-        flags = tuple(
-            _make_flag(name=f"flag{i}", long=f"--flag{i}", description=f"Flag {i}")
-            for i in range(30)
-        )
+        flags = tuple(_make_flag(name=f"flag{i}", long=f"--flag{i}", description=f"Flag {i}") for i in range(30))
         man = _make_man_page(flags=flags)
         prompt = build_generation_prompt(man)
         assert "--flag19" in prompt
@@ -145,10 +143,7 @@ class TestBuildGenerationPrompt:
 
     def test_examples_limit_to_5(self):
         """Only first 5 examples are included."""
-        examples = tuple(
-            ParsedExample(command=f"cmd{i}", description=f"Ex {i}")
-            for i in range(10)
-        )
+        examples = tuple(ParsedExample(command=f"cmd{i}", description=f"Ex {i}") for i in range(10))
         man = _make_man_page(examples=examples)
         prompt = build_generation_prompt(man)
         assert "cmd4" in prompt
@@ -176,9 +171,7 @@ class TestBuildSubcommandPrompt:
         assert "DESCRIPTION" in prompt
 
     def test_with_flags(self):
-        flags = (
-            _make_flag(name="force", short="-f", long="--force", description="Force restart"),
-        )
+        flags = (_make_flag(name="force", short="-f", long="--force", description="Force restart"),)
         man = _make_man_page(flags=flags)
         prompt = build_subcommand_prompt(man, "restart")
         assert "OPTIONS" in prompt
@@ -217,10 +210,7 @@ class TestBuildValidationPrompt:
         assert "valid" in prompt
 
     def test_validation_prompt_with_many_flags(self):
-        flags = tuple(
-            _make_flag(name=f"f{i}", long=f"--f{i}", description=f"Flag {i}")
-            for i in range(35)
-        )
+        flags = tuple(_make_flag(name=f"f{i}", long=f"--f{i}", description=f"Flag {i}") for i in range(35))
         man = _make_man_page(flags=flags)
         prompt = build_validation_prompt('{"name":"x"}', man)
         # Should include up to 30 flags
@@ -228,5 +218,5 @@ class TestBuildValidationPrompt:
 
     def test_validation_prompt_with_no_flags(self):
         man = _make_man_page()
-        prompt = build_validation_prompt('{}', man)
+        prompt = build_validation_prompt("{}", man)
         assert "testcmd(1)" in prompt

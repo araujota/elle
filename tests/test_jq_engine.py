@@ -1039,7 +1039,7 @@ class TestQueryParseEdgeCases:
     def test_query_file_multiline_unparseable_output(self, engine, tmp_path) -> None:
         """query_file() returns None parsed_output for multi-line non-JSON."""
         json_file = tmp_path / "data.json"
-        json_file.write_text('[1,2]')
+        json_file.write_text("[1,2]")
 
         with patch(
             "elle.ops.jq.engine.subprocess.run",
@@ -1584,7 +1584,7 @@ class TestDetectChangesArrayElements:
         ops = {c.operation for c in changes}
         assert "modify" in ops  # a changed
         assert "delete" in ops  # c removed
-        assert "add" in ops     # d added
+        assert "add" in ops  # d added
 
 
 # ---------------------------------------------------------------------------

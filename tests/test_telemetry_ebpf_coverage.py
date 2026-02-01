@@ -64,10 +64,7 @@ class TestFormatConnections:
         assert "ipv4" in result[0]
 
     def test_truncation(self):
-        conns = tuple(
-            NetworkConnection(addr=f"10.0.0.{i}", port=8000 + i)
-            for i in range(MAX_DISPLAY_ITEMS + 3)
-        )
+        conns = tuple(NetworkConnection(addr=f"10.0.0.{i}", port=8000 + i) for i in range(MAX_DISPLAY_ITEMS + 3))
         result = _format_connections(conns)
         assert len(result) == MAX_DISPLAY_ITEMS + 1
         assert "... and 3 more" in result[-1]
@@ -84,9 +81,7 @@ class TestFormatRenameList:
         assert "/old -> /new" in result[0]
 
     def test_truncation(self):
-        renames = tuple(
-            (f"/old_{i}", f"/new_{i}") for i in range(MAX_DISPLAY_ITEMS + 2)
-        )
+        renames = tuple((f"/old_{i}", f"/new_{i}") for i in range(MAX_DISPLAY_ITEMS + 2))
         result = _format_rename_list(renames)
         assert len(result) == MAX_DISPLAY_ITEMS + 1
         assert "... and 2 more" in result[-1]
@@ -578,9 +573,17 @@ class TestBccAvailable:
 
 
 class TestCheckCapabilities:
-    def _mock_all(self, kernel=(6, 8, 0), root=False, cap_bpf=False,
-                  cap_perfmon=False, cap_net_admin=False, cap_sys_admin=False,
-                  bpf_fs=True, bcc=True):
+    def _mock_all(
+        self,
+        kernel=(6, 8, 0),
+        root=False,
+        cap_bpf=False,
+        cap_perfmon=False,
+        cap_net_admin=False,
+        cap_sys_admin=False,
+        bpf_fs=True,
+        bcc=True,
+    ):
         """Return patches that set up a controlled capability environment."""
         return [
             patch(

@@ -157,10 +157,12 @@ class TestRuleBasedGeneration:
     @pytest.mark.timeout(10)
     def test_explanation_with_links(self):
         builder = NarrativeBuilder(use_llm=False)
-        chain = _make_chain([
-            _make_link(confidence=0.9, temporal_delta_sec=30),
-            _make_link(confidence=0.3, temporal_delta_sec=60),
-        ])
+        chain = _make_chain(
+            [
+                _make_link(confidence=0.9, temporal_delta_sec=30),
+                _make_link(confidence=0.3, temporal_delta_sec=60),
+            ]
+        )
         timeline = builder._build_timeline(chain)
         explanation = builder._generate_explanation_rule_based(chain, timeline)
         assert "high confidence" in explanation
@@ -269,9 +271,11 @@ class TestExtractKeywords:
     @pytest.mark.timeout(10)
     def test_extracts_keywords(self):
         builder = NarrativeBuilder(use_llm=False)
-        chain = _make_chain([
-            _make_link(cause_summary="nginx failed with timeout", effect_summary="disk full error"),
-        ])
+        chain = _make_chain(
+            [
+                _make_link(cause_summary="nginx failed with timeout", effect_summary="disk full error"),
+            ]
+        )
         keywords = builder._extract_keywords(chain, "service failed", "nginx disk full")
         assert "failed" in keywords
         assert "nginx" in keywords

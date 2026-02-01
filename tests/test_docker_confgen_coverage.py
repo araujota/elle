@@ -75,7 +75,9 @@ class TestDockerfileValidation:
     def test_valid_dockerfile(self):
         """Valid Dockerfile passes validation."""
         handler = _make_handler()
-        content = "FROM python:3.10\nWORKDIR /app\nCOPY . .\nRUN pip install -r requirements.txt\nCMD ['python', 'app.py']\n"
+        content = (
+            "FROM python:3.10\nWORKDIR /app\nCOPY . .\nRUN pip install -r requirements.txt\nCMD ['python', 'app.py']\n"
+        )
         result = handler.validate_content(content)
         assert result.valid
 

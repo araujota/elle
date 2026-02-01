@@ -109,9 +109,7 @@ class TestBashCompletionParseFailure:
     def extractor(self) -> BashCompletionExtractor:
         return BashCompletionExtractor()
 
-    def test_parse_failure_continues_to_next_file(
-        self, extractor: BashCompletionExtractor, tmp_path: Path
-    ) -> None:
+    def test_parse_failure_continues_to_next_file(self, extractor: BashCompletionExtractor, tmp_path: Path) -> None:
         """Exception reading one completion file should not block others (lines 339-341)."""
         # First file: will cause an exception
         bad_file = tmp_path / "bad_bash_comp"
@@ -119,7 +117,7 @@ class TestBashCompletionParseFailure:
 
         # Second file: has valid flags
         good_file = tmp_path / "good_bash_comp"
-        good_file.write_text('COMPREPLY=( $(compgen -W \'--help --version\' -- "$cur") )\n')
+        good_file.write_text("COMPREPLY=( $(compgen -W '--help --version' -- \"$cur\") )\n")
 
         manifest = FileManifest(completions=(str(bad_file), str(good_file)))
 
@@ -141,9 +139,7 @@ class TestBashCompletionParseFailure:
         flag_names = {f.flag for f in result.flags}
         assert "--help" in flag_names
 
-    def test_all_files_fail_returns_error(
-        self, extractor: BashCompletionExtractor, tmp_path: Path
-    ) -> None:
+    def test_all_files_fail_returns_error(self, extractor: BashCompletionExtractor, tmp_path: Path) -> None:
         """When all completion files fail to parse, return error."""
         bad_file = tmp_path / "bad_bash_comp"
         bad_file.write_text("content")
@@ -167,22 +163,15 @@ class TestZshCompletionParseCoverage:
     def extractor(self) -> ZshCompletionExtractor:
         return ZshCompletionExtractor()
 
-    def test_parse_failure_continues(
-        self, extractor: ZshCompletionExtractor, tmp_path: Path
-    ) -> None:
+    def test_parse_failure_continues(self, extractor: ZshCompletionExtractor, tmp_path: Path) -> None:
         """Exception reading one zsh file continues to next (lines 507-509)."""
         bad_file = tmp_path / "bad_zsh_comp"
         bad_file.write_text("content")
 
         good_file = tmp_path / "good_zsh_comp"
-        good_file.write_text(
-            "_arguments \\\n"
-            "    '--verbose[Enable verbose mode]' \\\n"
-        )
+        good_file.write_text("_arguments \\\n    '--verbose[Enable verbose mode]' \\\n")
 
-        manifest = FileManifest(
-            completions=(str(bad_file), str(good_file))
-        )
+        manifest = FileManifest(completions=(str(bad_file), str(good_file)))
 
         original_read_text = Path.read_text
         call_count = [0]
@@ -199,15 +188,11 @@ class TestZshCompletionParseCoverage:
         # Should succeed from the good file
         assert result.source_name == "zsh_completion"
 
-    def test_zsh_result_building_with_flags(
-        self, extractor: ZshCompletionExtractor, tmp_path: Path
-    ) -> None:
+    def test_zsh_result_building_with_flags(self, extractor: ZshCompletionExtractor, tmp_path: Path) -> None:
         """Cover ShellCompletions result construction (lines 518-530)."""
         comp_file = tmp_path / "zsh_pkg"
         comp_file.write_text(
-            "_arguments \\\n"
-            "    '--help[Show help message]' \\\n"
-            "    '--output[Output file]:file:_files' \\\n"
+            "_arguments \\\n    '--help[Show help message]' \\\n    '--output[Output file]:file:_files' \\\n"
         )
 
         # Use "zsh" in filename to pass the filter
@@ -224,15 +209,11 @@ class TestZshCompletionParseCoverage:
             flag_names = {f.flag for f in result.flags}
             assert "--help" in flag_names
 
-    def test_zsh_flag_with_description_and_value(
-        self, extractor: ZshCompletionExtractor, tmp_path: Path
-    ) -> None:
+    def test_zsh_flag_with_description_and_value(self, extractor: ZshCompletionExtractor, tmp_path: Path) -> None:
         """Cover flag extraction with description and takes_value (lines 551-572)."""
         comp_file = tmp_path / "zsh_detailed"
         comp_file.write_text(
-            "_arguments \\\n"
-            "    '--config[Config file path]:config file:_files' \\\n"
-            "    '--dry-run[Simulate only]' \\\n"
+            "_arguments \\\n    '--config[Config file path]:config file:_files' \\\n    '--dry-run[Simulate only]' \\\n"
         )
         manifest = FileManifest(completions=(str(comp_file),))
         result = extractor.extract("pkg", manifest=manifest)
@@ -243,9 +224,7 @@ class TestZshCompletionParseCoverage:
                     assert flag.takes_value is True
                     assert "Config" in flag.description
 
-    def test_zsh_no_flags_found(
-        self, extractor: ZshCompletionExtractor, tmp_path: Path
-    ) -> None:
+    def test_zsh_no_flags_found(self, extractor: ZshCompletionExtractor, tmp_path: Path) -> None:
         """Empty content with no flags returns error (line 511-516)."""
         comp_file = tmp_path / "zsh_empty"
         comp_file.write_text("# nothing here\n")
@@ -267,9 +246,7 @@ class TestManPageExtractorCoverage:
     def extractor(self) -> ManPageExtractor:
         return ManPageExtractor()
 
-    def test_uses_first_binary_when_no_name_match(
-        self, extractor: ManPageExtractor
-    ) -> None:
+    def test_uses_first_binary_when_no_name_match(self, extractor: ManPageExtractor) -> None:
         """When no binary matches package name, use first binary (line 610)."""
         manifest = FileManifest(binaries=("/usr/bin/othertool",))
 
@@ -283,13 +260,9 @@ class TestManPageExtractorCoverage:
             assert result.success is False
             assert "No man page" in (result.error or "")
 
-    def test_uses_matching_binary_name(
-        self, extractor: ManPageExtractor
-    ) -> None:
+    def test_uses_matching_binary_name(self, extractor: ManPageExtractor) -> None:
         """When a binary matches the package name, it is used."""
-        manifest = FileManifest(
-            binaries=("/usr/bin/othertool", "/usr/bin/mypkg")
-        )
+        manifest = FileManifest(binaries=("/usr/bin/othertool", "/usr/bin/mypkg"))
 
         with patch(
             "elle.capabilities.autogen.parser.parse_man_page",
@@ -331,12 +304,7 @@ class TestHelpOutputNoFlagsCoverage:
     def test_help_text_with_no_parseable_flags(self, extractor: HelpOutputExtractor) -> None:
         """Help output with no matching flag patterns returns error (line 815)."""
         mock_result = MagicMock()
-        mock_result.stdout = (
-            "Usage: mytool [command]\n"
-            "\n"
-            "A tool that does things.\n"
-            "Run 'mytool help' for more info.\n"
-        )
+        mock_result.stdout = "Usage: mytool [command]\n\nA tool that does things.\nRun 'mytool help' for more info.\n"
         mock_result.stderr = ""
 
         with patch("subprocess.run", return_value=mock_result):

@@ -345,6 +345,7 @@ class TestDependencyCheckerBuildResult:
 class TestCheckerConvenienceFunctions:
     def test_get_checker_singleton(self):
         from elle.capabilities.dependencies.checker import get_checker, reset_checker
+
         reset_checker()
         c1 = get_checker()
         c2 = get_checker()
@@ -353,6 +354,7 @@ class TestCheckerConvenienceFunctions:
 
     def test_check_dependency(self):
         from elle.capabilities.dependencies.checker import check_dependency, reset_checker
+
         reset_checker()
         # "json" should be unknown to the default registry, but function should not raise
         result = check_dependency("json")
@@ -365,6 +367,7 @@ class TestCheckerConvenienceFunctions:
             check_dependencies_for_capability,
             reset_checker,
         )
+
         reset_checker()
         results = check_dependencies_for_capability("nonexistent.capability")
         assert isinstance(results, list)
@@ -385,6 +388,7 @@ class TestDependencySchema:
             PREFERENCES_TABLE,
             SCHEMA_VERSION,
         )
+
         assert SCHEMA_VERSION == 1
         assert PG_SCHEMA == "deps"
         assert "dependency_preferences" in PREFERENCES_TABLE

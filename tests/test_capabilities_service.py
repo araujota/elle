@@ -618,9 +618,7 @@ class TestRunSystemctlHelper:
     def test_run_systemctl_success(self, mock_run_safe):
         from elle.capabilities.core.service import _run_systemctl
 
-        mock_run_safe.return_value = _make_subprocess_result(
-            stdout="", stderr="", exit_code=0
-        )
+        mock_run_safe.return_value = _make_subprocess_result(stdout="", stderr="", exit_code=0)
 
         success, stdout, stderr, exit_code = _run_systemctl("restart", "nginx", 30)
 
@@ -632,9 +630,7 @@ class TestRunSystemctlHelper:
     def test_run_systemctl_failure(self, mock_run_safe):
         from elle.capabilities.core.service import _run_systemctl
 
-        mock_run_safe.return_value = _make_subprocess_result(
-            stdout="", stderr="Access denied", exit_code=1
-        )
+        mock_run_safe.return_value = _make_subprocess_result(stdout="", stderr="Access denied", exit_code=1)
 
         success, stdout, stderr, exit_code = _run_systemctl("start", "ssh", 60)
 

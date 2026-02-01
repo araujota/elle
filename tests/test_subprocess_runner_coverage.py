@@ -207,9 +207,7 @@ class TestStreamingLoopCoverage:
 
         with patch("subprocess.Popen", return_value=mock_proc):
             with patch("select.select", return_value=([mock_stdout, mock_stderr], [], [])):
-                result = _run_streaming(
-                    "cmd", Path("/tmp"), 30.0, lambda line: captured.append(line), None
-                )
+                result = _run_streaming("cmd", Path("/tmp"), 30.0, lambda line: captured.append(line), None)
 
         assert result.exit_code == 0
         # stdout and stderr lines should have been captured
@@ -233,9 +231,7 @@ class TestStreamingLoopCoverage:
 
         with patch("subprocess.Popen", return_value=mock_proc):
             with patch("select.select", return_value=([None], [], [])):
-                result = _run_streaming(
-                    "test", Path("/tmp"), 30.0, lambda l: None, None
-                )
+                result = _run_streaming("test", Path("/tmp"), 30.0, lambda l: None, None)
 
         assert result.exit_code == 0
 
@@ -245,17 +241,13 @@ class TestStreamingLoopCoverage:
         mock_proc.poll = MagicMock(return_value=0)
         mock_proc.stdout = MagicMock()
         mock_proc.stderr = MagicMock()
-        mock_proc.communicate = MagicMock(
-            side_effect=sp.TimeoutExpired("cmd", 1.0)
-        )
+        mock_proc.communicate = MagicMock(side_effect=sp.TimeoutExpired("cmd", 1.0))
         mock_proc.returncode = None
         mock_proc.wait = MagicMock()
         mock_proc.kill = MagicMock()
 
         with patch("subprocess.Popen", return_value=mock_proc):
-            result = _run_streaming(
-                "slow_cmd", Path("/tmp"), 30.0, lambda l: None, None
-            )
+            result = _run_streaming("slow_cmd", Path("/tmp"), 30.0, lambda l: None, None)
 
         assert result.timed_out is True
         assert "timed out" in result.stderr.lower()
@@ -267,17 +259,13 @@ class TestStreamingLoopCoverage:
         mock_proc.poll = MagicMock(return_value=0)
         mock_proc.stdout = MagicMock()
         mock_proc.stderr = MagicMock()
-        mock_proc.communicate = MagicMock(
-            return_value=("remaining_out\n", "remaining_err\n")
-        )
+        mock_proc.communicate = MagicMock(return_value=("remaining_out\n", "remaining_err\n"))
         mock_proc.returncode = 0
 
         captured: list[str] = []
 
         with patch("subprocess.Popen", return_value=mock_proc):
-            result = _run_streaming(
-                "cmd", Path("/tmp"), 30.0, lambda l: captured.append(l), None
-            )
+            result = _run_streaming("cmd", Path("/tmp"), 30.0, lambda l: captured.append(l), None)
 
         assert "remaining_out" in result.stdout
         assert "remaining_err" in result.stderr
@@ -306,9 +294,7 @@ class TestStreamingLoopCoverage:
         with patch("subprocess.Popen", return_value=mock_proc):
             with patch("select.select", return_value=([], [], [])):
                 with patch("time.time", side_effect=fake_time):
-                    result = _run_streaming(
-                        "hanging_cmd", Path("/tmp"), 5.0, lambda l: None, None
-                    )
+                    result = _run_streaming("hanging_cmd", Path("/tmp"), 5.0, lambda l: None, None)
 
         assert result.timed_out is True
         mock_proc.kill.assert_called_once()

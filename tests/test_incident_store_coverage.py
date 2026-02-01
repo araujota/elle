@@ -246,10 +246,12 @@ class TestRowToIncident:
     @pytest.mark.timeout(10)
     def test_created_at_as_string(self):
         """ISO string timestamps should be parsed correctly."""
-        row = _make_incident_row({
-            "created_at": "2024-06-15T12:00:00+00:00",
-            "updated_at": "2024-06-15T13:00:00+00:00",
-        })
+        row = _make_incident_row(
+            {
+                "created_at": "2024-06-15T12:00:00+00:00",
+                "updated_at": "2024-06-15T13:00:00+00:00",
+            }
+        )
         result = _row_to_incident(row)
         assert result.created_at.year == 2024
         assert result.created_at.month == 6
@@ -332,10 +334,12 @@ class TestUpdateIncident:
         update_result = MagicMock()
         update_result.rowcount = 1
         select_result = MagicMock()
-        select_result.fetchone.return_value = _make_incident_row({
-            "summary": "multi",
-            "status": "mitigated",
-        })
+        select_result.fetchone.return_value = _make_incident_row(
+            {
+                "summary": "multi",
+                "status": "mitigated",
+            }
+        )
         mock_conn.execute.side_effect = [update_result, select_result]
 
         result = update_incident(
@@ -787,15 +791,17 @@ class TestFinalizeOutcome:
         update_result.rowcount = 1
         # 3rd execute: SELECT in _get_incident_with_conn (after update)
         post_update_result = MagicMock()
-        post_update_result.fetchone.return_value = _make_incident_row({
-            "outcome": outcome,
-            "status": {
-                "improved": "resolved",
-                "partial": "mitigated",
-                "worse": "open",
-                "no_change": "open",
-            }.get(outcome, "open"),
-        })
+        post_update_result.fetchone.return_value = _make_incident_row(
+            {
+                "outcome": outcome,
+                "status": {
+                    "improved": "resolved",
+                    "partial": "mitigated",
+                    "worse": "open",
+                    "no_change": "open",
+                }.get(outcome, "open"),
+            }
+        )
         mock_conn.execute.side_effect = [select_result, update_result, post_update_result]
 
     @pytest.mark.timeout(10)
@@ -854,10 +860,12 @@ class TestFinalizeOutcome:
         update_result = MagicMock()
         update_result.rowcount = 1
         post_update_result = MagicMock()
-        post_update_result.fetchone.return_value = _make_incident_row({
-            "outcome": "unknown",
-            "status": "open",
-        })
+        post_update_result.fetchone.return_value = _make_incident_row(
+            {
+                "outcome": "unknown",
+                "status": "open",
+            }
+        )
         mock_conn.execute.side_effect = [select_result, update_result, post_update_result]
 
         result = finalize_outcome("test-id-123", outcome="unknown")
@@ -958,18 +966,22 @@ class TestRowToDecisionRecord:
         row = {
             "chosen_approach": "Clear disk space",
             "rationale": "Disk full",
-            "confidence_json": json.dumps({
-                "overall": 0.9,
-                "from_man_vault": 0.2,
-                "from_incident_vault": 0.5,
-                "from_llm": 0.2,
-                "dominant_tier": "semantic",
-            }),
-            "provenance_json": json.dumps({
-                "man_pages": [{"name": "du", "section": "1", "snippet": "estimate file space"}],
-                "prior_incidents": [],
-                "primary_source": "man_vault",
-            }),
+            "confidence_json": json.dumps(
+                {
+                    "overall": 0.9,
+                    "from_man_vault": 0.2,
+                    "from_incident_vault": 0.5,
+                    "from_llm": 0.2,
+                    "dominant_tier": "semantic",
+                }
+            ),
+            "provenance_json": json.dumps(
+                {
+                    "man_pages": [{"name": "du", "section": "1", "snippet": "estimate file space"}],
+                    "prior_incidents": [],
+                    "primary_source": "man_vault",
+                }
+            ),
             "planned_commands_json": json.dumps(["du -sh /var", "apt clean"]),
             "decided_at": "2024-02-01T10:00:00+00:00",
         }
@@ -1238,17 +1250,19 @@ class TestTelemetrySnapshots:
 
         ext_conn = MagicMock()
         ext_conn.execute.return_value.fetchone.return_value = {
-            "snapshot_json": json.dumps({
-                "cpu": {"load_1m": 2.0, "load_5m": 1.5, "load_15m": 1.0},
-                "memory": {"total_mb": 8192, "available_mb": 4096},
-                "disk": {},
-                "network": {},
-                "kernel": {},
-                "gpu": {},
-                "services": [],
-                "hostname": "myhost",
-                "uptime_sec": 100,
-            }),
+            "snapshot_json": json.dumps(
+                {
+                    "cpu": {"load_1m": 2.0, "load_5m": 1.5, "load_15m": 1.0},
+                    "memory": {"total_mb": 8192, "available_mb": 4096},
+                    "disk": {},
+                    "network": {},
+                    "kernel": {},
+                    "gpu": {},
+                    "services": [],
+                    "hostname": "myhost",
+                    "uptime_sec": 100,
+                }
+            ),
         }
 
         with patch(PATCH_GET_CONN) as mock_gc:
@@ -1263,17 +1277,19 @@ class TestTelemetrySnapshots:
         from elle.daemon.incidents.store import get_telemetry_snapshot
 
         mock_conn.execute.return_value.fetchone.return_value = {
-            "snapshot_json": json.dumps({
-                "cpu": {"load_1m": 1.0, "load_5m": 0.5, "load_15m": 0.3},
-                "memory": {"total_mb": 16384, "available_mb": 8192},
-                "disk": {},
-                "network": {},
-                "kernel": {},
-                "gpu": {},
-                "services": [],
-                "hostname": "host",
-                "uptime_sec": 50,
-            }),
+            "snapshot_json": json.dumps(
+                {
+                    "cpu": {"load_1m": 1.0, "load_5m": 0.5, "load_15m": 0.3},
+                    "memory": {"total_mb": 16384, "available_mb": 8192},
+                    "disk": {},
+                    "network": {},
+                    "kernel": {},
+                    "gpu": {},
+                    "services": [],
+                    "hostname": "host",
+                    "uptime_sec": 50,
+                }
+            ),
         }
 
         result = get_telemetry_snapshot("inc-001", "pre")
@@ -1291,17 +1307,19 @@ class TestTelemetrySnapshots:
     def test_get_telemetry_snapshots(self, mock_conn):
         from elle.daemon.incidents.store import get_telemetry_snapshots
 
-        snap_json = json.dumps({
-            "cpu": {"load_1m": 1.0, "load_5m": 0.5, "load_15m": 0.3},
-            "memory": {"total_mb": 16384, "available_mb": 8192},
-            "disk": {},
-            "network": {},
-            "kernel": {},
-            "gpu": {},
-            "services": [],
-            "hostname": "h",
-            "uptime_sec": 10,
-        })
+        snap_json = json.dumps(
+            {
+                "cpu": {"load_1m": 1.0, "load_5m": 0.5, "load_15m": 0.3},
+                "memory": {"total_mb": 16384, "available_mb": 8192},
+                "disk": {},
+                "network": {},
+                "kernel": {},
+                "gpu": {},
+                "services": [],
+                "hostname": "h",
+                "uptime_sec": 10,
+            }
+        )
         mock_conn.execute.return_value.fetchall.return_value = [
             {"which": "pre", "snapshot_json": snap_json},
             {"which": "post", "snapshot_json": snap_json},
@@ -1416,16 +1434,18 @@ class TestControlSurfaceSnapshots:
     def test_get_control_surface_snapshots(self, mock_conn):
         from elle.daemon.incidents.store import get_control_surface_snapshots
 
-        snap_json = json.dumps({
-            "services": [],
-            "configs": [],
-            "packages": {"packages": []},
-            "scheduler": {},
-            "privilege": {},
-            "network_control": {},
-            "kernel_policy": {},
-            "hardware": {},
-        })
+        snap_json = json.dumps(
+            {
+                "services": [],
+                "configs": [],
+                "packages": {"packages": []},
+                "scheduler": {},
+                "privilege": {},
+                "network_control": {},
+                "kernel_policy": {},
+                "hardware": {},
+            }
+        )
         mock_conn.execute.return_value.fetchall.return_value = [
             {"which": "pre", "snapshot_json": snap_json},
         ]

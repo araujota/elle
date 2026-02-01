@@ -66,30 +66,22 @@ class TestFixitContextHasVaultContext:
     def test_with_man_snippets_only(self):
         """has_vault_context returns True when man_snippets present."""
         ctx = _context(
-            man_snippets=(
-                ManSnippetContext(name="ls", section="1", snippet="list dir"),
-            ),
+            man_snippets=(ManSnippetContext(name="ls", section="1", snippet="list dir"),),
         )
         assert ctx.has_vault_context() is True
 
     def test_with_prior_art_only(self):
         """has_vault_context returns True when prior_art present."""
         ctx = _context(
-            prior_art=(
-                PriorArtContext(incident_id="INC-1", title="test", outcome="improved"),
-            ),
+            prior_art=(PriorArtContext(incident_id="INC-1", title="test", outcome="improved"),),
         )
         assert ctx.has_vault_context() is True
 
     def test_with_both(self):
         """has_vault_context returns True when both present."""
         ctx = _context(
-            man_snippets=(
-                ManSnippetContext(name="ls", section="1", snippet="list"),
-            ),
-            prior_art=(
-                PriorArtContext(incident_id="INC-1", title="test", outcome="improved"),
-            ),
+            man_snippets=(ManSnippetContext(name="ls", section="1", snippet="list"),),
+            prior_art=(PriorArtContext(incident_id="INC-1", title="test", outcome="improved"),),
         )
         assert ctx.has_vault_context() is True
 
@@ -138,9 +130,7 @@ class TestFixitContextPrimarySource:
     def test_man_vault_when_no_good_prior_art(self):
         """Returns 'man_vault' when only man snippets present (no good prior art)."""
         ctx = _context(
-            man_snippets=(
-                ManSnippetContext(name="ls", section="1", snippet="list dir"),
-            ),
+            man_snippets=(ManSnippetContext(name="ls", section="1", snippet="list dir"),),
             prior_art=(
                 PriorArtContext(
                     incident_id="INC-3",
@@ -155,9 +145,7 @@ class TestFixitContextPrimarySource:
     def test_man_vault_no_prior_art(self):
         """Returns 'man_vault' when only man snippets and no prior art."""
         ctx = _context(
-            man_snippets=(
-                ManSnippetContext(name="grep", section="1", snippet="search"),
-            ),
+            man_snippets=(ManSnippetContext(name="grep", section="1", snippet="search"),),
         )
         assert ctx.primary_source == "man_vault"
 
@@ -169,9 +157,7 @@ class TestFixitContextPrimarySource:
     def test_low_score_prior_art_returns_man_vault(self):
         """Returns 'man_vault' when prior art has good outcome but low score."""
         ctx = _context(
-            man_snippets=(
-                ManSnippetContext(name="ls", section="1", snippet="list"),
-            ),
+            man_snippets=(ManSnippetContext(name="ls", section="1", snippet="list"),),
             prior_art=(
                 PriorArtContext(
                     incident_id="INC-4",
@@ -223,12 +209,8 @@ class TestBuildRationaleSummary:
     def test_with_both_sources(self):
         """Summary combines both man and incident references."""
         ctx = _context(
-            man_snippets=(
-                ManSnippetContext(name="ls", section="1", snippet="list"),
-            ),
-            prior_art=(
-                PriorArtContext(incident_id="INC-1", title="t", outcome="improved"),
-            ),
+            man_snippets=(ManSnippetContext(name="ls", section="1", snippet="list"),),
+            prior_art=(PriorArtContext(incident_id="INC-1", title="t", outcome="improved"),),
         )
         summary = ctx.build_rationale_summary()
         assert "man" in summary
@@ -391,9 +373,7 @@ class TestToRationaleKwargs:
     def test_overall_capped_at_one(self):
         """Overall confidence is capped at 1.0."""
         ctx = _context(
-            man_snippets=(
-                ManSnippetContext(name="a", section="1", snippet="x", relevance_score=1.0),
-            ),
+            man_snippets=(ManSnippetContext(name="a", section="1", snippet="x", relevance_score=1.0),),
             prior_art=(
                 PriorArtContext(
                     incident_id="INC",

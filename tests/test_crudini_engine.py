@@ -1040,7 +1040,10 @@ class TestPreviewEdit:
             result = engine.preview_edit(request)
 
         assert result.is_valid_ini is True
-        assert "host" not in result.proposed_content or "host" not in result.proposed_content.split("[database]")[1].split("[")[0]
+        assert (
+            "host" not in result.proposed_content
+            or "host" not in result.proposed_content.split("[database]")[1].split("[")[0]
+        )
 
     def test_preview_edit_del_section(self, engine, tmp_path) -> None:
         """preview_edit() removes an entire section in preview."""

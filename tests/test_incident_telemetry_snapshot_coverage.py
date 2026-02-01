@@ -124,7 +124,9 @@ class TestParsePsiFile:
     @pytest.mark.timeout(10)
     def test_valid_psi(self, tmp_path):
         psi_file = tmp_path / "psi_cpu"
-        psi_file.write_text("some avg10=5.50 avg60=3.20 avg300=1.10 total=123456\nfull avg10=2.30 avg60=1.00 avg300=0.50 total=654321\n")
+        psi_file.write_text(
+            "some avg10=5.50 avg60=3.20 avg300=1.10 total=123456\nfull avg10=2.30 avg60=1.00 avg300=0.50 total=654321\n"
+        )
 
         some, full = _parse_psi_file(str(psi_file))
         assert some == 5.5
@@ -161,6 +163,7 @@ class TestCollectCpuPressure:
         stat.write_text("cpu 100 20 50 5000 30 10 5 15 0 0\n")
 
         with patch("elle.daemon.incidents.telemetry_snapshot.Path") as MockPath:
+
             def path_side_effect(p):
                 if p == "/proc/loadavg":
                     return loadavg
@@ -409,8 +412,12 @@ class TestCollectTelemetrySnapshot:
                                 gpu.return_value = GPUMetrics()
                                 with patch("elle.daemon.incidents.telemetry_snapshot._collect_service_runtime") as svc:
                                     svc.return_value = ServiceRuntimeSnapshot(service="nginx.service")
-                                    with patch("elle.daemon.incidents.telemetry_snapshot._get_hostname", return_value="h"):
-                                        with patch("elle.daemon.incidents.telemetry_snapshot._get_uptime_sec", return_value=100):
+                                    with patch(
+                                        "elle.daemon.incidents.telemetry_snapshot._get_hostname", return_value="h"
+                                    ):
+                                        with patch(
+                                            "elle.daemon.incidents.telemetry_snapshot._get_uptime_sec", return_value=100
+                                        ):
                                             result = collect_telemetry_snapshot(
                                                 implicated_services=["nginx.service"],
                                                 oom_kills_1h=1,
@@ -436,7 +443,9 @@ class TestCollectTelemetrySnapshot:
                             with patch("elle.daemon.incidents.telemetry_snapshot._collect_gpu_metrics") as gpu:
                                 gpu.return_value = GPUMetrics()
                                 with patch("elle.daemon.incidents.telemetry_snapshot._get_hostname", return_value="x"):
-                                    with patch("elle.daemon.incidents.telemetry_snapshot._get_uptime_sec", return_value=0):
+                                    with patch(
+                                        "elle.daemon.incidents.telemetry_snapshot._get_uptime_sec", return_value=0
+                                    ):
                                         result = collect_telemetry_snapshot()
 
         assert result.services == ()

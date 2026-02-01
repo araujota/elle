@@ -970,9 +970,7 @@ class TestAutonomyUpdatePaths:
         )
 
         assert result.success is True
-        engine.update_after_execution.assert_called_once_with(
-            "mock.capability", True, "low"
-        )
+        engine.update_after_execution.assert_called_once_with("mock.capability", True, "low")
 
     @pytest.mark.asyncio
     async def test_autonomy_update_returns_none(self):
@@ -1126,8 +1124,10 @@ class TestLazyDependencyChecker:
             autonomy_engine=_make_mock_autonomy_engine(),
             # dependency_checker left as None
         )
-        with patch("elle.capabilities.executor.CapabilityExecutor.dependency_checker",
-                    new_callable=lambda: property(lambda self: MagicMock())):
+        with patch(
+            "elle.capabilities.executor.CapabilityExecutor.dependency_checker",
+            new_callable=lambda: property(lambda self: MagicMock()),
+        ):
             # Just accessing the property triggers lazy init
             pass
 
@@ -1319,9 +1319,7 @@ class TestExecuteCapabilityConvenience:
         reset_executor()
 
         mock_result = CapabilityResult(success=True)
-        with patch.object(
-            CapabilityExecutor, "execute", new_callable=AsyncMock, return_value=mock_result
-        ):
+        with patch.object(CapabilityExecutor, "execute", new_callable=AsyncMock, return_value=mock_result):
             with patch("elle.capabilities.executor.CapabilityExecutor.__init__", return_value=None):
                 result = await execute_capability("mock.cap", TestInput())
                 assert result.success is True

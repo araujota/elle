@@ -387,7 +387,7 @@ class TestListDomainsEnumeration:
 
     def test_list_domains_returns_unique_domains(self):
         """list_domains returns all registered domains."""
-        self.registry.register(TestCapability)       # domain = "file"
+        self.registry.register(TestCapability)  # domain = "file"
         self.registry.register(AnotherTestCapability)  # domain = "service"
 
         domains = self.registry.list_domains()
@@ -622,14 +622,18 @@ class TestLoadCoreCapabilities:
     def test_logs_info_when_capabilities_loaded(self, caplog):
         """Logs info message when stored or python count > 0."""
         registry = CapabilityRegistry()
-        with patch(
-            "elle.capabilities.registry._sync_core_if_needed",
-        ) as mock_sync, patch(
-            "elle.capabilities.registry._load_stored_core_capabilities",
-            return_value=5,
-        ), patch(
-            "elle.capabilities.registry._load_python_core_capabilities",
-            return_value=2,
+        with (
+            patch(
+                "elle.capabilities.registry._sync_core_if_needed",
+            ) as mock_sync,
+            patch(
+                "elle.capabilities.registry._load_stored_core_capabilities",
+                return_value=5,
+            ),
+            patch(
+                "elle.capabilities.registry._load_python_core_capabilities",
+                return_value=2,
+            ),
         ):
             with caplog.at_level(logging.INFO, logger="elle.capabilities.registry"):
                 _load_core_capabilities(registry)
@@ -640,14 +644,18 @@ class TestLoadCoreCapabilities:
     def test_no_log_when_zero_capabilities(self, caplog):
         """Does not log info when no capabilities loaded."""
         registry = CapabilityRegistry()
-        with patch(
-            "elle.capabilities.registry._sync_core_if_needed",
-        ), patch(
-            "elle.capabilities.registry._load_stored_core_capabilities",
-            return_value=0,
-        ), patch(
-            "elle.capabilities.registry._load_python_core_capabilities",
-            return_value=0,
+        with (
+            patch(
+                "elle.capabilities.registry._sync_core_if_needed",
+            ),
+            patch(
+                "elle.capabilities.registry._load_stored_core_capabilities",
+                return_value=0,
+            ),
+            patch(
+                "elle.capabilities.registry._load_python_core_capabilities",
+                return_value=0,
+            ),
         ):
             with caplog.at_level(logging.INFO, logger="elle.capabilities.registry"):
                 _load_core_capabilities(registry)

@@ -137,20 +137,24 @@ class TestSearchEventsEntityModuleImport:
         now = datetime.utcnow()
 
         evt1 = MagicMock()
-        evt1.model_dump = MagicMock(return_value={
-            "event_id": "evt-1",
-            "ts": now,
-            "message": "test",
-            "entity": "eth0",
-        })
+        evt1.model_dump = MagicMock(
+            return_value={
+                "event_id": "evt-1",
+                "ts": now,
+                "message": "test",
+                "entity": "eth0",
+            }
+        )
 
         evt2 = MagicMock()
-        evt2.model_dump = MagicMock(return_value={
-            "event_id": "evt-2",
-            "ts": now - timedelta(minutes=1),
-            "message": "entity event",
-            "entity": "eth0",
-        })
+        evt2.model_dump = MagicMock(
+            return_value={
+                "event_id": "evt-2",
+                "ts": now - timedelta(minutes=1),
+                "message": "entity event",
+                "entity": "eth0",
+            }
+        )
 
         mock_store = MagicMock()
         mock_store.search_events.return_value = [evt1]

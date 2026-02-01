@@ -79,17 +79,13 @@ class TestSyscallEvent:
         assert ev.port == 443
 
     def test_frozen_model(self):
-        ev = SyscallEvent(
-            ts_ns=1, syscall="read", category="file_read", pid=1, comm="x"
-        )
+        ev = SyscallEvent(ts_ns=1, syscall="read", category="file_read", pid=1, comm="x")
         with pytest.raises(ValidationError):
             ev.pid = 999
 
     def test_pid_must_be_non_negative(self):
         with pytest.raises(ValidationError):
-            SyscallEvent(
-                ts_ns=1, syscall="read", category="file_read", pid=-1, comm="x"
-            )
+            SyscallEvent(ts_ns=1, syscall="read", category="file_read", pid=-1, comm="x")
 
     def test_port_validation(self):
         with pytest.raises(ValidationError):

@@ -176,9 +176,11 @@ class TestCollectSystemMetrics:
 
         mock_open_fn.side_effect = open_side_effect
 
-        with patch("pathlib.Path.iterdir", return_value=[]), \
-             patch("pathlib.Path.exists", return_value=False), \
-             patch("glob.glob", return_value=[]):
+        with (
+            patch("pathlib.Path.iterdir", return_value=[]),
+            patch("pathlib.Path.exists", return_value=False),
+            patch("glob.glob", return_value=[]),
+        ):
             metrics = collect_system_metrics()
 
         assert metrics["cpu.load_1m"] == 1.0
@@ -214,9 +216,11 @@ class TestCollectSystemMetrics:
 
         mock_open_fn.side_effect = open_side_effect
 
-        with patch("pathlib.Path.iterdir", return_value=[]), \
-             patch("pathlib.Path.exists", return_value=False), \
-             patch("glob.glob", return_value=[]):
+        with (
+            patch("pathlib.Path.iterdir", return_value=[]),
+            patch("pathlib.Path.exists", return_value=False),
+            patch("glob.glob", return_value=[]),
+        ):
             metrics = collect_system_metrics()
 
         # / and /var succeed, /home fails
@@ -231,9 +235,11 @@ class TestCollectSystemMetrics:
     @patch("builtins.open", side_effect=OSError("no procfs"))
     def test_total_failure_returns_empty(self, mock_open_fn, mock_statvfs, mock_loadavg):
         """When every collection source raises, return empty dict."""
-        with patch("pathlib.Path.iterdir", side_effect=Exception("no proc")), \
-             patch("pathlib.Path.exists", return_value=False), \
-             patch("glob.glob", return_value=[]):
+        with (
+            patch("pathlib.Path.iterdir", side_effect=Exception("no proc")),
+            patch("pathlib.Path.exists", return_value=False),
+            patch("glob.glob", return_value=[]),
+        ):
             metrics = collect_system_metrics()
 
         assert isinstance(metrics, dict)
@@ -267,8 +273,10 @@ class TestRecordMetric:
         ctx.__enter__ = MagicMock(return_value=pooled)
         ctx.__exit__ = MagicMock(return_value=False)
 
-        with patch(PATCH_GET_CONN, return_value=ctx), \
-             patch("elle.daemon.telemetry.aggregator.ensure_aggregation_schema") as mock_schema:
+        with (
+            patch(PATCH_GET_CONN, return_value=ctx),
+            patch("elle.daemon.telemetry.aggregator.ensure_aggregation_schema") as mock_schema,
+        ):
             record_metric("cpu.load_1m", 2.5, ts=datetime(2025, 1, 1, tzinfo=timezone.utc))
             mock_schema.assert_called_once_with(pooled)
 
@@ -326,8 +334,10 @@ class TestRecordMetricsBatch:
         ctx.__enter__ = MagicMock(return_value=pooled)
         ctx.__exit__ = MagicMock(return_value=False)
 
-        with patch(PATCH_GET_CONN, return_value=ctx), \
-             patch("elle.daemon.telemetry.aggregator.ensure_aggregation_schema") as mock_schema:
+        with (
+            patch(PATCH_GET_CONN, return_value=ctx),
+            patch("elle.daemon.telemetry.aggregator.ensure_aggregation_schema") as mock_schema,
+        ):
             record_metrics_batch(
                 {"cpu.load_1m": 1.0},
                 ts=datetime(2025, 1, 1, tzinfo=timezone.utc),
@@ -348,11 +358,11 @@ class TestComputeTrendWindow:
         cursor = mock_conn.cursor.return_value
         # Four window queries (1h, 6h, 24h, 7d), then _get_baseline fetchone
         cursor.fetchone.side_effect = [
-            (80.0, 12),   # 1h
-            (70.0, 72),   # 6h
+            (80.0, 12),  # 1h
+            (70.0, 72),  # 6h
             (65.0, 288),  # 24h
-            (60.0, 2016), # 7d
-            None,          # _get_baseline -> no row
+            (60.0, 2016),  # 7d
+            None,  # _get_baseline -> no row
         ]
 
         now = datetime(2025, 6, 1, 12, 0, 0)
@@ -372,11 +382,11 @@ class TestComputeTrendWindow:
         """When some windows have no data, averages are None."""
         cursor = mock_conn.cursor.return_value
         cursor.fetchone.side_effect = [
-            (80.0, 5),   # 1h has data
-            (None, 0),   # 6h no data
-            (None, 0),   # 24h no data
-            (None, 0),   # 7d no data
-            None,          # _get_baseline -> no row
+            (80.0, 5),  # 1h has data
+            (None, 0),  # 6h no data
+            (None, 0),  # 24h no data
+            (None, 0),  # 7d no data
+            None,  # _get_baseline -> no row
         ]
 
         now = datetime(2025, 6, 1, 12, 0, 0)
@@ -396,8 +406,8 @@ class TestComputeTrendWindow:
         cursor.fetchone.side_effect = [
             (50.0, 10),  # 1h
             (50.0, 60),  # 6h
-            (50.0, 240), # 24h
-            (50.0, 1680),# 7d
+            (50.0, 240),  # 24h
+            (50.0, 1680),  # 7d
             # _get_baseline query returns a row
             {
                 "metric": "mem.used_pct",
@@ -410,9 +420,7 @@ class TestComputeTrendWindow:
 
         now = datetime(2025, 6, 1, 12, 0, 0)
         # current_value = 80.0, mean = 50.0, stddev = 5.0 => z = 6.0 > 2.0
-        trend = aggregator_low_threshold._compute_trend_window(
-            "mem.used_pct", 80.0, now, mock_conn
-        )
+        trend = aggregator_low_threshold._compute_trend_window("mem.used_pct", 80.0, now, mock_conn)
 
         assert trend.is_anomaly is True
         assert trend.anomaly_score is not None
@@ -536,9 +544,7 @@ class TestComputeForecast:
         fake_module.ModelSelector = mock_selector_cls
 
         with patch.dict("sys.modules", {"elle.daemon.telemetry.model_selector": fake_module}):
-            trend = self._make_trend(
-                "disk./.used_pct", current=80.0, rate=0.5, avg_1h=80.0, avg_6h=75.0
-            )
+            trend = self._make_trend("disk./.used_pct", current=80.0, rate=0.5, avg_1h=80.0, avg_6h=75.0)
             forecast = aggregator._compute_forecast("disk./.used_pct", trend, mock_conn)
 
         assert forecast.predicted_value_24h == 88.0
@@ -605,9 +611,7 @@ class TestCheckAnomaly:
             "updated_at": "2025-06-01T00:00:00+00:00",
         }
 
-        result = aggregator_low_threshold._check_anomaly(
-            "mem.used_pct", 80.0, datetime.utcnow(), mock_conn
-        )
+        result = aggregator_low_threshold._check_anomaly("mem.used_pct", 80.0, datetime.utcnow(), mock_conn)
         assert result is None
 
     def test_positive_z_score_above(self, aggregator_low_threshold, mock_conn):
@@ -643,9 +647,7 @@ class TestCheckAnomaly:
 
         now = datetime(2025, 6, 1, 12, 0, 0)
         # z = (10 - 50) / 5 = -8.0, abs = 8.0 > 2.0
-        result = aggregator_low_threshold._check_anomaly(
-            "mem.available_pct", 10.0, now, mock_conn
-        )
+        result = aggregator_low_threshold._check_anomaly("mem.available_pct", 10.0, now, mock_conn)
 
         assert result is not None
         assert result.is_anomaly is True
@@ -766,7 +768,7 @@ class TestBaselineOperations:
         assert params[0] == "new.metric"
         assert params[1] == 42.0
         assert params[2] == 0.0  # stddev = 0 for first sample
-        assert params[3] == 1   # samples = 1
+        assert params[3] == 1  # samples = 1
         mock_conn.commit.assert_called_once()
 
 
@@ -786,17 +788,18 @@ class TestRunAggregationCycle:
         cursor.fetchone.return_value = None
         cursor.fetchall.return_value = []
 
-        with patch(
-            "elle.daemon.telemetry.aggregator.collect_system_metrics",
-            return_value={
-                "disk./.used_pct": 75.0,
-                "mem.used_pct": 60.0,
-                "cpu.load_1m": 1.5,
-                "swap.used_pct": 10.0,
-            },
-        ), patch(
-            "elle.daemon.telemetry.aggregator.record_metrics_batch"
-        ) as mock_record:
+        with (
+            patch(
+                "elle.daemon.telemetry.aggregator.collect_system_metrics",
+                return_value={
+                    "disk./.used_pct": 75.0,
+                    "mem.used_pct": 60.0,
+                    "cpu.load_1m": 1.5,
+                    "swap.used_pct": 10.0,
+                },
+            ),
+            patch("elle.daemon.telemetry.aggregator.record_metrics_batch") as mock_record,
+        ):
             ctx = agg.run_aggregation_cycle(conn=mock_conn)
 
         assert ctx is not None
@@ -815,10 +818,13 @@ class TestRunAggregationCycle:
         cursor.fetchone.return_value = None
         cursor.fetchall.return_value = []
 
-        with patch(
-            "elle.daemon.telemetry.aggregator.collect_system_metrics",
-            return_value={"disk./.used_pct": 95.0},
-        ), patch("elle.daemon.telemetry.aggregator.record_metrics_batch"):
+        with (
+            patch(
+                "elle.daemon.telemetry.aggregator.collect_system_metrics",
+                return_value={"disk./.used_pct": 95.0},
+            ),
+            patch("elle.daemon.telemetry.aggregator.record_metrics_batch"),
+        ):
             ctx = agg.run_aggregation_cycle(conn=mock_conn)
 
         assert ctx.has_warnings is True
@@ -835,9 +841,7 @@ class TestGetTrendContext:
 
     def test_delegates_to_aggregator(self, mock_conn):
         """get_trend_context creates a TrendAggregator and runs cycle."""
-        with patch.object(
-            TrendAggregator, "run_aggregation_cycle"
-        ) as mock_cycle:
+        with patch.object(TrendAggregator, "run_aggregation_cycle") as mock_cycle:
             mock_cycle.return_value = MagicMock()
             result = get_trend_context(conn=mock_conn)
             mock_cycle.assert_called_once_with(conn=mock_conn)
@@ -892,8 +896,10 @@ class TestGetMetricTrend:
         ctx.__enter__ = MagicMock(return_value=pooled)
         ctx.__exit__ = MagicMock(return_value=False)
 
-        with patch(PATCH_GET_CONN, return_value=ctx) as mock_get, \
-             patch("elle.daemon.telemetry.aggregator.ensure_aggregation_schema"):
+        with (
+            patch(PATCH_GET_CONN, return_value=ctx) as mock_get,
+            patch("elle.daemon.telemetry.aggregator.ensure_aggregation_schema"),
+        ):
             get_metric_trend("cpu.load_1m")
             mock_get.assert_called_once_with(schema="telemetry")
 
@@ -952,8 +958,10 @@ class TestCleanupOldSamples:
         ctx.__enter__ = MagicMock(return_value=pooled)
         ctx.__exit__ = MagicMock(return_value=False)
 
-        with patch(PATCH_GET_CONN, return_value=ctx), \
-             patch("elle.daemon.telemetry.aggregator.ensure_aggregation_schema") as mock_schema:
+        with (
+            patch(PATCH_GET_CONN, return_value=ctx),
+            patch("elle.daemon.telemetry.aggregator.ensure_aggregation_schema") as mock_schema,
+        ):
             cleanup_old_samples()
             mock_schema.assert_called_once_with(pooled)
 
@@ -1124,7 +1132,7 @@ class TestEdgeCases:
             (None, 0),  # 6h
             (None, 0),  # 24h
             (None, 0),  # 7d
-            None,        # _get_baseline returns None
+            None,  # _get_baseline returns None
         ]
 
         now = datetime(2025, 6, 1, 12, 0, 0)

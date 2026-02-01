@@ -749,11 +749,13 @@ class TestUncoveredBranches:
         )
         plan = _make_plan(
             intent,
-            calls=(CapabilityCall(
-                capability="service.restart",
-                args={"service": "nginx"},
-                purpose="Restart",
-            ),),
+            calls=(
+                CapabilityCall(
+                    capability="service.restart",
+                    args={"service": "nginx"},
+                    purpose="Restart",
+                ),
+            ),
         )
         exec_result = ExecutionResult(
             plan=plan,

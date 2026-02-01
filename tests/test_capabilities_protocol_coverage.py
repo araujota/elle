@@ -91,10 +91,12 @@ class TestCapabilityProtocol:
 
             def verify(self, input):
                 from elle.capabilities.models import VerificationResult
+
                 return VerificationResult(passed=True)
 
             def rollback(self, input, result):
                 from elle.capabilities.models import RollbackResult
+
                 return RollbackResult(success=False)
 
         cap = ConcreteCapability()

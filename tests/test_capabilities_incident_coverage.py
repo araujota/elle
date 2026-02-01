@@ -19,6 +19,7 @@ from elle.capabilities.core.incident import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _mock_incident(incident_id: str = "inc-001"):
     """Return a mock incident object used by the store."""
     inc = MagicMock()
@@ -118,10 +119,13 @@ class TestIncidentCreateRun:
             notify=False,
         )
 
-        with patch.dict("sys.modules", {
-            "elle.daemon.incidents.store": store_mod,
-            "elle.daemon.incidents.snapshot": snapshot_mod,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.daemon.incidents.store": store_mod,
+                "elle.daemon.incidents.snapshot": snapshot_mod,
+            },
+        ):
             result = cap.run(inp)
 
         assert result.success is True
@@ -143,10 +147,13 @@ class TestIncidentCreateRun:
             notify=False,
         )
 
-        with patch.dict("sys.modules", {
-            "elle.daemon.incidents.store": store_mod,
-            "elle.daemon.incidents.snapshot": snapshot_mod,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.daemon.incidents.store": store_mod,
+                "elle.daemon.incidents.snapshot": snapshot_mod,
+            },
+        ):
             result = cap.run(inp)
 
         assert result.success is True
@@ -166,10 +173,13 @@ class TestIncidentCreateRun:
             attach_snapshot=False,
         )
 
-        with patch.dict("sys.modules", {
-            "elle.daemon.incidents.store": store_mod,
-            "elle.daemon.notifications": notify_mod,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.daemon.incidents.store": store_mod,
+                "elle.daemon.notifications": notify_mod,
+            },
+        ):
             result = cap.run(inp)
 
         assert result.success is True
@@ -215,10 +225,13 @@ class TestIncidentCreateRun:
             attach_snapshot=False,
         )
 
-        with patch.dict("sys.modules", {
-            "elle.daemon.incidents.store": store_mod,
-            "elle.daemon.notifications": notify_mod,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.daemon.incidents.store": store_mod,
+                "elle.daemon.notifications": notify_mod,
+            },
+        ):
             result = cap.run(inp)
 
         assert result.success is True
@@ -429,10 +442,13 @@ class TestIncidentAttachRun:
             snapshot_which="post",
         )
 
-        with patch.dict("sys.modules", {
-            "elle.daemon.incidents.store": store_mod,
-            "elle.daemon.incidents.snapshot": snapshot_mod,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.daemon.incidents.store": store_mod,
+                "elle.daemon.incidents.snapshot": snapshot_mod,
+            },
+        ):
             result = cap.run(inp)
 
         assert result.success is True
@@ -450,10 +466,13 @@ class TestIncidentAttachRun:
             attach_type="snapshot",
         )
 
-        with patch.dict("sys.modules", {
-            "elle.daemon.incidents.store": store_mod,
-            "elle.daemon.incidents.snapshot": snapshot_mod,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "elle.daemon.incidents.store": store_mod,
+                "elle.daemon.incidents.snapshot": snapshot_mod,
+            },
+        ):
             result = cap.run(inp)
 
         assert result.success is False

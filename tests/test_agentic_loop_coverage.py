@@ -628,9 +628,7 @@ class TestVerificationDomainBranches:
         mock_result = ToolResult(tool_name="execute_capability", success=True, output="Written")
 
         with patch.object(loop.tools, "execute") as mock_execute:
-            mock_execute.return_value = ToolResult(
-                tool_name="shell_command", success=True, output="File: /tmp/test"
-            )
+            mock_execute.return_value = ToolResult(tool_name="shell_command", success=True, output="File: /tmp/test")
             passed, verification = await loop._verify_outcome(mock_tool_call, mock_result)
 
         assert passed is True
@@ -649,9 +647,7 @@ class TestVerificationDomainBranches:
         mock_result = ToolResult(tool_name="execute_capability", success=True, output="Started")
 
         with patch.object(loop.tools, "execute") as mock_execute:
-            mock_execute.return_value = ToolResult(
-                tool_name="shell_command", success=True, output="true"
-            )
+            mock_execute.return_value = ToolResult(tool_name="shell_command", success=True, output="true")
             passed, verification = await loop._verify_outcome(mock_tool_call, mock_result)
 
         assert passed is True
@@ -691,9 +687,7 @@ class TestVerificationDomainBranches:
         mock_result = ToolResult(tool_name="execute_capability", success=True, output="Edited")
 
         with patch.object(loop.tools, "execute") as mock_execute:
-            mock_execute.return_value = ToolResult(
-                tool_name="shell_command", success=True, output="key = value"
-            )
+            mock_execute.return_value = ToolResult(tool_name="shell_command", success=True, output="key = value")
             passed, verification = await loop._verify_outcome(mock_tool_call, mock_result)
 
         assert passed is True
@@ -809,9 +803,7 @@ class TestFirewallDenyVerification:
                 output="80/tcp DENY Anywhere",
             )
 
-            result = await loop._verify_network(
-                "ver-deny", "call-deny", "network.firewall_deny", {"port": "80"}
-            )
+            result = await loop._verify_network("ver-deny", "call-deny", "network.firewall_deny", {"port": "80"})
 
         assert result.passed is True
         assert result.method == "network_check"
@@ -829,9 +821,7 @@ class TestFirewallDenyVerification:
                 output="443/tcp DENY Anywhere",
             )
 
-            result = await loop._verify_network(
-                "ver-close", "call-close", "network.firewall_close", {"port": "443"}
-            )
+            result = await loop._verify_network("ver-close", "call-close", "network.firewall_close", {"port": "443"})
 
         assert result.passed is True
         assert result.method == "network_check"

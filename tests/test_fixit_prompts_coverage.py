@@ -158,9 +158,7 @@ class TestFormatPriorArtContext:
                     precondition_match=0.7,
                     days_ago=3,
                     trigger_command="apt install foo",
-                    successful_actions=(
-                        SuccessfulAction(command="apt update"),
-                    ),
+                    successful_actions=(SuccessfulAction(command="apt update"),),
                     decision={"diagnosis": {"error_category": "dependency_missing"}},
                 ),
             ),
@@ -373,10 +371,7 @@ class TestFormatPriorArtContext:
 
     def test_max_three_successful_actions(self):
         """Only first 3 successful actions shown per incident."""
-        actions = tuple(
-            SuccessfulAction(command=f"cmd_{i}")
-            for i in range(5)
-        )
+        actions = tuple(SuccessfulAction(command=f"cmd_{i}") for i in range(5))
         ctx = _context(
             prior_art=(
                 PriorArtContext(
@@ -425,9 +420,7 @@ class TestBuildFixitPrompt:
         """Prompt includes formatted man and prior art context."""
         ctx = _context(
             failure=_failure(),
-            man_snippets=(
-                ManSnippetContext(name="ls", section="1", snippet="list dir"),
-            ),
+            man_snippets=(ManSnippetContext(name="ls", section="1", snippet="list dir"),),
             prior_art=(
                 PriorArtContext(
                     incident_id="INC-1",

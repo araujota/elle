@@ -99,17 +99,13 @@ class TestGenerate:
 
     def test_generate_connect_error(self, provider):
         """ConnectError should propagate."""
-        with patch.object(
-            provider._client, "post", side_effect=httpx.ConnectError("Connection refused")
-        ):
+        with patch.object(provider._client, "post", side_effect=httpx.ConnectError("Connection refused")):
             with pytest.raises(httpx.ConnectError):
                 provider.generate("Test", model="m", max_tokens=10, temperature=0.5, timeout=5.0)
 
     def test_generate_timeout_error(self, provider):
         """TimeoutException should propagate."""
-        with patch.object(
-            provider._client, "post", side_effect=httpx.ReadTimeout("Timed out")
-        ):
+        with patch.object(provider._client, "post", side_effect=httpx.ReadTimeout("Timed out")):
             with pytest.raises(httpx.TimeoutException):
                 provider.generate("Test", model="m", max_tokens=10, temperature=0.5, timeout=5.0)
 
@@ -287,9 +283,7 @@ class TestChat:
 
     def test_chat_connect_error(self, provider):
         """ConnectError should propagate from chat."""
-        with patch.object(
-            provider._client, "post", side_effect=httpx.ConnectError("refused")
-        ):
+        with patch.object(provider._client, "post", side_effect=httpx.ConnectError("refused")):
             with pytest.raises(httpx.ConnectError):
                 provider.chat(
                     [{"role": "user", "content": "Hi"}],
@@ -301,9 +295,7 @@ class TestChat:
 
     def test_chat_timeout_error(self, provider):
         """TimeoutException should propagate from chat."""
-        with patch.object(
-            provider._client, "post", side_effect=httpx.ReadTimeout("timeout")
-        ):
+        with patch.object(provider._client, "post", side_effect=httpx.ReadTimeout("timeout")):
             with pytest.raises(httpx.TimeoutException):
                 provider.chat(
                     [{"role": "user", "content": "Hi"}],
@@ -326,13 +318,15 @@ class TestStreamChat:
         """stream_chat should yield ProviderResponse chunks."""
         lines = [
             json.dumps({"message": {"content": "Hello"}, "model": "test", "done": False}),
-            json.dumps({
-                "message": {"content": " world"},
-                "model": "test",
-                "done": True,
-                "prompt_eval_count": 10,
-                "eval_count": 5,
-            }),
+            json.dumps(
+                {
+                    "message": {"content": " world"},
+                    "model": "test",
+                    "done": True,
+                    "prompt_eval_count": 10,
+                    "eval_count": 5,
+                }
+            ),
         ]
 
         mock_response = MagicMock()
@@ -416,24 +410,26 @@ class TestStreamChat:
     def test_stream_chat_with_tool_calls(self, provider):
         """stream_chat should parse tool calls from final chunk."""
         lines = [
-            json.dumps({
-                "message": {
-                    "content": "",
-                    "tool_calls": [
-                        {
-                            "id": "tc_1",
-                            "function": {
-                                "name": "get_info",
-                                "arguments": '{"aspect": "resources"}',
-                            },
-                        }
-                    ],
-                },
-                "model": "test",
-                "done": True,
-                "prompt_eval_count": 5,
-                "eval_count": 3,
-            }),
+            json.dumps(
+                {
+                    "message": {
+                        "content": "",
+                        "tool_calls": [
+                            {
+                                "id": "tc_1",
+                                "function": {
+                                    "name": "get_info",
+                                    "arguments": '{"aspect": "resources"}',
+                                },
+                            }
+                        ],
+                    },
+                    "model": "test",
+                    "done": True,
+                    "prompt_eval_count": 5,
+                    "eval_count": 3,
+                }
+            ),
         ]
 
         mock_response = MagicMock()
@@ -460,22 +456,24 @@ class TestStreamChat:
     def test_stream_chat_tool_call_invalid_json_args(self, provider):
         """stream_chat should handle invalid JSON in tool call args."""
         lines = [
-            json.dumps({
-                "message": {
-                    "content": "",
-                    "tool_calls": [
-                        {
-                            "id": "tc_bad",
-                            "function": {
-                                "name": "bad",
-                                "arguments": "{not valid json",
-                            },
-                        }
-                    ],
-                },
-                "model": "test",
-                "done": True,
-            }),
+            json.dumps(
+                {
+                    "message": {
+                        "content": "",
+                        "tool_calls": [
+                            {
+                                "id": "tc_bad",
+                                "function": {
+                                    "name": "bad",
+                                    "arguments": "{not valid json",
+                                },
+                            }
+                        ],
+                    },
+                    "model": "test",
+                    "done": True,
+                }
+            ),
         ]
 
         mock_response = MagicMock()
@@ -554,16 +552,12 @@ class TestIsAvailable:
 
     def test_connection_error_returns_false(self, provider):
         """Should return False on connection error."""
-        with patch.object(
-            provider._client, "get", side_effect=httpx.ConnectError("refused")
-        ):
+        with patch.object(provider._client, "get", side_effect=httpx.ConnectError("refused")):
             assert provider.is_available() is False
 
     def test_timeout_returns_false(self, provider):
         """Should return False on timeout."""
-        with patch.object(
-            provider._client, "get", side_effect=httpx.ReadTimeout("timeout")
-        ):
+        with patch.object(provider._client, "get", side_effect=httpx.ReadTimeout("timeout")):
             assert provider.is_available() is False
 
 
@@ -604,9 +598,7 @@ class TestListModels:
 
     def test_list_models_error(self, provider):
         """Should return empty list on error."""
-        with patch.object(
-            provider._client, "get", side_effect=httpx.ConnectError("refused")
-        ):
+        with patch.object(provider._client, "get", side_effect=httpx.ConnectError("refused")):
             models = provider.list_models()
 
         assert models == []

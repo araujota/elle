@@ -1340,8 +1340,7 @@ class TestSearchPriorArtDaemonAPI:
         failure = _make_failure()
 
         daemon_results = [
-            {"incident_id": f"INC-{i}", "title": f"incident {i}", "outcome": "improved"}
-            for i in range(5)
+            {"incident_id": f"INC-{i}", "title": f"incident {i}", "outcome": "improved"} for i in range(5)
         ]
 
         mock_client = MagicMock()
@@ -1517,10 +1516,7 @@ class TestSearchPriorArtDirectStore:
         svc = FixitService(use_man_vault=False, use_incident_vault=True)
         failure = _make_failure()
 
-        store_results = [
-            {"incident_id": f"INC-{i}", "title": f"incident {i}", "outcome": "improved"}
-            for i in range(6)
-        ]
+        store_results = [{"incident_id": f"INC-{i}", "title": f"incident {i}", "outcome": "improved"} for i in range(6)]
 
         mock_snapshot = MagicMock()
         mock_snapshot.collect_snapshot.return_value = MagicMock()
@@ -2149,9 +2145,7 @@ class TestExecuteFixCapabilityPath:
 
     @patch(_MAP)
     @patch(_RUN)
-    def test_capability_runtime_error_in_event_loop_falls_back_to_asyncio_run(
-        self, mock_run_safe, mock_map
-    ):
+    def test_capability_runtime_error_in_event_loop_falls_back_to_asyncio_run(self, mock_run_safe, mock_map):
         """RuntimeError from get_event_loop falls back to asyncio.run (lines 840-841)."""
         svc = FixitService()
         session = _make_session()
