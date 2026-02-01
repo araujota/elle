@@ -1121,7 +1121,7 @@ class TestLazyDependencyChecker:
     def test_dependency_checker_lazy_init(self):
         """When no dependency_checker provided, one is created lazily."""
         registry = CapabilityRegistry()
-        executor = CapabilityExecutor(
+        CapabilityExecutor(
             registry=registry,
             autonomy_engine=_make_mock_autonomy_engine(),
             # dependency_checker left as None

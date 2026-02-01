@@ -264,14 +264,14 @@ class TestGlobalRegistry:
 # Additional coverage tests
 # =============================================================================
 
-from unittest.mock import MagicMock, patch
 import logging
+from unittest.mock import MagicMock, patch
 
 from elle.capabilities.exceptions import CapabilityRegistrationError
 from elle.capabilities.registry import (
     _load_core_capabilities,
-    _load_stored_core_capabilities,
     _load_python_core_capabilities,
+    _load_stored_core_capabilities,
     _sync_core_if_needed,
 )
 

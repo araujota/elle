@@ -2879,8 +2879,6 @@ class TestCgroupPressureParsing:
         mock_base.iterdir.return_value = [mock_entry]
 
         # Make the second base path not exist
-        call_count = {"n": 0}
-        original_path = Path
 
         def mock_path(path_str):
             if "system.slice" in str(path_str):
