@@ -17,7 +17,6 @@ from elle.rag.confgen.models import (
     ConfigGenContext,
     ConfigGenLLMError,
     ConfigGenRequest,
-    ConfigGenResult,
 )
 
 # ---------------------------------------------------------------------------

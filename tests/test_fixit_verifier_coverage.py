@@ -21,19 +21,15 @@ from unittest.mock import MagicMock, patch
 
 from elle.cli.fixit.models import (
     FixCommand,
-    FixitAnalysis,
-    FixitDiagnosis,
     VerificationStatus,
 )
 from elle.cli.fixit.verifier import (
     _check_bash_syntax,
     _check_executable_exists,
     _check_flags_exist,
-    _check_parse,
     _extract_flags,
     verify_command,
 )
-
 
 # =============================================================================
 # _check_executable_exists edge cases (lines 83, 125-128)

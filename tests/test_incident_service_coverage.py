@@ -6,7 +6,6 @@ Tests IncidentVaultService with mocked DB, embedding client, and asyncio.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -16,7 +15,6 @@ from elle.daemon.incidents.service import (
     get_service,
     reset_service,
 )
-
 
 # ---------------------------------------------------------------------------
 # IncidentVaultService tests
@@ -120,7 +118,7 @@ class TestIncidentVaultService:
     def test_embed_pending_import_error(self):
         svc = IncidentVaultService()
 
-        with patch("elle.daemon.incidents.service.get_conn") as mock_gc:
+        with patch("elle.daemon.incidents.service.get_conn"):
             # get_conn should NOT be called if import fails
             with patch.dict("sys.modules", {"elle.rag": None}):
                 try:

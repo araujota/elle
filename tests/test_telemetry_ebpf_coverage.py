@@ -8,18 +8,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, mock_open, patch
 
-import pytest
-
-from elle.daemon.telemetry.ebpf.syscall_models import (
-    NetworkConnection,
-    SyscallSummary,
-    SyscallTrace,
-)
-
 # ---------------------------------------------------------------------------
 # syscall_explainer coverage
 # ---------------------------------------------------------------------------
-
 from elle.daemon.telemetry.ebpf.syscall_explainer import (
     MAX_DISPLAY_ITEMS,
     _format_connections,
@@ -30,6 +21,11 @@ from elle.daemon.telemetry.ebpf.syscall_explainer import (
     explain_summary,
     explain_trace,
     format_trace_for_display,
+)
+from elle.daemon.telemetry.ebpf.syscall_models import (
+    NetworkConnection,
+    SyscallSummary,
+    SyscallTrace,
 )
 
 
@@ -98,7 +94,7 @@ class TestFormatRenameList:
 
 class TestExplainSummary:
     def _make_summary(self, **kwargs):
-        defaults = dict(command="test", pid=1, duration_ms=10, total_syscalls=5)
+        defaults = {"command": "test", "pid": 1, "duration_ms": 10, "total_syscalls": 5}
         defaults.update(kwargs)
         return SyscallSummary(**defaults)
 
@@ -155,7 +151,7 @@ class TestExplainSummary:
 
 class TestExplainTrace:
     def _make_summary(self, **kwargs):
-        defaults = dict(command="test", pid=1, duration_ms=10, total_syscalls=5)
+        defaults = {"command": "test", "pid": 1, "duration_ms": 10, "total_syscalls": 5}
         defaults.update(kwargs)
         return SyscallSummary(**defaults)
 
@@ -193,7 +189,7 @@ class TestExplainTrace:
 
 class TestCreateBriefSummary:
     def _make_summary(self, **kwargs):
-        defaults = dict(command="test", pid=1, duration_ms=10, total_syscalls=5)
+        defaults = {"command": "test", "pid": 1, "duration_ms": 10, "total_syscalls": 5}
         defaults.update(kwargs)
         return SyscallSummary(**defaults)
 
@@ -274,7 +270,7 @@ class TestCreateTraceWithExplanation:
 
 class TestFormatTraceForDisplay:
     def _make_summary(self, **kwargs):
-        defaults = dict(command="test", pid=1, duration_ms=10, total_syscalls=5)
+        defaults = {"command": "test", "pid": 1, "duration_ms": 10, "total_syscalls": 5}
         defaults.update(kwargs)
         return SyscallSummary(**defaults)
 
@@ -412,7 +408,6 @@ from elle.daemon.telemetry.ebpf.capabilities import (
     CAP_NET_ADMIN,
     CAP_PERFMON,
     CAP_SYS_ADMIN,
-    MIN_KERNEL_VERSION,
     CapabilityCheck,
     _bcc_available,
     _bpf_fs_available,

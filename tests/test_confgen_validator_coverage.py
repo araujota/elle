@@ -2,14 +2,9 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
-import pytest
-
 from elle.rag.confgen.models import (
     ConfigGenResult,
     ConfigOp,
-    ValidationIssue,
 )
 from elle.rag.confgen.validator import (
     ConfigValidator,
@@ -294,7 +289,7 @@ class TestValidateContent:
             file_type="yaml",
             generated_content="key: [\ninvalid: yaml: content:\n",
         )
-        validation = self.validator.validate(result)
+        self.validator.validate(result)
         # May or may not produce a YAML error depending on ruamel.yaml availability
         # The important thing is no crash
 

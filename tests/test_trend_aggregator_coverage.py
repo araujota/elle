@@ -7,10 +7,9 @@ record_metric, record_metrics_batch, TrendAggregator methods, get_trend_context,
 get_metric_trend, cleanup_old_samples, and correlation/store logic.
 """
 
-import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -27,7 +26,6 @@ from elle.daemon.telemetry.aggregator import (
     record_metrics_batch,
 )
 from elle.daemon.telemetry.trends import (
-    CRITICAL_THRESHOLDS,
     TRACKED_METRICS,
     MetricBaseline,
     TrendConfig,
@@ -896,7 +894,7 @@ class TestGetMetricTrend:
 
         with patch(PATCH_GET_CONN, return_value=ctx) as mock_get, \
              patch("elle.daemon.telemetry.aggregator.ensure_aggregation_schema"):
-            result = get_metric_trend("cpu.load_1m")
+            get_metric_trend("cpu.load_1m")
             mock_get.assert_called_once_with(schema="telemetry")
 
     def test_with_conn_skips_get_conn(self, mock_conn):

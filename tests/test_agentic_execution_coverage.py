@@ -28,7 +28,7 @@ from elle.cli.agentic.execution import (
     get_recent_executions,
     store_execution,
 )
-from elle.cli.agentic.stages import Hypothesis, LoopStage
+from elle.cli.agentic.stages import Hypothesis
 
 PATCH_GET_CONN = "elle.storage.engine.get_conn"
 

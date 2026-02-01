@@ -389,7 +389,7 @@ class TestSearchIncidents:
         with patch(
             "elle.cli.agentic.retrieval_pipeline.search",
             create=True,
-        ) as mock_search:
+        ):
             # The module uses a local import, so we must patch at the retriever level
             pass
 
@@ -692,7 +692,7 @@ class TestRetrieveForIncident:
             patch.dict("sys.modules", {"elle.daemon.incidents.store": mock_store}),
             patch.object(pipeline, "retrieve", return_value=mock_ctx) as mock_retrieve,
         ):
-            result = await pipeline.retrieve_for_incident("inc-oom")
+            await pipeline.retrieve_for_incident("inc-oom")
 
         # Verify retrieve was called
         mock_retrieve.assert_called_once()

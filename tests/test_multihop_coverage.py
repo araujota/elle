@@ -26,9 +26,7 @@ from elle.daemon.incidents.multihop import (
 )
 from elle.daemon.incidents.narrative import (
     MultiHopConfig,
-    MultiHopResult,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

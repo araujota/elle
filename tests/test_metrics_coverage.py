@@ -13,7 +13,6 @@ Targets:
 
 from __future__ import annotations
 
-from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -26,7 +25,6 @@ from elle.daemon.observability.metrics import (
     collect_observability_metrics,
     format_prometheus,
 )
-
 
 # =============================================================================
 # ObservabilityMetrics model tests

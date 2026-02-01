@@ -10,8 +10,6 @@ import textwrap
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from elle.capabilities.autogen.core_migrator import (
     CoreCapabilityExtractor,
     CoreCapabilityMigrator,
@@ -22,7 +20,6 @@ from elle.capabilities.autogen.core_migrator import (
     extract_imports,
     find_helper_functions,
 )
-
 
 # ===========================================================================
 # Source extraction utilities
@@ -227,7 +224,7 @@ class TestCoreCapabilityMigrator:
     def test_migrate_all_no_core_dir(self):
         """When core directory doesn't exist, returns error."""
         mock_store = MagicMock()
-        migrator = CoreCapabilityMigrator(store=mock_store)
+        CoreCapabilityMigrator(store=mock_store)
 
         with patch("elle.capabilities.autogen.core_migrator.Path") as MockPath:
             mock_core = MagicMock()

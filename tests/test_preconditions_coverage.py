@@ -16,7 +16,6 @@ from elle.daemon.incidents.preconditions import (
     _resolve_path,
     create_precondition,
     evaluate_expression,
-    evaluate_precondition,
     evaluate_preconditions,
     infer_preconditions,
 )

@@ -5,15 +5,14 @@ Tests collection functions with mocked /proc, subprocess, and socket calls.
 
 from __future__ import annotations
 
-from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from elle.daemon.incidents.telemetry_snapshot import (
     CPUPressure,
-    DiskIOPressure,
     DiskInfo,
+    DiskIOPressure,
     GPUDevice,
     GPUMetrics,
     InterfaceInfo,
@@ -34,7 +33,6 @@ from elle.daemon.incidents.telemetry_snapshot import (
     _parse_psi_file,
     collect_telemetry_snapshot,
 )
-
 
 # ---------------------------------------------------------------------------
 # Model instantiation tests

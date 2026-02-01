@@ -14,20 +14,16 @@ import subprocess as sp
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from elle.cli.subprocess_runner import (
     MAX_OUTPUT_SIZE,
     DenyReason,
     RunMode,
-    _check_denylist_legacy,
     _map_rules_to_deny_reason,
     _run_capture,
     _run_streaming,
     check_denylist,
     run,
 )
-
 
 # =========================================================================
 # check_denylist fallback via ImportError (lines 220-223)
@@ -290,7 +286,6 @@ class TestStreamingLoopCoverage:
 
     def test_streaming_timeout_in_poll_loop(self) -> None:
         """Timeout during the polling loop (lines 488-497)."""
-        import time
 
         mock_proc = MagicMock()
         mock_proc.poll = MagicMock(return_value=None)  # never finishes

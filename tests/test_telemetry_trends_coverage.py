@@ -18,21 +18,16 @@ from elle.daemon.telemetry.trends import (
     TIME_TO_WARNING_HOURS,
     TRACKED_METRICS,
     WARNING_THRESHOLDS,
-    AnomalyResult,
     CorrelationAlert,
     Forecast,
-    MetricBaseline,
     MetricSample,
-    PlanValidationResult,
     TrendConfig,
     TrendContext,
     TrendWindow,
-    ValidationWarning,
     WindowStats,
     compute_forecast_urgency,
     create_forecast_with_urgency,
 )
-
 
 # ---------------------------------------------------------------------------
 # Constants

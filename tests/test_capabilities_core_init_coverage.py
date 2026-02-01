@@ -11,7 +11,6 @@ from unittest.mock import patch
 
 from elle.capabilities.core import get_core_capabilities
 
-
 # The 10 domain module paths that get_core_capabilities() tries to import.
 _DOMAIN_MODULES = [
     "elle.capabilities.core.service",

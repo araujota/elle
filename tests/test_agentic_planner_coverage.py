@@ -16,8 +16,6 @@ import json
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from elle.cli.agentic.models import (
     ActionRequest,
     ActionType,
@@ -25,7 +23,6 @@ from elle.cli.agentic.models import (
     InformationNeed,
 )
 from elle.cli.agentic.planner import CapabilityPlanner
-
 
 # =============================================================================
 # Helpers
@@ -160,7 +157,7 @@ class TestPlanLlmBranch:
         mock_llm = MagicMock()
 
         with patch("elle.rag.llm.get_llm", return_value=mock_llm):
-            plan = await planner.plan(intent, user_input="check nginx")
+            await planner.plan(intent, user_input="check nginx")
 
         mock_llm.is_available.assert_not_called()
 

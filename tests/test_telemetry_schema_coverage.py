@@ -6,9 +6,7 @@ ensure_schema, get_table_stats.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, call, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from elle.daemon.telemetry.schema import (
     CORRELATION_ALERTS_TABLE,
@@ -24,7 +22,6 @@ from elle.daemon.telemetry.schema import (
     ensure_schema,
     get_table_stats,
 )
-
 
 # ---------------------------------------------------------------------------
 # Constants

@@ -7,10 +7,7 @@ Covers:
 
 from __future__ import annotations
 
-import importlib
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from elle.capabilities.dependencies.models import (
     DependencyCheckResult,
@@ -19,7 +16,6 @@ from elle.capabilities.dependencies.models import (
     InstallationRequest,
     InstallationResult,
 )
-
 
 # ===========================================================================
 # Model instantiation tests (boost coverage for models.py)

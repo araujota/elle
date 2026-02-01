@@ -19,7 +19,6 @@ from elle.capabilities.policy import (
 from elle.policy.models import PolicyEffect, PolicyEvaluationResult
 from elle.policy.models import RiskLevel as PolicyRiskLevel
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

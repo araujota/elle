@@ -9,7 +9,7 @@ insert_probe_result, get_latest_probe_result, delete_old_probe_results.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest

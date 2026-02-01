@@ -28,7 +28,6 @@ from elle.capabilities.autogen.intelligence.models import (
     FileManifest,
 )
 
-
 # =========================================================================
 # FileManifestExtractor: binary and config categorization (lines 216, 221, 238)
 # =========================================================================

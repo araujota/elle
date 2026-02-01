@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -18,14 +18,11 @@ from elle.daemon.incidents.models import (
     DecisionRecord,
     Fingerprint,
     IncidentAction,
-    IncidentCitation,
     IncidentReport,
     IncidentSnapshot,
-    ManPageCitation,
     Precondition,
     Provenance,
     SystemSnapshot,
-    TelemetryCitation,
 )
 from elle.daemon.incidents.store import (
     _parse_provenance,

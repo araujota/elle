@@ -19,33 +19,32 @@ from elle.capabilities.autogen.prompts import (
     build_validation_prompt,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
 def _make_man_page(**kwargs) -> ParsedManPage:
     """Build a ParsedManPage with sensible defaults, overriding with kwargs."""
-    defaults = dict(
-        name="testcmd",
-        section=1,
-        synopsis=None,
-        description="",
-        flags=(),
-        examples=(),
-        raw_text="",
-    )
+    defaults = {
+        "name": "testcmd",
+        "section": 1,
+        "synopsis": None,
+        "description": "",
+        "flags": (),
+        "examples": (),
+        "raw_text": "",
+    }
     defaults.update(kwargs)
     return ParsedManPage(**defaults)
 
 
 def _make_flag(**kwargs) -> ParsedFlag:
-    defaults = dict(
-        name="verbose",
-        short="-v",
-        long="--verbose",
-        description="Enable verbose output",
-    )
+    defaults = {
+        "name": "verbose",
+        "short": "-v",
+        "long": "--verbose",
+        "description": "Enable verbose output",
+    }
     defaults.update(kwargs)
     return ParsedFlag(**defaults)
 

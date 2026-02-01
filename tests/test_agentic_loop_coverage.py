@@ -19,25 +19,18 @@ Targets specific uncovered lines:
 
 from __future__ import annotations
 
-import os
 from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest
 
 from elle.cli.agentic.loop import (
     AgenticLoop,
-    AgenticLoopResult,
-    ToolCallRecord,
-    get_agentic_loop,
     reset_agentic_loop,
 )
 from elle.cli.agentic.tools import (
-    ToolRegistry,
     ToolResult,
-    get_tool_registry,
     reset_tool_registry,
 )
-
 
 # =============================================================================
 # Fixtures
@@ -294,7 +287,7 @@ class TestIterationLimitWarnings:
                 return_value=ToolResult(tool_name="shell_command", success=True, output="file"),
             ),
         ):
-            result = await loop.run("Test", stream_callback=stream_cb)
+            await loop.run("Test", stream_callback=stream_cb)
 
         # Check the warning was streamed
         combined = "".join(streamed)
@@ -403,7 +396,7 @@ class TestMaxDurationExceeded:
         ):
             mock_time.time = fake_time
 
-            result = await loop.run("Long query", stream_callback=stream_cb)
+            await loop.run("Long query", stream_callback=stream_cb)
 
         combined = "".join(streamed)
         assert "maximum duration" in combined.lower() or "exceeded" in combined.lower()
@@ -518,7 +511,7 @@ class TestAuditRecordingDuringToolCalls:
                 return_value=ToolResult(tool_name="shell_command", success=True, output="up 5 days"),
             ),
         ):
-            result = await loop.run("Uptime?")
+            await loop.run("Uptime?")
 
         mock_audit.add_tool_call.assert_called_once()
 

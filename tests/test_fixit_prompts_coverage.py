@@ -28,14 +28,13 @@ from elle.cli.fixit.prompts import (
     get_schema_hint,
 )
 
-
 # =============================================================================
 # Helpers
 # =============================================================================
 
 
 def _failure(**kw) -> CommandFailure:
-    defaults = dict(command="ls /nonexistent", exit_code=2, stderr="No such file", cwd=Path("/home"))
+    defaults = {"command": "ls /nonexistent", "exit_code": 2, "stderr": "No such file", "cwd": Path("/home")}
     defaults.update(kw)
     return CommandFailure(**defaults)
 

@@ -6,7 +6,6 @@ Tests surface hash computation, collection functions, and model instantiation.
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -34,7 +33,6 @@ from elle.daemon.incidents.control_surface import (
     _hash_file,
     collect_control_surface,
 )
-
 
 # ---------------------------------------------------------------------------
 # Surface hash tests

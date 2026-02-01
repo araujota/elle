@@ -22,12 +22,8 @@ import pytest
 
 from elle.capabilities.autogen.retriever import (
     CapabilityRetriever,
-    CapabilitySearchResult,
     _migrate_to_v2,
-    get_retriever,
-    reset_retriever,
 )
-
 
 # =========================================================================
 # Helpers

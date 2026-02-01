@@ -24,7 +24,6 @@ from elle.daemon.telemetry.ebpf.syscall_models import (
     SyscallTrace,
 )
 
-
 # ---------------------------------------------------------------------------
 # SyscallEvent
 # ---------------------------------------------------------------------------
@@ -190,7 +189,7 @@ class TestSyscallSummary:
 
 class TestSyscallTrace:
     def _make_summary(self, **kwargs):
-        defaults = dict(command="test", pid=1, duration_ms=10, total_syscalls=1)
+        defaults = {"command": "test", "pid": 1, "duration_ms": 10, "total_syscalls": 1}
         defaults.update(kwargs)
         return SyscallSummary(**defaults)
 
