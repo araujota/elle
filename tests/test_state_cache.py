@@ -6,8 +6,10 @@ Docker/network/firewall state parsing, and listeners.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import subprocess
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -890,3 +892,811 @@ class TestRefreshNetworkState:
             await cache._refresh_network_state()
 
         assert cache._stats["errors"] == 1
+
+
+# ---------------------------------------------------------------------------
+# NEW Tests: Increase branch coverage to >90%
+# ---------------------------------------------------------------------------
+
+
+class TestRefreshAllActual:
+    """Cover line 228: _refresh_all actually calling asyncio.gather."""
+
+    @pytest.mark.asyncio
+    async def test_refresh_all_calls_both_refreshes(self):
+        cache = StateCache()
+        with patch.object(cache, "_refresh_docker_state", new_callable=AsyncMock) as mock_d:
+            with patch.object(cache, "_refresh_network_state", new_callable=AsyncMock) as mock_n:
+                await cache._refresh_all()
+                mock_d.assert_called_once()
+                mock_n.assert_called_once()
+
+
+class TestDockerRefreshLoop:
+    """Cover lines 236-245: _docker_refresh_loop while loop body."""
+
+    @pytest.mark.asyncio
+    async def test_docker_refresh_loop_runs_and_stops(self):
+        """Test the loop iterates once, then _running is set to False."""
+        cache = StateCache()
+        cache._running = True
+
+        call_count = 0
+
+        async def mock_refresh():
+            nonlocal call_count
+            call_count += 1
+            cache._running = False  # Stop after first iteration
+
+        with patch.object(cache, "_refresh_docker_state", side_effect=mock_refresh):
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                await cache._docker_refresh_loop()
+
+        assert call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_docker_refresh_loop_cancelled(self):
+        """Test CancelledError breaks the loop (line 241-242)."""
+        cache = StateCache()
+        cache._running = True
+
+        with patch("asyncio.sleep", new_callable=AsyncMock, side_effect=asyncio.CancelledError):
+            await cache._docker_refresh_loop()
+
+        # Should exit cleanly without error increment
+        assert cache._stats["errors"] == 0
+
+    @pytest.mark.asyncio
+    async def test_docker_refresh_loop_exception(self):
+        """Test generic exception increments errors (lines 243-245)."""
+        cache = StateCache()
+        cache._running = True
+
+        call_count = 0
+
+        async def mock_sleep(_):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 2:
+                cache._running = False
+            raise RuntimeError("boom")
+
+        with patch("asyncio.sleep", new_callable=AsyncMock, side_effect=mock_sleep):
+            await cache._docker_refresh_loop()
+
+        assert cache._stats["errors"] >= 1
+
+    @pytest.mark.asyncio
+    async def test_docker_refresh_loop_stopped_during_sleep(self):
+        """Test that _running=False after sleep skips refresh (line 239 branch)."""
+        cache = StateCache()
+        cache._running = True
+
+        async def mock_sleep(_):
+            cache._running = False  # Stop during sleep
+
+        with patch("asyncio.sleep", new_callable=AsyncMock, side_effect=mock_sleep):
+            with patch.object(cache, "_refresh_docker_state", new_callable=AsyncMock) as mock_r:
+                await cache._docker_refresh_loop()
+                mock_r.assert_not_called()
+
+
+class TestNetworkRefreshLoop:
+    """Cover lines 249-258: _network_refresh_loop while loop body."""
+
+    @pytest.mark.asyncio
+    async def test_network_refresh_loop_runs_and_stops(self):
+        cache = StateCache()
+        cache._running = True
+
+        call_count = 0
+
+        async def mock_refresh():
+            nonlocal call_count
+            call_count += 1
+            cache._running = False
+
+        with patch.object(cache, "_refresh_network_state", side_effect=mock_refresh):
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                await cache._network_refresh_loop()
+
+        assert call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_network_refresh_loop_cancelled(self):
+        cache = StateCache()
+        cache._running = True
+
+        with patch("asyncio.sleep", new_callable=AsyncMock, side_effect=asyncio.CancelledError):
+            await cache._network_refresh_loop()
+
+        assert cache._stats["errors"] == 0
+
+    @pytest.mark.asyncio
+    async def test_network_refresh_loop_exception(self):
+        cache = StateCache()
+        cache._running = True
+
+        call_count = 0
+
+        async def mock_sleep(_):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 2:
+                cache._running = False
+            raise RuntimeError("boom")
+
+        with patch("asyncio.sleep", new_callable=AsyncMock, side_effect=mock_sleep):
+            await cache._network_refresh_loop()
+
+        assert cache._stats["errors"] >= 1
+
+    @pytest.mark.asyncio
+    async def test_network_refresh_loop_stopped_during_sleep(self):
+        """Branch: _running becomes False after sleep, so refresh is skipped."""
+        cache = StateCache()
+        cache._running = True
+
+        async def mock_sleep(_):
+            cache._running = False
+
+        with patch("asyncio.sleep", new_callable=AsyncMock, side_effect=mock_sleep):
+            with patch.object(cache, "_refresh_network_state", new_callable=AsyncMock) as mock_r:
+                await cache._network_refresh_loop()
+                mock_r.assert_not_called()
+
+
+class TestRefreshDockerStateAvailable:
+    """Cover lines 284-316: _refresh_docker_state when Docker IS available."""
+
+    @pytest.mark.asyncio
+    async def test_docker_available_full_refresh(self):
+        cache = StateCache()
+
+        docker_info_result = MagicMock()
+        docker_info_result.returncode = 0
+        docker_info_result.stdout = "Docker info"
+
+        container = ContainerInfo(
+            id="abc123def456",
+            names="webapp",
+            image="nginx:latest",
+            status="Up 2 hours",
+            state="running",
+        )
+
+        with patch("asyncio.to_thread", return_value=docker_info_result):
+            with patch.object(
+                cache,
+                "_get_containers",
+                new_callable=AsyncMock,
+                return_value=(container,),
+            ):
+                with patch.object(
+                    cache,
+                    "_get_docker_items",
+                    new_callable=AsyncMock,
+                    return_value=["nginx:latest", "redis:7"],
+                ):
+                    with patch.object(
+                        cache,
+                        "_get_compose_services",
+                        new_callable=AsyncMock,
+                        return_value=["web", "db"],
+                    ):
+                        with patch.object(
+                            cache,
+                            "_check_swarm_active",
+                            new_callable=AsyncMock,
+                            return_value=False,
+                        ):
+                            await cache._refresh_docker_state()
+
+        state = cache.get_docker_state()
+        assert state.docker_available is True
+        assert len(state.running_containers) == 1
+        assert state.running_containers[0].names == "webapp"
+        assert cache._last_docker_refresh is not None
+        assert cache._stats["docker_refreshes"] == 1
+
+
+class TestGetContainersAllFlag:
+    """Cover line 334: _get_containers with all_containers=True inserts -a flag."""
+
+    @pytest.mark.asyncio
+    async def test_get_containers_with_all_flag(self):
+        cache = StateCache()
+
+        container_json = json.dumps(
+            {
+                "ID": "abc123def456",
+                "Names": "webapp",
+                "Image": "nginx:latest",
+                "Status": "Exited (0)",
+                "State": "exited",
+                "Ports": "",
+                "CreatedAt": "2025-06-15",
+            }
+        )
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = container_json
+
+        with patch("asyncio.to_thread", return_value=mock_result) as mock_thread:
+            containers = await cache._get_containers(all_containers=True)
+
+        assert len(containers) == 1
+        # Verify the -a flag was included in the command
+        call_args = mock_thread.call_args
+        cmd_arg = call_args[0][1]  # second positional arg is the command list
+        assert "-a" in cmd_arg
+
+
+class TestGetComposeServicesFailed:
+    """Cover branch 398->402: compose returns non-zero code."""
+
+    @pytest.mark.asyncio
+    async def test_compose_non_zero_returns_empty(self):
+        cache = StateCache()
+
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stdout = ""
+
+        with patch("asyncio.to_thread", return_value=mock_result):
+            services = await cache._get_compose_services()
+
+        assert services == []
+
+
+class TestGetInterfacesNonZero:
+    """Cover branch 473->495: ip addr returns non-zero."""
+
+    @pytest.mark.asyncio
+    async def test_interfaces_non_zero_returncode(self):
+        cache = StateCache()
+
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stdout = ""
+
+        with patch("asyncio.to_thread", return_value=mock_result):
+            interfaces = await cache._get_interfaces()
+
+        assert interfaces == ()
+
+
+class TestGetDnsServersNameserverOnlyKeyword:
+    """Cover branch 532->529: nameserver line with only one part (no IP)."""
+
+    @pytest.mark.asyncio
+    async def test_nameserver_line_without_ip(self):
+        cache = StateCache()
+
+        # "nameserver" alone (len(parts) == 1), should NOT append
+        resolv_text = "nameserver\nnameserver 1.1.1.1\n"
+
+        with patch("elle.daemon.telemetry.state_cache.Path") as MockPath:
+            MockPath.return_value.read_text.return_value = resolv_text
+            servers = await cache._get_dns_servers()
+
+        # Only the valid one should be returned
+        assert servers == ("1.1.1.1",)
+
+
+class TestGetWireguardInterfacesNonZero:
+    """Cover branch 563->568: wg show returns non-zero."""
+
+    @pytest.mark.asyncio
+    async def test_wireguard_non_zero_returncode(self):
+        cache = StateCache()
+
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stdout = ""
+
+        with patch("asyncio.to_thread", return_value=mock_result):
+            wg = await cache._get_wireguard_interfaces()
+
+        assert wg == ()
+
+
+class TestGetFirewallStateBranches:
+    """Cover branches 582->589, 598->609: ufw non-zero falls to iptables,
+    iptables non-zero falls to default."""
+
+    @pytest.mark.asyncio
+    async def test_ufw_nonzero_iptables_nonzero_returns_default(self):
+        """Both ufw and iptables return non-zero, falls through to default."""
+        cache = StateCache()
+
+        mock_result = MagicMock()
+        mock_result.returncode = 127  # command exists but fails
+        mock_result.stdout = ""
+
+        with patch("asyncio.to_thread", return_value=mock_result):
+            fw = await cache._get_firewall_state()
+
+        # Should return default FirewallState
+        assert fw.backend == "unknown"
+        assert fw.active is False
+
+    @pytest.mark.asyncio
+    async def test_ufw_nonzero_iptables_succeeds_no_drop(self):
+        """UFW returns non-zero, iptables succeeds with no DROP/REJECT."""
+        cache = StateCache()
+
+        call_count = 0
+
+        async def mock_to_thread(func, *args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            result = MagicMock()
+            if call_count == 1:
+                # ufw fails
+                result.returncode = 1
+                result.stdout = ""
+            else:
+                # iptables succeeds with ACCEPT only
+                result.returncode = 0
+                result.stdout = "Chain INPUT (policy ACCEPT)\nACCEPT all"
+            return result
+
+        with patch("asyncio.to_thread", side_effect=mock_to_thread):
+            fw = await cache._get_firewall_state()
+
+        assert fw.backend == "iptables"
+        assert fw.active is False  # no DROP or REJECT
+
+
+class TestParseUfwStatusBranches:
+    """Cover branches 621->623 and 629->618: reject (incoming/outgoing),
+    and lines without ALLOW/DENY/REJECT that continue the loop."""
+
+    def test_reject_incoming_policy(self):
+        """Cover branch 621->623: reject (incoming) sets deny."""
+        cache = StateCache()
+        output = """Status: active
+
+Default: reject (incoming), allow (outgoing), deny (routed)
+"""
+        result = cache._parse_ufw_status(output)
+        assert result.active is True
+        assert result.default_incoming == "deny"
+        assert result.default_outgoing == "allow"
+
+    def test_reject_outgoing_policy(self):
+        """Cover the reject (outgoing) branch of line 623."""
+        cache = StateCache()
+        output = """Status: active
+
+Default: allow (incoming), reject (outgoing), deny (routed)
+"""
+        result = cache._parse_ufw_status(output)
+        assert result.default_incoming == "allow"
+        assert result.default_outgoing == "deny"
+
+    def test_lines_without_actions_continue(self):
+        """Cover branch 629->618: lines that do not have ALLOW/DENY/REJECT."""
+        cache = StateCache()
+        output = """Status: active
+Logging: on (low)
+Default: deny (incoming), allow (outgoing), disabled (routed)
+New profiles: skip
+
+To                         Action      From
+--                         ------      ----
+22/tcp                     ALLOW       Anywhere
+"""
+        result = cache._parse_ufw_status(output)
+        assert result.active is True
+        # Only the ALLOW rule should be parsed
+        assert len(result.rules) == 1
+        assert result.rules[0].action == "allow"
+
+    def test_deny_rule_parsed(self):
+        """Cover DENY rule action branch in _parse_ufw_status."""
+        cache = StateCache()
+        output = """Status: active
+
+Default: deny (incoming), allow (outgoing)
+
+To                         Action      From
+--                         ------      ----
+8080/tcp                   DENY        Anywhere
+"""
+        result = cache._parse_ufw_status(output)
+        assert len(result.rules) == 1
+        assert result.rules[0].action == "deny"
+
+    def test_reject_rule_parsed(self):
+        """Cover REJECT rule action branch in _parse_ufw_status."""
+        cache = StateCache()
+        output = """Status: active
+
+Default: deny (incoming), allow (outgoing)
+
+To                         Action      From
+--                         ------      ----
+9090/tcp                   REJECT      Anywhere
+"""
+        result = cache._parse_ufw_status(output)
+        assert len(result.rules) == 1
+        assert result.rules[0].action == "reject"
+
+
+class TestListenersIPv6:
+    """Cover lines 669-670: IPv6 listener parsing with ']:' pattern."""
+
+    @pytest.mark.asyncio
+    async def test_parse_ipv6_listener(self):
+        cache = StateCache()
+
+        ss_output = (
+            "State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process\n"
+            'LISTEN 0      128    [::]:80   [::]:*     users:(("nginx",pid=1234,fd=6))\n'
+        )
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = ss_output
+
+        with patch("asyncio.to_thread", return_value=mock_result):
+            listeners = await cache._get_listeners()
+
+        assert len(listeners) == 1
+        assert listeners[0].port == 80
+        assert listeners[0].address == "::"
+        assert listeners[0].is_wildcard is True
+
+
+class TestListenersNoProcessInfo:
+    """Cover branch 680->689: listener with fewer than 6 parts (no process info)."""
+
+    @pytest.mark.asyncio
+    async def test_listener_without_process_info(self):
+        cache = StateCache()
+
+        ss_output = (
+            "State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process\n"
+            "LISTEN 0      128    0.0.0.0:8080  0.0.0.0:*\n"
+        )
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = ss_output
+
+        with patch("asyncio.to_thread", return_value=mock_result):
+            listeners = await cache._get_listeners()
+
+        assert len(listeners) == 1
+        assert listeners[0].port == 8080
+        assert listeners[0].process == "unknown"
+        assert listeners[0].pid is None
+
+
+class TestListenersPidWithoutName:
+    """Cover branches 684->686 and 686->689: pid found but name not found."""
+
+    @pytest.mark.asyncio
+    async def test_listener_pid_no_name(self):
+        cache = StateCache()
+
+        # Process info with pid= but no quoted name
+        ss_output = (
+            "State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process\n"
+            "LISTEN 0      128    0.0.0.0:3000  0.0.0.0:*     pid=9999\n"
+        )
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = ss_output
+
+        with patch("asyncio.to_thread", return_value=mock_result):
+            listeners = await cache._get_listeners()
+
+        assert len(listeners) == 1
+        assert listeners[0].port == 3000
+        assert listeners[0].pid == 9999
+        assert listeners[0].process == "unknown"
+
+    @pytest.mark.asyncio
+    async def test_listener_name_no_pid(self):
+        """Cover branch where name_match succeeds but pid_match fails."""
+        cache = StateCache()
+
+        ss_output = (
+            "State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process\n"
+            'LISTEN 0      128    0.0.0.0:4000  0.0.0.0:*     users:(("myapp",fd=3))\n'
+        )
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = ss_output
+
+        with patch("asyncio.to_thread", return_value=mock_result):
+            listeners = await cache._get_listeners()
+
+        assert len(listeners) == 1
+        assert listeners[0].port == 4000
+        assert listeners[0].pid is None
+        assert listeners[0].process == "myapp"
+
+
+# ---------------------------------------------------------------------------
+# NEW Coverage Tests: lines 228, 236-258, 284-316, 334, 669-670
+# ---------------------------------------------------------------------------
+
+
+class TestRefreshAllGather:
+    """Cover line 228: _refresh_all calls asyncio.gather with both refresh methods."""
+
+    @pytest.mark.asyncio
+    async def test_refresh_all_gather_with_exceptions(self):
+        """asyncio.gather with return_exceptions=True handles errors gracefully (line 228)."""
+        cache = StateCache()
+
+        async def fail_docker():
+            raise RuntimeError("docker fail")
+
+        async def fail_network():
+            raise RuntimeError("network fail")
+
+        with (
+            patch.object(cache, "_refresh_docker_state", side_effect=fail_docker),
+            patch.object(cache, "_refresh_network_state", side_effect=fail_network),
+        ):
+            # Should not raise because return_exceptions=True
+            await cache._refresh_all()
+
+
+class TestDockerRefreshLoopRunsRefresh:
+    """Cover lines 236-240: _docker_refresh_loop executes _refresh_docker_state
+    after sleep when _running is True."""
+
+    @pytest.mark.asyncio
+    async def test_docker_loop_calls_refresh_when_running(self):
+        """After sleep, if _running is True, _refresh_docker_state is called (lines 239-240)."""
+        cache = StateCache()
+        cache._running = True
+
+        call_count = 0
+
+        async def tracked_refresh():
+            nonlocal call_count
+            call_count += 1
+            cache._running = False  # Stop after one refresh
+
+        with (
+            patch("asyncio.sleep", new_callable=AsyncMock),
+            patch.object(cache, "_refresh_docker_state", side_effect=tracked_refresh),
+        ):
+            await cache._docker_refresh_loop()
+
+        assert call_count == 1
+
+
+class TestNetworkRefreshLoopRunsRefresh:
+    """Cover lines 249-253: _network_refresh_loop executes _refresh_network_state
+    after sleep when _running is True."""
+
+    @pytest.mark.asyncio
+    async def test_network_loop_calls_refresh_when_running(self):
+        """After sleep, if _running is True, _refresh_network_state is called (lines 252-253)."""
+        cache = StateCache()
+        cache._running = True
+
+        call_count = 0
+
+        async def tracked_refresh():
+            nonlocal call_count
+            call_count += 1
+            cache._running = False  # Stop after one refresh
+
+        with (
+            patch("asyncio.sleep", new_callable=AsyncMock),
+            patch.object(cache, "_refresh_network_state", side_effect=tracked_refresh),
+        ):
+            await cache._network_refresh_loop()
+
+        assert call_count == 1
+
+
+class TestDockerStateRefreshInternals:
+    """Cover lines 284-316: Docker state refresh -- getting containers, images,
+    networks, volumes, compose services, swarm, and setting _last_docker_refresh."""
+
+    @pytest.mark.asyncio
+    async def test_full_docker_refresh_sets_timestamp(self):
+        """Full Docker refresh sets _last_docker_refresh timestamp (line 316)."""
+        cache = StateCache()
+
+        docker_info_result = MagicMock()
+        docker_info_result.returncode = 0
+        docker_info_result.stdout = "Docker info"
+
+        with (
+            patch("asyncio.to_thread", return_value=docker_info_result),
+            patch.object(
+                cache,
+                "_get_containers",
+                new_callable=AsyncMock,
+                return_value=(),
+            ),
+            patch.object(
+                cache,
+                "_get_docker_items",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch.object(
+                cache,
+                "_get_compose_services",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch.object(
+                cache,
+                "_check_swarm_active",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+        ):
+            before = datetime.now(timezone.utc)
+            await cache._refresh_docker_state()
+            after = datetime.now(timezone.utc)
+
+        assert cache._last_docker_refresh is not None
+        assert before <= cache._last_docker_refresh <= after
+
+    @pytest.mark.asyncio
+    async def test_docker_not_available_sets_timestamp(self):
+        """Docker not available still sets _last_docker_refresh (line 280)."""
+        cache = StateCache()
+
+        failed_result = MagicMock()
+        failed_result.returncode = 1
+        failed_result.stdout = ""
+
+        with patch("asyncio.to_thread", return_value=failed_result):
+            await cache._refresh_docker_state()
+
+        assert cache._last_docker_refresh is not None
+        assert cache.get_docker_state().docker_available is False
+
+
+class TestContainerListTimeout:
+    """Cover line 334: _get_containers timeout handling."""
+
+    @pytest.mark.asyncio
+    async def test_get_containers_timeout(self):
+        """Container list command timing out is handled (line 334/342)."""
+        cache = StateCache()
+
+        with patch("asyncio.to_thread", side_effect=subprocess.TimeoutExpired("docker", 10)):
+            # The timeout propagates; _refresh_docker_state catches it
+            with pytest.raises(subprocess.TimeoutExpired):
+                await cache._get_containers()
+
+    @pytest.mark.asyncio
+    async def test_get_containers_all_flag_inserts_a(self):
+        """When all_containers=True, -a is inserted at index 2 (line 334)."""
+        cache = StateCache()
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = ""
+
+        with patch("asyncio.to_thread", return_value=mock_result) as mock_thread:
+            await cache._get_containers(all_containers=True)
+
+        call_args = mock_thread.call_args
+        cmd = call_args[0][1]
+        assert "-a" in cmd
+        assert cmd.index("-a") == 2
+
+
+class TestListenerSsOutputWithProcessInfo:
+    """Cover lines 669-670: ss output with full process info parsing."""
+
+    @pytest.mark.asyncio
+    async def test_listener_with_full_process_info(self):
+        """Parse ss output with pid and process name (lines 680-687)."""
+        cache = StateCache()
+
+        ss_output = (
+            "State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process\n"
+            'LISTEN 0      128    0.0.0.0:443   0.0.0.0:*     users:(("nginx",pid=1234,fd=6))\n'
+            'LISTEN 0      128    0.0.0.0:3306  0.0.0.0:*     users:(("mysqld",pid=5678,fd=3))\n'
+            'LISTEN 0      128    [::1]:6379    [::]:*         users:(("redis-server",pid=9012,fd=7))\n'
+        )
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = ss_output
+
+        with patch("asyncio.to_thread", return_value=mock_result):
+            listeners = await cache._get_listeners()
+
+        assert len(listeners) == 3
+
+        # nginx on 443
+        assert listeners[0].port == 443
+        assert listeners[0].process == "nginx"
+        assert listeners[0].pid == 1234
+        assert listeners[0].is_wildcard is True
+
+        # mysqld on 3306
+        assert listeners[1].port == 3306
+        assert listeners[1].process == "mysqld"
+        assert listeners[1].pid == 5678
+
+        # redis-server on IPv6 localhost:6379
+        assert listeners[2].port == 6379
+        assert listeners[2].process == "redis-server"
+        assert listeners[2].pid == 9012
+
+    @pytest.mark.asyncio
+    async def test_listener_wildcard_star(self):
+        """Parse ss output with * as wildcard address."""
+        cache = StateCache()
+
+        ss_output = (
+            "State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process\n"
+            'LISTEN 0      128    *:8080  *:*     users:(("node",pid=4321,fd=10))\n'
+        )
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = ss_output
+
+        with patch("asyncio.to_thread", return_value=mock_result):
+            listeners = await cache._get_listeners()
+
+        assert len(listeners) == 1
+        assert listeners[0].port == 8080
+        assert listeners[0].is_wildcard is True
+        assert listeners[0].process == "node"
+        assert listeners[0].pid == 4321
+
+
+class TestRefreshNetworkStateSetsTimestamp:
+    """Cover line 454: _last_network_refresh is set after successful refresh."""
+
+    @pytest.mark.asyncio
+    async def test_network_refresh_sets_timestamp(self):
+        cache = StateCache()
+
+        with (
+            patch.object(cache, "_get_interfaces", new_callable=AsyncMock, return_value=()),
+            patch.object(cache, "_get_default_route", new_callable=AsyncMock, return_value=(None, None)),
+            patch.object(cache, "_get_dns_servers", new_callable=AsyncMock, return_value=()),
+            patch.object(cache, "_get_hostname", new_callable=AsyncMock, return_value="host1"),
+            patch.object(cache, "_get_wireguard_interfaces", new_callable=AsyncMock, return_value=()),
+            patch.object(cache, "_get_firewall_state", new_callable=AsyncMock, return_value=FirewallState()),
+            patch.object(cache, "_get_listeners", new_callable=AsyncMock, return_value=()),
+        ):
+            before = datetime.now(timezone.utc)
+            await cache._refresh_network_state()
+            after = datetime.now(timezone.utc)
+
+        assert cache._last_network_refresh is not None
+        assert before <= cache._last_network_refresh <= after
+
+
+class TestStartCreatesBackgroundTasks:
+    """Cover lines 218-219: start() creates background tasks via asyncio.create_task."""
+
+    @pytest.mark.asyncio
+    async def test_start_creates_two_tasks(self):
+        """start() calls asyncio.create_task twice (lines 218-219)."""
+        cache = StateCache()
+
+        with (
+            patch.object(cache, "_refresh_all", new_callable=AsyncMock),
+            patch("asyncio.create_task") as mock_create_task,
+        ):
+            await cache.start()
+
+        assert mock_create_task.call_count == 2

@@ -2232,3 +2232,412 @@ class TestLazyLoading:
             recorder = loop.audit_recorder
             assert recorder is not None
             mock_get.assert_called_once()
+
+
+# =============================================================================
+# Additional Coverage Tests
+# =============================================================================
+
+
+class TestOsReleaseParsing:
+    """Tests for /etc/os-release parsing in _get_system_context."""
+
+    def test_os_release_pretty_name_found(self):
+        """_get_system_context should parse PRETTY_NAME from /etc/os-release."""
+        loop = AgenticLoop()
+        fake_content = "NAME=Ubuntu\nPRETTY_NAME=\"Ubuntu 22.04.4 LTS\"\nVERSION_ID=22.04\n"
+        from unittest.mock import mock_open
+
+        with patch("builtins.open", mock_open(read_data=fake_content)):
+            _, os_info, _ = loop._get_system_context()
+            assert os_info == "Ubuntu 22.04.4 LTS"
+
+    def test_os_release_no_pretty_name(self):
+        """_get_system_context should fallback when PRETTY_NAME is missing."""
+        loop = AgenticLoop()
+        fake_content = "NAME=Ubuntu\nVERSION_ID=22.04\n"
+        from unittest.mock import mock_open
+
+        with patch("builtins.open", mock_open(read_data=fake_content)):
+            _, os_info, _ = loop._get_system_context()
+            assert os_info == "Ubuntu 24.04 LTS"
+
+
+class TestVerifyConfigInvalidSyntax:
+    """Tests for config verification with invalid JSON/YAML syntax."""
+
+    @pytest.mark.asyncio
+    async def test_verify_config_json_invalid(self):
+        """_verify_config should fail when JSON syntax check fails."""
+        loop = AgenticLoop(prefetch_context=False, enable_verification=True)
+
+        call_count = 0
+
+        async def mock_execute(tool_name, args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # Initial file existence check
+                return ToolResult(
+                    tool_name="shell_command",
+                    success=True,
+                    output="{bad json",
+                )
+            else:
+                # JSON syntax check fails
+                return ToolResult(
+                    tool_name="shell_command",
+                    success=False,
+                    output="",
+                    error="json parse error",
+                )
+
+        with patch.object(loop.tools, "execute", side_effect=mock_execute):
+            result = await loop._verify_config(
+                "ver-123", "call-456", "config.edit", {"path": "/etc/app/config.json"}
+            )
+
+            assert result.passed is False
+            assert "JSON syntax: INVALID" in result.evidence
+
+    @pytest.mark.asyncio
+    async def test_verify_config_yaml_invalid(self):
+        """_verify_config should fail when YAML syntax check fails."""
+        loop = AgenticLoop(prefetch_context=False, enable_verification=True)
+
+        call_count = 0
+
+        async def mock_execute(tool_name, args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # Initial file existence check
+                return ToolResult(
+                    tool_name="shell_command",
+                    success=True,
+                    output="key: [invalid",
+                )
+            else:
+                # YAML syntax check fails
+                return ToolResult(
+                    tool_name="shell_command",
+                    success=False,
+                    output="",
+                    error="yaml parse error",
+                )
+
+        with patch.object(loop.tools, "execute", side_effect=mock_execute):
+            result = await loop._verify_config(
+                "ver-123", "call-456", "config.edit", {"path": "/etc/app/config.yml"}
+            )
+
+            assert result.passed is False
+            assert "YAML syntax: INVALID" in result.evidence
+
+
+class TestVerifyNetworkFirewallDeny:
+    """Tests for network verification with firewall deny operations."""
+
+    @pytest.mark.asyncio
+    async def test_verify_network_firewall_deny(self):
+        """_verify_network should verify firewall deny operations."""
+        loop = AgenticLoop(prefetch_context=False, enable_verification=True)
+
+        with patch.object(loop.tools, "execute") as mock_execute:
+            mock_execute.return_value = ToolResult(
+                tool_name="shell_command",
+                success=True,
+                output="443/tcp DENY Anywhere",
+            )
+
+            result = await loop._verify_network(
+                "ver-123",
+                "call-456",
+                "network.firewall_deny",
+                {"port": "443"},
+            )
+
+            assert result.passed is True
+            assert result.method == "network_check"
+
+    @pytest.mark.asyncio
+    async def test_verify_network_firewall_close(self):
+        """_verify_network should verify firewall close operations."""
+        loop = AgenticLoop(prefetch_context=False, enable_verification=True)
+
+        with patch.object(loop.tools, "execute") as mock_execute:
+            mock_execute.return_value = ToolResult(
+                tool_name="shell_command",
+                success=True,
+                output="8080/tcp DENY Anywhere",
+            )
+
+            result = await loop._verify_network(
+                "ver-123",
+                "call-456",
+                "network.firewall_close",
+                {"port": "8080"},
+            )
+
+            assert result.passed is True
+            assert result.method == "network_check"
+
+
+class TestRunVerificationStrategyDomainRouting:
+    """Tests for _run_verification_strategy routing to each domain."""
+
+    @pytest.mark.asyncio
+    async def test_routing_file_domain(self):
+        """_run_verification_strategy should route file domain to _verify_file."""
+        loop = AgenticLoop(prefetch_context=False, enable_verification=True)
+        mock_tool_call = MagicMock()
+        mock_tool_call.id = "call_1"
+        mock_result = ToolResult(tool_name="execute_capability", success=True, output="OK")
+
+        result = await loop._run_verification_strategy(
+            "file.read", {}, mock_result, mock_tool_call
+        )
+        assert result is not None
+        assert result.method == "non_mutating"
+
+    @pytest.mark.asyncio
+    async def test_routing_docker_domain(self):
+        """_run_verification_strategy should route docker domain to _verify_docker."""
+        loop = AgenticLoop(prefetch_context=False, enable_verification=True)
+        mock_tool_call = MagicMock()
+        mock_tool_call.id = "call_1"
+        mock_result = ToolResult(tool_name="execute_capability", success=True, output="OK")
+
+        result = await loop._run_verification_strategy(
+            "docker.list", {}, mock_result, mock_tool_call
+        )
+        assert result is not None
+        assert result.method == "non_mutating"
+
+    @pytest.mark.asyncio
+    async def test_routing_package_domain(self):
+        """_run_verification_strategy should route package domain to _verify_package."""
+        loop = AgenticLoop(prefetch_context=False, enable_verification=True)
+        mock_tool_call = MagicMock()
+        mock_tool_call.id = "call_1"
+        mock_result = ToolResult(tool_name="execute_capability", success=True, output="OK")
+
+        result = await loop._run_verification_strategy(
+            "package.info", {}, mock_result, mock_tool_call
+        )
+        assert result is not None
+        assert result.method == "non_mutating"
+
+    @pytest.mark.asyncio
+    async def test_routing_config_domain(self):
+        """_run_verification_strategy should route config domain to _verify_config."""
+        loop = AgenticLoop(prefetch_context=False, enable_verification=True)
+        mock_tool_call = MagicMock()
+        mock_tool_call.id = "call_1"
+        mock_result = ToolResult(tool_name="execute_capability", success=True, output="OK")
+
+        result = await loop._run_verification_strategy(
+            "config.preview", {}, mock_result, mock_tool_call
+        )
+        assert result is not None
+        assert result.method == "non_mutating"
+
+    @pytest.mark.asyncio
+    async def test_routing_network_domain(self):
+        """_run_verification_strategy should route network domain to _verify_network."""
+        loop = AgenticLoop(prefetch_context=False, enable_verification=True)
+        mock_tool_call = MagicMock()
+        mock_tool_call.id = "call_1"
+        mock_result = ToolResult(tool_name="execute_capability", success=True, output="OK")
+
+        result = await loop._run_verification_strategy(
+            "network.diagnose", {}, mock_result, mock_tool_call
+        )
+        assert result is not None
+        assert result.method == "non_mutating"
+
+
+class TestToolCallAuditRecording:
+    """Tests for audit recording during tool call execution in the main loop."""
+
+    @pytest.mark.asyncio
+    async def test_tool_calls_recorded_to_audit(self):
+        """Tool calls during the loop should be recorded to the audit trail."""
+        loop = AgenticLoop(
+            prefetch_context=False,
+            enable_audit=True,
+            enable_verification=False,
+        )
+
+        mock_audit = MagicMock()
+        mock_record = MagicMock()
+        mock_record.execution_id = "exec-audit-tool"
+        mock_audit.start.return_value = mock_record
+        loop._audit_recorder = mock_audit
+
+        tool_call_response = _make_tool_call_response(
+            content="",
+            tool_calls=(_make_tool_call("shell_command", {"command": "uptime"}),),
+            done=False,
+        )
+        final_response = _make_tool_call_response(content="System has been up 5 days.")
+
+        mock_session = _make_mock_session(
+            chat_response=tool_call_response,
+            continue_responses=[final_response],
+        )
+
+        with (
+            patch("elle.rag.llm.LLMSession", return_value=mock_session),
+            patch(
+                "elle.cli.agentic.incident_recorder.record_execution_to_incident",
+                return_value="inc-audit-tool",
+            ),
+            patch.object(
+                loop.tools,
+                "execute",
+                return_value=ToolResult(
+                    tool_name="shell_command",
+                    success=True,
+                    output="up 5 days",
+                ),
+            ),
+        ):
+            result = await loop.run("How long has system been up?")
+
+            assert result.success
+            assert result.execution_id == "exec-audit-tool"
+            # Verify add_tool_call was invoked for the tool call
+            mock_audit.add_tool_call.assert_called_once()
+            call_args = mock_audit.add_tool_call.call_args
+            assert call_args[0][0] == "exec-audit-tool"
+
+
+class TestLLMUnavailableWithAudit:
+    """Tests for LLMUnavailableError with audit enabled."""
+
+    @pytest.mark.asyncio
+    async def test_llm_unavailable_records_audit_failure(self):
+        """LLMUnavailableError should record failure to audit trail when audit is enabled."""
+        from elle.rag.llm import LLMUnavailableError
+
+        loop = AgenticLoop(
+            prefetch_context=False,
+            enable_audit=True,
+        )
+
+        mock_audit = MagicMock()
+        mock_record = MagicMock()
+        mock_record.execution_id = "exec-unavail"
+        mock_audit.start.return_value = mock_record
+        loop._audit_recorder = mock_audit
+
+        mock_session = _make_mock_session()
+        mock_session.chat.side_effect = LLMUnavailableError("Ollama not running")
+
+        with (
+            patch("elle.rag.llm.LLMSession", return_value=mock_session),
+            patch(
+                "elle.cli.agentic.incident_recorder.record_execution_to_incident",
+                return_value="inc-unavail",
+            ),
+        ):
+            result = await loop.run("Test query")
+
+            assert not result.success
+            mock_audit.fail.assert_called_once_with("exec-unavail", "Ollama not running", 0)
+
+
+class TestRetrievalContextEmptyString:
+    """Tests for empty retrieval context string in the loop."""
+
+    @pytest.mark.asyncio
+    async def test_empty_context_string_not_appended(self):
+        """When retrieval context format_for_prompt returns empty, user message should not include it."""
+        loop = AgenticLoop(
+            prefetch_context=True,
+            enable_audit=False,
+        )
+
+        mock_retrieval_context = MagicMock()
+        mock_retrieval_context.retrieval_duration_ms = 10
+        mock_retrieval_context.format_for_prompt.return_value = ""
+
+        mock_pipeline = AsyncMock()
+        mock_pipeline.retrieve.return_value = mock_retrieval_context
+        loop._retrieval_pipeline = mock_pipeline
+
+        mock_response = _make_tool_call_response(content="Answer.")
+        mock_session = _make_mock_session(chat_response=mock_response)
+
+        with (
+            patch("elle.rag.llm.LLMSession", return_value=mock_session),
+            patch(
+                "elle.cli.agentic.incident_recorder.record_execution_to_incident",
+                return_value=None,
+            ),
+        ):
+            result = await loop.run("Test query")
+
+            assert result.success
+            # The user message passed to chat should NOT contain separator since context was empty
+            chat_args = mock_session.chat.call_args
+            user_message = chat_args[0][0] if chat_args[0] else chat_args.kwargs.get("content", "")
+            assert "---" not in str(user_message)
+
+
+class TestIterationLimitWarning:
+    """Tests for iteration limit approaching warning with stream callback."""
+
+    @pytest.mark.asyncio
+    async def test_approaching_max_iterations_notifies_stream(self):
+        """Stream callback should receive warning when approaching max iterations."""
+        loop = AgenticLoop(
+            prefetch_context=False,
+            enable_audit=False,
+            max_iterations=5,
+        )
+
+        collected_stream = []
+
+        def stream_callback(token: str):
+            collected_stream.append(token)
+
+        # The first response triggers tool call. We need iterations to reach
+        # max_iterations - 2 = 3, meaning iteration 3+ with stream_callback.
+        tool_call_response = _make_tool_call_response(
+            content="",
+            tool_calls=(_make_tool_call("shell_command", {"command": "date"}),),
+            done=False,
+        )
+        final_response = _make_tool_call_response(content="Done.")
+
+        mock_session = _make_mock_session(
+            chat_response=tool_call_response,
+            # iterations 2, 3, 4 continue with tools, iteration 5 final
+            continue_responses=[tool_call_response, tool_call_response, tool_call_response, final_response],
+        )
+
+        with (
+            patch("elle.rag.llm.LLMSession", return_value=mock_session),
+            patch(
+                "elle.cli.agentic.incident_recorder.record_execution_to_incident",
+                return_value=None,
+            ),
+            patch.object(
+                loop.tools,
+                "execute",
+                return_value=ToolResult(
+                    tool_name="shell_command",
+                    success=True,
+                    output="Mon Feb 1",
+                ),
+            ),
+        ):
+            result = await loop.run("Date repeatedly", stream_callback=stream_callback)
+
+            # The loop should have hit max iterations
+            assert result.iterations >= 3
+            # Check that iteration warning was streamed
+            combined = "".join(collected_stream)
+            assert "remaining" in combined.lower() or "maximum" in combined.lower()

@@ -604,3 +604,576 @@ class TestServiceInputValidation:
     def test_timeout_above_300_rejected(self):
         with pytest.raises(pydantic.ValidationError):
             ServiceInput(service="nginx", timeout_sec=301)
+
+
+# =============================================================================
+# Coverage: _run_systemctl helper (lines 97-107)
+# =============================================================================
+
+
+class TestRunSystemctlHelper:
+    """Tests that exercise the _run_systemctl function directly."""
+
+    @patch("elle.cli.subprocess_runner.run_safe")
+    def test_run_systemctl_success(self, mock_run_safe):
+        from elle.capabilities.core.service import _run_systemctl
+
+        mock_run_safe.return_value = _make_subprocess_result(
+            stdout="", stderr="", exit_code=0
+        )
+
+        success, stdout, stderr, exit_code = _run_systemctl("restart", "nginx", 30)
+
+        assert success is True
+        assert exit_code == 0
+        mock_run_safe.assert_called_once()
+
+    @patch("elle.cli.subprocess_runner.run_safe")
+    def test_run_systemctl_failure(self, mock_run_safe):
+        from elle.capabilities.core.service import _run_systemctl
+
+        mock_run_safe.return_value = _make_subprocess_result(
+            stdout="", stderr="Access denied", exit_code=1
+        )
+
+        success, stdout, stderr, exit_code = _run_systemctl("start", "ssh", 60)
+
+        assert success is False
+        assert stderr == "Access denied"
+        assert exit_code == 1
+
+
+# =============================================================================
+# Coverage: _get_service_state helper (lines 119-155)
+# =============================================================================
+
+
+class TestGetServiceStateHelper:
+    """Tests that exercise the _get_service_state function directly."""
+
+    @patch("elle.cli.subprocess_runner.run_safe")
+    def test_get_state_active_with_pid(self, mock_run_safe):
+        from elle.capabilities.core.service import _get_service_state
+
+        mock_run_safe.side_effect = [
+            # First call: is-active
+            _make_subprocess_result(stdout="active"),
+            # Second call: show --property
+            _make_subprocess_result(stdout="SubState=running\nMainPID=1234"),
+        ]
+
+        active_state, sub_state, pid = _get_service_state("nginx")
+
+        assert active_state == "active"
+        assert sub_state == "running"
+        assert pid == 1234
+
+    @patch("elle.cli.subprocess_runner.run_safe")
+    def test_get_state_inactive_pid_zero(self, mock_run_safe):
+        from elle.capabilities.core.service import _get_service_state
+
+        mock_run_safe.side_effect = [
+            _make_subprocess_result(stdout="inactive"),
+            _make_subprocess_result(stdout="SubState=dead\nMainPID=0"),
+        ]
+
+        active_state, sub_state, pid = _get_service_state("nginx")
+
+        assert active_state == "inactive"
+        assert sub_state == "dead"
+        assert pid is None  # PID=0 treated as None
+
+    @patch("elle.cli.subprocess_runner.run_safe")
+    def test_get_state_show_failure(self, mock_run_safe):
+        from elle.capabilities.core.service import _get_service_state
+
+        mock_run_safe.side_effect = [
+            _make_subprocess_result(stdout="active"),
+            _make_subprocess_result(exit_code=1, stdout=""),
+        ]
+
+        active_state, sub_state, pid = _get_service_state("nginx")
+
+        assert active_state == "active"
+        assert sub_state == ""
+        assert pid is None
+
+    @patch("elle.cli.subprocess_runner.run_safe")
+    def test_get_state_empty_stdout_on_is_active(self, mock_run_safe):
+        from elle.capabilities.core.service import _get_service_state
+
+        mock_run_safe.side_effect = [
+            _make_subprocess_result(stdout=""),
+            _make_subprocess_result(stdout="SubState=dead\nMainPID=0"),
+        ]
+
+        active_state, sub_state, pid = _get_service_state("nginx")
+
+        assert active_state == "unknown"
+
+    @patch("elle.cli.subprocess_runner.run_safe")
+    def test_get_state_none_stdout_on_is_active(self, mock_run_safe):
+        from elle.capabilities.core.service import _get_service_state
+
+        result1 = _make_subprocess_result(stdout="")
+        result1.stdout = None  # Explicitly set to None
+        mock_run_safe.side_effect = [
+            result1,
+            _make_subprocess_result(stdout="SubState=running\nMainPID=100"),
+        ]
+
+        active_state, sub_state, pid = _get_service_state("nginx")
+
+        assert active_state == "unknown"
+
+    @patch("elle.cli.subprocess_runner.run_safe")
+    def test_get_state_mainpid_invalid_value(self, mock_run_safe):
+        """Cover the ValueError branch for non-integer MainPID."""
+        from elle.capabilities.core.service import _get_service_state
+
+        mock_run_safe.side_effect = [
+            _make_subprocess_result(stdout="active"),
+            _make_subprocess_result(stdout="SubState=running\nMainPID=notanumber"),
+        ]
+
+        active_state, sub_state, pid = _get_service_state("nginx")
+
+        assert active_state == "active"
+        assert sub_state == "running"
+        assert pid is None  # ValueError caught, pid stays None
+
+    @patch("elle.cli.subprocess_runner.run_safe")
+    def test_get_state_line_without_equals(self, mock_run_safe):
+        """Cover branch where a line in show output has no '=' sign."""
+        from elle.capabilities.core.service import _get_service_state
+
+        mock_run_safe.side_effect = [
+            _make_subprocess_result(stdout="active"),
+            _make_subprocess_result(stdout="SubState=running\nBadLineNoEquals\nMainPID=42"),
+        ]
+
+        active_state, sub_state, pid = _get_service_state("nginx")
+
+        assert active_state == "active"
+        assert sub_state == "running"
+        assert pid == 42
+
+
+# =============================================================================
+# Coverage: ServiceRestartCapability.verify not-passed branch (line 268->271)
+# =============================================================================
+
+
+class TestRestartVerifyNotPassed:
+    """Test the verify() branch where service is NOT active after restart."""
+
+    @patch("elle.capabilities.core.service._get_service_state")
+    def test_verify_service_not_active_returns_discrepancies(self, mock_state):
+        mock_state.return_value = ("inactive", "dead", None)
+
+        cap = ServiceRestartCapability()
+        inp = ServiceInput(service="nginx")
+        result = cap.verify(inp)
+
+        assert result.passed is False
+        assert len(result.discrepancies) == 1
+        assert "Service not active" in result.discrepancies[0]
+        assert "inactive/dead" in result.discrepancies[0]
+
+    @patch("elle.capabilities.core.service._get_service_state")
+    def test_verify_service_failed_returns_discrepancies(self, mock_state):
+        mock_state.return_value = ("failed", "failed", None)
+
+        cap = ServiceRestartCapability()
+        inp = ServiceInput(service="nginx")
+        result = cap.verify(inp)
+
+        assert result.passed is False
+        assert "failed/failed" in result.discrepancies[0]
+
+    @patch("elle.capabilities.core.service._get_service_state")
+    def test_verify_service_active_passes(self, mock_state):
+        mock_state.return_value = ("active", "running", 5678)
+
+        cap = ServiceRestartCapability()
+        inp = ServiceInput(service="nginx")
+        result = cap.verify(inp)
+
+        assert result.passed is True
+        assert result.discrepancies == ()
+        assert result.actual_state["pid"] == 5678
+
+
+# =============================================================================
+# Coverage: ServiceStartCapability.dry_run when NOT active (line 352)
+# =============================================================================
+
+
+class TestStartDryRunNotActive:
+    """Cover the dry_run branch for starting a service that is not active."""
+
+    @patch("elle.capabilities.core.service._get_service_state")
+    def test_dry_run_start_inactive_service(self, mock_state):
+        mock_state.return_value = ("inactive", "dead", None)
+
+        cap = ServiceStartCapability()
+        inp = ServiceInput(service="nginx")
+        result = cap.dry_run(inp)
+
+        assert result.is_valid is True
+        assert result.requires_confirmation is False
+        assert result.estimated_risk == "low"
+        assert "systemctl start nginx" in result.would_execute
+        assert "nginx.service" in result.would_modify
+        assert "Would start" in result.preview_text
+
+    @patch("elle.capabilities.core.service._get_service_state")
+    def test_dry_run_start_failed_service(self, mock_state):
+        mock_state.return_value = ("failed", "failed", None)
+
+        cap = ServiceStartCapability()
+        inp = ServiceInput(service="broken")
+        result = cap.dry_run(inp)
+
+        assert result.is_valid is True
+        assert result.estimated_risk == "low"
+        assert "systemctl start broken" in result.would_execute
+
+
+# =============================================================================
+# Coverage: ServiceStopCapability.dry_run when active (line 481)
+# =============================================================================
+
+
+class TestStopDryRunActive:
+    """Cover the dry_run branch for stopping a service that IS active."""
+
+    @patch("elle.capabilities.core.service._get_service_state")
+    def test_dry_run_stop_active_service_with_pid(self, mock_state):
+        mock_state.return_value = ("active", "running", 9876)
+
+        cap = ServiceStopCapability()
+        inp = ServiceInput(service="nginx")
+        result = cap.dry_run(inp)
+
+        assert result.is_valid is True
+        assert result.requires_confirmation is True
+        assert result.estimated_risk == "medium"
+        assert "systemctl stop nginx" in result.would_execute
+        assert "nginx.service" in result.would_modify
+        assert "PID: 9876" in result.preview_text
+
+    @patch("elle.capabilities.core.service._get_service_state")
+    def test_dry_run_stop_active_service_without_pid(self, mock_state):
+        mock_state.return_value = ("active", "running", None)
+
+        cap = ServiceStopCapability()
+        inp = ServiceInput(service="nginx")
+        result = cap.dry_run(inp)
+
+        assert result.is_valid is True
+        assert "PID: N/A" in result.preview_text
+
+
+# =============================================================================
+# Coverage: ServiceStatusCapability.spec, .verify, .run failure (lines 575, 617, 664)
+# =============================================================================
+
+
+class TestStatusCapabilityEdgeCases:
+    """Cover ServiceStatusCapability spec, verify, and run failure branches."""
+
+    def setup_method(self):
+        self.cap = ServiceStatusCapability()
+
+    def test_spec_is_read_only(self):
+        """Cover the spec property (line 575)."""
+        spec = self.cap.spec
+
+        assert spec.name == "service.status"
+        assert spec.risk == "none"
+        assert spec.side_effects == ()
+        assert spec.requires_privilege is False
+        assert spec.trust_level == "core"
+
+    def test_verify_always_passes(self):
+        """Cover the verify method (line 664)."""
+        inp = ServiceInput(service="nginx")
+        result = self.cap.verify(inp)
+
+        assert result.passed is True
+        assert result.checks_performed == ()
+        assert result.actual_state == {}
+        assert result.expected_state == {}
+        assert result.discrepancies == ()
+
+    @patch("elle.cli.subprocess_runner.run_safe")
+    def test_run_failure_returns_error(self, mock_run_safe):
+        """Cover the run failure branch (line 617)."""
+        mock_run_safe.return_value = _make_subprocess_result(
+            exit_code=1,
+            stderr="Failed to connect to bus",
+        )
+
+        inp = ServiceInput(service="nginx")
+        result = self.cap.run(inp)
+
+        assert result.success is False
+        assert "Failed to connect to bus" in result.error
+        assert result.output is None
+
+    @patch("elle.cli.subprocess_runner.run_safe")
+    def test_run_failure_with_empty_stderr(self, mock_run_safe):
+        """Cover the fallback error message when stderr is empty."""
+        mock_run_safe.return_value = _make_subprocess_result(
+            exit_code=1,
+            stderr="",
+        )
+
+        inp = ServiceInput(service="nginx")
+        result = self.cap.run(inp)
+
+        assert result.success is False
+        assert result.error == "Failed to get service status"
+
+
+# =============================================================================
+# Coverage: Status run() stdout parsing edge cases (lines 628-643)
+# =============================================================================
+
+
+class TestStatusRunParsing:
+    """Cover parsing edge cases in ServiceStatusCapability.run()."""
+
+    def setup_method(self):
+        self.cap = ServiceStatusCapability()
+
+    @patch("elle.cli.subprocess_runner.run_safe")
+    def test_run_empty_stdout(self, mock_run_safe):
+        """Cover branch where stdout is empty/falsy (line 628->634)."""
+        mock_run_safe.return_value = _make_subprocess_result(
+            stdout="",
+            exit_code=0,
+        )
+
+        inp = ServiceInput(service="nginx")
+        result = self.cap.run(inp)
+
+        assert result.success is True
+        assert result.output.active_state == "unknown"
+        assert result.output.sub_state == ""
+        assert result.output.pid is None
+
+    @patch("elle.cli.subprocess_runner.run_safe")
+    def test_run_none_stdout(self, mock_run_safe):
+        """Cover branch where stdout is None."""
+        res = _make_subprocess_result(exit_code=0)
+        res.stdout = None
+
+        mock_run_safe.return_value = res
+
+        inp = ServiceInput(service="nginx")
+        result = self.cap.run(inp)
+
+        assert result.success is True
+        assert result.output.active_state == "unknown"
+
+    @patch("elle.cli.subprocess_runner.run_safe")
+    def test_run_line_without_equals(self, mock_run_safe):
+        """Cover branch where a line in stdout has no '=' (line 630->629)."""
+        mock_run_safe.return_value = _make_subprocess_result(
+            stdout="ActiveState=active\nSomeGarbageLine\nSubState=running\nMainPID=555\nLoadState=loaded",
+        )
+
+        inp = ServiceInput(service="nginx")
+        result = self.cap.run(inp)
+
+        assert result.success is True
+        assert result.output.active_state == "active"
+        assert result.output.sub_state == "running"
+        assert result.output.pid == 555
+
+    @patch("elle.cli.subprocess_runner.run_safe")
+    def test_run_mainpid_not_a_number(self, mock_run_safe):
+        """Cover ValueError branch for MainPID (lines 640-641)."""
+        mock_run_safe.return_value = _make_subprocess_result(
+            stdout="ActiveState=active\nSubState=running\nMainPID=abc\nLoadState=loaded",
+        )
+
+        inp = ServiceInput(service="nginx")
+        result = self.cap.run(inp)
+
+        assert result.success is True
+        assert result.output.pid is None  # ValueError caught
+
+    @patch("elle.cli.subprocess_runner.run_safe")
+    def test_run_mainpid_zero_is_none(self, mock_run_safe):
+        """Ensure MainPID=0 is treated as None."""
+        mock_run_safe.return_value = _make_subprocess_result(
+            stdout="ActiveState=inactive\nSubState=dead\nMainPID=0\nLoadState=loaded",
+        )
+
+        inp = ServiceInput(service="nginx")
+        result = self.cap.run(inp)
+
+        assert result.success is True
+        assert result.output.pid is None
+
+    @patch("elle.cli.subprocess_runner.run_safe")
+    def test_run_mainpid_empty_string(self, mock_run_safe):
+        """Cover branch where MainPID key exists but value is empty."""
+        mock_run_safe.return_value = _make_subprocess_result(
+            stdout="ActiveState=active\nSubState=running\nMainPID=\nLoadState=loaded",
+        )
+
+        inp = ServiceInput(service="nginx")
+        result = self.cap.run(inp)
+
+        assert result.success is True
+        # Empty string for MainPID - the get() returns "" which is falsy
+        # so the if props.get("MainPID") check at line 635 is False
+        assert result.output.pid is None
+
+
+# =============================================================================
+# Coverage: Spec properties for all capabilities
+# =============================================================================
+
+
+class TestAllCapabilitySpecs:
+    """Cover spec property for all capability classes."""
+
+    def test_restart_spec(self):
+        cap = ServiceRestartCapability()
+        spec = cap.spec
+        assert spec.name == "service.restart"
+        assert spec.risk == "medium"
+        assert spec.requires_privilege is True
+        assert len(spec.side_effects) == 1
+
+    def test_start_spec(self):
+        cap = ServiceStartCapability()
+        spec = cap.spec
+        assert spec.name == "service.start"
+        assert spec.risk == "low"
+        assert spec.requires_privilege is True
+
+    def test_stop_spec(self):
+        cap = ServiceStopCapability()
+        spec = cap.spec
+        assert spec.name == "service.stop"
+        assert spec.risk == "medium"
+        assert spec.requires_privilege is True
+
+    def test_status_spec(self):
+        cap = ServiceStatusCapability()
+        spec = cap.spec
+        assert spec.name == "service.status"
+        assert spec.risk == "none"
+        assert spec.requires_privilege is False
+
+
+# =============================================================================
+# Coverage: Start verify not-passed branch
+# =============================================================================
+
+
+class TestStartVerifyNotPassed:
+    """Cover verify() for ServiceStartCapability when service is not active."""
+
+    @patch("elle.capabilities.core.service._get_service_state")
+    def test_verify_start_not_active(self, mock_state):
+        mock_state.return_value = ("inactive", "dead", None)
+
+        cap = ServiceStartCapability()
+        inp = ServiceInput(service="nginx")
+        result = cap.verify(inp)
+
+        assert result.passed is False
+        assert len(result.discrepancies) == 1
+        assert "Service not active" in result.discrepancies[0]
+
+
+# =============================================================================
+# Coverage: Stop failure with empty stderr (fallback error message)
+# =============================================================================
+
+
+class TestStopFailureEdgeCases:
+    """Cover stop failure when stderr is empty (fallback error message)."""
+
+    @patch("elle.capabilities.core.service._run_systemctl")
+    @patch("elle.capabilities.core.service._get_service_state")
+    def test_stop_failure_empty_stderr_uses_fallback(self, mock_state, mock_run):
+        mock_state.return_value = ("active", "running", 1234)
+        mock_run.return_value = (False, "", "", 1)
+
+        cap = ServiceStopCapability()
+        inp = ServiceInput(service="nginx")
+        result = cap.run(inp)
+
+        assert result.success is False
+        assert result.error == "systemctl stop failed with exit code 1"
+
+    @patch("elle.capabilities.core.service._run_systemctl")
+    @patch("elle.capabilities.core.service._get_service_state")
+    def test_start_failure_empty_stderr_uses_fallback(self, mock_state, mock_run):
+        mock_state.return_value = ("inactive", "dead", None)
+        mock_run.return_value = (False, "", "", 1)
+
+        cap = ServiceStartCapability()
+        inp = ServiceInput(service="nginx")
+        result = cap.run(inp)
+
+        assert result.success is False
+        assert result.error == "systemctl start failed with exit code 1"
+
+    @patch("elle.capabilities.core.service._run_systemctl")
+    @patch("elle.capabilities.core.service._get_service_state")
+    def test_restart_failure_empty_stderr_uses_fallback(self, mock_state, mock_run):
+        mock_state.return_value = ("active", "running", 1234)
+        mock_run.return_value = (False, "", "", 1)
+
+        cap = ServiceRestartCapability()
+        inp = ServiceInput(service="nginx")
+        result = cap.run(inp)
+
+        assert result.success is False
+        assert result.error == "systemctl restart failed with exit code 1"
+
+
+# =============================================================================
+# Coverage: Rollback failure for start and stop
+# =============================================================================
+
+
+class TestRollbackFailureEdgeCases:
+    """Cover rollback failure branches for start and stop capabilities."""
+
+    @patch("elle.capabilities.core.service._run_systemctl")
+    def test_start_rollback_failure(self, mock_run):
+        mock_run.return_value = (False, "", "Permission denied", 1)
+
+        cap = ServiceStartCapability()
+        inp = ServiceInput(service="nginx")
+        dummy_result = CapabilityResult(success=True)
+        rollback = cap.rollback(inp, dummy_result)
+
+        assert rollback.success is False
+        assert rollback.error == "Permission denied"
+        assert rollback.rolled_back == ()
+        assert "nginx.service" in rollback.failed_to_rollback
+
+    @patch("elle.capabilities.core.service._run_systemctl")
+    def test_stop_rollback_failure(self, mock_run):
+        mock_run.return_value = (False, "", "Service not found", 1)
+
+        cap = ServiceStopCapability()
+        inp = ServiceInput(service="nginx")
+        dummy_result = CapabilityResult(success=True)
+        rollback = cap.rollback(inp, dummy_result)
+
+        assert rollback.success is False
+        assert rollback.error == "Service not found"
+        assert rollback.rolled_back == ()
+        assert "nginx.service" in rollback.failed_to_rollback

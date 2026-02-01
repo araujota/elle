@@ -580,3 +580,428 @@ class TestAuthDryRun:
         assert result.estimated_risk == "low"
         assert len(result.would_modify) == 0
         assert result.requires_confirmation is False
+
+
+# =============================================================================
+# TestSessionTokenSpec  (covers line 84)
+# =============================================================================
+
+
+class TestSessionTokenSpec:
+    """Tests for SessionTokenCapability.spec property."""
+
+    def test_spec_returns_correct_capability_spec(self):
+        """Accessing spec property returns a valid CapabilitySpec for session_token."""
+        cap = SessionTokenCapability()
+        spec = cap.spec
+
+        assert spec.name == "auth.session_token"
+        assert spec.domain == "auth"
+        assert spec.risk == "medium"
+        assert spec.trust_level == "core"
+        assert spec.version == "1.0.0"
+        assert spec.requires_privilege is False
+        assert spec.idempotent is False
+        assert len(spec.side_effects) == 1
+        assert spec.side_effects[0].kind == "file_write"
+        assert spec.side_effects[0].target == "session.token"
+
+
+# =============================================================================
+# TestSessionTokenRunException  (covers line 234 else branch)
+# =============================================================================
+
+
+class TestSessionTokenRunException:
+    """Tests for exception handling in SessionTokenCapability.run."""
+
+    def setup_method(self):
+        self.cap = SessionTokenCapability()
+
+    @patch(f"{_ST}.get_token_path")
+    @patch(f"{_ST}.generate_session_token")
+    def test_run_exception_during_generate(self, mock_gen, mock_path):
+        """Exception during generate is caught and returns failure."""
+        mock_gen.side_effect = OSError("Disk full")
+        mock_path.return_value = Path("/var/lib/elle/session.token")
+
+        inp = SessionTokenInput(action="generate")
+        result = self.cap.run(inp)
+
+        assert result.success is False
+        assert "Disk full" in result.error
+
+
+# =============================================================================
+# TestSessionTokenVerify  (covers lines 249-270)
+# =============================================================================
+
+
+class TestSessionTokenVerify:
+    """Tests for SessionTokenCapability.verify method."""
+
+    def setup_method(self):
+        self.cap = SessionTokenCapability()
+
+    @patch(f"{_ST}.read_token_file")
+    @patch(f"{_ST}.get_token_path")
+    def test_verify_generate_token_exists(self, mock_path, mock_read):
+        """Verify after generate passes when token file exists."""
+        mock_path.return_value = Path("/var/lib/elle/session.token")
+        mock_read.return_value = "tok_abc123"
+
+        inp = SessionTokenInput(action="generate")
+        result = self.cap.verify(inp)
+
+        assert result.passed is True
+        assert result.actual_state == {"token_exists": True}
+        assert result.expected_state == {"token_exists": True}
+
+    @patch(f"{_ST}.read_token_file")
+    @patch(f"{_ST}.get_token_path")
+    def test_verify_generate_token_missing(self, mock_path, mock_read):
+        """Verify after generate fails when token file is missing."""
+        mock_path.return_value = Path("/var/lib/elle/session.token")
+        mock_read.return_value = None
+
+        inp = SessionTokenInput(action="generate")
+        result = self.cap.verify(inp)
+
+        assert result.passed is False
+        assert result.actual_state == {"token_exists": False}
+
+    @patch(f"{_ST}.get_token_path")
+    def test_verify_delete_file_gone(self, mock_path):
+        """Verify after delete passes when token file is gone."""
+        mock_path.return_value = Path("/tmp/nonexistent_token_file_xyz")
+
+        inp = SessionTokenInput(action="delete")
+        result = self.cap.verify(inp)
+
+        assert result.passed is True
+        assert result.actual_state == {"token_exists": False}
+        assert result.expected_state == {"token_exists": False}
+
+    @patch(f"{_ST}.get_token_path")
+    def test_verify_delete_file_still_exists(self, mock_path, tmp_path):
+        """Verify after delete fails when token file still exists."""
+        token_file = tmp_path / "session.token"
+        token_file.write_text("leftover")
+        mock_path.return_value = token_file
+
+        inp = SessionTokenInput(action="delete")
+        result = self.cap.verify(inp)
+
+        assert result.passed is False
+        assert result.actual_state == {"token_exists": True}
+
+    @patch(f"{_ST}.get_token_path")
+    def test_verify_read_action_passes_trivially(self, mock_path):
+        """Verify for read/validate actions returns trivially passed."""
+        mock_path.return_value = Path("/var/lib/elle/session.token")
+
+        inp = SessionTokenInput(action="read")
+        result = self.cap.verify(inp)
+
+        assert result.passed is True
+
+    @patch(f"{_ST}.get_token_path")
+    def test_verify_validate_action_passes_trivially(self, mock_path):
+        """Verify for validate action returns trivially passed."""
+        mock_path.return_value = Path("/var/lib/elle/session.token")
+
+        inp = SessionTokenInput(action="validate", token="tok_test")
+        result = self.cap.verify(inp)
+
+        assert result.passed is True
+
+    @patch(f"{_ST}.read_token_file")
+    def test_verify_generate_custom_path(self, mock_read):
+        """Verify with custom_path uses the custom path."""
+        mock_read.return_value = "tok_custom"
+
+        inp = SessionTokenInput(action="generate", custom_path="/tmp/custom.token")
+        result = self.cap.verify(inp)
+
+        assert result.passed is True
+        mock_read.assert_called_once_with(Path("/tmp/custom.token"))
+
+
+# =============================================================================
+# TestMobileCertsSpec  (covers line 338)
+# =============================================================================
+
+
+class TestMobileCertsSpec:
+    """Tests for MobileCertsCapability.spec property."""
+
+    def test_spec_returns_correct_capability_spec(self):
+        """Accessing spec property returns a valid CapabilitySpec for mobile_certs."""
+        cap = MobileCertsCapability()
+        spec = cap.spec
+
+        assert spec.name == "auth.mobile_certs"
+        assert spec.domain == "auth"
+        assert spec.risk == "high"
+        assert spec.trust_level == "core"
+        assert spec.version == "1.0.0"
+        assert spec.requires_privilege is False
+        assert spec.idempotent is False
+        assert len(spec.side_effects) == 1
+        assert spec.side_effects[0].kind == "file_write"
+        assert "mobile" in spec.side_effects[0].target
+        assert spec.dependencies == ("cryptography",)
+
+
+# =============================================================================
+# TestMobileCertsDryRun  (covers lines 362-378)
+# =============================================================================
+
+
+class TestMobileCertsDryRun:
+    """Tests for MobileCertsCapability.dry_run method."""
+
+    def setup_method(self):
+        self.cap = MobileCertsCapability()
+
+    def test_dry_run_ensure_high_risk(self):
+        """Dry run for ensure action is high risk and lists cert files."""
+        inp = MobileCertsInput(action="ensure")
+        result = self.cap.dry_run(inp)
+
+        assert result.is_valid is True
+        assert result.estimated_risk == "high"
+        assert "ca.crt" in result.would_modify
+        assert "server.crt" in result.would_modify
+        assert result.requires_confirmation is False
+
+    def test_dry_run_generate_client_low_risk(self):
+        """Dry run for generate_client is low risk with no modifications."""
+        inp = MobileCertsInput(action="generate_client", device_id="dev-001")
+        result = self.cap.dry_run(inp)
+
+        assert result.is_valid is True
+        assert result.estimated_risk == "low"
+        assert len(result.would_modify) == 0
+        assert "dev-001" in result.preview_text
+
+    def test_dry_run_verify_client_low_risk(self):
+        """Dry run for verify_client is low risk with no modifications."""
+        inp = MobileCertsInput(action="verify_client")
+        result = self.cap.dry_run(inp)
+
+        assert result.is_valid is True
+        assert result.estimated_risk == "low"
+        assert len(result.would_modify) == 0
+
+    def test_dry_run_get_fingerprint_low_risk(self):
+        """Dry run for get_fingerprint is low risk with no modifications."""
+        inp = MobileCertsInput(action="get_fingerprint")
+        result = self.cap.dry_run(inp)
+
+        assert result.is_valid is True
+        assert result.estimated_risk == "low"
+        assert len(result.would_modify) == 0
+
+    def test_dry_run_rotate_server_high_risk_requires_confirmation(self):
+        """Dry run for rotate_server is high risk and requires confirmation."""
+        inp = MobileCertsInput(action="rotate_server")
+        result = self.cap.dry_run(inp)
+
+        assert result.is_valid is True
+        assert result.estimated_risk == "high"
+        assert result.requires_confirmation is True
+        assert "server.crt" in result.would_modify
+        assert "server.key" in result.would_modify
+
+
+# =============================================================================
+# TestMobileCertsVerifyClient  (covers lines 458-459)
+# =============================================================================
+
+
+class TestMobileCertsVerifyClient:
+    """Tests for verify_client action with actual cert_pem."""
+
+    def setup_method(self):
+        self.cap = MobileCertsCapability()
+
+    @patch("elle.mobile.crypto.MobileCrypto")
+    def test_verify_client_valid_cert(self, mock_crypto_cls):
+        """verify_client with valid cert returns verified=True and device_id."""
+        mock_crypto = mock_crypto_cls.return_value
+        mock_crypto.verify_client_cert.return_value = (True, "dev-001")
+
+        inp = MobileCertsInput(
+            action="verify_client",
+            cert_pem="-----BEGIN CERTIFICATE-----\nFAKE\n-----END CERTIFICATE-----\n",
+        )
+        result = self.cap.run(inp)
+
+        assert result.success is True
+        assert result.output.verified is True
+        assert result.output.device_id == "dev-001"
+        assert result.output.error_message is None
+        mock_crypto.verify_client_cert.assert_called_once()
+
+    @patch("elle.mobile.crypto.MobileCrypto")
+    def test_verify_client_invalid_cert(self, mock_crypto_cls):
+        """verify_client with invalid cert returns verified=False and error."""
+        mock_crypto = mock_crypto_cls.return_value
+        mock_crypto.verify_client_cert.return_value = (False, "Certificate expired")
+
+        inp = MobileCertsInput(
+            action="verify_client",
+            cert_pem="-----BEGIN CERTIFICATE-----\nBAD\n-----END CERTIFICATE-----\n",
+        )
+        result = self.cap.run(inp)
+
+        assert result.success is True
+        assert result.output.verified is False
+        assert result.output.device_id is None
+        assert result.output.error_message == "Certificate expired"
+
+
+# =============================================================================
+# TestMobileCertsRotateServerBranches  (covers lines 486->488, 488->491)
+# =============================================================================
+
+
+class TestMobileCertsRotateServerBranches:
+    """Tests for branch conditions in rotate_server where certs may not exist."""
+
+    def setup_method(self):
+        self.cap = MobileCertsCapability()
+
+    @patch("elle.mobile.crypto.MobileCrypto")
+    def test_rotate_server_cert_missing_key_exists(self, mock_crypto_cls):
+        """rotate_server when server cert is missing but key exists."""
+        mock_crypto = mock_crypto_cls.return_value
+        mock_paths = _mock_mobile_paths()
+
+        mock_server_cert = MagicMock(spec=Path)
+        mock_server_cert.exists.return_value = False
+        mock_server_cert.__str__ = lambda s: "/var/lib/elle/mobile/server.crt"
+        mock_paths.server_cert = mock_server_cert
+
+        mock_server_key = MagicMock(spec=Path)
+        mock_server_key.exists.return_value = True
+        mock_server_key.__str__ = lambda s: "/var/lib/elle/mobile/server.key"
+        mock_paths.server_key = mock_server_key
+
+        new_paths = _mock_mobile_paths()
+        mock_crypto.ensure_certificates.side_effect = [mock_paths, new_paths]
+        mock_crypto.get_server_fingerprint.return_value = "NEW:FP:01"
+
+        inp = MobileCertsInput(action="rotate_server")
+        result = self.cap.run(inp)
+
+        assert result.success is True
+        mock_server_cert.unlink.assert_not_called()
+        mock_server_key.unlink.assert_called_once()
+
+    @patch("elle.mobile.crypto.MobileCrypto")
+    def test_rotate_server_both_missing(self, mock_crypto_cls):
+        """rotate_server when both server cert and key are missing."""
+        mock_crypto = mock_crypto_cls.return_value
+        mock_paths = _mock_mobile_paths()
+
+        mock_server_cert = MagicMock(spec=Path)
+        mock_server_cert.exists.return_value = False
+        mock_server_cert.__str__ = lambda s: "/var/lib/elle/mobile/server.crt"
+        mock_paths.server_cert = mock_server_cert
+
+        mock_server_key = MagicMock(spec=Path)
+        mock_server_key.exists.return_value = False
+        mock_server_key.__str__ = lambda s: "/var/lib/elle/mobile/server.key"
+        mock_paths.server_key = mock_server_key
+
+        new_paths = _mock_mobile_paths()
+        mock_crypto.ensure_certificates.side_effect = [mock_paths, new_paths]
+        mock_crypto.get_server_fingerprint.return_value = "NEW:FP:02"
+
+        inp = MobileCertsInput(action="rotate_server")
+        result = self.cap.run(inp)
+
+        assert result.success is True
+        mock_server_cert.unlink.assert_not_called()
+        mock_server_key.unlink.assert_not_called()
+
+    @patch("elle.mobile.crypto.MobileCrypto")
+    def test_rotate_server_cert_exists_key_missing(self, mock_crypto_cls):
+        """rotate_server when server cert exists but key is missing."""
+        mock_crypto = mock_crypto_cls.return_value
+        mock_paths = _mock_mobile_paths()
+
+        mock_server_cert = MagicMock(spec=Path)
+        mock_server_cert.exists.return_value = True
+        mock_server_cert.__str__ = lambda s: "/var/lib/elle/mobile/server.crt"
+        mock_paths.server_cert = mock_server_cert
+
+        mock_server_key = MagicMock(spec=Path)
+        mock_server_key.exists.return_value = False
+        mock_server_key.__str__ = lambda s: "/var/lib/elle/mobile/server.key"
+        mock_paths.server_key = mock_server_key
+
+        new_paths = _mock_mobile_paths()
+        mock_crypto.ensure_certificates.side_effect = [mock_paths, new_paths]
+        mock_crypto.get_server_fingerprint.return_value = "NEW:FP:03"
+
+        inp = MobileCertsInput(action="rotate_server")
+        result = self.cap.run(inp)
+
+        assert result.success is True
+        mock_server_cert.unlink.assert_called_once()
+        mock_server_key.unlink.assert_not_called()
+
+
+# =============================================================================
+# TestMobileCertsRunExceptions  (covers lines 520, 532-533)
+# =============================================================================
+
+
+class TestMobileCertsRunExceptions:
+    """Tests for exception handling in MobileCertsCapability.run."""
+
+    def setup_method(self):
+        self.cap = MobileCertsCapability()
+
+    @patch("elle.mobile.crypto.MobileCrypto")
+    def test_generic_exception_during_ensure(self, mock_crypto_cls):
+        """Generic exception during ensure is caught and reported."""
+        mock_crypto = mock_crypto_cls.return_value
+        mock_crypto.ensure_certificates.side_effect = RuntimeError("Certificate generation failed")
+
+        inp = MobileCertsInput(action="ensure")
+        result = self.cap.run(inp)
+
+        assert result.success is False
+        assert "Certificate generation failed" in result.error
+
+    @patch("elle.mobile.crypto.MobileCrypto")
+    def test_generic_exception_during_get_fingerprint(self, mock_crypto_cls):
+        """Generic exception during get_fingerprint is caught and reported."""
+        mock_crypto = mock_crypto_cls.return_value
+        mock_crypto.get_server_fingerprint.side_effect = FileNotFoundError("No cert file")
+
+        inp = MobileCertsInput(action="get_fingerprint")
+        result = self.cap.run(inp)
+
+        assert result.success is False
+        assert "No cert file" in result.error
+
+    @patch("elle.mobile.crypto.MobileCrypto")
+    def test_generic_exception_during_generate_client(self, mock_crypto_cls):
+        """Generic exception during generate_client is caught and reported."""
+        mock_crypto = mock_crypto_cls.return_value
+        mock_crypto.generate_client_certificate.side_effect = ValueError("Invalid device")
+
+        inp = MobileCertsInput(
+            action="generate_client",
+            device_id="dev-bad",
+            device_name="Bad Device",
+        )
+        result = self.cap.run(inp)
+
+        assert result.success is False
+        assert "Invalid device" in result.error

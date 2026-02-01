@@ -2056,3 +2056,959 @@ class TestDomainPackagesConstant:
     def test_docker_domain_includes_docker_io(self):
         """Docker domain packages should include docker.io."""
         assert "docker.io" in DOMAIN_PACKAGES["docker"]
+
+
+# =============================================================================
+# NEW TESTS: Coverage gap targeting (lines 402-426, 465-487, 986-1007, etc.)
+# =============================================================================
+
+
+class TestCollectPackageStateDomainAndContext:
+    """Cover lines 402-426: domain-specific and context-relevant package paths."""
+
+    def test_domain_package_found_and_added(self):
+        """Domain-specific package with a version gets appended (lines 402-410)."""
+
+        def fake_version(name):
+            # Return a version only for non-bedrock docker domain packages
+            if name in ("docker-ce", "docker-compose", "docker-buildx"):
+                return "24.0.0"
+            return None
+
+        with patch("elle.daemon.incidents.snapshot._get_package_version", side_effect=fake_version):
+            result = collect_package_state(domain="docker")
+        names = [p.name for p in result]
+        # At least one non-bedrock docker domain package should appear
+        assert "docker-ce" in names or "docker-compose" in names or "docker-buildx" in names
+        # Verify they are marked as non-bedrock
+        for pkg in result:
+            if pkg.name in ("docker-ce", "docker-compose", "docker-buildx"):
+                assert pkg.is_bedrock is False
+
+    def test_context_relevant_package_found_and_added(self):
+        """Context-relevant package extracted from command with a version (lines 415-426)."""
+
+        def fake_version(name):
+            if name == "nginx":
+                return "1.18.0"
+            return None
+
+        with patch("elle.daemon.incidents.snapshot._get_package_version", side_effect=fake_version):
+            result = collect_package_state(command="apt install nginx")
+        names = [p.name for p in result]
+        assert "nginx" in names
+        nginx_pkg = [p for p in result if p.name == "nginx"][0]
+        assert nginx_pkg.version == "1.18.0"
+        assert nginx_pkg.is_bedrock is False
+
+
+class TestAptHistoryEdgeCases:
+    """Cover lines 465, 467-468, 477-480, 482-487: apt history edge cases."""
+
+    def test_apt_history_old_entry_skipped(self):
+        """Entries older than 24h are skipped (line 465)."""
+        # Use a date far in the past so it is before the cutoff
+        content = (
+            "Start-Date: 2020-01-01  00:00:00\n"
+            "Commandline: apt install old-pkg\n"
+            "Install: old-pkg (1.0)\n\n"
+        )
+        with patch.object(Path, "exists", return_value=True), patch.object(
+            Path, "read_text", return_value=content
+        ):
+            result = _get_recent_apt_history()
+        assert len(result) == 0
+
+    def test_apt_history_bad_date_skipped(self):
+        """Entries with unparseable dates are skipped (lines 467-468)."""
+        content = (
+            "Start-Date: not-a-date\n"
+            "Commandline: apt install bad\n"
+            "Install: bad (1.0)\n\n"
+        )
+        with patch.object(Path, "exists", return_value=True), patch.object(
+            Path, "read_text", return_value=content
+        ):
+            result = _get_recent_apt_history()
+        assert len(result) == 0
+
+    def test_apt_history_upgrade_action(self):
+        """Upgrade entries are parsed (lines 477-480)."""
+        now = datetime.utcnow()
+        date_str = now.strftime("%Y-%m-%d  %H:%M:%S")
+        content = (
+            f"Start-Date: {date_str}\n"
+            "Commandline: apt upgrade\n"
+            "Upgrade: openssl (3.0.1 => 3.0.2)\n\n"
+        )
+        with patch.object(Path, "exists", return_value=True), patch.object(
+            Path, "read_text", return_value=content
+        ):
+            result = _get_recent_apt_history()
+        assert len(result) == 1
+        assert result[0]["action"] == "upgrade"
+
+    def test_apt_history_remove_action(self):
+        """Remove entries are parsed (lines 482-485)."""
+        now = datetime.utcnow()
+        date_str = now.strftime("%Y-%m-%d  %H:%M:%S")
+        content = (
+            f"Start-Date: {date_str}\n"
+            "Commandline: apt remove nginx\n"
+            "Remove: nginx (1.18.0)\n\n"
+        )
+        with patch.object(Path, "exists", return_value=True), patch.object(
+            Path, "read_text", return_value=content
+        ):
+            result = _get_recent_apt_history()
+        assert len(result) == 1
+        assert result[0]["action"] == "remove"
+
+
+class TestCertExpirySuccessPath:
+    """Cover lines 986-1007: successful cert expiry parsing."""
+
+    def test_cert_expiry_success(self):
+        """Full success path through openssl s_client + x509 (lines 986-1007)."""
+        s_client_result = MagicMock()
+        s_client_result.returncode = 0
+        s_client_result.stdout = b"CERTIFICATE DATA"
+
+        x509_result = MagicMock()
+        x509_result.returncode = 0
+        x509_result.stdout = "notAfter=Wed, 01 Jan 2028 00:00:00 GMT"
+
+        with patch(
+            "elle.daemon.incidents.snapshot.subprocess.run",
+            side_effect=[s_client_result, x509_result, s_client_result, x509_result],
+        ):
+            result = _get_cert_expiry()
+        # Should have results for both endpoints (localhost:443, localhost:8443)
+        assert len(result) == 2
+        assert result[0]["endpoint"] == "localhost:443"
+        assert result[0]["days_until_expiry"] > 0
+
+    def test_cert_expiry_bad_date_string(self):
+        """Bad date string triggers inner except (lines 1006-1007)."""
+        s_client_result = MagicMock()
+        s_client_result.returncode = 0
+        s_client_result.stdout = b"CERTIFICATE DATA"
+
+        x509_result = MagicMock()
+        x509_result.returncode = 0
+        x509_result.stdout = "notAfter=INVALID_DATE_STRING"
+
+        with patch(
+            "elle.daemon.incidents.snapshot.subprocess.run",
+            side_effect=[s_client_result, x509_result, s_client_result, x509_result],
+        ):
+            result = _get_cert_expiry()
+        # Both endpoints fail to parse -> empty
+        assert result == []
+
+
+class TestCgroupPressureEdgeCases:
+    """Cover lines 1048, 1056, 1068-1071: cgroup edge cases."""
+
+    def test_cgroup_entry_not_dir_skipped(self):
+        """Non-directory entries in cgroup slice are skipped (line 1048)."""
+        mock_entry = MagicMock()
+        mock_entry.is_dir.return_value = False
+
+        mock_base = MagicMock()
+        mock_base.exists.return_value = True
+        mock_base.iterdir.return_value = [mock_entry]
+
+        # Only system.slice exists, user.slice does not
+        def path_factory(p):
+            if "system.slice" in str(p):
+                return mock_base
+            m = MagicMock()
+            m.exists.return_value = False
+            return m
+
+        with patch("elle.daemon.incidents.snapshot.Path", side_effect=path_factory):
+            result = _get_cgroup_pressure()
+        assert result == []
+
+    def test_cgroup_max_value_skipped(self):
+        """Cgroup entry with memory.max='max' is skipped (line 1056)."""
+        mock_mem_current = MagicMock()
+        mock_mem_current.exists.return_value = True
+        mock_mem_current.read_text.return_value = "536870912"
+
+        mock_mem_max = MagicMock()
+        mock_mem_max.exists.return_value = True
+        mock_mem_max.read_text.return_value = "max"
+
+        mock_entry = MagicMock()
+        mock_entry.is_dir.return_value = True
+        mock_entry.name = "test.service"
+        mock_entry.__truediv__ = MagicMock(
+            side_effect=lambda name: {
+                "memory.current": mock_mem_current,
+                "memory.max": mock_mem_max,
+            }.get(name, MagicMock(exists=MagicMock(return_value=False)))
+        )
+
+        mock_base = MagicMock()
+        mock_base.exists.return_value = True
+        mock_base.iterdir.return_value = [mock_entry]
+
+        def path_factory(p):
+            if "system.slice" in str(p):
+                return mock_base
+            m = MagicMock()
+            m.exists.return_value = False
+            return m
+
+        with patch("elle.daemon.incidents.snapshot.Path", side_effect=path_factory):
+            result = _get_cgroup_pressure()
+        assert result == []
+
+    def test_cgroup_value_error_in_inner_try(self):
+        """ValueError in inner try triggers except (lines 1068-1069)."""
+        mock_mem_current = MagicMock()
+        mock_mem_current.exists.return_value = True
+        mock_mem_current.read_text.return_value = "not_a_number"
+
+        mock_mem_max = MagicMock()
+        mock_mem_max.exists.return_value = True
+        mock_mem_max.read_text.return_value = "1073741824"
+
+        mock_entry = MagicMock()
+        mock_entry.is_dir.return_value = True
+        mock_entry.name = "bad.service"
+        mock_entry.__truediv__ = MagicMock(
+            side_effect=lambda name: {
+                "memory.current": mock_mem_current,
+                "memory.max": mock_mem_max,
+            }.get(name, MagicMock(exists=MagicMock(return_value=False)))
+        )
+
+        mock_base = MagicMock()
+        mock_base.exists.return_value = True
+        mock_base.iterdir.return_value = [mock_entry]
+
+        def path_factory(p):
+            if "system.slice" in str(p):
+                return mock_base
+            m = MagicMock()
+            m.exists.return_value = False
+            return m
+
+        with patch("elle.daemon.incidents.snapshot.Path", side_effect=path_factory):
+            result = _get_cgroup_pressure()
+        # ValueError is caught; no entries added
+        assert result == []
+
+
+class TestPsiPressureEdgeCases:
+    """Cover lines 1102-1103: PSI OSError/ValueError exception."""
+
+    def test_psi_pressure_oserror_per_resource(self):
+        """OSError reading a PSI file triggers except (lines 1102-1103)."""
+
+        def path_factory(path_str):
+            p = MagicMock()
+            p.exists.return_value = True
+            p.read_text.side_effect = OSError("permission denied")
+            return p
+
+        with patch("elle.daemon.incidents.snapshot.Path", side_effect=path_factory):
+            result = _get_psi_pressure()
+        # All three fail gracefully -> defaults
+        assert result["cpu_avg10"] == 0.0
+        assert result["mem_avg10"] == 0.0
+        assert result["io_avg10"] == 0.0
+
+
+class TestDiskInfoEdgeCases:
+    """Cover lines 1281, 1286-1287: disk pseudo-filesystem skip and ValueError."""
+
+    def test_disk_info_pseudo_filesystem_skipped(self):
+        """Mounts starting with /dev, /run, /sys are skipped (line 1281)."""
+        df_output = (
+            "Mounted on  Use% Avail Source\n"
+            "/dev/shm    50%  1G    tmpfs\n"
+            "/run/user   10%  5G    tmpfs\n"
+            "/sys/fs     1%   10G   sysfs\n"
+            "/           75%  120G  /dev/sda1\n"
+        )
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = df_output
+        with patch("elle.daemon.incidents.snapshot.subprocess.run", return_value=mock_result):
+            result = _get_disk_info()
+        # Only "/" should be included; pseudo-filesystems are skipped
+        assert len(result) == 1
+        assert result[0]["mount"] == "/"
+
+    def test_disk_info_value_error_in_pct(self):
+        """Non-numeric percentage triggers ValueError continue (lines 1286-1287)."""
+        df_output = (
+            "Mounted on  Use% Avail Source\n"
+            "/           abc%  120G  /dev/sda1\n"
+        )
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = df_output
+        with patch("elle.daemon.incidents.snapshot.subprocess.run", return_value=mock_result):
+            result = _get_disk_info()
+        assert result == []
+
+
+class TestTcpRetransmitZeroOutSegs:
+    """Cover line 931: break when OutSegs is zero."""
+
+    def test_tcp_retransmit_zero_out_segs(self):
+        """Return 0.0 when OutSegs is 0 (line 931 break path)."""
+        content = (
+            "Tcp: RtoAlgorithm RtoMin RtoMax MaxConn ActiveOpens PassiveOpens "
+            "AttemptFails EstabResets CurrEstab InSegs OutSegs RetransSegs InErrs OutRsts\n"
+            "Tcp: 1 200 120000 -1 100 50 10 5 20 1000 0 10 0 0\n"
+        )
+        with patch("builtins.open", mock_open(read_data=content)):
+            result = _get_tcp_retransmit_rate()
+        assert result == 0.0
+
+
+class TestConntrackOSError:
+    """Cover lines 886-887: OSError/ValueError in conntrack."""
+
+    def test_conntrack_value_error(self):
+        """ValueError when reading conntrack files (lines 886-887)."""
+        with (
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "read_text", side_effect=ValueError("bad int")),
+        ):
+            result = _get_conntrack_stats()
+        assert result["count"] == 0
+        assert result["utilization"] == 0.0
+
+
+class TestSmartInfoEmptyLine:
+    """Cover line 1500: empty line continue in _get_smart_info."""
+
+    def test_smart_info_empty_lines_skipped(self):
+        """Empty lines in lsblk output are skipped (line 1500)."""
+        import json
+
+        smart_data = {
+            "smart_status": {"passed": True},
+        }
+        lsblk_result = MagicMock()
+        lsblk_result.returncode = 0
+        lsblk_result.stdout = "\nnvme0n1 disk\n\n"
+
+        smartctl_result = MagicMock()
+        smartctl_result.returncode = 0
+        smartctl_result.stdout = json.dumps(smart_data)
+
+        with patch(
+            "elle.daemon.incidents.snapshot.subprocess.run",
+            side_effect=[lsblk_result, smartctl_result],
+        ):
+            result = _get_smart_info()
+        assert len(result) == 1
+        assert result[0]["dev"] == "/dev/nvme0n1"
+
+
+class TestDockerContainersEmptyLine:
+    """Cover line 1440: empty line continue in _get_docker_containers."""
+
+    def test_docker_containers_empty_lines_skipped(self):
+        """Empty lines in docker ps output are skipped (line 1440)."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "\nweb\trunning\tnginx:latest\n\n"
+        with patch("elle.daemon.incidents.snapshot.subprocess.run", return_value=mock_result):
+            result = _get_docker_containers()
+        assert len(result) == 1
+        assert result[0]["name"] == "web"
+
+
+class TestInodeUsageOuterException:
+    """Cover lines 837-838: outer except in _get_inode_usage."""
+
+    def test_inode_usage_outer_exception(self):
+        """General exception in the outer try is caught (lines 837-838)."""
+        with patch("elle.daemon.incidents.snapshot.os.statvfs", side_effect=RuntimeError("unexpected")):
+            result = _get_inode_usage()
+        assert result == []
+
+
+class TestZombieCountPermissionError:
+    """Cover lines 953-954: PermissionError reading /proc/[pid]/stat."""
+
+    def test_zombie_count_permission_error_on_stat(self):
+        """PermissionError on stat read is caught (lines 953-954)."""
+        fake_proc = MagicMock()
+        pid1 = MagicMock()
+        pid1.name = "1"
+        # The / operator on the entry returns a mock whose read_text raises
+        stat_mock = MagicMock()
+        stat_mock.read_text.side_effect = PermissionError("denied")
+        pid1.__truediv__ = lambda self, x: stat_mock
+
+        fake_proc.iterdir.return_value = [pid1]
+
+        with patch("elle.daemon.incidents.snapshot.Path", return_value=fake_proc):
+            result = _get_zombie_count()
+        # Permission error is caught; count stays at 0
+        assert result == 0
+
+
+# =============================================================================
+# NEW COVERAGE TESTS: Lines 402-426, 465-487, 683, 837-838, 886-887,
+# 931, 953-954, 986-1007, 1048-1071, 1102-1103
+# =============================================================================
+
+
+class TestCollectPackageStateDomainSpecific:
+    """Cover lines 402-426: domain-specific and context-relevant package lookups."""
+
+    def test_domain_packages_collected_and_not_bedrock(self):
+        """Domain-specific packages are added with is_bedrock=False (lines 402-410)."""
+
+        def fake_version(name):
+            # Return versions for domain-specific docker packages, not bedrock
+            if name in ("docker-ce", "docker-buildx"):
+                return "24.0.0"
+            return None
+
+        with patch("elle.daemon.incidents.snapshot._get_package_version", side_effect=fake_version):
+            result = collect_package_state(domain="docker")
+
+        names = [p.name for p in result]
+        # Domain packages that had a version should appear
+        assert "docker-ce" in names or "docker-buildx" in names
+        # They should be marked as non-bedrock
+        for p in result:
+            if p.name in ("docker-ce", "docker-buildx"):
+                assert p.is_bedrock is False
+                assert p.source == "apt"
+
+    def test_context_relevant_packages_collected(self):
+        """Context-relevant packages from command/stderr are collected (lines 412-426)."""
+
+        def fake_version(name):
+            if name == "nginx":
+                return "1.22.0"
+            return None
+
+        with patch("elle.daemon.incidents.snapshot._get_package_version", side_effect=fake_version):
+            result = collect_package_state(command="apt install nginx")
+
+        names = [p.name for p in result]
+        assert "nginx" in names
+        for p in result:
+            if p.name == "nginx":
+                assert p.is_bedrock is False
+
+    def test_domain_packages_skip_already_seen(self):
+        """Domain packages already seen in bedrock are not duplicated."""
+
+        def fake_version(name):
+            # docker.io is both bedrock AND docker domain
+            if name == "docker.io":
+                return "20.10.0"
+            return None
+
+        with patch("elle.daemon.incidents.snapshot._get_package_version", side_effect=fake_version):
+            result = collect_package_state(domain="docker")
+
+        # docker.io should appear exactly once
+        docker_entries = [p for p in result if p.name == "docker.io"]
+        assert len(docker_entries) == 1
+        # It was found via bedrock, so is_bedrock=True
+        assert docker_entries[0].is_bedrock is True
+
+
+class TestAptHistoryParsing:
+    """Cover lines 465-487: APT history parsing for Upgrade and Remove actions."""
+
+    def test_apt_history_upgrade_action(self):
+        """Parse Upgrade action from apt history (lines 476-480)."""
+        now = datetime.utcnow()
+        date_str = now.strftime("%Y-%m-%d  %H:%M:%S")
+        content = (
+            f"Start-Date: {date_str}\n"
+            "Commandline: apt upgrade -y\n"
+            "Upgrade: openssl:amd64 (3.0.2-0ubuntu1, 3.0.2-0ubuntu2)\n\n"
+        )
+        with (
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "read_text", return_value=content),
+        ):
+            result = _get_recent_apt_history()
+        assert len(result) == 1
+        assert result[0]["action"] == "upgrade"
+        assert "openssl" in result[0]["packages"]
+        assert "command" in result[0]
+
+    def test_apt_history_remove_action(self):
+        """Parse Remove action from apt history (lines 481-485)."""
+        now = datetime.utcnow()
+        date_str = now.strftime("%Y-%m-%d  %H:%M:%S")
+        content = (
+            f"Start-Date: {date_str}\n"
+            "Commandline: apt remove nginx\n"
+            "Remove: nginx:amd64 (1.18.0-6ubuntu1)\n\n"
+        )
+        with (
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "read_text", return_value=content),
+        ):
+            result = _get_recent_apt_history()
+        assert len(result) == 1
+        assert result[0]["action"] == "remove"
+        assert "nginx" in result[0]["packages"]
+
+    def test_apt_history_old_entry_skipped(self):
+        """Entries older than 24 hours are skipped (line 464-465)."""
+        content = (
+            "Start-Date: 2020-01-01  00:00:00\n"
+            "Commandline: apt install old-pkg\n"
+            "Install: old-pkg (1.0)\n\n"
+        )
+        with (
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "read_text", return_value=content),
+        ):
+            result = _get_recent_apt_history()
+        assert result == []
+
+    def test_apt_history_bad_date_skipped(self):
+        """Entries with unparseable dates are skipped (line 467-468)."""
+        content = (
+            "Start-Date: not-a-date\n"
+            "Commandline: apt install bad-date\n"
+            "Install: bad-date (1.0)\n\n"
+        )
+        with (
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "read_text", return_value=content),
+        ):
+            result = _get_recent_apt_history()
+        assert result == []
+
+    def test_apt_history_exception_returns_empty(self):
+        """General exception in apt history parsing returns empty (line 486-487)."""
+        with (
+            patch.object(Path, "exists", side_effect=RuntimeError("boom")),
+        ):
+            result = _get_recent_apt_history()
+        assert result == []
+
+
+class TestCgroupMemPressureInFingerprint:
+    """Cover line 683: cgroup_mem_pressure max aggregation in extract_fingerprint."""
+
+    def test_cgroup_mem_pressure_aggregated(self):
+        """Cgroup mem pressure uses max(d['mem_pct']/100) across entries (line 683)."""
+        snapshot = SystemSnapshot(
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=100,
+            cpu_load=(0.5, 0.5, 0.5),
+            mem_total_mb=8192,
+            mem_free_mb=4096,
+            mem_available_mb=6144,
+        )
+
+        cgroup_data = [
+            {"name": "test1.service", "mem_current_mb": 256, "mem_max_mb": 512, "mem_pct": 50.0},
+            {"name": "test2.service", "mem_current_mb": 768, "mem_max_mb": 1024, "mem_pct": 75.0},
+        ]
+
+        with (
+            patch("elle.daemon.incidents.snapshot._get_inode_usage", return_value=[]),
+            patch("elle.daemon.incidents.snapshot._get_io_stats", return_value=[]),
+            patch(
+                "elle.daemon.incidents.snapshot._get_conntrack_stats",
+                return_value={"count": 0, "max": 0, "utilization": 0.0},
+            ),
+            patch("elle.daemon.incidents.snapshot._get_tcp_retransmit_rate", return_value=0.0),
+            patch("elle.daemon.incidents.snapshot._get_zombie_count", return_value=0),
+            patch("elle.daemon.incidents.snapshot._get_pending_reboot", return_value=False),
+            patch("elle.daemon.incidents.snapshot._get_cert_expiry", return_value=[]),
+            patch(
+                "elle.daemon.incidents.snapshot._get_dns_latency",
+                return_value={"p50": 0.0, "p95": 0.0, "p99": 0.0},
+            ),
+            patch("elle.daemon.incidents.snapshot._get_cgroup_pressure", return_value=cgroup_data),
+            patch(
+                "elle.daemon.incidents.snapshot._get_psi_pressure",
+                return_value={"cpu_avg10": 0.0, "mem_avg10": 0.0, "io_avg10": 0.0},
+            ),
+            patch("elle.daemon.incidents.snapshot._get_security_events", return_value=0),
+        ):
+            fp = extract_fingerprint(snapshot)
+
+        # max(50/100, 75/100) = 0.75
+        assert fp.cgroup_mem_pressure == pytest.approx(0.75, abs=0.01)
+
+
+class TestIoStatsInFingerprint:
+    """Cover lines 837-838: io_stats read from /proc/diskstats producing latency pressure."""
+
+    def test_io_latency_from_diskstats(self):
+        """IO latency is computed from rd_ticks/rd_ios and wr_ticks/wr_ios."""
+        snapshot = SystemSnapshot(
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=100,
+            cpu_load=(0.5, 0.5, 0.5),
+            mem_total_mb=8192,
+            mem_free_mb=4096,
+            mem_available_mb=6144,
+        )
+
+        io_data = [
+            {"dev": "sda", "rd_ios": 100, "rd_ticks": 5000, "wr_ios": 200, "wr_ticks": 8000},
+        ]
+
+        with (
+            patch("elle.daemon.incidents.snapshot._get_inode_usage", return_value=[]),
+            patch("elle.daemon.incidents.snapshot._get_io_stats", return_value=io_data),
+            patch(
+                "elle.daemon.incidents.snapshot._get_conntrack_stats",
+                return_value={"count": 0, "max": 0, "utilization": 0.0},
+            ),
+            patch("elle.daemon.incidents.snapshot._get_tcp_retransmit_rate", return_value=0.0),
+            patch("elle.daemon.incidents.snapshot._get_zombie_count", return_value=0),
+            patch("elle.daemon.incidents.snapshot._get_pending_reboot", return_value=False),
+            patch("elle.daemon.incidents.snapshot._get_cert_expiry", return_value=[]),
+            patch(
+                "elle.daemon.incidents.snapshot._get_dns_latency",
+                return_value={"p50": 0.0, "p95": 0.0, "p99": 0.0},
+            ),
+            patch("elle.daemon.incidents.snapshot._get_cgroup_pressure", return_value=[]),
+            patch(
+                "elle.daemon.incidents.snapshot._get_psi_pressure",
+                return_value={"cpu_avg10": 0.0, "mem_avg10": 0.0, "io_avg10": 0.0},
+            ),
+            patch("elle.daemon.incidents.snapshot._get_security_events", return_value=0),
+        ):
+            fp = extract_fingerprint(snapshot)
+
+        # rd_lat = 5000/100 = 50ms -> 50/100 = 0.5
+        # wr_lat = 8000/200 = 40ms -> 40/100 = 0.4
+        # max = 0.5
+        assert fp.io_latency_pressure == pytest.approx(0.5, abs=0.01)
+
+
+class TestConntrackInFingerprint:
+    """Cover lines 886-887: conntrack utilization in fingerprint."""
+
+    def test_conntrack_pressure_in_fingerprint(self):
+        """Conntrack utilization feeds into conntrack_pressure (lines 886-887)."""
+        snapshot = SystemSnapshot(
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=100,
+            cpu_load=(0.5, 0.5, 0.5),
+            mem_total_mb=8192,
+            mem_free_mb=4096,
+            mem_available_mb=6144,
+        )
+
+        with (
+            patch("elle.daemon.incidents.snapshot._get_inode_usage", return_value=[]),
+            patch("elle.daemon.incidents.snapshot._get_io_stats", return_value=[]),
+            patch(
+                "elle.daemon.incidents.snapshot._get_conntrack_stats",
+                return_value={"count": 8000, "max": 10000, "utilization": 80.0},
+            ),
+            patch("elle.daemon.incidents.snapshot._get_tcp_retransmit_rate", return_value=0.0),
+            patch("elle.daemon.incidents.snapshot._get_zombie_count", return_value=0),
+            patch("elle.daemon.incidents.snapshot._get_pending_reboot", return_value=False),
+            patch("elle.daemon.incidents.snapshot._get_cert_expiry", return_value=[]),
+            patch(
+                "elle.daemon.incidents.snapshot._get_dns_latency",
+                return_value={"p50": 0.0, "p95": 0.0, "p99": 0.0},
+            ),
+            patch("elle.daemon.incidents.snapshot._get_cgroup_pressure", return_value=[]),
+            patch(
+                "elle.daemon.incidents.snapshot._get_psi_pressure",
+                return_value={"cpu_avg10": 0.0, "mem_avg10": 0.0, "io_avg10": 0.0},
+            ),
+            patch("elle.daemon.incidents.snapshot._get_security_events", return_value=0),
+        ):
+            fp = extract_fingerprint(snapshot)
+
+        # utilization 80 / 100 = 0.8
+        assert fp.conntrack_pressure == pytest.approx(0.8, abs=0.01)
+
+
+class TestTcpRetransmitAndZombieInFingerprint:
+    """Cover lines 931, 953-954: tcp retransmit rate and zombie count."""
+
+    def test_retransmit_rate_and_zombie_in_fingerprint(self):
+        """TCP retransmit rate returned by _get_tcp_retransmit_rate
+        and zombie count by _get_zombie_count flow into fingerprint (lines 931, 953-954)."""
+        snapshot = SystemSnapshot(
+            os="Ubuntu",
+            kernel="6.8",
+            uptime_sec=100,
+            cpu_load=(0.5, 0.5, 0.5),
+            mem_total_mb=8192,
+            mem_free_mb=4096,
+            mem_available_mb=6144,
+        )
+
+        with (
+            patch("elle.daemon.incidents.snapshot._get_inode_usage", return_value=[]),
+            patch("elle.daemon.incidents.snapshot._get_io_stats", return_value=[]),
+            patch(
+                "elle.daemon.incidents.snapshot._get_conntrack_stats",
+                return_value={"count": 0, "max": 0, "utilization": 0.0},
+            ),
+            patch("elle.daemon.incidents.snapshot._get_tcp_retransmit_rate", return_value=0.05),
+            patch("elle.daemon.incidents.snapshot._get_zombie_count", return_value=3),
+            patch("elle.daemon.incidents.snapshot._get_pending_reboot", return_value=False),
+            patch("elle.daemon.incidents.snapshot._get_cert_expiry", return_value=[]),
+            patch(
+                "elle.daemon.incidents.snapshot._get_dns_latency",
+                return_value={"p50": 0.0, "p95": 0.0, "p99": 0.0},
+            ),
+            patch("elle.daemon.incidents.snapshot._get_cgroup_pressure", return_value=[]),
+            patch(
+                "elle.daemon.incidents.snapshot._get_psi_pressure",
+                return_value={"cpu_avg10": 0.0, "mem_avg10": 0.0, "io_avg10": 0.0},
+            ),
+            patch("elle.daemon.incidents.snapshot._get_security_events", return_value=0),
+        ):
+            fp = extract_fingerprint(snapshot)
+
+        assert fp.tcp_retransmit_rate == pytest.approx(0.05, abs=0.001)
+        assert fp.zombie_count == 3
+
+
+class TestCertExpirySuccess:
+    """Cover lines 986-1007: successful certificate expiry check via openssl."""
+
+    def test_cert_expiry_successful_check(self):
+        """Parse certificate expiry from openssl output (lines 986-1007)."""
+        # Mock the s_client call
+        s_client_result = MagicMock()
+        s_client_result.returncode = 0
+        s_client_result.stdout = b"CERTIFICATE DATA"
+
+        # Mock the x509 call
+        x509_result = MagicMock()
+        x509_result.returncode = 0
+        x509_result.stdout = "notAfter=Mon, 15 Jun 2026 12:00:00 GMT\n"
+
+        with patch(
+            "elle.daemon.incidents.snapshot.subprocess.run",
+            side_effect=[s_client_result, x509_result, s_client_result, x509_result],
+        ):
+            result = _get_cert_expiry()
+
+        # Should have results for both endpoints
+        assert len(result) == 2
+        assert result[0]["endpoint"] == "localhost:443"
+        assert "days_until_expiry" in result[0]
+
+    def test_cert_expiry_x509_fails(self):
+        """x509 command fails after s_client succeeds (line 993 false branch)."""
+        s_client_result = MagicMock()
+        s_client_result.returncode = 0
+        s_client_result.stdout = b"CERT"
+
+        x509_result = MagicMock()
+        x509_result.returncode = 1
+        x509_result.stdout = ""
+
+        with patch(
+            "elle.daemon.incidents.snapshot.subprocess.run",
+            side_effect=[s_client_result, x509_result, s_client_result, x509_result],
+        ):
+            result = _get_cert_expiry()
+
+        assert result == []
+
+    def test_cert_expiry_bad_date_format(self):
+        """Certificate date parsing fails gracefully (lines 1006-1007)."""
+        s_client_result = MagicMock()
+        s_client_result.returncode = 0
+        s_client_result.stdout = b"CERT"
+
+        x509_result = MagicMock()
+        x509_result.returncode = 0
+        x509_result.stdout = "notAfter=this-is-not-a-date\n"
+
+        with patch(
+            "elle.daemon.incidents.snapshot.subprocess.run",
+            side_effect=[s_client_result, x509_result, s_client_result, x509_result],
+        ):
+            result = _get_cert_expiry()
+
+        # Bad dates are caught, no entries added
+        assert result == []
+
+
+class TestCgroupPressureParsing:
+    """Cover lines 1048-1071: cgroup pressure filesystem parsing."""
+
+    def test_cgroup_pressure_with_max_unlimited(self):
+        """Entries with memory.max='max' are skipped (line 1056)."""
+        mock_base = MagicMock()
+        mock_base.exists.return_value = True
+
+        mock_entry = MagicMock()
+        mock_entry.is_dir.return_value = True
+        mock_entry.name = "unlimited.service"
+
+        mock_mem_current = MagicMock()
+        mock_mem_current.exists.return_value = True
+        mock_mem_current.read_text.return_value = "536870912"
+
+        mock_mem_max = MagicMock()
+        mock_mem_max.exists.return_value = True
+        mock_mem_max.read_text.return_value = "max"
+
+        mock_entry.__truediv__ = MagicMock(
+            side_effect=lambda name: {
+                "memory.current": mock_mem_current,
+                "memory.max": mock_mem_max,
+            }.get(name, MagicMock())
+        )
+        mock_base.iterdir.return_value = [mock_entry]
+
+        # Make the second base path not exist
+        call_count = {"n": 0}
+        original_path = Path
+
+        def mock_path(path_str):
+            if "system.slice" in str(path_str):
+                return mock_base
+            m = MagicMock()
+            m.exists.return_value = False
+            return m
+
+        with patch("elle.daemon.incidents.snapshot.Path", side_effect=mock_path):
+            result = _get_cgroup_pressure()
+
+        # Entry with "max" should be skipped
+        assert len(result) == 0
+
+    def test_cgroup_pressure_non_dir_skipped(self):
+        """Non-directory entries are skipped (line 1048)."""
+        mock_base = MagicMock()
+        mock_base.exists.return_value = True
+
+        mock_file = MagicMock()
+        mock_file.is_dir.return_value = False
+        mock_file.name = "cgroup.procs"
+
+        mock_base.iterdir.return_value = [mock_file]
+
+        def mock_path(path_str):
+            if "system.slice" in str(path_str):
+                return mock_base
+            m = MagicMock()
+            m.exists.return_value = False
+            return m
+
+        with patch("elle.daemon.incidents.snapshot.Path", side_effect=mock_path):
+            result = _get_cgroup_pressure()
+
+        assert result == []
+
+    def test_cgroup_pressure_valid_entry(self):
+        """Valid cgroup entry with numeric memory.max is parsed (lines 1057-1067)."""
+        mock_base = MagicMock()
+        mock_base.exists.return_value = True
+
+        mock_entry = MagicMock()
+        mock_entry.is_dir.return_value = True
+        mock_entry.name = "myservice.service"
+
+        mock_mem_current = MagicMock()
+        mock_mem_current.exists.return_value = True
+        mock_mem_current.read_text.return_value = "268435456"  # 256MB
+
+        mock_mem_max = MagicMock()
+        mock_mem_max.exists.return_value = True
+        mock_mem_max.read_text.return_value = "536870912"  # 512MB
+
+        mock_entry.__truediv__ = MagicMock(
+            side_effect=lambda name: {
+                "memory.current": mock_mem_current,
+                "memory.max": mock_mem_max,
+            }.get(name, MagicMock())
+        )
+        mock_base.iterdir.return_value = [mock_entry]
+
+        def mock_path(path_str):
+            if "system.slice" in str(path_str):
+                return mock_base
+            m = MagicMock()
+            m.exists.return_value = False
+            return m
+
+        with patch("elle.daemon.incidents.snapshot.Path", side_effect=mock_path):
+            result = _get_cgroup_pressure()
+
+        assert len(result) == 1
+        assert result[0]["name"] == "myservice.service"
+        # 256/512 = 50%
+        assert result[0]["mem_pct"] == pytest.approx(50.0, abs=0.1)
+
+
+class TestPsiPressureOsError:
+    """Cover lines 1102-1103: PSI parsing with OSError/ValueError."""
+
+    def test_psi_pressure_os_error(self):
+        """OSError while reading PSI file is caught (lines 1102-1103)."""
+
+        def mock_path(path_str):
+            p = MagicMock()
+            if "cpu" in str(path_str):
+                p.exists.return_value = True
+                p.read_text.side_effect = OSError("Permission denied")
+            elif "memory" in str(path_str):
+                p.exists.return_value = True
+                p.read_text.side_effect = ValueError("bad value")
+            else:
+                p.exists.return_value = False
+            return p
+
+        with patch("elle.daemon.incidents.snapshot.Path", side_effect=mock_path):
+            result = _get_psi_pressure()
+
+        # Errors are caught, defaults remain
+        assert result["cpu_avg10"] == 0.0
+        assert result["mem_avg10"] == 0.0
+
+
+class TestTcpRetransmitRateReturnValue:
+    """Cover line 931: TCP retransmit rate computed and returned."""
+
+    def test_tcp_retransmit_rate_with_data(self):
+        """Parse and compute retransmit rate from /proc/net/snmp (line 930-931)."""
+        content = (
+            "Tcp: RtoAlgorithm RtoMin RtoMax MaxConn ActiveOpens PassiveOpens "
+            "AttemptFails EstabResets CurrEstab InSegs OutSegs RetransSegs InErrs OutRsts\n"
+            "Tcp: 1 200 120000 -1 100 50 10 5 20 1000 10000 500 0 0\n"
+        )
+        with patch("builtins.open", mock_open(read_data=content)):
+            result = _get_tcp_retransmit_rate()
+
+        # RetransSegs=500, OutSegs=10000 -> 500/10000 = 0.05
+        assert result == pytest.approx(0.05, abs=0.001)
+
+    def test_tcp_retransmit_rate_zero_outsegs(self):
+        """Zero OutSegs does not divide by zero (line 929 branch)."""
+        content = (
+            "Tcp: RtoAlgorithm OutSegs RetransSegs\n"
+            "Tcp: 1 0 0\n"
+        )
+        with patch("builtins.open", mock_open(read_data=content)):
+            result = _get_tcp_retransmit_rate()
+
+        # OutSegs=0, so the rate never gets computed, returns 0.0
+        assert result == 0.0

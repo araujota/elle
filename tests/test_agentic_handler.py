@@ -702,3 +702,155 @@ class TestErrorRecovery:
 
         with pytest.raises(RuntimeError, match="Synthesis failed"):
             await handler.handle("Check nginx")
+
+
+# =============================================================================
+# TestUncoveredBranches - Additional coverage for uncovered lines
+# =============================================================================
+
+
+class TestUncoveredBranches:
+    """Tests targeting specific uncovered branches to push coverage above 90%."""
+
+    @pytest.mark.asyncio
+    async def test_empty_plan_breaks_loop(self) -> None:
+        """Planner returns empty parallel_groups -> loop breaks at lines 145-146."""
+        intent = _make_intent(information_needs=(_make_need(),))
+        empty_plan = ExecutionPlan(
+            parallel_groups=(),
+            intent=intent,
+            estimated_duration_ms=0,
+        )
+
+        handler, mocks = _build_handler(intent=intent, plan=empty_plan)
+
+        response = await handler.handle("Check nginx")
+
+        assert isinstance(response, AgenticResponse)
+        # Planner was called but executor should NOT be called (empty plan breaks loop)
+        mocks["planner"].plan.assert_awaited_once()
+        mocks["executor"].execute.assert_not_awaited()
+        mocks["evaluator"].evaluate.assert_not_awaited()
+        # Synthesizer still called to produce a response
+        mocks["synthesizer"].synthesize.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_action_capability_in_actions_taken(self) -> None:
+        """Successful non-read capability adds to actions_taken (line 252)."""
+        intent = _make_intent(
+            information_needs=(),
+            action_requests=(_make_action(),),
+        )
+        # Use a capability name that is NOT in the read-only suffixes
+        action_evidence = _make_evidence(
+            capability="service.restart",
+            success=True,
+            output_text="restarted",
+        )
+        plan = _make_plan(
+            intent,
+            calls=(CapabilityCall(
+                capability="service.restart",
+                args={"service": "nginx"},
+                purpose="Restart",
+            ),),
+        )
+        exec_result = ExecutionResult(
+            plan=plan,
+            evidence=(action_evidence,),
+            total_duration_ms=100,
+        )
+        satisfied = _make_eval_result(status=EvaluationStatus.SATISFIED)
+
+        handler, mocks = _build_handler(
+            intent=intent,
+            plan=plan,
+            exec_result=exec_result,
+            eval_result=satisfied,
+        )
+
+        response = await handler.handle("Restart nginx")
+
+        assert any("service.restart: success" in a for a in response.actions_taken)
+
+    def test_can_handle_delegates_to_analyzer(self) -> None:
+        """can_handle() delegates to intent_analyzer.can_handle() (line 279)."""
+        handler, mocks = _build_handler()
+
+        result = handler.can_handle("Check nginx")
+
+        assert result is True
+        mocks["analyzer"].can_handle.assert_called_once_with("Check nginx")
+
+    def test_can_handle_returns_false(self) -> None:
+        """can_handle() returns False when analyzer says no."""
+        handler, mocks = _build_handler()
+        mocks["analyzer"].can_handle.return_value = False
+
+        result = handler.can_handle("something unhandled")
+
+        assert result is False
+
+
+class TestModuleSingletons:
+    """Tests for module-level singleton functions (lines 296-298, 304)."""
+
+    def test_get_unified_handler_creates_singleton(self) -> None:
+        """get_unified_handler creates instance on first call (lines 296-298)."""
+        from elle.cli.agentic.handler import (
+            get_unified_handler,
+            reset_agentic_handler,
+        )
+
+        # Ensure clean state
+        reset_agentic_handler()
+
+        with (
+            patch("elle.cli.agentic.handler.get_intent_analyzer") as mock_analyzer,
+            patch("elle.cli.agentic.handler.get_capability_planner") as mock_planner,
+            patch("elle.cli.agentic.handler.get_plan_executor") as mock_executor,
+            patch("elle.cli.agentic.handler.get_goal_evaluator") as mock_evaluator,
+            patch("elle.cli.agentic.handler.get_synthesizer") as mock_synthesizer,
+        ):
+            mock_analyzer.return_value = MagicMock()
+            mock_planner.return_value = MagicMock()
+            mock_executor.return_value = MagicMock()
+            mock_evaluator.return_value = MagicMock()
+            mock_synthesizer.return_value = MagicMock()
+
+            handler = get_unified_handler()
+            assert isinstance(handler, UnifiedAgenticHandler)
+
+            # Second call returns same instance
+            handler2 = get_unified_handler()
+            assert handler is handler2
+
+        # Clean up
+        reset_agentic_handler()
+
+    def test_reset_agentic_handler_clears_singleton(self) -> None:
+        """reset_agentic_handler sets singleton to None (line 304)."""
+        import elle.cli.agentic.handler as handler_module
+        from elle.cli.agentic.handler import (
+            get_unified_handler,
+            reset_agentic_handler,
+        )
+
+        with (
+            patch("elle.cli.agentic.handler.get_intent_analyzer") as mock_analyzer,
+            patch("elle.cli.agentic.handler.get_capability_planner") as mock_planner,
+            patch("elle.cli.agentic.handler.get_plan_executor") as mock_executor,
+            patch("elle.cli.agentic.handler.get_goal_evaluator") as mock_evaluator,
+            patch("elle.cli.agentic.handler.get_synthesizer") as mock_synthesizer,
+        ):
+            mock_analyzer.return_value = MagicMock()
+            mock_planner.return_value = MagicMock()
+            mock_executor.return_value = MagicMock()
+            mock_evaluator.return_value = MagicMock()
+            mock_synthesizer.return_value = MagicMock()
+
+            get_unified_handler()
+            assert handler_module._unified_handler is not None
+
+            reset_agentic_handler()
+            assert handler_module._unified_handler is None

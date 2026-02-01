@@ -284,3 +284,222 @@ class TestConditionMatching:
         )
 
         assert match_condition(condition, request) is False
+
+
+# =============================================================================
+# Additional coverage tests (lines 44, 105, 108-112, 133-134, 149, 186-187,
+# 229, 262, 312, 314, 319, 321, 325-328, 333, 346-348)
+# =============================================================================
+
+
+class TestExactCaseInsensitiveMatching:
+    """Tests for match_exact_ci (line 44)."""
+
+    def test_case_insensitive_match(self):
+        """Test case-insensitive exact matching returns True."""
+        from elle.policy.matchers import match_exact_ci
+
+        assert match_exact_ci("Hello", "hello") is True
+        assert match_exact_ci("HELLO", "hello") is True
+        assert match_exact_ci("hello", "HELLO") is True
+
+    def test_case_insensitive_mismatch(self):
+        """Test case-insensitive exact matching returns False for different strings."""
+        from elle.policy.matchers import match_exact_ci
+
+        assert match_exact_ci("hello", "world") is False
+        assert match_exact_ci("abc", "abcd") is False
+
+
+class TestGlobToRegexBranches:
+    """Tests for _glob_to_regex branches: ? wildcard (line 105) and [ ] char class (lines 108-112)."""
+
+    def test_question_mark_in_doublestar_pattern(self):
+        """Test ? wildcard inside a ** glob pattern (line 105)."""
+        # ? in a ** pattern goes through _glob_to_regex which adds [^/]
+        assert match_glob("/**/file?.txt", "/foo/file1.txt") is True
+        assert match_glob("/**/file?.txt", "/foo/file12.txt") is False
+
+    def test_character_class_in_doublestar_pattern(self):
+        """Test [abc] character class inside a ** glob pattern (lines 108-112)."""
+        assert match_glob("/**/file[123].txt", "/foo/file1.txt") is True
+        assert match_glob("/**/file[123].txt", "/foo/file4.txt") is False
+        assert match_glob("/**/[abc].txt", "/dir/a.txt") is True
+        assert match_glob("/**/[abc].txt", "/dir/d.txt") is False
+
+
+class TestRegexCompileFailure:
+    """Tests for _compile_regex returning None on invalid regex (lines 133-134, 149)."""
+
+    def test_invalid_regex_returns_false(self):
+        """Test match_regex with invalid pattern returns False (lines 133-134, 149)."""
+        assert match_regex("[invalid", "test value") is False
+        assert match_regex("(unclosed", "test") is False
+
+
+class TestMatchPatternDefaultCase:
+    """Tests for the default/fallback case in match_pattern (lines 186-187)."""
+
+    def test_unknown_match_type_returns_false(self):
+        """Test match_pattern with an unrecognized match type hits the default case."""
+        from unittest.mock import MagicMock
+
+        # Create a mock that looks like a MatchType but is not one of the known values
+        fake_type = MagicMock()
+        fake_type.value = "unknown"
+        # match_pattern uses structural pattern matching; a MagicMock won't match
+        # any of the known MatchType cases, so it falls to the default.
+        assert match_pattern("test", "test", fake_type) is False
+
+
+class TestDomainLengthMismatch:
+    """Tests for domain matching when part counts differ (line 229)."""
+
+    def test_different_depth_returns_false(self):
+        """Test domain with different number of parts returns False (line 229)."""
+        assert match_domain("network", "network.interface") is False
+        assert match_domain("a.b.c", "a.b") is False
+        assert match_domain("x", "x.y.z") is False
+
+
+class TestTimeWindowDefaultTime:
+    """Tests for match_time_window with check_time=None (line 262)."""
+
+    def test_none_check_time_uses_current(self):
+        """Test match_time_window with None uses datetime.now() (line 262)."""
+        # A window covering the entire day should always match
+        full_day = (TimeWindow(start=time(0, 0), end=time(23, 59, 59)),)
+        assert match_time_window(full_day, None) is True
+
+    def test_no_check_time_argument(self):
+        """Test match_time_window default argument (check_time defaults to None)."""
+        full_day = (TimeWindow(start=time(0, 0), end=time(23, 59, 59)),)
+        assert match_time_window(full_day) is True
+
+
+class TestConditionPathBranches:
+    """Tests for path condition branches (lines 312, 314)."""
+
+    def test_path_condition_request_path_none(self):
+        """Test path condition when request.path is None (line 312)."""
+        condition = Condition(path="/etc/**", match_type=MatchType.GLOB)
+        request = PolicyEvaluationRequest(
+            operation_type="file_write",
+            path=None,
+        )
+        assert match_condition(condition, request) is False
+
+    def test_path_condition_no_match(self):
+        """Test path condition when pattern does not match (line 314)."""
+        condition = Condition(path="/etc/**", match_type=MatchType.GLOB)
+        request = PolicyEvaluationRequest(
+            operation_type="file_write",
+            path="/var/log/syslog",
+        )
+        assert match_condition(condition, request) is False
+
+
+class TestConditionDomainBranches:
+    """Tests for domain condition branches (lines 319, 321)."""
+
+    def test_domain_condition_request_domain_none(self):
+        """Test domain condition when request.domain is None (line 319)."""
+        condition = Condition(domain="network.*")
+        request = PolicyEvaluationRequest(
+            operation_type="config_edit",
+            domain=None,
+        )
+        assert match_condition(condition, request) is False
+
+    def test_domain_condition_no_match(self):
+        """Test domain condition when domain does not match (line 321)."""
+        condition = Condition(domain="network.*")
+        request = PolicyEvaluationRequest(
+            operation_type="config_edit",
+            domain="service.systemd",
+        )
+        assert match_condition(condition, request) is False
+
+
+class TestConditionIntentBranches:
+    """Tests for intent condition branches (lines 325-328)."""
+
+    def test_intent_condition_match(self):
+        """Test intent condition matching (line 327-328 true path)."""
+        condition = Condition(intent="shell_*", match_type=MatchType.GLOB)
+        request = PolicyEvaluationRequest(
+            operation_type="command",
+            intent="shell_passthrough",
+        )
+        assert match_condition(condition, request) is True
+
+    def test_intent_condition_no_match(self):
+        """Test intent condition when intent does not match (line 327-328 false path)."""
+        condition = Condition(intent="shell_*", match_type=MatchType.GLOB)
+        request = PolicyEvaluationRequest(
+            operation_type="command",
+            intent="system_question",
+        )
+        assert match_condition(condition, request) is False
+
+    def test_intent_condition_request_intent_none(self):
+        """Test intent condition when request.intent is None (lines 325-326)."""
+        condition = Condition(intent="shell_passthrough", match_type=MatchType.EXACT)
+        request = PolicyEvaluationRequest(
+            operation_type="command",
+            intent=None,
+        )
+        assert match_condition(condition, request) is False
+
+
+class TestConditionRiskLevelNone:
+    """Tests for risk_level condition when request.risk_level is None (line 333)."""
+
+    def test_risk_condition_request_risk_none(self):
+        """Test risk condition when request has no risk level (line 333)."""
+        condition = Condition(risk_level=RiskLevel.HIGH)
+        request = PolicyEvaluationRequest(
+            operation_type="command",
+            risk_level=None,
+        )
+        assert match_condition(condition, request) is False
+
+
+class TestConditionAllowedHours:
+    """Tests for allowed_hours condition on Condition (lines 346-348)."""
+
+    def test_allowed_hours_within_window(self):
+        """Test allowed_hours condition when time is in window (lines 346-348 pass)."""
+        from datetime import datetime as dt
+
+        window = TimeWindow(start=time(9, 0), end=time(17, 0))
+        condition = Condition(allowed_hours=(window,))
+        # Create request with timestamp at noon
+        request = PolicyEvaluationRequest(
+            operation_type="command",
+            timestamp=dt(2024, 6, 15, 12, 0, 0),
+        )
+        assert match_condition(condition, request) is True
+
+    def test_allowed_hours_outside_window(self):
+        """Test allowed_hours condition when time is outside window (lines 346-348 fail)."""
+        from datetime import datetime as dt
+
+        window = TimeWindow(start=time(9, 0), end=time(17, 0))
+        condition = Condition(allowed_hours=(window,))
+        # Create request with timestamp at 2 AM
+        request = PolicyEvaluationRequest(
+            operation_type="command",
+            timestamp=dt(2024, 6, 15, 2, 0, 0),
+        )
+        assert match_condition(condition, request) is False
+
+    def test_allowed_hours_no_timestamp(self):
+        """Test allowed_hours condition using request.timestamp for time extraction."""
+        window = TimeWindow(start=time(0, 0), end=time(23, 59, 59))
+        condition = Condition(allowed_hours=(window,))
+        # Default timestamp is datetime.now(), full-day window should match
+        request = PolicyEvaluationRequest(
+            operation_type="command",
+        )
+        assert match_condition(condition, request) is True

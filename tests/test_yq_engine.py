@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import subprocess
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -1103,3 +1103,781 @@ class TestYQCommentPreservation:
             description="test defaults",
         )
         assert request.preserve_comments is True
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage: variant detection edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestYQVariantDetectionEdgeCases:
+    """Tests for _detect_variant() edge cases and behavior-based detection."""
+
+    def test_detect_variant_cached(self) -> None:
+        """_detect_variant returns cached variant without re-running."""
+        import elle.ops.yq.engine as mod
+
+        mod._yq_checked = False
+        mod._yq_path = None
+        mod._yq_variant = "mikefarah"
+
+        # Should return cached value without calling subprocess
+        result = mod._detect_variant()
+        assert result == "mikefarah"
+
+        mod._yq_checked = False
+        mod._yq_path = None
+        mod._yq_variant = None
+
+    def test_detect_variant_behavior_kislyuk(self) -> None:
+        """_detect_variant falls back to behavior test and detects kislyuk."""
+        import elle.ops.yq.engine as mod
+
+        mod._yq_checked = False
+        mod._yq_path = None
+        mod._yq_variant = None
+
+        # --version returns generic output (no mikefarah, no kislyuk keyword)
+        version_result = _make_completed(stdout="yq version 2.0.0\n")
+        # Behavior test: kislyuk syntax succeeds
+        behavior_result = _make_completed(stdout="key: value\n", rc=0)
+
+        call_count = 0
+
+        def side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return version_result
+            return behavior_result
+
+        with (
+            patch("elle.ops.yq.engine.shutil.which", return_value="/usr/bin/yq"),
+            patch("elle.ops.yq.engine.subprocess.run", side_effect=side_effect),
+        ):
+            variant = mod._detect_variant()
+
+        assert variant == "kislyuk"
+
+        mod._yq_checked = False
+        mod._yq_path = None
+        mod._yq_variant = None
+
+    def test_detect_variant_behavior_mikefarah_fallback(self) -> None:
+        """_detect_variant falls back to mikefarah syntax when kislyuk fails."""
+        import elle.ops.yq.engine as mod
+
+        mod._yq_checked = False
+        mod._yq_path = None
+        mod._yq_variant = None
+
+        # --version returns generic output
+        version_result = _make_completed(stdout="yq version 2.0.0\n")
+        # kislyuk syntax fails
+        kislyuk_fail = _make_completed(stderr="error", rc=1)
+        # mikefarah syntax succeeds
+        mikefarah_ok = _make_completed(stdout="key: value\n", rc=0)
+
+        call_count = 0
+
+        def side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return version_result
+            elif call_count == 2:
+                return kislyuk_fail
+            return mikefarah_ok
+
+        with (
+            patch("elle.ops.yq.engine.shutil.which", return_value="/usr/bin/yq"),
+            patch("elle.ops.yq.engine.subprocess.run", side_effect=side_effect),
+        ):
+            variant = mod._detect_variant()
+
+        assert variant == "mikefarah"
+
+        mod._yq_checked = False
+        mod._yq_path = None
+        mod._yq_variant = None
+
+    def test_detect_variant_behavior_both_fail(self) -> None:
+        """_detect_variant returns None when both behavior tests fail."""
+        import elle.ops.yq.engine as mod
+
+        mod._yq_checked = False
+        mod._yq_path = None
+        mod._yq_variant = None
+
+        # --version returns generic output
+        version_result = _make_completed(stdout="yq version 2.0.0\n")
+        # Both behavior tests fail
+        fail_result = _make_completed(stderr="error", rc=1)
+
+        call_count = 0
+
+        def side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return version_result
+            return fail_result
+
+        with (
+            patch("elle.ops.yq.engine.shutil.which", return_value="/usr/bin/yq"),
+            patch("elle.ops.yq.engine.subprocess.run", side_effect=side_effect),
+        ):
+            variant = mod._detect_variant()
+
+        assert variant is None
+
+        mod._yq_checked = False
+        mod._yq_path = None
+        mod._yq_variant = None
+
+    def test_detect_variant_exception(self) -> None:
+        """_detect_variant returns None when subprocess raises exception."""
+        import elle.ops.yq.engine as mod
+
+        mod._yq_checked = False
+        mod._yq_path = None
+        mod._yq_variant = None
+
+        with (
+            patch("elle.ops.yq.engine.shutil.which", return_value="/usr/bin/yq"),
+            patch(
+                "elle.ops.yq.engine.subprocess.run",
+                side_effect=OSError("not found"),
+            ),
+        ):
+            variant = mod._detect_variant()
+
+        assert variant is None
+
+        mod._yq_checked = False
+        mod._yq_path = None
+        mod._yq_variant = None
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage: get_version edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestYQGetVersionEdgeCases:
+    """Tests for get_version() cached return and exception path."""
+
+    def test_get_version_cached(self) -> None:
+        """get_version returns cached version without re-running."""
+        import elle.ops.yq.engine as mod
+
+        mod._yq_checked = False
+        mod._yq_path = None
+        mod._yq_version = "cached_v1.0"
+
+        result = mod.get_version()
+        assert result == "cached_v1.0"
+
+        mod._yq_checked = False
+        mod._yq_path = None
+        mod._yq_version = None
+
+    def test_get_version_exception_returns_none(self) -> None:
+        """get_version returns None when subprocess raises an exception."""
+        import elle.ops.yq.engine as mod
+
+        mod._yq_checked = False
+        mod._yq_path = None
+        mod._yq_version = None
+
+        with (
+            patch("elle.ops.yq.engine.shutil.which", return_value="/usr/bin/yq"),
+            patch(
+                "elle.ops.yq.engine.subprocess.run",
+                side_effect=OSError("broken"),
+            ),
+        ):
+            version = mod.get_version()
+
+        assert version is None
+
+        mod._yq_checked = False
+        mod._yq_path = None
+        mod._yq_version = None
+
+    def test_get_version_nonzero_exit(self) -> None:
+        """get_version returns None when yq --version exits non-zero."""
+        import elle.ops.yq.engine as mod
+
+        mod._yq_checked = False
+        mod._yq_path = None
+        mod._yq_version = None
+
+        with (
+            patch("elle.ops.yq.engine.shutil.which", return_value="/usr/bin/yq"),
+            patch(
+                "elle.ops.yq.engine.subprocess.run",
+                return_value=_make_completed(stderr="error", rc=1),
+            ),
+        ):
+            version = mod.get_version()
+
+        assert version is None
+
+        mod._yq_checked = False
+        mod._yq_path = None
+        mod._yq_version = None
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage: _run_yq kislyuk from_file
+# ---------------------------------------------------------------------------
+
+
+class TestYQRunKislyukFromFile:
+    """Tests for _run_yq with kislyuk variant and from_file."""
+
+    def test_kislyuk_from_file_appends_path(self, engine_kislyuk, tmp_path) -> None:
+        """_run_yq with kislyuk variant appends file path to command."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("key: value\n")
+
+        with patch(
+            "elle.ops.yq.engine.subprocess.run",
+            return_value=_make_completed(stdout="key: value\n"),
+        ) as mock_run:
+            engine_kislyuk._run_yq(".", from_file=str(yaml_file))
+
+        args = mock_run.call_args[0][0]
+        assert str(yaml_file) in args
+        assert mock_run.call_args[1].get("input") is None
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage: query YAML parse failure
+# ---------------------------------------------------------------------------
+
+
+class TestYQQueryParseEdgeCases:
+    """Tests for query and query_file YAML parse edge cases."""
+
+    def test_query_yaml_parse_failure(self, engine_mikefarah) -> None:
+        """query() handles YAML parse failure of output gracefully."""
+        # Output that is valid from yq but fails yaml.safe_load
+        with patch(
+            "elle.ops.yq.engine.subprocess.run",
+            return_value=_make_completed(stdout="!!invalid: {{{bad\n"),
+        ):
+            result = engine_mikefarah.query("key: value\n", ".")
+
+        assert result.success is True
+        # parsed_output may be None or partially parsed; key is no crash
+        assert result.output == "!!invalid: {{{bad"
+
+    def test_query_raw_output_skips_parse(self, engine_mikefarah) -> None:
+        """query() with raw_output=True skips YAML parsing."""
+        with patch(
+            "elle.ops.yq.engine.subprocess.run",
+            return_value=_make_completed(stdout="raw_string_value\n"),
+        ):
+            result = engine_mikefarah.query("key: raw_string_value\n", ".key", raw_output=True)
+
+        assert result.success is True
+        assert result.parsed_output is None
+
+    def test_query_file_raw_output_skips_parse(self, engine_mikefarah, tmp_path) -> None:
+        """query_file() with raw_output=True skips YAML parsing."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("key: value\n")
+
+        with patch(
+            "elle.ops.yq.engine.subprocess.run",
+            return_value=_make_completed(stdout="value\n"),
+        ):
+            result = engine_mikefarah.query_file(str(yaml_file), ".key", raw_output=True)
+
+        assert result.success is True
+        assert result.parsed_output is None
+
+    def test_query_file_yaml_parse_failure(self, engine_mikefarah, tmp_path) -> None:
+        """query_file() handles YAML parse failure of output gracefully."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("key: value\n")
+
+        with patch(
+            "elle.ops.yq.engine.subprocess.run",
+            return_value=_make_completed(stdout="!!invalid: {{{bad\n"),
+        ):
+            result = engine_mikefarah.query_file(str(yaml_file), ".")
+
+        assert result.success is True
+        assert result.output == "!!invalid: {{{bad"
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage: transform YAML parse failure
+# ---------------------------------------------------------------------------
+
+
+class TestYQTransformParseEdgeCases:
+    """Tests for transform YAML parse failure on success."""
+
+    def test_transform_yaml_parse_failure(self, engine_mikefarah) -> None:
+        """transform() handles YAML parse failure of output gracefully."""
+        with patch(
+            "elle.ops.yq.engine.subprocess.run",
+            return_value=_make_completed(stdout="!!invalid: {{{bad\n"),
+        ):
+            result = engine_mikefarah.transform("key: value\n", ".")
+
+        assert result.success is True
+        assert result.parsed_output is None
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage: preview_edit
+# ---------------------------------------------------------------------------
+
+
+class TestYQPreviewEdit:
+    """Tests for preview_edit() method."""
+
+    def test_preview_edit_file_not_found(self, engine_mikefarah) -> None:
+        """preview_edit returns empty preview for missing file."""
+        request = YQEditRequest(
+            file_path="/nonexistent/file.yaml",
+            filter=".",
+            description="test preview missing file",
+        )
+        result = engine_mikefarah.preview_edit(request)
+        assert result.is_valid_yaml is False
+        assert result.original_content == ""
+        assert result.proposed_content == ""
+
+    def test_preview_edit_transform_failure(self, engine_mikefarah, tmp_path) -> None:
+        """preview_edit returns invalid preview when transform fails."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("key: value\n")
+
+        request = YQEditRequest(
+            file_path=str(yaml_file),
+            filter=".bad|||",
+            description="test preview transform fail",
+        )
+
+        with patch(
+            "elle.ops.yq.engine.subprocess.run",
+            return_value=_make_completed(stderr="bad expression", rc=1),
+        ):
+            result = engine_mikefarah.preview_edit(request)
+
+        assert result.is_valid_yaml is False
+        assert result.original_content == "key: value\n"
+        assert result.proposed_content == ""
+
+    def test_preview_edit_success(self, engine_mikefarah, tmp_path) -> None:
+        """preview_edit returns valid preview with diffs."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("key: value\n")
+
+        request = YQEditRequest(
+            file_path=str(yaml_file),
+            filter='.key = "new"',
+            description="test preview success",
+        )
+
+        with (
+            patch(
+                "elle.ops.yq.engine.subprocess.run",
+                return_value=_make_completed(stdout="key: new\n"),
+            ),
+            patch("elle.ops.augeas.diff.unified_diff", return_value="--- a\n+++ b\n"),
+            patch("elle.ops.augeas.diff.colored_diff", return_value="colored_diff"),
+        ):
+            result = engine_mikefarah.preview_edit(request)
+
+        assert result.is_valid_yaml is True
+        assert result.original_content == "key: value\n"
+        assert result.proposed_content == "key: new\n"
+        assert result.diff == "--- a\n+++ b\n"
+        assert result.diff_colored == "colored_diff"
+
+    def test_preview_edit_appends_newline(self, engine_mikefarah, tmp_path) -> None:
+        """preview_edit appends newline if proposed content lacks one."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("key: value\n")
+
+        request = YQEditRequest(
+            file_path=str(yaml_file),
+            filter='.key = "new"',
+            description="test newline",
+        )
+
+        with (
+            patch(
+                "elle.ops.yq.engine.subprocess.run",
+                return_value=_make_completed(stdout="key: new"),  # no trailing newline
+            ),
+            patch("elle.ops.augeas.diff.unified_diff", return_value=""),
+            patch("elle.ops.augeas.diff.colored_diff", return_value=""),
+        ):
+            result = engine_mikefarah.preview_edit(request)
+
+        assert result.proposed_content.endswith("\n")
+
+    def test_preview_edit_privilege_check(self, engine_mikefarah, tmp_path) -> None:
+        """preview_edit detects when file requires privileged access."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("key: value\n")
+
+        request = YQEditRequest(
+            file_path=str(yaml_file),
+            filter='.key = "new"',
+            description="test privilege",
+        )
+
+        with (
+            patch(
+                "elle.ops.yq.engine.subprocess.run",
+                return_value=_make_completed(stdout="key: new\n"),
+            ),
+            patch("elle.ops.augeas.diff.unified_diff", return_value=""),
+            patch("elle.ops.augeas.diff.colored_diff", return_value=""),
+            patch("os.access", return_value=False),
+        ):
+            result = engine_mikefarah.preview_edit(request)
+
+        assert result.requires_privilege is True
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage: execute_edit success path with validation
+# ---------------------------------------------------------------------------
+
+
+class TestYQExecuteEditSuccessPath:
+    """Tests for execute_edit success path including validation and rollback."""
+
+    def test_execute_edit_success_with_skip_validation(self, engine_mikefarah, tmp_path) -> None:
+        """execute_edit succeeds with skip_validation=True."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("key: value\n")
+
+        request = YQEditRequest(
+            file_path=str(yaml_file),
+            filter='.key = "new"',
+            description="test success",
+            skip_backup=True,
+            skip_validation=True,
+        )
+
+        with (
+            patch(
+                "elle.ops.yq.engine.subprocess.run",
+                return_value=_make_completed(stdout="key: new\n"),
+            ),
+            patch("elle.ops.augeas.diff.unified_diff", return_value="--- a\n+++ b\n"),
+            patch("elle.ops.augeas.diff.colored_diff", return_value="colored"),
+        ):
+            result = engine_mikefarah.execute_edit(request)
+
+        assert result.success is True
+        assert result.validation_passed is True
+        assert yaml_file.read_text() == "key: new\n"
+
+    def test_execute_edit_success_with_validation(self, engine_mikefarah, tmp_path) -> None:
+        """execute_edit succeeds when validation passes."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("key: value\n")
+
+        request = YQEditRequest(
+            file_path=str(yaml_file),
+            filter='.key = "new"',
+            description="test validation pass",
+            skip_backup=True,
+            skip_validation=False,
+        )
+
+        # First call: transform. Second call: validate_file.
+        call_count = 0
+
+        def side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return _make_completed(stdout="key: new\n")
+            # validate_file call
+            return _make_completed(stdout="key: new\n")
+
+        with (
+            patch("elle.ops.yq.engine.subprocess.run", side_effect=side_effect),
+            patch("elle.ops.augeas.diff.unified_diff", return_value="diff"),
+            patch("elle.ops.augeas.diff.colored_diff", return_value="colored"),
+        ):
+            result = engine_mikefarah.execute_edit(request)
+
+        assert result.success is True
+        assert result.validation_passed is True
+        assert len(result.changes) >= 0
+
+    def test_execute_edit_validation_failure_rollback(self, engine_mikefarah, tmp_path) -> None:
+        """execute_edit rolls back on validation failure with backup."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("key: value\n")
+
+        backup_record = MagicMock()
+        backup_record.backup_path = "/tmp/backup.yaml"
+
+        request = YQEditRequest(
+            file_path=str(yaml_file),
+            filter='.key = "new"',
+            description="test rollback",
+            skip_backup=False,
+            skip_validation=False,
+        )
+
+        # First call: transform. Second call: validate_file (fails).
+        call_count = 0
+
+        def side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return _make_completed(stdout="key: new\n")
+            # validate_file call fails
+            return _make_completed(stderr="invalid yaml", rc=1)
+
+        with (
+            patch("elle.ops.yq.engine.subprocess.run", side_effect=side_effect),
+            patch("elle.ops.augeas.backup.backup_file", return_value=backup_record),
+            patch("elle.ops.augeas.backup.restore_file", return_value=True),
+        ):
+            result = engine_mikefarah.execute_edit(request)
+
+        assert result.success is False
+        assert result.validation_passed is False
+        assert result.rollback_applied is True
+        assert "rolled back" in result.error
+
+    def test_execute_edit_validation_failure_rollback_fails(self, engine_mikefarah, tmp_path) -> None:
+        """execute_edit reports rollback failure on validation failure."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("key: value\n")
+
+        backup_record = MagicMock()
+        backup_record.backup_path = "/tmp/backup.yaml"
+
+        request = YQEditRequest(
+            file_path=str(yaml_file),
+            filter='.key = "new"',
+            description="test rollback failure",
+            skip_backup=False,
+            skip_validation=False,
+        )
+
+        call_count = 0
+
+        def side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return _make_completed(stdout="key: new\n")
+            return _make_completed(stderr="invalid yaml", rc=1)
+
+        with (
+            patch("elle.ops.yq.engine.subprocess.run", side_effect=side_effect),
+            patch("elle.ops.augeas.backup.backup_file", return_value=backup_record),
+            patch("elle.ops.augeas.backup.restore_file", side_effect=OSError("restore failed")),
+        ):
+            result = engine_mikefarah.execute_edit(request)
+
+        assert result.success is False
+        assert result.validation_passed is False
+        assert "rollback failed" in result.error
+
+    def test_execute_edit_write_generic_exception(self, engine_mikefarah, tmp_path) -> None:
+        """execute_edit handles generic write exceptions."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("key: value\n")
+
+        request = YQEditRequest(
+            file_path=str(yaml_file),
+            filter='.key = "new"',
+            description="test generic write error",
+            skip_backup=True,
+        )
+
+        with (
+            patch(
+                "elle.ops.yq.engine.subprocess.run",
+                return_value=_make_completed(stdout="key: new\n"),
+            ),
+            patch.object(
+                type(yaml_file),
+                "write_text",
+                side_effect=OSError("disk error"),
+            ),
+        ):
+            result = engine_mikefarah.execute_edit(request)
+
+        assert result.success is False
+        assert "Failed to write file" in result.error
+
+    def test_execute_edit_appends_newline(self, engine_mikefarah, tmp_path) -> None:
+        """execute_edit appends newline to proposed content if missing."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("key: value\n")
+
+        request = YQEditRequest(
+            file_path=str(yaml_file),
+            filter='.key = "new"',
+            description="test newline append",
+            skip_backup=True,
+            skip_validation=True,
+        )
+
+        with (
+            patch(
+                "elle.ops.yq.engine.subprocess.run",
+                return_value=_make_completed(stdout="key: new"),  # No trailing newline
+            ),
+            patch("elle.ops.augeas.diff.unified_diff", return_value="diff"),
+            patch("elle.ops.augeas.diff.colored_diff", return_value="colored"),
+        ):
+            result = engine_mikefarah.execute_edit(request)
+
+        assert result.success is True
+        assert yaml_file.read_text() == "key: new\n"
+
+    def test_execute_edit_dry_run_with_backup(self, engine_mikefarah, tmp_path) -> None:
+        """execute_edit dry_run creates backup but does not write file."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("key: value\n")
+
+        backup_record = MagicMock()
+        backup_record.backup_path = "/tmp/backup.yaml"
+
+        request = YQEditRequest(
+            file_path=str(yaml_file),
+            filter='.key = "new"',
+            description="test dry run with backup",
+            dry_run=True,
+            skip_backup=False,
+        )
+
+        with (
+            patch(
+                "elle.ops.yq.engine.subprocess.run",
+                return_value=_make_completed(stdout="key: new\n"),
+            ),
+            patch("elle.ops.augeas.backup.backup_file", return_value=backup_record),
+            patch("elle.ops.augeas.diff.unified_diff", return_value="diff"),
+            patch("elle.ops.augeas.diff.colored_diff", return_value="colored"),
+        ):
+            result = engine_mikefarah.execute_edit(request)
+
+        assert result.success is True
+        assert result.backup_path == "/tmp/backup.yaml"
+        assert result.validation_passed is True
+        # File should be unchanged
+        assert yaml_file.read_text() == "key: value\n"
+
+    def test_execute_edit_transform_failure_with_backup(self, engine_mikefarah, tmp_path) -> None:
+        """execute_edit returns error with backup_path when transform fails."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("key: value\n")
+
+        backup_record = MagicMock()
+        backup_record.backup_path = "/tmp/backup.yaml"
+
+        request = YQEditRequest(
+            file_path=str(yaml_file),
+            filter=".bad|||",
+            description="test transform fail with backup",
+            skip_backup=False,
+        )
+
+        with (
+            patch(
+                "elle.ops.yq.engine.subprocess.run",
+                return_value=_make_completed(stderr="bad expression", rc=1),
+            ),
+            patch("elle.ops.augeas.backup.backup_file", return_value=backup_record),
+        ):
+            result = engine_mikefarah.execute_edit(request)
+
+        assert result.success is False
+        assert result.backup_path == "/tmp/backup.yaml"
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage: _detect_changes with arrays
+# ---------------------------------------------------------------------------
+
+
+class TestYQChangeDetectionEdgeCases:
+    """Tests for _detect_changes array element comparison and nested changes."""
+
+    def test_detect_array_element_modify(self, engine_mikefarah) -> None:
+        """_detect_changes detects modifications within same-length arrays."""
+        original = "items:\n  - 1\n  - 2\n"
+        modified = "items:\n  - 1\n  - 3\n"
+        changes = engine_mikefarah._detect_changes(original, modified)
+        assert len(changes) == 1
+        assert changes[0].operation == "modify"
+        assert changes[0].path == "$.items[1]"
+        assert changes[0].old_value == 2
+        assert changes[0].new_value == 3
+
+    def test_detect_nested_dict_changes(self, engine_mikefarah) -> None:
+        """_detect_changes recurses into nested dicts."""
+        original = "a:\n  b:\n    c: 1\n"
+        modified = "a:\n  b:\n    c: 2\n"
+        changes = engine_mikefarah._detect_changes(original, modified)
+        assert len(changes) == 1
+        assert changes[0].path == "$.a.b.c"
+        assert changes[0].operation == "modify"
+
+    def test_detect_changes_none_inputs(self, engine_mikefarah) -> None:
+        """_detect_changes handles None YAML (empty documents)."""
+        # Both None / empty documents
+        changes = engine_mikefarah._detect_changes("", "")
+        assert changes == []
+
+    def test_detect_changes_nested_array_in_dict(self, engine_mikefarah) -> None:
+        """_detect_changes detects changes in arrays nested within dicts."""
+        original = "data:\n  items:\n    - a\n    - b\n"
+        modified = "data:\n  items:\n    - a\n    - c\n"
+        changes = engine_mikefarah._detect_changes(original, modified)
+        assert len(changes) == 1
+        assert changes[0].operation == "modify"
+        assert "items[1]" in changes[0].path
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage: set_value with False bool
+# ---------------------------------------------------------------------------
+
+
+class TestYQSetValueEdgeCases:
+    """Tests for set_value edge cases."""
+
+    def test_set_value_bool_false(self, engine_mikefarah) -> None:
+        """set_value() handles False boolean correctly."""
+        with patch(
+            "elle.ops.yq.engine.subprocess.run",
+            return_value=_make_completed(stdout="active: false\n"),
+        ):
+            result = engine_mikefarah.set_value("active: true\n", ".active", False)
+
+        assert "false" in result
+
+    def test_set_value_float(self, engine_mikefarah) -> None:
+        """set_value() handles float values correctly."""
+        with patch(
+            "elle.ops.yq.engine.subprocess.run",
+            return_value=_make_completed(stdout="ratio: 3.14\n"),
+        ):
+            result = engine_mikefarah.set_value("ratio: 1.0\n", ".ratio", 3.14)
+
+        assert "3.14" in result

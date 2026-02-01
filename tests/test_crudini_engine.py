@@ -853,3 +853,582 @@ class TestCrudiniExecuteEditErrors:
         result = engine.execute_edit(request)
         assert result.success is False
         assert "File not found" in result.error
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage tests
+# ---------------------------------------------------------------------------
+
+
+class TestGetVersionEdgeCases:
+    """Tests for get_version cached path and exception handling."""
+
+    def test_get_version_returns_cached_value(self) -> None:
+        """get_version() returns the cached version without running subprocess."""
+        import elle.ops.crudini.engine as mod
+
+        mod._crudini_checked = False
+        mod._crudini_path = None
+        mod._crudini_version = "1.2.3"
+
+        try:
+            version = mod.get_version()
+            assert version == "1.2.3"
+        finally:
+            mod._crudini_checked = False
+            mod._crudini_path = None
+            mod._crudini_version = None
+
+    def test_get_version_returns_none_on_exception(self) -> None:
+        """get_version() returns None when subprocess raises an exception."""
+        import elle.ops.crudini.engine as mod
+
+        mod._crudini_checked = False
+        mod._crudini_path = None
+        mod._crudini_version = None
+
+        with (
+            patch("elle.ops.crudini.engine.shutil.which", return_value="/usr/bin/crudini"),
+            patch(
+                "elle.ops.crudini.engine.subprocess.run",
+                side_effect=OSError("binary not found"),
+            ),
+        ):
+            version = mod.get_version()
+
+        assert version is None
+
+        mod._crudini_checked = False
+        mod._crudini_path = None
+        mod._crudini_version = None
+
+    def test_get_version_returns_none_on_nonzero_exit(self) -> None:
+        """get_version() returns None when crudini --version exits non-zero."""
+        import elle.ops.crudini.engine as mod
+
+        mod._crudini_checked = False
+        mod._crudini_path = None
+        mod._crudini_version = None
+
+        with (
+            patch("elle.ops.crudini.engine.shutil.which", return_value="/usr/bin/crudini"),
+            patch(
+                "elle.ops.crudini.engine.subprocess.run",
+                return_value=_make_completed(stderr="error", rc=1),
+            ),
+        ):
+            version = mod.get_version()
+
+        assert version is None
+
+        mod._crudini_checked = False
+        mod._crudini_path = None
+        mod._crudini_version = None
+
+
+class TestGetSectionEdgeCases:
+    """Tests for get_section line parsing edge cases."""
+
+    def test_get_section_skips_lines_without_equals(self, engine) -> None:
+        """get_section() skips lines that do not contain an = character."""
+        sh_output = "host='localhost'\nsome-junk-line\nport='5432'\n"
+        with patch(
+            "elle.ops.crudini.engine.subprocess.run",
+            return_value=_make_completed(stdout=sh_output),
+        ):
+            section = engine.get_section("/etc/app.conf", "database")
+
+        assert section == {"host": "localhost", "port": "5432"}
+
+
+class TestProcessUnknownOperation:
+    """Tests for process() with an unknown operation kind."""
+
+    def test_process_unknown_kind(self, engine) -> None:
+        """process() returns error for an unknown operation kind."""
+        # Use a MagicMock to bypass pydantic Literal validation
+        mock_op = MagicMock()
+        mock_op.kind = "unknown_op"
+        mock_op.parameter = None
+        mock_op.value = None
+        mock_op.section = "test"
+
+        request = MagicMock()
+        request.file_path = "/etc/app.conf"
+        request.operation = mock_op
+
+        result = engine.process(request)
+        assert result.success is False
+        assert "Unknown operation kind" in result.error
+
+
+class TestPreviewEdit:
+    """Tests for preview_edit() method."""
+
+    def test_preview_edit_file_not_found(self, engine) -> None:
+        """preview_edit() returns empty preview when file does not exist."""
+        request = CrudiniEditRequest(
+            file_path="/nonexistent/file.ini",
+            operations=(CrudiniOperation(kind="set", section="db", parameter="host", value="x"),),
+            description="test preview missing file",
+        )
+        result = engine.preview_edit(request)
+        assert result.is_valid_ini is False
+        assert result.original_content == ""
+        assert result.proposed_content == ""
+
+    def test_preview_edit_set_operation(self, engine, tmp_path) -> None:
+        """preview_edit() generates a diff for set operations."""
+        ini_file = tmp_path / "test.ini"
+        ini_file.write_text(SAMPLE_INI)
+
+        request = CrudiniEditRequest(
+            file_path=str(ini_file),
+            operations=(CrudiniOperation(kind="set", section="database", parameter="host", value="newhost"),),
+            description="test preview set",
+        )
+
+        with (
+            patch("elle.ops.augeas.diff.unified_diff", return_value="--- a\n+++ b\n") as mock_udiff,
+            patch("elle.ops.augeas.diff.colored_diff", return_value="colored") as mock_cdiff,
+        ):
+            result = engine.preview_edit(request)
+
+        assert result.is_valid_ini is True
+        assert result.original_content == SAMPLE_INI
+        assert result.proposed_content != ""
+        assert result.diff == "--- a\n+++ b\n"
+        assert result.diff_colored == "colored"
+        mock_udiff.assert_called_once()
+        mock_cdiff.assert_called_once()
+
+    def test_preview_edit_set_new_section(self, engine, tmp_path) -> None:
+        """preview_edit() creates a new section when it does not exist."""
+        ini_file = tmp_path / "test.ini"
+        ini_file.write_text(SAMPLE_INI)
+
+        request = CrudiniEditRequest(
+            file_path=str(ini_file),
+            operations=(CrudiniOperation(kind="set", section="newsection", parameter="key", value="val"),),
+            description="test preview new section",
+        )
+
+        with (
+            patch("elle.ops.augeas.diff.unified_diff", return_value="diff"),
+            patch("elle.ops.augeas.diff.colored_diff", return_value="colored"),
+        ):
+            result = engine.preview_edit(request)
+
+        assert result.is_valid_ini is True
+        assert "newsection" in result.proposed_content
+
+    def test_preview_edit_del_parameter(self, engine, tmp_path) -> None:
+        """preview_edit() removes a parameter in preview."""
+        ini_file = tmp_path / "test.ini"
+        ini_file.write_text(SAMPLE_INI)
+
+        request = CrudiniEditRequest(
+            file_path=str(ini_file),
+            operations=(CrudiniOperation(kind="del", section="database", parameter="host"),),
+            description="test preview delete param",
+        )
+
+        with (
+            patch("elle.ops.augeas.diff.unified_diff", return_value="diff"),
+            patch("elle.ops.augeas.diff.colored_diff", return_value="colored"),
+        ):
+            result = engine.preview_edit(request)
+
+        assert result.is_valid_ini is True
+        assert "host" not in result.proposed_content or "host" not in result.proposed_content.split("[database]")[1].split("[")[0]
+
+    def test_preview_edit_del_section(self, engine, tmp_path) -> None:
+        """preview_edit() removes an entire section in preview."""
+        ini_file = tmp_path / "test.ini"
+        ini_file.write_text(SAMPLE_INI)
+
+        request = CrudiniEditRequest(
+            file_path=str(ini_file),
+            operations=(CrudiniOperation(kind="del", section="server"),),
+            description="test preview delete section",
+        )
+
+        with (
+            patch("elle.ops.augeas.diff.unified_diff", return_value="diff"),
+            patch("elle.ops.augeas.diff.colored_diff", return_value="colored"),
+        ):
+            result = engine.preview_edit(request)
+
+        assert result.is_valid_ini is True
+
+    def test_preview_edit_invalid_ini_content(self, engine, tmp_path) -> None:
+        """preview_edit() returns is_valid_ini=False when parsing fails."""
+        ini_file = tmp_path / "test.ini"
+        # Write content that will fail configparser.read_string
+        ini_file.write_text("not valid ini content without section\nkey = value\n")
+
+        request = CrudiniEditRequest(
+            file_path=str(ini_file),
+            operations=(CrudiniOperation(kind="set", section="db", parameter="host", value="x"),),
+            description="test preview invalid ini",
+        )
+
+        result = engine.preview_edit(request)
+        assert result.is_valid_ini is False
+
+    def test_preview_edit_requires_privilege(self, engine, tmp_path) -> None:
+        """preview_edit() detects when file requires elevated access."""
+        ini_file = tmp_path / "test.ini"
+        ini_file.write_text(SAMPLE_INI)
+
+        request = CrudiniEditRequest(
+            file_path=str(ini_file),
+            operations=(CrudiniOperation(kind="set", section="database", parameter="host", value="x"),),
+            description="test preview privilege",
+        )
+
+        with (
+            patch("elle.ops.augeas.diff.unified_diff", return_value="diff"),
+            patch("elle.ops.augeas.diff.colored_diff", return_value="colored"),
+            patch("os.access", return_value=False),
+        ):
+            result = engine.preview_edit(request)
+
+        assert result.requires_privilege is True
+
+
+class TestExecuteEditRollback:
+    """Tests for execute_edit rollback paths."""
+
+    def test_execute_edit_rollback_on_operation_failure(self, engine, tmp_path) -> None:
+        """execute_edit() rolls back on operation failure when backup exists."""
+        ini_file = tmp_path / "test.ini"
+        ini_file.write_text(SAMPLE_INI)
+
+        request = CrudiniEditRequest(
+            file_path=str(ini_file),
+            operations=(CrudiniOperation(kind="set", section="database", parameter="host", value="newhost"),),
+            description="test rollback on failure",
+            skip_backup=False,
+            skip_validation=True,
+        )
+
+        mock_backup_record = MagicMock()
+        mock_backup_record.backup_path = "/tmp/backup.ini"
+
+        with (
+            patch("elle.ops.augeas.backup.backup_file", return_value=mock_backup_record),
+            patch(
+                "elle.ops.crudini.engine.subprocess.run",
+                return_value=_make_completed(stderr="write error", rc=1),
+            ),
+            patch("elle.ops.augeas.backup.restore_file") as mock_restore,
+        ):
+            result = engine.execute_edit(request)
+
+        assert result.success is False
+        assert result.rollback_applied is True
+        assert "rolled back" in result.error
+        mock_restore.assert_called_once_with("/tmp/backup.ini")
+
+    def test_execute_edit_rollback_failure(self, engine, tmp_path) -> None:
+        """execute_edit() reports both errors when rollback also fails."""
+        ini_file = tmp_path / "test.ini"
+        ini_file.write_text(SAMPLE_INI)
+
+        request = CrudiniEditRequest(
+            file_path=str(ini_file),
+            operations=(CrudiniOperation(kind="set", section="database", parameter="host", value="newhost"),),
+            description="test rollback failure",
+            skip_backup=False,
+            skip_validation=True,
+        )
+
+        mock_backup_record = MagicMock()
+        mock_backup_record.backup_path = "/tmp/backup.ini"
+
+        with (
+            patch("elle.ops.augeas.backup.backup_file", return_value=mock_backup_record),
+            patch(
+                "elle.ops.crudini.engine.subprocess.run",
+                return_value=_make_completed(stderr="write error", rc=1),
+            ),
+            patch("elle.ops.augeas.backup.restore_file", side_effect=OSError("restore failed")),
+        ):
+            result = engine.execute_edit(request)
+
+        assert result.success is False
+        assert "rollback failed" in result.error
+        assert result.rollback_applied is False
+
+    def test_execute_edit_operation_failure_no_backup(self, engine, tmp_path) -> None:
+        """execute_edit() returns error without rollback when skip_backup=True."""
+        ini_file = tmp_path / "test.ini"
+        ini_file.write_text(SAMPLE_INI)
+
+        request = CrudiniEditRequest(
+            file_path=str(ini_file),
+            operations=(CrudiniOperation(kind="set", section="database", parameter="host", value="newhost"),),
+            description="test failure no backup",
+            skip_backup=True,
+            skip_validation=True,
+        )
+
+        with patch(
+            "elle.ops.crudini.engine.subprocess.run",
+            return_value=_make_completed(stderr="write error", rc=1),
+        ):
+            result = engine.execute_edit(request)
+
+        assert result.success is False
+        assert result.error == "write error"
+        assert result.backup_path is None
+
+
+class TestExecuteEditValidation:
+    """Tests for execute_edit validation paths."""
+
+    def test_execute_edit_validation_failure_rollback(self, engine, tmp_path) -> None:
+        """execute_edit() rolls back when post-edit validation fails."""
+        ini_file = tmp_path / "test.ini"
+        ini_file.write_text(SAMPLE_INI)
+
+        request = CrudiniEditRequest(
+            file_path=str(ini_file),
+            operations=(CrudiniOperation(kind="set", section="database", parameter="host", value="newhost"),),
+            description="test validation rollback",
+            skip_backup=False,
+            skip_validation=False,
+        )
+
+        mock_backup_record = MagicMock()
+        mock_backup_record.backup_path = "/tmp/backup.ini"
+
+        # First subprocess.run call is for the get (old_value), second is for set, third is for validate
+        call_count = 0
+
+        def _side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                # get old_value and set operation succeed
+                return _make_completed(stdout="localhost\n")
+            else:
+                # validate fails
+                return _make_completed(stderr="parse error", rc=1)
+
+        with (
+            patch("elle.ops.augeas.backup.backup_file", return_value=mock_backup_record),
+            patch("elle.ops.crudini.engine.subprocess.run", side_effect=_side_effect),
+            patch("elle.ops.augeas.backup.restore_file") as mock_restore,
+        ):
+            result = engine.execute_edit(request)
+
+        assert result.success is False
+        assert result.validation_passed is False
+        assert result.rollback_applied is True
+        assert "Validation failed" in result.error
+        mock_restore.assert_called_once_with("/tmp/backup.ini")
+
+    def test_execute_edit_validation_failure_rollback_fails(self, engine, tmp_path) -> None:
+        """execute_edit() reports both errors when validation fails and rollback also fails."""
+        ini_file = tmp_path / "test.ini"
+        ini_file.write_text(SAMPLE_INI)
+
+        request = CrudiniEditRequest(
+            file_path=str(ini_file),
+            operations=(CrudiniOperation(kind="set", section="database", parameter="host", value="newhost"),),
+            description="test validation rollback failure",
+            skip_backup=False,
+            skip_validation=False,
+        )
+
+        mock_backup_record = MagicMock()
+        mock_backup_record.backup_path = "/tmp/backup.ini"
+
+        call_count = 0
+
+        def _side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                return _make_completed(stdout="localhost\n")
+            else:
+                return _make_completed(stderr="parse error", rc=1)
+
+        with (
+            patch("elle.ops.augeas.backup.backup_file", return_value=mock_backup_record),
+            patch("elle.ops.crudini.engine.subprocess.run", side_effect=_side_effect),
+            patch("elle.ops.augeas.backup.restore_file", side_effect=OSError("disk error")),
+        ):
+            result = engine.execute_edit(request)
+
+        assert result.success is False
+        assert result.validation_passed is False
+        assert result.rollback_applied is False
+        assert "rollback failed" in result.error
+
+
+class TestExecuteEditSuccess:
+    """Tests for execute_edit successful path with backup and validation."""
+
+    def test_execute_edit_full_success_with_backup(self, engine, tmp_path) -> None:
+        """execute_edit() succeeds with backup creation and validation."""
+        ini_file = tmp_path / "test.ini"
+        ini_file.write_text(SAMPLE_INI)
+
+        request = CrudiniEditRequest(
+            file_path=str(ini_file),
+            operations=(CrudiniOperation(kind="set", section="database", parameter="host", value="newhost"),),
+            description="test full success",
+            skip_backup=False,
+            skip_validation=True,
+        )
+
+        mock_backup_record = MagicMock()
+        mock_backup_record.backup_path = "/tmp/backup.ini"
+
+        with (
+            patch("elle.ops.augeas.backup.backup_file", return_value=mock_backup_record),
+            patch(
+                "elle.ops.crudini.engine.subprocess.run",
+                return_value=_make_completed(stdout="localhost\n"),
+            ),
+            patch("elle.ops.augeas.diff.unified_diff", return_value="--- a\n+++ b\n"),
+            patch("elle.ops.augeas.diff.colored_diff", return_value="colored"),
+        ):
+            result = engine.execute_edit(request)
+
+        assert result.success is True
+        assert result.backup_path == "/tmp/backup.ini"
+        assert len(result.changes) == 1
+        assert result.changes[0].section == "database"
+        assert result.changes[0].parameter == "host"
+        assert result.changes[0].old_value == "localhost"
+        assert result.changes[0].new_value == "newhost"
+        assert result.changes[0].operation == "set"
+
+    def test_execute_edit_success_with_validation(self, engine, tmp_path) -> None:
+        """execute_edit() passes when validation succeeds."""
+        ini_file = tmp_path / "test.ini"
+        ini_file.write_text(SAMPLE_INI)
+
+        request = CrudiniEditRequest(
+            file_path=str(ini_file),
+            operations=(CrudiniOperation(kind="set", section="database", parameter="host", value="newhost"),),
+            description="test success with validation",
+            skip_backup=True,
+            skip_validation=False,
+        )
+
+        with (
+            patch(
+                "elle.ops.crudini.engine.subprocess.run",
+                return_value=_make_completed(stdout="localhost\n"),
+            ),
+            patch("elle.ops.augeas.diff.unified_diff", return_value="diff"),
+            patch("elle.ops.augeas.diff.colored_diff", return_value="colored"),
+        ):
+            result = engine.execute_edit(request)
+
+        assert result.success is True
+        assert result.validation_passed is True
+
+    def test_execute_edit_del_operation_records_change(self, engine, tmp_path) -> None:
+        """execute_edit() with del operation records new_value as None."""
+        ini_file = tmp_path / "test.ini"
+        ini_file.write_text(SAMPLE_INI)
+
+        request = CrudiniEditRequest(
+            file_path=str(ini_file),
+            operations=(CrudiniOperation(kind="del", section="database", parameter="host"),),
+            description="test del change recording",
+            skip_backup=True,
+            skip_validation=True,
+        )
+
+        with (
+            patch(
+                "elle.ops.crudini.engine.subprocess.run",
+                return_value=_make_completed(stdout="localhost\n"),
+            ),
+            patch("elle.ops.augeas.diff.unified_diff", return_value="diff"),
+            patch("elle.ops.augeas.diff.colored_diff", return_value="colored"),
+        ):
+            result = engine.execute_edit(request)
+
+        assert result.success is True
+        assert len(result.changes) == 1
+        assert result.changes[0].operation == "del"
+        assert result.changes[0].new_value is None
+
+    def test_execute_edit_dry_run_with_backup(self, engine, tmp_path) -> None:
+        """execute_edit() with dry_run and backup creates backup but does not execute."""
+        ini_file = tmp_path / "test.ini"
+        ini_file.write_text(SAMPLE_INI)
+
+        request = CrudiniEditRequest(
+            file_path=str(ini_file),
+            operations=(CrudiniOperation(kind="set", section="database", parameter="host", value="newhost"),),
+            description="test dry run with backup",
+            dry_run=True,
+            skip_backup=False,
+        )
+
+        mock_backup_record = MagicMock()
+        mock_backup_record.backup_path = "/tmp/backup.ini"
+
+        with (
+            patch("elle.ops.augeas.backup.backup_file", return_value=mock_backup_record),
+            patch("elle.ops.crudini.engine.CrudiniEngine.preview_edit") as mock_preview,
+        ):
+            mock_preview.return_value = MagicMock(
+                diff="--- a\n+++ b\n",
+                diff_colored="colored",
+                is_valid_ini=True,
+            )
+            result = engine.execute_edit(request)
+
+        assert result.success is True
+        assert result.backup_path == "/tmp/backup.ini"
+        assert result.validation_passed is True
+        assert ini_file.read_text() == SAMPLE_INI
+
+
+class TestExecuteEditValidationNoBackup:
+    """Tests for execute_edit validation failure without backup."""
+
+    def test_validation_fails_no_backup_continues(self, engine, tmp_path) -> None:
+        """execute_edit() with validation failure and no backup does not rollback."""
+        ini_file = tmp_path / "test.ini"
+        ini_file.write_text(SAMPLE_INI)
+
+        request = CrudiniEditRequest(
+            file_path=str(ini_file),
+            operations=(CrudiniOperation(kind="set", section="database", parameter="host", value="newhost"),),
+            description="test validation no backup",
+            skip_backup=True,
+            skip_validation=False,
+        )
+
+        call_count = 0
+
+        def _side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                return _make_completed(stdout="localhost\n")
+            else:
+                # validation fails
+                return _make_completed(stderr="parse error", rc=1)
+
+        with (
+            patch("elle.ops.crudini.engine.subprocess.run", side_effect=_side_effect),
+            patch("elle.ops.augeas.diff.unified_diff", return_value="diff"),
+            patch("elle.ops.augeas.diff.colored_diff", return_value="colored"),
+        ):
+            result = engine.execute_edit(request)
+
+        # When validation fails but there is no backup_path, it continues to success
+        assert result.success is True
+        assert result.validation_passed is False

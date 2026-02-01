@@ -618,18 +618,17 @@ class TestNotifyIncidentCreated:
 
     def test_async_callback_with_running_loop(self):
         """Async callback is scheduled on the running loop."""
+        import asyncio
+
         async_cb = AsyncMock()
         corr = IncidentCorrelator(on_incident_created=async_cb)
-
-        # Run in an event loop context
-        import asyncio
 
         async def _run():
             corr._notify_incident_created("inc-001")
             # Allow the scheduled task to execute
             await asyncio.sleep(0.01)
 
-        asyncio.get_event_loop().run_until_complete(_run())
+        asyncio.run(_run())
         async_cb.assert_called_once_with("inc-001")
 
 

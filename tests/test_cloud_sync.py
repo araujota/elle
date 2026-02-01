@@ -753,3 +753,408 @@ class TestCloudIncidentMatch:
                 fingerprint_similarity=1.5,
                 surface_similarity=0.5,
             )
+
+
+# =============================================================================
+# TestCloudSyncClientClose (NEW)
+# =============================================================================
+
+
+class TestCloudSyncClientClose:
+    """Tests for CloudSyncClient.close."""
+
+    async def test_close_with_active_client(self) -> None:
+        """Close with active client calls aclose and sets _client to None."""
+        client = CloudSyncClient(
+            endpoint="https://cloud.example.com",
+            ca_cert_path="/a",
+            client_cert_path="/b",
+            client_key_path="/c",
+        )
+        mock_http = AsyncMock()
+        client._client = mock_http
+
+        await client.close()
+
+        mock_http.aclose.assert_awaited_once()
+        assert client._client is None
+
+    async def test_close_with_no_client(self) -> None:
+        """Close with no active client does nothing and does not raise."""
+        client = CloudSyncClient()
+        assert client._client is None
+        await client.close()  # Should not raise
+        assert client._client is None
+
+
+# =============================================================================
+# TestGetResolutionStats (NEW)
+# =============================================================================
+
+
+class TestGetResolutionStats:
+    """Tests for CloudSyncClient.get_resolution_stats."""
+
+    async def test_success(self) -> None:
+        """Successful GET returns parsed JSON dict."""
+        client = CloudSyncClient(
+            endpoint="https://cloud.example.com",
+            ca_cert_path="/a",
+            client_cert_path="/b",
+            client_key_path="/c",
+        )
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {
+            "outcome_distribution": {"improved": 0.6, "partial": 0.3},
+            "avg_time_to_resolve_sec": 300,
+            "sample_size": 50,
+        }
+
+        mock_http = AsyncMock()
+        mock_http.get = AsyncMock(return_value=mock_response)
+        client._client = mock_http
+
+        result = await client.get_resolution_stats("disk")
+
+        assert result["sample_size"] == 50
+        assert result["outcome_distribution"]["improved"] == 0.6
+        mock_http.get.assert_awaited_once()
+        # Verify URL contains the domain
+        call_args = mock_http.get.call_args
+        assert "disk" in call_args[0][0]
+
+    async def test_server_error(self) -> None:
+        """Server error from raise_for_status propagates."""
+        client = CloudSyncClient(
+            endpoint="https://cloud.example.com",
+            ca_cert_path="/a",
+            client_cert_path="/b",
+            client_key_path="/c",
+        )
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "Internal Server Error",
+            request=MagicMock(),
+            response=mock_response,
+        )
+
+        mock_http = AsyncMock()
+        mock_http.get = AsyncMock(return_value=mock_response)
+        client._client = mock_http
+
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.get_resolution_stats("disk")
+
+    async def test_not_configured(self) -> None:
+        """Not configured raises RuntimeError."""
+        client = CloudSyncClient()
+        with pytest.raises(RuntimeError, match="Cloud sync not configured"):
+            await client.get_resolution_stats("disk")
+
+
+# =============================================================================
+# TestConfigureCloudClient (NEW)
+# =============================================================================
+
+
+class TestConfigureCloudClient:
+    """Tests for configure_cloud_client / get_cloud_client module singletons."""
+
+    def test_get_cloud_client_default(self) -> None:
+        """get_cloud_client returns an unconfigured client when nothing is configured."""
+        from elle.daemon.incidents.cloud_sync import get_cloud_client
+
+        client = get_cloud_client()
+        assert client.is_configured() is False
+
+    def test_configure_and_get(self) -> None:
+        """configure_cloud_client creates a configured client retrievable via get_cloud_client."""
+        from elle.daemon.incidents.cloud_sync import configure_cloud_client, get_cloud_client
+
+        configured = configure_cloud_client(
+            endpoint="https://test.example.com",
+            ca_cert_path="/a",
+            client_cert_path="/b",
+            client_key_path="/c",
+        )
+        assert configured.is_configured() is True
+        assert get_cloud_client() is configured
+
+    def test_get_cloud_client_singleton(self) -> None:
+        """Repeated calls to get_cloud_client return the same instance."""
+        from elle.daemon.incidents.cloud_sync import get_cloud_client
+
+        c1 = get_cloud_client()
+        c2 = get_cloud_client()
+        assert c1 is c2
+
+
+# =============================================================================
+# TestSubmitWithRetryPaths (NEW)
+# =============================================================================
+
+
+class TestSubmitWithRetryPaths:
+    """Additional tests for submit_incident_with_retry paths."""
+
+    async def test_success_path(self) -> None:
+        """Direct submission succeeds and returns CloudSubmissionResult."""
+        from elle.daemon.incidents.cloud_sync import configure_cloud_client
+
+        configure_cloud_client(
+            endpoint="https://cloud.example.com",
+            ca_cert_path="/a",
+            client_cert_path="/b",
+            client_key_path="/c",
+        )
+
+        expected = CloudSubmissionResult(
+            cloud_id="c1",
+            accepted=True,
+            similar_count=2,
+        )
+        with patch.object(
+            CloudSyncClient,
+            "submit_incident",
+            new_callable=AsyncMock,
+            return_value=expected,
+        ):
+            result = await submit_incident_with_retry(
+                _make_anonymized_incident(),
+                original_hash="hash1",
+            )
+        assert result is not None
+        assert result.cloud_id == "c1"
+        assert result.accepted is True
+        assert result.similar_count == 2
+
+    async def test_not_configured_returns_none(self) -> None:
+        """When not configured, returns None immediately without submission."""
+        result = await submit_incident_with_retry(
+            _make_anonymized_incident(),
+            original_hash="hash1",
+        )
+        assert result is None
+
+    async def test_failure_enqueues_to_cloud_queue(self) -> None:
+        """On submission failure, enqueues the incident to the cloud queue."""
+        from elle.daemon.incidents.cloud_sync import configure_cloud_client
+
+        configure_cloud_client(
+            endpoint="https://cloud.example.com",
+            ca_cert_path="/a",
+            client_cert_path="/b",
+            client_key_path="/c",
+        )
+
+        mock_queue = MagicMock()
+        mock_queue.enqueue = MagicMock(return_value=True)
+
+        with (
+            patch.object(
+                CloudSyncClient,
+                "submit_incident",
+                new_callable=AsyncMock,
+                side_effect=httpx.ConnectError("connection refused"),
+            ),
+            patch(
+                "elle.daemon.incidents.cloud_queue.get_cloud_queue",
+                return_value=mock_queue,
+            ),
+        ):
+            result = await submit_incident_with_retry(
+                _make_anonymized_incident(),
+                original_hash="hash1",
+            )
+
+        assert result is None
+        mock_queue.enqueue.assert_called_once()
+        # Verify that the enqueue call received the correct original_hash
+        call_kwargs = mock_queue.enqueue.call_args
+        assert call_kwargs.kwargs.get("original_hash") == "hash1"
+
+
+# =============================================================================
+# TestQuerySimilarOptionalParams (NEW)
+# =============================================================================
+
+
+class TestQuerySimilarOptionalParams:
+    """Tests for query_similar with optional parameters (surface_hashes, domain)."""
+
+    async def test_with_surface_hashes(self) -> None:
+        """surface_hashes are included in the request payload."""
+        client = CloudSyncClient(
+            endpoint="https://cloud.example.com",
+            ca_cert_path="/a",
+            client_cert_path="/b",
+            client_key_path="/c",
+        )
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"matches": [], "total_searched": 0}
+
+        mock_http = AsyncMock()
+        mock_http.post = AsyncMock(return_value=mock_response)
+        client._client = mock_http
+
+        fp = _make_fingerprint()
+        await client.query_similar(fp, surface_hashes={"config": "abc123"})
+
+        call_args = mock_http.post.call_args
+        payload = call_args.kwargs.get("json") or call_args[1].get("json")
+        assert "surface_hashes" in payload
+        assert payload["surface_hashes"]["config"] == "abc123"
+
+    async def test_with_domain(self) -> None:
+        """domain is included in the request payload."""
+        client = CloudSyncClient(
+            endpoint="https://cloud.example.com",
+            ca_cert_path="/a",
+            client_cert_path="/b",
+            client_key_path="/c",
+        )
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"matches": [], "total_searched": 0}
+
+        mock_http = AsyncMock()
+        mock_http.post = AsyncMock(return_value=mock_response)
+        client._client = mock_http
+
+        fp = _make_fingerprint()
+        await client.query_similar(fp, domain="disk")
+
+        call_args = mock_http.post.call_args
+        payload = call_args.kwargs.get("json") or call_args[1].get("json")
+        assert payload["domain"] == "disk"
+
+
+# =============================================================================
+# TestQueryCloudSync (NEW)
+# =============================================================================
+
+
+class TestQueryCloudSync:
+    """Tests for the synchronous wrapper query_cloud_sync."""
+
+    def test_not_available_returns_none(self) -> None:
+        """When cloud client is not available, returns None immediately."""
+        from elle.daemon.incidents.cloud_sync import query_cloud_sync
+
+        fp = _make_fingerprint()
+        result = query_cloud_sync(fp)
+        assert result is None
+
+    def test_with_no_running_loop_uses_asyncio_run(self) -> None:
+        """When there is no running event loop, uses asyncio.run."""
+        from elle.daemon.incidents.cloud_sync import query_cloud_sync
+
+        expected = CloudQueryResult(
+            matches=(),
+            total_searched=100,
+        )
+
+        with (
+            patch.object(
+                CloudSyncClient,
+                "is_available",
+                return_value=True,
+            ),
+            patch.object(
+                CloudSyncClient,
+                "query_similar",
+                new_callable=AsyncMock,
+                return_value=expected,
+            ),
+        ):
+            fp = _make_fingerprint()
+            result = query_cloud_sync(fp, domain="disk")
+
+        assert result is not None
+        assert result.total_searched == 100
+
+    def test_query_exception_returns_none(self) -> None:
+        """When query_similar raises, query_cloud_sync returns None."""
+        from elle.daemon.incidents.cloud_sync import query_cloud_sync
+
+        with (
+            patch.object(
+                CloudSyncClient,
+                "is_available",
+                return_value=True,
+            ),
+            patch.object(
+                CloudSyncClient,
+                "query_similar",
+                new_callable=AsyncMock,
+                side_effect=httpx.ConnectError("connection refused"),
+            ),
+        ):
+            fp = _make_fingerprint()
+            result = query_cloud_sync(fp)
+
+        assert result is None
+
+
+# =============================================================================
+# TestSubmitWithRetryEnqueueFailure (NEW)
+# =============================================================================
+
+
+class TestSubmitWithRetryEnqueueFailure:
+    """Tests for submit_incident_with_retry when enqueue itself fails."""
+
+    async def test_enqueue_non_runtime_error(self) -> None:
+        """When enqueue raises a non-RuntimeError, returns None and logs error."""
+        from elle.daemon.incidents.cloud_sync import configure_cloud_client
+
+        configure_cloud_client(
+            endpoint="https://cloud.example.com",
+            ca_cert_path="/a",
+            client_cert_path="/b",
+            client_key_path="/c",
+        )
+
+        mock_queue = MagicMock()
+        mock_queue.enqueue = MagicMock(side_effect=OSError("disk full"))
+
+        with (
+            patch.object(
+                CloudSyncClient,
+                "submit_incident",
+                new_callable=AsyncMock,
+                side_effect=httpx.ConnectError("down"),
+            ),
+            patch(
+                "elle.daemon.incidents.cloud_queue.get_cloud_queue",
+                return_value=mock_queue,
+            ),
+        ):
+            result = await submit_incident_with_retry(
+                _make_anonymized_incident(),
+                original_hash="hash1",
+            )
+
+        assert result is None
+        mock_queue.enqueue.assert_called_once()
+
+
+# =============================================================================
+# TestHealthCheckNotConfigured (NEW)
+# =============================================================================
+
+
+class TestHealthCheckNotConfigured:
+    """Tests for health_check when not configured."""
+
+    async def test_not_configured_returns_false(self) -> None:
+        """health_check returns False when client is not configured."""
+        client = CloudSyncClient()
+        assert client.is_configured() is False
+        result = await client.health_check()
+        assert result is False
