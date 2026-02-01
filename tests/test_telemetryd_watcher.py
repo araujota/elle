@@ -685,9 +685,14 @@ class TestWatchLoop:
             watcher._shutdown.set()
             return False
 
+        async def mock_disconnect():
+            # Must mirror real _disconnect by resetting _connected so the
+            # loop re-enters the _connect path on the next iteration.
+            watcher._connected = False
+
         with patch.object(watcher, "_connect", side_effect=mock_connect):
             with patch.object(watcher, "_read_events", side_effect=RuntimeError("read error")):
-                with patch.object(watcher, "_disconnect", new_callable=AsyncMock):
+                with patch.object(watcher, "_disconnect", side_effect=mock_disconnect):
                     with patch("asyncio.sleep", new_callable=AsyncMock):
                         await watcher._watch_loop()
 
@@ -869,17 +874,21 @@ class TestStartExtended:
         """start runs _watch_loop until CancelledError."""
         with patch.object(watcher, "check_available", return_value=True):
             with patch.object(watcher, "_watch_loop", side_effect=asyncio.CancelledError):
-                with patch.object(watcher, "stop", new_callable=AsyncMock):
-                    await watcher.start()
-                    assert watcher._running is False  # stop() sets this
+                # Mock _health_check_loop to prevent a real background task
+                # with 30-second sleeps that would outlive the test.
+                with patch.object(watcher, "_health_check_loop", new_callable=AsyncMock):
+                    with patch.object(watcher, "stop", new_callable=AsyncMock) as mock_stop:
+                        await watcher.start()
+                        mock_stop.assert_called_once()
 
     async def test_start_available_then_error(self, watcher):
         """start handles exceptions from _watch_loop."""
         with patch.object(watcher, "check_available", return_value=True):
             with patch.object(watcher, "_watch_loop", side_effect=RuntimeError("loop error")):
-                with patch.object(watcher, "stop", new_callable=AsyncMock) as mock_stop:
-                    await watcher.start()
-                    mock_stop.assert_called_once()
+                with patch.object(watcher, "_health_check_loop", new_callable=AsyncMock):
+                    with patch.object(watcher, "stop", new_callable=AsyncMock) as mock_stop:
+                        await watcher.start()
+                        mock_stop.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
