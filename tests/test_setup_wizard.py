@@ -2002,17 +2002,27 @@ class TestSetupModelsAsync:
 
         mock_warmup_service = MagicMock()
         mock_warmup_service.list_models = AsyncMock(return_value=["test-model"])
-
-        async def interrupted_warmup():
-            raise KeyboardInterrupt()
-
-        mock_warmup_service.warm_llm = interrupted_warmup
+        mock_warmup_service.warm_llm = AsyncMock()
         mock_warmup_service.close = AsyncMock()
 
         mock_warmup_mod = MagicMock()
         mock_warmup_mod.ModelWarmupService.return_value = mock_warmup_service
 
-        with patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}):
+        # Raise KeyboardInterrupt from a patched asyncio.wait_for instead of
+        # from inside a coroutine.  On Python 3.10, Task.__step immediately
+        # re-raises KeyboardInterrupt/SystemExit before the caller's except
+        # handler can catch it, causing the exception to escape to the event
+        # loop and kill the entire pytest process with exit code 2.
+        def mock_wait_for(coro, timeout=None):
+            # Close the coroutine to avoid "was never awaited" warnings.
+            if hasattr(coro, "close"):
+                coro.close()
+            raise KeyboardInterrupt()
+
+        with (
+            patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}),
+            patch("asyncio.wait_for", side_effect=mock_wait_for),
+        ):
             result = await wizard._setup_models_async("test-model")
 
         assert result is True
