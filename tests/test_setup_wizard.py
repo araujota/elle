@@ -1861,6 +1861,18 @@ class TestSetupModels:
 class TestSetupModelsAsync:
     """Tests for _setup_models_async method."""
 
+    @pytest.fixture(autouse=True)
+    def _mock_progress(self):
+        """Mock rich Progress to prevent background rendering threads.
+
+        MagicMock.__exit__ returns a truthy MagicMock by default, which
+        suppresses exceptions (including KeyboardInterrupt).  Setting
+        return_value to False preserves normal exception propagation.
+        """
+        with patch("elle.cli.setup.wizard.Progress") as mock_cls:
+            mock_cls.return_value.__exit__ = MagicMock(return_value=False)
+            yield mock_cls
+
     @pytest.mark.asyncio
     async def test_model_already_available_warmup_success(self, wizard, mock_console):
         """When the LLM model is already available and warmup succeeds."""
@@ -1876,10 +1888,7 @@ class TestSetupModelsAsync:
         mock_warmup_mod = MagicMock()
         mock_warmup_mod.ModelWarmupService.return_value = mock_warmup_service
 
-        with (
-            patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}),
-            patch("elle.cli.setup.wizard.Progress"),
-        ):
+        with patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}):
             result = await wizard._setup_models_async("test-model")
 
         assert result is True
@@ -1903,7 +1912,6 @@ class TestSetupModelsAsync:
         with (
             patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}),
             patch.object(wizard, "_pull_model_with_progress", new_callable=AsyncMock, return_value=True),
-            patch("elle.cli.setup.wizard.Progress"),
         ):
             result = await wizard._setup_models_async("test-model")
 
@@ -1924,7 +1932,6 @@ class TestSetupModelsAsync:
         with (
             patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}),
             patch.object(wizard, "_pull_model_with_progress", new_callable=AsyncMock, return_value=False),
-            patch("elle.cli.setup.wizard.Progress"),
         ):
             result = await wizard._setup_models_async("test-model")
 
@@ -1945,10 +1952,7 @@ class TestSetupModelsAsync:
         mock_warmup_mod = MagicMock()
         mock_warmup_mod.ModelWarmupService.return_value = mock_warmup_service
 
-        with (
-            patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}),
-            patch("elle.cli.setup.wizard.Progress"),
-        ):
+        with patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}):
             result = await wizard._setup_models_async("test-model")
 
         # Returns True because model is available, just warmup failed
@@ -1986,7 +1990,6 @@ class TestSetupModelsAsync:
         with (
             patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}),
             patch("asyncio.wait_for", side_effect=mock_wait_for),
-            patch("elle.cli.setup.wizard.Progress"),
         ):
             result = await wizard._setup_models_async("test-model")
 
@@ -2009,10 +2012,7 @@ class TestSetupModelsAsync:
         mock_warmup_mod = MagicMock()
         mock_warmup_mod.ModelWarmupService.return_value = mock_warmup_service
 
-        with (
-            patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}),
-            patch("elle.cli.setup.wizard.Progress"),
-        ):
+        with patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}):
             result = await wizard._setup_models_async("test-model")
 
         assert result is True
@@ -2029,10 +2029,7 @@ class TestSetupModelsAsync:
         mock_warmup_mod = MagicMock()
         mock_warmup_mod.ModelWarmupService.return_value = mock_warmup_service
 
-        with (
-            patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}),
-            patch("elle.cli.setup.wizard.Progress"),
-        ):
+        with patch.dict("sys.modules", {"elle.rag.model_warmup": mock_warmup_mod}):
             result = await wizard._setup_models_async("test-model")
 
         assert result is False
