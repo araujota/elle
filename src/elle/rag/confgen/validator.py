@@ -128,6 +128,17 @@ class ConfigValidator:
         issues: list[ValidationIssue] = []
         path = Path(target_path)
 
+        # Check for path traversal (before forbidden paths so traversal is always reported)
+        if ".." in target_path:
+            issues.append(
+                ValidationIssue(
+                    severity="error",
+                    message="Path contains traversal sequence (..)",
+                    path=target_path,
+                    suggestion="Use absolute paths",
+                )
+            )
+
         # Check forbidden paths
         resolved = str(path.resolve()) if path.exists() else target_path
         if resolved in FORBIDDEN_PATHS or target_path in FORBIDDEN_PATHS:
@@ -153,17 +164,6 @@ class ConfigValidator:
                     )
                 )
                 break
-
-        # Check for path traversal
-        if ".." in target_path:
-            issues.append(
-                ValidationIssue(
-                    severity="error",
-                    message="Path contains traversal sequence (..)",
-                    path=target_path,
-                    suggestion="Use absolute paths",
-                )
-            )
 
         # Check for absolute path
         if not target_path.startswith("/"):

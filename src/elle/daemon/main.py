@@ -715,11 +715,15 @@ class ElledDaemon:
 
 def setup_logging(level: str = "INFO") -> None:
     """Configure logging for the daemon."""
+    log_level = getattr(logging, level.upper(), logging.INFO)
     logging.basicConfig(
-        level=getattr(logging, level.upper(), logging.INFO),
+        level=log_level,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+    # basicConfig is idempotent; explicitly set the level to ensure it applies
+    # even when the root logger already has handlers from prior calls.
+    logging.getLogger().setLevel(log_level)
 
     logging.getLogger("uvicorn").setLevel(logging.WARNING)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)

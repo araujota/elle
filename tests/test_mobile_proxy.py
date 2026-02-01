@@ -54,6 +54,14 @@ if "aiohttp" not in sys.modules:
     _aiohttp_stub.ClientTimeout = MagicMock
     _aiohttp_stub.ClientSession = MagicMock
     sys.modules["aiohttp"] = _aiohttp_stub
+else:
+    # aiohttp may already be in sys.modules as a MagicMock (from another test
+    # file's stubbing).  In that case ClientError is a MagicMock, not a real
+    # exception class, which breaks ``except aiohttp.ClientError`` and
+    # ``AsyncMock(side_effect=...)``.  Ensure it is always a real exception.
+    _existing = sys.modules["aiohttp"]
+    if not (isinstance(_existing.ClientError, type) and issubclass(_existing.ClientError, BaseException)):
+        _existing.ClientError = _StubClientError
 
 # ---------------------------------------------------------------------------
 # NOW it is safe to import the module under test and companions.

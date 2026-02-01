@@ -365,7 +365,7 @@ class TestDependencyRegistry:
         # Check unregistered dependency
         import asyncio
 
-        result = asyncio.get_event_loop().run_until_complete(registry.check("unknown"))
+        result = asyncio.run(registry.check("unknown"))
         assert result.available is False
         assert "No checker registered" in result.message
 
