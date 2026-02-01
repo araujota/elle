@@ -29,6 +29,7 @@ def _test_config(tmp_path: Path) -> Config:
     return Config(
         api=ApiConfig(enabled=False),
         queues=QueueConfig(raw_queue_size=100, event_queue_size=50),
+        cloud_sync=CloudSyncConfig(enabled=False),
         capability_versioning_enabled=False,
         capability_bootstrap_enabled=False,
         auto_learn_new_packages=False,
