@@ -195,11 +195,11 @@ class GatewayServer:
 
         return True
 
-    def restart(self) -> GatewayStatus:
+    def restart(self) -> GatewayStatus | None:
         """Restart the gateway server.
 
         Returns:
-            Gateway status after restarting.
+            Gateway status after restarting, or None on failure.
         """
         self.stop()
         time.sleep(0.5)

@@ -506,7 +506,7 @@ def compute_code_hmac(code: str) -> str:
     import hashlib
     import hmac
 
-    key = os.environ.get("ELLE_AUTOGEN_KEY", "")
+    key = os.environ.get("ELLE_AUTOGEN_KEY", "")  # nosec B105
     if not key:
         try:
             key = Path("/etc/elle/db.key").read_text().strip()

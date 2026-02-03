@@ -194,6 +194,9 @@ def _mobile_up(args: list[str], session: Session) -> tuple[str, bool]:
         print(f"\n{Colors.DIM}Starting mobile gateway...{Colors.RESET}")
         status = server.start()
 
+        if status is None:
+            return f"{Colors.RED}Failed to start gateway: process exited immediately{Colors.RESET}", False
+
         lines = [
             "",
             f"{Colors.BOLD_GREEN}Mobile Gateway Started{Colors.RESET}",
