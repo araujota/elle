@@ -74,21 +74,38 @@ The daemon captures telemetry. The Agent Loop reasons over it with documentation
 
 ## Quick Start
 
+### Install via APT (recommended)
+
 ```bash
+# Import the repository signing key
+curl -fsSL http://repo.agentelle.org/gpg.key \
+  | sudo gpg --dearmor -o /usr/share/keyrings/elle-archive-keyring.gpg
+
+# Add the ELLE repository
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/elle-archive-keyring.gpg] http://repo.agentelle.org jammy main" \
+  | sudo tee /etc/apt/sources.list.d/elle.list
+
+# Install
+sudo apt update && sudo apt install elle
+
 # Install Ollama and pull the model
 curl -fsSL https://ollama.ai/install.sh | sh
 ollama pull qwen2.5:7b-instruct-q8_0
-
-# Install ELLE (from source)
-git clone https://github.com/araujota/elle.git && cd elle
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
 
 # Launch
 elle
 ```
 
-See the [Installation guide]({{ site.github_wiki }}/Installation) for APT repository setup and full instructions.
+### Install from source
+
+```bash
+git clone https://github.com/araujota/elle.git && cd elle
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+elle
+```
+
+See the [Installation guide]({{ site.github_wiki }}/Installation) for full instructions.
 
 ## Documentation
 

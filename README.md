@@ -28,15 +28,18 @@ ELLE is an AI-powered system administrator that runs entirely on your machine. I
 ### Install via APT (recommended)
 
 ```bash
+# Import the repository signing key
+curl -fsSL http://repo.agentelle.org/gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/elle-archive-keyring.gpg
+
 # Add the ELLE repository
-curl -fsSL https://agentelle.sh/gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/elle-archive-keyring.gpg
-echo "deb [signed-by=/usr/share/keyrings/elle-archive-keyring.gpg] https://agentelle.sh/ stable main" | sudo tee /etc/apt/sources.list.d/elle.list
-sudo apt update
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/elle-archive-keyring.gpg] http://repo.agentelle.org jammy main" \
+  | sudo tee /etc/apt/sources.list.d/elle.list
 
-# Install ELLE and the telemetry daemon
-sudo apt install elle elled-telemetryd
+# Install
+sudo apt update && sudo apt install elle
 
-# Pull the LLM model
+# Install Ollama and pull the model
+curl -fsSL https://ollama.ai/install.sh | sh
 ollama pull qwen2.5:7b-instruct-q8_0
 
 # Launch
