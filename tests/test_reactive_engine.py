@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -200,6 +202,19 @@ class TestRegexMatch:
     def test_invalid_regex_not_found(self):
         assert _regex_match("[invalid", "nope") is False
 
+    def test_long_pattern_falls_back_to_literal(self):
+        """Patterns longer than 200 chars fall back to substring match."""
+        long_pattern = "a" * 201
+        assert _regex_match(long_pattern, "x" + "a" * 201 + "y") is True
+        assert _regex_match(long_pattern, "short") is False
+
+    def test_nested_quantifier_falls_back_to_literal(self):
+        """Patterns with nested quantifiers (ReDoS risk) fall back to literal match."""
+        # (a+)+ is a classic ReDoS pattern
+        redos_pattern = "(a+)+"
+        assert _regex_match(redos_pattern, "text with (a+)+ inside") is True
+        assert _regex_match(redos_pattern, "nothing here") is False
+
 
 # ---------------------------------------------------------------------------
 # _metric_matches_pattern
@@ -230,6 +245,14 @@ class TestMetricMatchesPattern:
     def test_no_wildcard_no_match(self):
         """Exact pattern without wildcard that does not match."""
         assert _metric_matches_pattern("cpu.idle", "cpu.load") is False
+
+    def test_regex_error_falls_back_to_exact(self):
+        """When wildcard conversion produces invalid regex, falls back to exact match."""
+        # Inject a pattern with wildcard that, after escaping, produces bad regex
+        # by patching re.match to raise
+        with patch("elle.reactive.engine.re.match", side_effect=re.error("bad")):
+            assert _metric_matches_pattern("disk.root", "disk.root") is True
+            assert _metric_matches_pattern("disk.root", "disk.other") is False
 
 
 # ---------------------------------------------------------------------------
@@ -312,6 +335,20 @@ class TestEventMatchesTrigger:
         func = _make_func(trigger_event=EventTrigger(severity=None))
         # Severity check is skipped when trigger severity is None
         assert engine._event_matches_trigger(_mock_event(severity="info"), func) is True
+
+    def test_severity_unknown_trigger_value_passes(self):
+        """When trigger severity is not in the known list, ValueError is caught and match passes."""
+        engine = ReactiveEngine()
+        func = _make_func(trigger_event=EventTrigger(severity="warning"))
+        # Patch the trigger's severity to an unknown value after construction
+        object.__setattr__(func.trigger.event, "severity", "unknown_level")
+        assert engine._event_matches_trigger(_mock_event(severity="warning"), func) is True
+
+    def test_severity_unknown_event_value_passes(self):
+        """When event severity is not in the known list, ValueError is caught and match passes."""
+        engine = ReactiveEngine()
+        func = _make_func(trigger_event=EventTrigger(severity="warning"))
+        assert engine._event_matches_trigger(_mock_event(severity="alien_level"), func) is True
 
     def test_match_numeric(self):
         engine = ReactiveEngine()
@@ -475,6 +512,35 @@ class TestCheckRateLimit:
             last_execution=None,
             daily_executions=0,
             daily_reset_date="2000-01-01",
+        )
+        assert engine._check_rate_limit(func) is True
+
+    @patch("elle.reactive.engine.get_rate_limit_state")
+    def test_same_day_below_max_checks_frequency(self, mock_state):
+        """When daily_reset_date is today and count below max, frequency check still applies."""
+        engine = ReactiveEngine()
+        func = _make_func(policy=PolicySpec(max_daily_executions=10, max_frequency="1h"))
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        mock_state.return_value = RateLimitState(
+            function_id=func.id,
+            last_execution=datetime.now(timezone.utc) - timedelta(minutes=5),
+            daily_executions=3,
+            daily_reset_date=today,
+        )
+        # Daily count (3) is below max (10) but frequency (5m < 1h) blocks
+        assert engine._check_rate_limit(func) is False
+
+    @patch("elle.reactive.engine.get_rate_limit_state")
+    def test_same_day_below_max_frequency_passed(self, mock_state):
+        """When daily_reset_date is today, count below max, and frequency passed, returns True."""
+        engine = ReactiveEngine()
+        func = _make_func(policy=PolicySpec(max_daily_executions=10, max_frequency="5m"))
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        mock_state.return_value = RateLimitState(
+            function_id=func.id,
+            last_execution=datetime.now(timezone.utc) - timedelta(hours=1),
+            daily_executions=3,
+            daily_reset_date=today,
         )
         assert engine._check_rate_limit(func) is True
 
@@ -1061,6 +1127,44 @@ class TestExecuteAction:
         assert result.output == "all good"
         assert result.execution_time_ms >= 0
 
+    async def test_high_risk_capability_blocked(self):
+        """Capabilities with risk 'high' or 'critical' are blocked in reactive execution."""
+        executor = MagicMock()
+        cap = MagicMock()
+        cap.input_schema = _StubInput
+        cap.spec = MagicMock()
+        cap.spec.risk = "high"
+        executor.registry.get.return_value = cap
+        engine = ReactiveEngine(executor=executor)
+
+        from elle.reactive.evaluator import ConditionContext
+
+        ctx = ConditionContext(event=None, state={}, system={})
+        action = ActionSpec(capability="dangerous.cap", input={})
+        result = await engine._execute_action(action, ctx)
+
+        assert result.success is False
+        assert "risk" in (result.error or "").lower()
+
+    async def test_critical_risk_capability_blocked(self):
+        """Capabilities with risk 'critical' are also blocked."""
+        executor = MagicMock()
+        cap = MagicMock()
+        cap.input_schema = _StubInput
+        cap.spec = MagicMock()
+        cap.spec.risk = "critical"
+        executor.registry.get.return_value = cap
+        engine = ReactiveEngine(executor=executor)
+
+        from elle.reactive.evaluator import ConditionContext
+
+        ctx = ConditionContext(event=None, state={}, system={})
+        action = ActionSpec(capability="very.dangerous", input={})
+        result = await engine._execute_action(action, ctx)
+
+        assert result.success is False
+        assert "risk" in (result.error or "").lower()
+
     async def test_execution_exception_returns_error(self):
         """When executor.execute raises, an error ActionResult is returned."""
         executor = MagicMock()
@@ -1239,6 +1343,28 @@ class TestProbeState:
 
         assert result["expired"] == "new_val"
 
+    async def test_probe_cache_eviction_at_max_size(self):
+        """When state cache reaches MAX_STATE_CACHE_SIZE, oldest entry is evicted."""
+        from elle.reactive.engine import MAX_STATE_CACHE_SIZE
+
+        engine = ReactiveEngine(executor=MagicMock())
+        # Fill cache to capacity
+        for i in range(MAX_STATE_CACHE_SIZE):
+            engine._state_cache[f"filler:{i}"] = (
+                datetime.now(timezone.utc),
+                {"value": i},
+            )
+        assert len(engine._state_cache) == MAX_STATE_CACHE_SIZE
+
+        func = _make_func(state={"new_key": StateProbe(probe="test.probe", cache_ttl=60)})
+        with patch.object(engine, "_run_probe", return_value="new_val"):
+            result = await engine._probe_state(func)
+
+        assert result["new_key"] == "new_val"
+        # Oldest entry should have been evicted
+        assert len(engine._state_cache) == MAX_STATE_CACHE_SIZE
+        assert "filler:0" not in engine._state_cache
+
 
 # ---------------------------------------------------------------------------
 # _update_rate_limit
@@ -1351,6 +1477,41 @@ class TestExecutorProperty:
     def test_provided(self):
         s = MagicMock()
         assert ReactiveEngine(executor=s).executor is s
+
+
+# ---------------------------------------------------------------------------
+# _run_probe (placeholder)
+# ---------------------------------------------------------------------------
+
+
+class TestRunProbe:
+    async def test_returns_none(self):
+        """The placeholder _run_probe always returns None."""
+        engine = ReactiveEngine(executor=MagicMock())
+        result = await engine._run_probe("any.probe.name")
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# _get_rate_lock eviction
+# ---------------------------------------------------------------------------
+
+
+class TestGetRateLock:
+    def test_evicts_oldest_when_at_capacity(self):
+        """When rate_limit_locks reaches 500, oldest entry is evicted."""
+        engine = ReactiveEngine(executor=MagicMock())
+        # Fill to capacity
+        for i in range(500):
+            engine._rate_limit_locks[f"func-{i}"] = asyncio.Lock()
+        assert len(engine._rate_limit_locks) == 500
+
+        # Adding one more should evict the oldest
+        lock = engine._get_rate_lock("func-new")
+        assert isinstance(lock, asyncio.Lock)
+        assert len(engine._rate_limit_locks) == 500
+        assert "func-0" not in engine._rate_limit_locks
+        assert "func-new" in engine._rate_limit_locks
 
 
 # ---------------------------------------------------------------------------
