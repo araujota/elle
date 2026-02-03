@@ -51,7 +51,7 @@ class GatewayServer:
         self.crypto = MobileCrypto(self.config)
         self.store = MobileStore(self.config)
 
-    def start(self) -> GatewayStatus:
+    def start(self) -> GatewayStatus | None:
         """Start the gateway server.
 
         Returns:

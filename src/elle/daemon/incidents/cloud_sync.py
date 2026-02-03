@@ -241,7 +241,7 @@ class CloudSyncClient:
                     import asyncio
                     import random
 
-                    delay = 0.5 * (2**attempt) + random.uniform(0, 0.5)  # noqa: S311
+                    delay = 0.5 * (2**attempt) + random.uniform(0, 0.5)  # noqa: S311  # nosec B311
                     logger.warning(f"Cloud submit attempt {attempt + 1} failed: {e}, retrying in {delay}s")
                     await asyncio.sleep(delay)
                 else:

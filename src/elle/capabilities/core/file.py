@@ -517,7 +517,7 @@ class FileWriteCapability(BaseCapability[FileWriteInput, FileWriteOutput]):
             except OSError:
                 pass  # File doesn't exist yet or not accessible, safe to proceed
 
-            os.rename(tmp_path, str(path))
+            os.rename(tmp_path, str(path))  # type: ignore[arg-type]  # tmp_path is str here (set to None only on early return)
             tmp_path = None  # Rename succeeded, no orphan to clean
 
             # Set mode if specified

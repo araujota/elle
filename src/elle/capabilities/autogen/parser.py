@@ -58,7 +58,7 @@ def read_man_page(command: str) -> str | None:
             timeout=10,
         )
         if col_result.returncode == 0 and col_result.stdout.strip():
-            return col_result.stdout
+            return str(col_result.stdout)
     except Exception as e:
         logger.debug(f"Failed to read man page for {command}: {e}")
 

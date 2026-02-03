@@ -81,7 +81,7 @@ class MobileCrypto:
         """
         import os
 
-        passphrase = os.environ.get("ELLE_AUTOGEN_KEY", "")
+        passphrase = os.environ.get("ELLE_AUTOGEN_KEY", "")  # nosec B105
         if not passphrase:
             try:
                 passphrase = Path("/etc/elle/db.key").read_text().strip()
@@ -485,7 +485,7 @@ class MobileCrypto:
         import os
 
         key_data = path.read_bytes()
-        passphrase = os.environ.get("ELLE_AUTOGEN_KEY", "")
+        passphrase = os.environ.get("ELLE_AUTOGEN_KEY", "")  # nosec B105
         if not passphrase:
             try:
                 passphrase = Path("/etc/elle/db.key").read_text().strip()

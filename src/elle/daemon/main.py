@@ -262,7 +262,7 @@ class ElledDaemon:
         # Drain event queue before shutdown (H13)
         if self.event_queue:
             try:
-                while not self.event_queue.empty():
+                while not self.event_queue.empty:
                     events = await asyncio.wait_for(self.event_queue.get_batch(max_items=100, timeout=0.5), timeout=1.0)
                     if events:
                         await asyncio.to_thread(insert_events_batch, events)

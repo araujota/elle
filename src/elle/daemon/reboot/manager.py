@@ -445,7 +445,7 @@ class RebootManager:
         # Start rollback timer (can be cancelled by user)
         self._rollback_task = asyncio.create_task(self._delayed_rollback(intent))
 
-        def _on_rollback_done(task: asyncio.Task) -> None:
+        def _on_rollback_done(task: asyncio.Task[None]) -> None:
             if task.cancelled():
                 return
             exc = task.exception()

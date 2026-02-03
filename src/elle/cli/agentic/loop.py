@@ -708,6 +708,7 @@ class AgenticLoop:
                             from elle.cli.agentic.tools import ToolResult
 
                             result = ToolResult(
+                                tool_name=tool_call.name,
                                 success=False,
                                 output="",
                                 error=f"Tool call timed out after {self.tool_call_timeout}s",
