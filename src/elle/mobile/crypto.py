@@ -72,22 +72,19 @@ class MobileCrypto:
     def _get_key_encryption(self) -> serialization.KeySerializationEncryption:
         """Get encryption algorithm for private key serialization.
 
-        Uses a passphrase derived from the ELLE DB key (/etc/elle/db.key or
-        ELLE_AUTOGEN_KEY env var). Falls back to NoEncryption with a warning
-        if no key exists (backward compatibility for dev environments).
+        Uses a passphrase derived from the ELLE secret key (ELLE_SECRET_KEY env
+        var or /etc/elle/db.key on disk). Falls back to NoEncryption with a
+        warning if no key exists (backward compatibility for dev environments).
 
         Returns:
             BestAvailableEncryption with passphrase, or NoEncryption as fallback.
         """
-        import os
+        from elle.storage.config import read_elle_key
 
-        passphrase = os.environ.get("ELLE_AUTOGEN_KEY", "")  # nosec B105
+        passphrase = read_elle_key()
         if not passphrase:
-            try:
-                passphrase = Path("/etc/elle/db.key").read_text().strip()
-            except (OSError, FileNotFoundError):
-                logger.warning("No encryption key available; private keys will not be encrypted at rest")
-                return serialization.NoEncryption()
+            logger.warning("No encryption key available; private keys will not be encrypted at rest")
+            return serialization.NoEncryption()
         return serialization.BestAvailableEncryption(passphrase.encode())
 
     def ensure_certificates(self) -> CertificatePaths:
@@ -482,15 +479,10 @@ class MobileCrypto:
         Tries decrypting with the ELLE passphrase first, then falls back
         to no password for migration of pre-existing unencrypted keys.
         """
-        import os
+        from elle.storage.config import read_elle_key
 
         key_data = path.read_bytes()
-        passphrase = os.environ.get("ELLE_AUTOGEN_KEY", "")  # nosec B105
-        if not passphrase:
-            try:
-                passphrase = Path("/etc/elle/db.key").read_text().strip()
-            except (OSError, FileNotFoundError):
-                passphrase = ""
+        passphrase = read_elle_key()
 
         if passphrase:
             try:

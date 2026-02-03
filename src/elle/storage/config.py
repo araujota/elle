@@ -8,6 +8,30 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
+
+_KEY_ENV_VAR = "ELLE_SECRET_KEY"
+_KEY_ENV_VAR_DEPRECATED = "ELLE_AUTOGEN_KEY"
+
+
+def read_elle_key(key_path: str = "/etc/elle/db.key") -> str:
+    """Read the ELLE encryption key from env var or disk.
+
+    Resolution order:
+    1. ELLE_SECRET_KEY env var (contains key material directly)
+    2. ELLE_AUTOGEN_KEY env var (deprecated alias)
+    3. Read from key_path file on disk
+
+    Returns empty string if unavailable.
+    """
+    value = os.environ.get(_KEY_ENV_VAR) or os.environ.get(_KEY_ENV_VAR_DEPRECATED) or ""
+    if value:
+        return value
+    try:
+        return Path(key_path).read_text().strip()
+    except (OSError, FileNotFoundError):
+        return ""
+
 
 # All schemas managed in the single 'elle' database
 SCHEMAS = (
