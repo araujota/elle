@@ -6,7 +6,7 @@ and organization operations.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -177,7 +177,7 @@ class FileResult(BaseModel):
         description="Whether rollback was needed and applied",
     )
     completed_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When the operation completed",
     )
 

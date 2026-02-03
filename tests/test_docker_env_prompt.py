@@ -92,7 +92,7 @@ class TestSessionRunQuit:
 
     def test_use_saved_values(self):
         mock_store = MagicMock()
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         mock_store.get_saved_values.return_value = [
             SavedEnvVar(
@@ -100,7 +100,7 @@ class TestSessionRunQuit:
                 name="DB_PASSWORD",
                 value="secret",
                 sensitive=True,
-                updated_at=datetime.utcnow(),
+                updated_at=datetime.now(timezone.utc),
             ),
         ]
         session = _make_session(store=mock_store)
@@ -189,14 +189,14 @@ class TestSessionRunQuit:
 
     def test_use_saved_with_missing_required(self):
         mock_store = MagicMock()
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         mock_store.get_saved_values.return_value = [
             SavedEnvVar(
                 image_family="postgres",
                 name="DB_USER",
                 value="admin",
-                updated_at=datetime.utcnow(),
+                updated_at=datetime.now(timezone.utc),
             ),
         ]
         session = _make_session(store=mock_store)

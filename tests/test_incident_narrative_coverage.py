@@ -6,7 +6,7 @@ rule-based generation, keyword extraction, and formatting.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -37,7 +37,7 @@ def _make_link(
     cause_time=None,
     effect_time=None,
 ) -> CausalLink:
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     return CausalLink(
         cause_type="event",
         cause_id="ev-001",
@@ -127,7 +127,7 @@ class TestRuleBasedGeneration:
     @pytest.mark.timeout(10)
     def test_summary_multiple_links(self):
         builder = NarrativeBuilder(use_llm=False)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         links = [
             _make_link(
                 cause_summary="Disk full",
@@ -316,7 +316,7 @@ class TestFormatDuration:
     @pytest.mark.timeout(10)
     def test_with_timestamps(self):
         builder = NarrativeBuilder(use_llm=False)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         chain = _make_chain()
         chain = CausalChain(
             chain_id="c",

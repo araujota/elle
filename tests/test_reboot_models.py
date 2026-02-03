@@ -1,6 +1,6 @@
 """Tests for reboot module Pydantic models."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -80,7 +80,7 @@ class TestPendingVerification:
             step_index=0,
             check_type="command",
             check_command="true",
-            executed_at=datetime.utcnow(),
+            executed_at=datetime.now(timezone.utc),
             passed=True,
         )
         assert v_executed.is_executed is True
@@ -141,7 +141,7 @@ class TestRebootIntent:
 
     def test_create_full_intent(self):
         """Test creating intent with all fields."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         verifications = (
             PendingVerification(
                 step_index=0,
@@ -219,7 +219,7 @@ class TestRebootIntentSummary:
         """Test creating intent summary."""
         summary = RebootIntentSummary(
             id="test-uuid",
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             goal="Test reboot",
             reason="user_requested",
             status="completed",
@@ -253,7 +253,7 @@ class TestRebootStatus:
         """Test status with active intent."""
         active = RebootIntentSummary(
             id="active-uuid",
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             goal="Active reboot",
             reason="kernel_update",
             status="verifying",
@@ -644,11 +644,11 @@ class TestRebootStatusEdgeCases:
         assert status.newest_intent is None
 
     def test_status_with_recent_intents(self):
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         summary1 = RebootIntentSummary(
             id="uuid-1",
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             goal="Goal 1",
             reason="kernel_update",
             status="completed",
@@ -657,7 +657,7 @@ class TestRebootStatusEdgeCases:
         )
         summary2 = RebootIntentSummary(
             id="uuid-2",
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             goal="Goal 2",
             reason="user_requested",
             status="failed",
@@ -710,7 +710,7 @@ class TestPendingVerificationEdgeCases:
             assert v.check_type == ct
 
     def test_verification_with_results(self):
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         v = PendingVerification(
             step_index=0,
@@ -718,7 +718,7 @@ class TestPendingVerificationEdgeCases:
             check_command="uname -r",
             expected_exit_code=0,
             expected_output_contains="6.8",
-            executed_at=datetime.utcnow(),
+            executed_at=datetime.now(timezone.utc),
             exit_code=0,
             stdout="6.8.0-generic",
             stderr="",
@@ -730,14 +730,14 @@ class TestPendingVerificationEdgeCases:
         assert v.stdout == "6.8.0-generic"
 
     def test_verification_with_failed_result(self):
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         v = PendingVerification(
             step_index=0,
             check_type="command",
             check_command="test -f /nonexistent",
             expected_exit_code=0,
-            executed_at=datetime.utcnow(),
+            executed_at=datetime.now(timezone.utc),
             exit_code=1,
             stdout="",
             stderr="file not found",

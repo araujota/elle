@@ -61,6 +61,27 @@ def _run_command(
     )
 
 
+def _run_privileged_command(
+    cmd: list[str],
+    timeout: int = 30,
+) -> subprocess.CompletedProcess[str]:
+    """Run a privileged command through Polkit instead of sudo.
+
+    Args:
+        cmd: Command and arguments (without sudo).
+        timeout: Command timeout in seconds.
+
+    Returns:
+        CompletedProcess with stdout/stderr.
+    """
+    from elle.security.polkit_helper import run_privileged_sync
+
+    result = run_privileged_sync(cmd, timeout=float(timeout))
+    if result.success:
+        return subprocess.CompletedProcess(cmd, 0, stdout=result.output or "", stderr="")
+    return subprocess.CompletedProcess(cmd, 1, stdout="", stderr=result.error or "")
+
+
 def _is_wireguard_available() -> bool:
     """Check if wg-quick is available."""
     try:
@@ -387,8 +408,8 @@ class WireGuardRestartCapability(BaseCapability[WireGuardRestartInput, WireGuard
         try:
             # Bring down if up
             if was_up:
-                result = _run_command(
-                    ["sudo", "wg-quick", "down", input.interface],
+                result = _run_privileged_command(
+                    ["wg-quick", "down", input.interface],
                     timeout=30,
                 )
                 commands_executed.append(f"wg-quick down {input.interface}")
@@ -396,8 +417,8 @@ class WireGuardRestartCapability(BaseCapability[WireGuardRestartInput, WireGuard
                     logger.warning(f"wg-quick down returned: {result.stderr}")
 
             # Bring up
-            result = _run_command(
-                ["sudo", "wg-quick", "up", input.interface],
+            result = _run_privileged_command(
+                ["wg-quick", "up", input.interface],
                 timeout=30,
             )
             commands_executed.append(f"wg-quick up {input.interface}")
@@ -423,8 +444,8 @@ class WireGuardRestartCapability(BaseCapability[WireGuardRestartInput, WireGuard
 
                 while time.time() < deadline:
                     # Check handshake status
-                    wg_result = _run_command(
-                        ["sudo", "wg", "show", input.interface],
+                    wg_result = _run_privileged_command(
+                        ["wg", "show", input.interface],
                         timeout=10,
                     )
 
@@ -543,7 +564,7 @@ class WireGuardRestartCapability(BaseCapability[WireGuardRestartInput, WireGuard
         if not result.output.was_up:
             # Interface was down before, bring it down again
             try:
-                _run_command(["sudo", "wg-quick", "down", input.interface])
+                _run_privileged_command(["wg-quick", "down", input.interface])
                 return RollbackResult(
                     success=True,
                     rolled_back=(input.interface,),
@@ -638,8 +659,8 @@ class WireGuardStatusCapability(BaseCapability[WireGuardStatusInput, WireGuardSt
 
         try:
             # Get WireGuard info
-            result = _run_command(
-                ["sudo", "wg", "show", input.interface],
+            result = _run_privileged_command(
+                ["wg", "show", input.interface],
                 timeout=10,
             )
 
@@ -823,6 +844,7 @@ class NetworkListenersCapability(BaseCapability[NetworkListenersInput, NetworkLi
                 for line in content.strip().split("\n")[1:]:  # Skip header
                     parts = line.split()
                     if len(parts) < 10:
+                        logger.debug(f"Skipping malformed line: {line!r}")
                         continue
 
                     # Parse local address:port
@@ -1261,8 +1283,8 @@ class WireGuardRotateKeysCapability(BaseCapability[WireGuardRotateKeysInput, Wir
             shutil.copy2(backup_path, config_path)
 
             # Restart interface
-            _run_command(["sudo", "wg-quick", "down", input.interface])
-            _run_command(["sudo", "wg-quick", "up", input.interface])
+            _run_privileged_command(["wg-quick", "down", input.interface])
+            _run_privileged_command(["wg-quick", "up", input.interface])
 
             return RollbackResult(
                 success=True,

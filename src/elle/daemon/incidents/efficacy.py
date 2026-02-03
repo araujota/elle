@@ -7,7 +7,7 @@ on THIS machine rather than static weights.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -40,7 +40,7 @@ class DomainEfficacy(BaseModel):
 
     # Metadata
     last_updated: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When this record was last updated",
     )
 
@@ -67,7 +67,7 @@ class EntityEfficacy(BaseModel):
     success_rate: float = Field(ge=0.0, le=1.0, default=0.5)
 
     # Metadata
-    last_updated: datetime = Field(default_factory=datetime.utcnow)
+    last_updated: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class SolutionApproachEfficacy(BaseModel):
@@ -110,7 +110,7 @@ class SolutionApproachEfficacy(BaseModel):
     )
 
     # Metadata
-    last_used: datetime = Field(default_factory=datetime.utcnow)
+    last_used: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class EfficacyStats(BaseModel):
@@ -136,7 +136,7 @@ class EfficacyStats(BaseModel):
     top_approaches: tuple[SolutionApproachEfficacy, ...] = Field(default_factory=tuple)
 
     # Computed at
-    computed_at: datetime = Field(default_factory=datetime.utcnow)
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class EfficacyContext(BaseModel):

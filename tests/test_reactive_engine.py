@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -45,7 +45,7 @@ def _mock_event(**overrides: Any) -> MagicMock:
     """Create a mock TelemetryEvent."""
     defaults: dict[str, Any] = {
         "event_id": "abc123",
-        "ts": datetime.utcnow(),
+        "ts": datetime.now(timezone.utc),
         "source": "journal",
         "severity": "warning",
         "category": "disk",
@@ -77,7 +77,7 @@ def _mock_forecast(**overrides: Any) -> MagicMock:
         "urgency": "prepare",
         "confidence": 0.8,
         "rate_of_change": 0.5,
-        "computed_at": datetime.utcnow(),
+        "computed_at": datetime.now(timezone.utc),
     }
     defaults.update(overrides)
     f = MagicMock()
@@ -430,7 +430,7 @@ class TestCheckRateLimit:
     def test_daily_limit_exceeded(self, mock_state):
         engine = ReactiveEngine()
         func = _make_func(policy=PolicySpec(max_daily_executions=5))
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         mock_state.return_value = RateLimitState(function_id=func.id, daily_executions=5, daily_reset_date=today)
         assert engine._check_rate_limit(func) is False
 
@@ -447,7 +447,7 @@ class TestCheckRateLimit:
         func = _make_func(policy=PolicySpec(max_frequency="1h"))
         mock_state.return_value = RateLimitState(
             function_id=func.id,
-            last_execution=datetime.utcnow() - timedelta(minutes=10),
+            last_execution=datetime.now(timezone.utc) - timedelta(minutes=10),
             daily_executions=0,
             daily_reset_date="2000-01-01",
         )
@@ -459,7 +459,7 @@ class TestCheckRateLimit:
         func = _make_func(policy=PolicySpec(max_frequency="5m"))
         mock_state.return_value = RateLimitState(
             function_id=func.id,
-            last_execution=datetime.utcnow() - timedelta(hours=1),
+            last_execution=datetime.now(timezone.utc) - timedelta(hours=1),
             daily_executions=0,
             daily_reset_date="2000-01-01",
         )
@@ -491,39 +491,39 @@ class TestCheckAllowedHours:
 
     @patch("elle.reactive.engine.datetime")
     def test_within(self, mock_dt):
-        mock_dt.utcnow.return_value = datetime(2024, 1, 1, 10, 0, 0)
+        mock_dt.now.return_value = datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
         engine = ReactiveEngine()
         assert engine._check_allowed_hours(PolicySpec(allowed_hours=(9, 17))) is True
 
     @patch("elle.reactive.engine.datetime")
     def test_outside(self, mock_dt):
-        mock_dt.utcnow.return_value = datetime(2024, 1, 1, 20, 0, 0)
+        mock_dt.now.return_value = datetime(2024, 1, 1, 20, 0, 0, tzinfo=timezone.utc)
         engine = ReactiveEngine()
         assert engine._check_allowed_hours(PolicySpec(allowed_hours=(9, 17))) is False
 
     @patch("elle.reactive.engine.datetime")
     def test_midnight_wrap_inside(self, mock_dt):
-        mock_dt.utcnow.return_value = datetime(2024, 1, 1, 23, 0, 0)
+        mock_dt.now.return_value = datetime(2024, 1, 1, 23, 0, 0, tzinfo=timezone.utc)
         engine = ReactiveEngine()
         assert engine._check_allowed_hours(PolicySpec(allowed_hours=(22, 6))) is True
 
     @patch("elle.reactive.engine.datetime")
     def test_midnight_wrap_outside(self, mock_dt):
-        mock_dt.utcnow.return_value = datetime(2024, 1, 1, 12, 0, 0)
+        mock_dt.now.return_value = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
         engine = ReactiveEngine()
         assert engine._check_allowed_hours(PolicySpec(allowed_hours=(22, 6))) is False
 
     @patch("elle.reactive.engine.datetime")
     def test_at_start_hour_boundary(self, mock_dt):
         """Current hour exactly at start_hour is within allowed hours."""
-        mock_dt.utcnow.return_value = datetime(2024, 1, 1, 9, 0, 0)
+        mock_dt.now.return_value = datetime(2024, 1, 1, 9, 0, 0, tzinfo=timezone.utc)
         engine = ReactiveEngine()
         assert engine._check_allowed_hours(PolicySpec(allowed_hours=(9, 17))) is True
 
     @patch("elle.reactive.engine.datetime")
     def test_at_end_hour_boundary(self, mock_dt):
         """Current hour exactly at end_hour is outside allowed hours."""
-        mock_dt.utcnow.return_value = datetime(2024, 1, 1, 17, 0, 0)
+        mock_dt.now.return_value = datetime(2024, 1, 1, 17, 0, 0, tzinfo=timezone.utc)
         engine = ReactiveEngine()
         assert engine._check_allowed_hours(PolicySpec(allowed_hours=(9, 17))) is False
 
@@ -560,7 +560,7 @@ class TestProcessEvent:
         expected_record = ExecutionRecord(
             function_id=func.id,
             function_name=func.name,
-            triggered_at=datetime.utcnow(),
+            triggered_at=datetime.now(timezone.utc),
             condition_result=True,
             success=True,
         )
@@ -624,7 +624,7 @@ class TestProcessForecast:
         expected_record = ExecutionRecord(
             function_id=func.id,
             function_name=func.name,
-            triggered_at=datetime.utcnow(),
+            triggered_at=datetime.now(timezone.utc),
             condition_result=True,
             success=True,
         )
@@ -647,7 +647,7 @@ class TestProcessScheduled:
         expected = ExecutionRecord(
             function_id=func.id,
             function_name=func.name,
-            triggered_at=datetime.utcnow(),
+            triggered_at=datetime.now(timezone.utc),
             condition_result=True,
             success=True,
         )
@@ -666,7 +666,7 @@ class TestProcessManual:
         expected = ExecutionRecord(
             function_id=func.id,
             function_name=func.name,
-            triggered_at=datetime.utcnow(),
+            triggered_at=datetime.now(timezone.utc),
             condition_result=True,
             success=True,
         )
@@ -886,7 +886,7 @@ class TestProcessFunctionGating:
         """When rate-limited, _process_function returns None."""
         engine = ReactiveEngine(executor=MagicMock())
         func = _make_func(policy=PolicySpec(max_daily_executions=1))
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         mock_state.return_value = RateLimitState(function_id=func.id, daily_executions=1, daily_reset_date=today)
         result = await engine._process_function(func, event=_mock_event())
         assert result is None
@@ -902,7 +902,7 @@ class TestProcessFunctionGating:
 
         # Patch datetime to be outside allowed hours
         with patch("elle.reactive.engine.datetime") as mock_dt:
-            mock_dt.utcnow.return_value = datetime(2024, 1, 1, 12, 0, 0)
+            mock_dt.now.return_value = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
             mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
             result = await engine._process_function(func, event=_mock_event())
 
@@ -1213,7 +1213,7 @@ class TestProbeState:
 
         # Pre-populate the cache
         cache_key = f"{func.id}:cached"
-        engine._state_cache[cache_key] = (datetime.utcnow(), {"value": "cached_val"})
+        engine._state_cache[cache_key] = (datetime.now(timezone.utc), {"value": "cached_val"})
 
         with patch.object(engine, "_run_probe") as mock_probe:
             result = await engine._probe_state(func)
@@ -1230,7 +1230,7 @@ class TestProbeState:
         # Pre-populate with an expired cache entry
         cache_key = f"{func.id}:expired"
         engine._state_cache[cache_key] = (
-            datetime.utcnow() - timedelta(seconds=10),
+            datetime.now(timezone.utc) - timedelta(seconds=10),
             {"value": "old_val"},
         )
 
@@ -1252,7 +1252,7 @@ class TestUpdateRateLimit:
         """On the same day, daily_executions is incremented by 1."""
         engine = ReactiveEngine()
         func = _make_func()
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         mock_get.return_value = RateLimitState(function_id=func.id, daily_executions=3, daily_reset_date=today)
 
         engine._update_rate_limit(func)
@@ -1426,7 +1426,7 @@ class TestProcessForecastFunction:
         expected = ExecutionRecord(
             function_id=func.id,
             function_name=func.name,
-            triggered_at=datetime.utcnow(),
+            triggered_at=datetime.now(timezone.utc),
             condition_result=True,
             success=True,
         )

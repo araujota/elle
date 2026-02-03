@@ -8,10 +8,11 @@ Storage backend: PostgreSQL via psycopg (schema ``reactive``).
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import psycopg
+from psycopg import sql
 
 from elle.common.pydantic_compat import safe_model_dump
 from elle.reactive.models import (
@@ -123,7 +124,7 @@ def update_function(
     def _run(c: psycopg.Connection) -> ReactiveFunction | None:
         # Build update statement dynamically
         updates = ["updated_at = %s"]
-        values: list[Any] = [serialize_datetime(datetime.utcnow())]
+        values: list[Any] = [serialize_datetime(datetime.now(timezone.utc))]
 
         if name is not None:
             updates.append("name = %s")
@@ -156,10 +157,9 @@ def update_function(
         values.append(function_id)
 
         cursor = c.cursor()
-        cursor.execute(
-            f"UPDATE reactive_functions SET {', '.join(updates)} WHERE id = %s",  # nosec B608
-            values,
-        )
+        set_clause = sql.SQL(", ").join(sql.SQL(u) for u in updates)
+        query = sql.SQL("UPDATE reactive_functions SET {} WHERE id = %s").format(set_clause)
+        cursor.execute(query, values)
 
         if cursor.rowcount == 0:
             return None
@@ -767,7 +767,7 @@ def update_rate_limit_state(
 
     def _run(c: psycopg.Connection) -> None:
         cursor = c.cursor()
-        now = serialize_datetime(datetime.utcnow())
+        now = serialize_datetime(datetime.now(timezone.utc))
 
         # Upsert each state key
         state_items = [
@@ -819,7 +819,7 @@ def set_function_state(
             ON CONFLICT (function_id, key) DO UPDATE
             SET value_json = EXCLUDED.value_json, updated_at = EXCLUDED.updated_at
             """,
-            (function_id, key, json_dumps(value), serialize_datetime(datetime.utcnow())),
+            (function_id, key, json_dumps(value), serialize_datetime(datetime.now(timezone.utc))),
         )
 
     if conn is not None:

@@ -45,7 +45,7 @@ def _mock_record(success: bool = True, error: str | None = None) -> ExecutionRec
     return ExecutionRecord(
         function_id="fid",
         function_name="test",
-        triggered_at=datetime.utcnow(),
+        triggered_at=datetime.now(timezone.utc),
         condition_result=True,
         success=success,
         error=error,

@@ -106,7 +106,7 @@ def write_token_file(token: str, path: Path | None = None) -> Path:
     finally:
         os.close(fd)
 
-    logger.info(f"Session token written to {path}")
+    logger.debug(f"Session token written to {path}")
     return path
 
 

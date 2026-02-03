@@ -7,12 +7,15 @@ overrides.
 
 from __future__ import annotations
 
+import logging
 import os
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
+
+logger = logging.getLogger(__name__)
 
 # Try to import tomllib (Python 3.11+) or fall back to toml
 try:
@@ -80,7 +83,8 @@ def _load_toml(path: Path) -> dict[str, Any]:
 
             result = toml.load(str(path))
         return result
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to parse config %s: %s", path, e)
         return {}
 
 

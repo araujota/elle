@@ -14,8 +14,9 @@ Metrics include:
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -155,7 +156,7 @@ class ObservabilityMetrics(BaseModel):
 
     # Collection metadata
     collected_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When these metrics were collected",
     )
 
@@ -179,7 +180,7 @@ async def collect_observability_metrics() -> ObservabilityMetrics:
     Returns:
         ObservabilityMetrics snapshot.
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     # Initialize with defaults
     metrics_data: dict[str, Any] = {
@@ -240,40 +241,34 @@ async def collect_observability_metrics() -> ObservabilityMetrics:
 
 async def _get_incident_statistics() -> dict[str, Any]:
     """Get incident-related statistics."""
-    stats: dict[str, Any] = {
-        "total_incidents": 0,
-        "open_incidents": 0,
-        "incidents_by_domain": {},
-        "incidents_by_outcome": {},
-        "mttr_overall_sec": None,
-        "mttr_by_domain": {},
-    }
 
-    try:
+    def _query() -> dict[str, Any]:
+        stats: dict[str, Any] = {
+            "total_incidents": 0,
+            "open_incidents": 0,
+            "incidents_by_domain": {},
+            "incidents_by_outcome": {},
+            "mttr_overall_sec": None,
+            "mttr_by_domain": {},
+        }
         from elle.storage.engine import get_conn
 
         with get_conn(schema="incidents") as conn:
             cursor = conn.cursor()
-
-            # Total incidents
             cursor.execute("SELECT COUNT(*) AS cnt FROM incidents")
             total_row = cursor.fetchone()
             stats["total_incidents"] = total_row["cnt"] if total_row else 0
 
-            # Open incidents
             cursor.execute("SELECT COUNT(*) AS cnt FROM incidents WHERE status = 'open'")
             open_row = cursor.fetchone()
             stats["open_incidents"] = open_row["cnt"] if open_row else 0
 
-            # By domain
             cursor.execute("SELECT domain, COUNT(*) AS cnt FROM incidents GROUP BY domain")
             stats["incidents_by_domain"] = {row["domain"]: row["cnt"] for row in cursor.fetchall()}
 
-            # By outcome
             cursor.execute("SELECT outcome, COUNT(*) AS cnt FROM incidents GROUP BY outcome")
             stats["incidents_by_outcome"] = {row["outcome"]: row["cnt"] for row in cursor.fetchall()}
 
-            # MTTR overall (for resolved incidents with time_to_resolve_sec)
             cursor.execute(
                 "SELECT AVG(time_to_resolve_sec) AS avg_ttr FROM incidents "
                 "WHERE status = 'resolved' AND time_to_resolve_sec IS NOT NULL"
@@ -282,7 +277,6 @@ async def _get_incident_statistics() -> dict[str, Any]:
             if row and row["avg_ttr"]:
                 stats["mttr_overall_sec"] = float(row["avg_ttr"])
 
-            # MTTR by domain
             cursor.execute(
                 "SELECT domain, AVG(time_to_resolve_sec) AS avg_ttr FROM incidents "
                 "WHERE status = 'resolved' AND time_to_resolve_sec IS NOT NULL "
@@ -291,82 +285,85 @@ async def _get_incident_statistics() -> dict[str, Any]:
             stats["mttr_by_domain"] = {
                 row["domain"]: float(row["avg_ttr"]) for row in cursor.fetchall() if row["avg_ttr"]
             }
+        return stats
 
+    try:
+        return await asyncio.to_thread(_query)
     except Exception as e:
         logger.debug(f"Incident stats error: {e}")
-
-    return stats
+        return {
+            "total_incidents": 0,
+            "open_incidents": 0,
+            "incidents_by_domain": {},
+            "incidents_by_outcome": {},
+            "mttr_overall_sec": None,
+            "mttr_by_domain": {},
+        }
 
 
 async def _get_event_statistics() -> dict[str, Any]:
     """Get event-related statistics."""
-    stats: dict[str, Any] = {
-        "total_events_1h": 0,
-        "total_events_24h": 0,
-        "events_by_severity": {},
-        "events_by_source": {},
-    }
 
-    try:
+    def _query() -> dict[str, Any]:
+        stats: dict[str, Any] = {
+            "total_events_1h": 0,
+            "total_events_24h": 0,
+            "events_by_severity": {},
+            "events_by_source": {},
+        }
         from elle.storage.engine import get_conn
 
         with get_conn(schema="telemetry") as conn:
             cursor = conn.cursor()
-
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             hour_ago = (now - timedelta(hours=1)).isoformat()
             day_ago = (now - timedelta(hours=24)).isoformat()
 
-            # Events in last hour
-            cursor.execute(
-                "SELECT COUNT(*) AS cnt FROM events WHERE ts >= %s",
-                (hour_ago,),
-            )
+            cursor.execute("SELECT COUNT(*) AS cnt FROM events WHERE ts >= %s", (hour_ago,))
             row = cursor.fetchone()
             stats["total_events_1h"] = row["cnt"] if row else 0
 
-            # Events in last 24h
-            cursor.execute(
-                "SELECT COUNT(*) AS cnt FROM events WHERE ts >= %s",
-                (day_ago,),
-            )
+            cursor.execute("SELECT COUNT(*) AS cnt FROM events WHERE ts >= %s", (day_ago,))
             row = cursor.fetchone()
             stats["total_events_24h"] = row["cnt"] if row else 0
 
-            # By severity (last 24h)
             cursor.execute(
                 "SELECT severity, COUNT(*) AS cnt FROM events WHERE ts >= %s GROUP BY severity",
                 (day_ago,),
             )
             stats["events_by_severity"] = {row["severity"]: row["cnt"] for row in cursor.fetchall()}
 
-            # By source (last 24h)
             cursor.execute(
                 "SELECT source, COUNT(*) AS cnt FROM events WHERE ts >= %s GROUP BY source",
                 (day_ago,),
             )
             stats["events_by_source"] = {row["source"]: row["cnt"] for row in cursor.fetchall()}
+        return stats
 
+    try:
+        return await asyncio.to_thread(_query)
     except Exception as e:
         logger.debug(f"Event stats error: {e}")
-
-    return stats
+        return {
+            "total_events_1h": 0,
+            "total_events_24h": 0,
+            "events_by_severity": {},
+            "events_by_source": {},
+        }
 
 
 async def _get_efficacy_statistics() -> dict[str, Any]:
     """Get capability efficacy statistics."""
-    stats: dict[str, Any] = {
-        "capability_success_rates": {},
-        "capability_executions_1h": 0,
-    }
 
-    try:
+    def _query() -> dict[str, Any]:
+        stats: dict[str, Any] = {
+            "capability_success_rates": {},
+            "capability_executions_1h": 0,
+        }
         from elle.storage.engine import get_conn
 
         with get_conn(schema="incidents") as conn:
             cursor = conn.cursor()
-
-            # Success rates from solution_approach_efficacy
             cursor.execute(
                 "SELECT approach_signature, success_rate FROM solution_approach_efficacy WHERE total_uses > 0"
             )
@@ -374,36 +371,35 @@ async def _get_efficacy_statistics() -> dict[str, Any]:
                 row["approach_signature"]: float(row["success_rate"]) for row in cursor.fetchall()
             }
 
-            # Recent executions (from incident_actions in last hour)
-            hour_ago = (datetime.utcnow() - timedelta(hours=1)).isoformat()
+            hour_ago = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
             cursor.execute(
                 "SELECT COUNT(*) AS cnt FROM incident_actions WHERE created_at >= %s AND kind = 'capability'",
                 (hour_ago,),
             )
             row = cursor.fetchone()
             stats["capability_executions_1h"] = row["cnt"] if row else 0
+        return stats
 
+    try:
+        return await asyncio.to_thread(_query)
     except Exception as e:
         logger.debug(f"Efficacy stats error: {e}")
-
-    return stats
+        return {"capability_success_rates": {}, "capability_executions_1h": 0}
 
 
 async def _get_forecast_statistics() -> dict[str, Any]:
     """Get forecast-related statistics."""
-    stats: dict[str, Any] = {
-        "active_warnings": 0,
-        "active_criticals": 0,
-        "forecasts_by_metric": {},
-    }
 
-    try:
+    def _query() -> dict[str, Any]:
+        stats: dict[str, Any] = {
+            "active_warnings": 0,
+            "active_criticals": 0,
+            "forecasts_by_metric": {},
+        }
         from elle.storage.engine import get_conn
 
         with get_conn(schema="incidents") as conn:
             cursor = conn.cursor()
-
-            # Count forecast incidents by urgency (open only)
             cursor.execute(
                 "SELECT COUNT(*) AS cnt FROM incidents WHERE forecast_urgency = 'prepare' AND status = 'open'"
             )
@@ -415,11 +411,13 @@ async def _get_forecast_statistics() -> dict[str, Any]:
             )
             row = cursor.fetchone()
             stats["active_criticals"] = row["cnt"] if row else 0
+        return stats
 
+    try:
+        return await asyncio.to_thread(_query)
     except Exception as e:
         logger.debug(f"Forecast stats error: {e}")
-
-    return stats
+        return {"active_warnings": 0, "active_criticals": 0, "forecasts_by_metric": {}}
 
 
 async def _get_reactive_statistics() -> dict[str, Any]:
@@ -434,7 +432,7 @@ async def _get_reactive_statistics() -> dict[str, Any]:
 
         stats["reactive_functions_enabled"] = get_function_count(enabled_only=True)
 
-        hour_ago = datetime.utcnow() - timedelta(hours=1)
+        hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
         stats["reactive_executions_1h"] = get_execution_count(since=hour_ago)
 
     except Exception as e:
@@ -482,15 +480,22 @@ def _get_cloud_queue_stats() -> dict[str, Any]:
 
 
 async def _get_system_health() -> dict[str, Any]:
-    """Get system health indicators."""
+    """Get system health indicators from the running daemon."""
     stats: dict[str, Any] = {
-        "telemetryd_healthy": True,
+        "telemetryd_healthy": False,
         "daemon_uptime_sec": 0.0,
-        "last_event_age_sec": 0.0,
+        "last_event_age_sec": -1.0,
     }
 
-    # These would be populated from the actual daemon state
-    # For now, return defaults
+    try:
+        from elle.daemon.api.routes import get_daemon
+
+        daemon = get_daemon()
+        status = daemon.get_status()
+        stats["telemetryd_healthy"] = status.healthy
+        stats["daemon_uptime_sec"] = float(status.uptime_sec)
+    except Exception as e:
+        logger.debug(f"Could not query daemon for health: {e}")
 
     return stats
 

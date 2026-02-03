@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TextIO
 
@@ -90,7 +91,7 @@ class PolicyAuditLogger:
             justification: User-provided justification (if applicable).
         """
         entry = PolicyAuditEntry(
-            timestamp=datetime.now(),
+            timestamp=datetime.now(timezone.utc),
             request=request,
             result=result,
             user_confirmed=user_confirmed,
@@ -144,8 +145,13 @@ class PolicyAuditLogger:
             # Ensure directory exists
             self._audit_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Open file in append mode
-            self._file = open(self._audit_path, "a", encoding="utf-8")
+            # Open file in append mode with restricted permissions (0o600)
+            fd = os.open(
+                str(self._audit_path),
+                os.O_WRONLY | os.O_CREAT | os.O_APPEND,
+                0o600,
+            )
+            self._file = os.fdopen(fd, "a", encoding="utf-8")
 
             # Count existing entries
             if self._audit_path.exists():
@@ -180,16 +186,14 @@ class PolicyAuditLogger:
             keep_count = len(lines) // 2
             kept_lines = lines[-keep_count:]
 
-            # Backup old file
-            backup_path = self._audit_path.with_suffix(".jsonl.bak")
-            self._audit_path.rename(backup_path)
+            # Archive old file with timestamp suffix instead of deleting
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            archive_path = self._audit_path.with_suffix(f".{timestamp}.jsonl")
+            self._audit_path.rename(archive_path)
 
             # Write kept entries
             with open(self._audit_path, "w", encoding="utf-8") as f:
                 f.writelines(kept_lines)
-
-            # Remove backup
-            backup_path.unlink()
 
             self._entry_count = len(kept_lines)
             logger.info(f"Rotated audit log, kept {self._entry_count} entries")
@@ -202,6 +206,16 @@ class PolicyAuditLogger:
         if self._file is not None:
             self._file.close()
             self._file = None
+
+    def __del__(self) -> None:
+        """Safety net: close file handle if not explicitly closed."""
+        self.close()
+
+    def __enter__(self) -> PolicyAuditLogger:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
 
     def read_entries(
         self,

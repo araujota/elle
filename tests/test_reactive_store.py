@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import pytest
@@ -316,7 +316,7 @@ class TestExecutionHistory:
         rec = ExecutionRecord(
             function_id=func.id,
             function_name=func.name,
-            triggered_at=datetime.utcnow(),
+            triggered_at=datetime.now(timezone.utc),
             condition_result=True,
             condition_explanation="all good",
             actions_executed=("docker.prune",),
@@ -336,7 +336,7 @@ class TestExecutionHistory:
             rec = ExecutionRecord(
                 function_id=func.id,
                 function_name=func.name,
-                triggered_at=datetime.utcnow(),
+                triggered_at=datetime.now(timezone.utc),
                 condition_result=True,
                 success=(i % 2 == 0),
             )
@@ -351,7 +351,7 @@ class TestExecutionHistory:
             rec = ExecutionRecord(
                 function_id=func.id,
                 function_name=func.name,
-                triggered_at=datetime.utcnow(),
+                triggered_at=datetime.now(timezone.utc),
                 condition_result=True,
                 success=success,
             )
@@ -375,7 +375,7 @@ class TestRateLimitState:
     def test_update_and_read(self, conn):
         func = _make_func()
         create_function(func, conn=conn)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         update_rate_limit_state(
             func.id, last_execution=now, daily_executions=3, daily_reset_date="2024-01-15", conn=conn
         )
@@ -431,7 +431,7 @@ class TestStatistics:
                 ExecutionRecord(
                     function_id=func.id,
                     function_name=func.name,
-                    triggered_at=datetime.utcnow(),
+                    triggered_at=datetime.now(timezone.utc),
                     condition_result=True,
                     success=True,
                 ),
@@ -447,7 +447,7 @@ class TestStatistics:
             ExecutionRecord(
                 function_id=func.id,
                 function_name=func.name,
-                triggered_at=datetime.utcnow(),
+                triggered_at=datetime.now(timezone.utc),
                 condition_result=True,
                 success=True,
             ),

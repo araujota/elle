@@ -38,6 +38,9 @@ class TelemetryQueue(Generic[T]):
         self._maxsize = maxsize
         self._dropped = 0
         self._processed = 0
+        self._total_enqueued = 0
+        self._drop_events: list[float] = []  # timestamps of recent drops
+        self._peak_size = 0
         self._lock = asyncio.Lock()
 
     @property
@@ -86,16 +89,25 @@ class TelemetryQueue(Generic[T]):
         Returns:
             True if item was queued, False if dropped.
         """
+        import time
+
         async with self._lock:
             try:
                 self._queue.put_nowait(item)
+                self._total_enqueued += 1
+                self._peak_size = max(self._peak_size, self._queue.qsize())
                 return True
             except asyncio.QueueFull:
                 # Drop oldest item to make room
                 try:
                     self._queue.get_nowait()
                     self._dropped += 1
+                    self._drop_events.append(time.time())
+                    # Keep only last 1000 drop timestamps
+                    if len(self._drop_events) > 1000:
+                        self._drop_events = self._drop_events[-1000:]
                     self._queue.put_nowait(item)
+                    self._total_enqueued += 1
 
                     if self._dropped % 100 == 0:
                         logger.warning(f"Queue '{self._name}' backpressure: {self._dropped} items dropped")
@@ -195,9 +207,13 @@ class TelemetryQueue(Generic[T]):
         """Mark a task as done (for join())."""
         self._queue.task_done()
 
-    async def join(self) -> None:
-        """Wait for all items to be processed."""
-        await self._queue.join()
+    async def join(self, timeout: float = 30.0) -> None:
+        """Wait for all items to be processed.
+
+        Args:
+            timeout: Maximum seconds to wait before raising TimeoutError.
+        """
+        await asyncio.wait_for(self._queue.join(), timeout=timeout)
 
     def clear(self) -> int:
         """Clear all items from the queue.
@@ -228,10 +244,38 @@ class TelemetryQueue(Generic[T]):
             processed=self._processed,
         )
 
+    def get_metrics(self) -> dict[str, Any]:
+        """Get detailed queue overflow metrics.
+
+        Returns:
+            Dict with drop count, current size, peak size,
+            total enqueued, and recent drop rate.
+        """
+        import time
+
+        now = time.time()
+        # Calculate drops in the last 60 seconds
+        recent_drops = sum(1 for t in self._drop_events if now - t < 60)
+
+        return {
+            "name": self._name,
+            "current_size": self.size,
+            "max_size": self._maxsize,
+            "peak_size": self._peak_size,
+            "total_dropped": self._dropped,
+            "total_processed": self._processed,
+            "total_enqueued": self._total_enqueued,
+            "recent_drops_per_minute": recent_drops,
+            "utilization_pct": (self.size / self._maxsize * 100) if self._maxsize > 0 else 0,
+        }
+
     def reset_stats(self) -> None:
         """Reset dropped/processed counters."""
         self._dropped = 0
         self._processed = 0
+        self._total_enqueued = 0
+        self._drop_events.clear()
+        self._peak_size = 0
 
 
 class PriorityQueue(Generic[T]):

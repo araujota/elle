@@ -929,12 +929,12 @@ async def _run_full_system_learn(
         Dict with statistics.
     """
     import asyncio
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     from elle.capabilities.autogen import get_store
 
     store = get_store()
-    start_time = datetime.utcnow()
+    start_time = datetime.now(timezone.utc)
 
     # Get existing packages to skip
     existing_packages: set[str] = set()
@@ -990,7 +990,7 @@ async def _run_full_system_learn(
         if attempted % 10 == 0:
             logger.info(f"Learn --all progress: {attempted}/{len(to_learn)} (+{succeeded} success, +{failed} fail)")
 
-    end_time = datetime.utcnow()
+    end_time = datetime.now(timezone.utc)
     duration = (end_time - start_time).total_seconds()
 
     return {

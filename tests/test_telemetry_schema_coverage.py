@@ -172,10 +172,10 @@ class TestGetTableStats:
         conn = MagicMock()
         call_count = 0
 
-        def side_effect(sql, *args):
+        def side_effect(sql_obj, *args):
             nonlocal call_count
             call_count += 1
-            if "events" in sql:
+            if "events" in str(sql_obj):
                 result = MagicMock()
                 result.fetchone.return_value = {"cnt": 100}
                 return result

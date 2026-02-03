@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -200,7 +200,7 @@ class TestPoll:
         q = _make_queue()
         w = WireguardWatcher(q, _make_shutdown())
         # First poll: peer is online
-        now_ts = int(datetime.utcnow().timestamp())
+        now_ts = int(datetime.now(timezone.utc).timestamp())
         stats = {
             "wg0": {
                 "peers": [
@@ -243,7 +243,7 @@ class TestPoll:
     async def test_poll_peer_reconnected(self):
         q = _make_queue()
         w = WireguardWatcher(q, _make_shutdown())
-        now_ts = int(datetime.utcnow().timestamp())
+        now_ts = int(datetime.now(timezone.utc).timestamp())
 
         # Set peer as offline
         w._peer_states["ABCDEFGH12345678"] = False
@@ -272,7 +272,7 @@ class TestPoll:
     async def test_poll_high_transfer(self):
         q = _make_queue()
         w = WireguardWatcher(q, _make_shutdown())
-        now_ts = int(datetime.utcnow().timestamp())
+        now_ts = int(datetime.now(timezone.utc).timestamp())
 
         # Set previous stats
         w._previous_stats["wg0"] = {
@@ -345,7 +345,7 @@ class TestWatchWireguard:
 
 class TestGetWireguardSummary:
     def test_success(self):
-        now_ts = int(datetime.utcnow().timestamp())
+        now_ts = int(datetime.now(timezone.utc).timestamp())
         dump = (
             f"wg0\tPRIV\tPUB\t51820\toff\n"
             f"wg0\tPEER1\t(none)\t1.2.3.4:51820\t10.0.0.0/24\t{now_ts - 10}\t1000\t2000\toff\n"
@@ -380,7 +380,7 @@ class TestGetWireguardSummary:
         assert summary is None
 
     def test_stale_peer(self):
-        old_ts = int(datetime.utcnow().timestamp()) - 600
+        old_ts = int(datetime.now(timezone.utc).timestamp()) - 600
         dump = (
             f"wg0\tPRIV\tPUB\t51820\toff\nwg0\tPEER1\t(none)\t1.2.3.4:51820\t10.0.0.0/24\t{old_ts}\t1000\t2000\toff\n"
         )

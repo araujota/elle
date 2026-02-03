@@ -37,7 +37,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -90,7 +90,7 @@ class ActionRecord(BaseModel):
     output: str = Field(default="")
     error: str | None = Field(default=None)
     duration_ms: int = Field(default=0)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class IncidentOutcome(BaseModel):
@@ -383,7 +383,7 @@ class IncidentContext:
 
     async def _enter(self) -> None:
         """Enter the context - create incident if needed."""
-        self._started_at = datetime.utcnow()
+        self._started_at = datetime.now(timezone.utc)
 
         if not self.is_recording:
             # Generate a tracking ID even if not recording

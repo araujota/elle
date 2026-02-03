@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
@@ -999,7 +999,7 @@ class PlannerService:
             success=result.success,
             privileged=step.requires_privilege,
             duration_ms=duration_ms,
-            executed_at=datetime.utcnow(),
+            executed_at=datetime.now(timezone.utc),
         )
 
     def _execute_capability_step(
@@ -1076,7 +1076,7 @@ class PlannerService:
                 success=cap_result.success,
                 privileged=step.requires_privilege,
                 duration_ms=duration_ms,
-                executed_at=datetime.utcnow(),
+                executed_at=datetime.now(timezone.utc),
             )
 
         except Exception as e:
@@ -1092,7 +1092,7 @@ class PlannerService:
                 success=False,
                 privileged=step.requires_privilege,
                 duration_ms=duration_ms,
-                executed_at=datetime.utcnow(),
+                executed_at=datetime.now(timezone.utc),
             )
 
     def _execute_rollback_step(
@@ -1131,7 +1131,7 @@ class PlannerService:
             success=result.success,
             privileged=step.requires_privilege,
             duration_ms=duration_ms,
-            executed_at=datetime.utcnow(),
+            executed_at=datetime.now(timezone.utc),
         )
 
     def _run_checks(

@@ -198,7 +198,7 @@ class TestDropAllTables:
 
         # Should drop: function_state, execution_history, reactive_functions, _meta
         assert conn.execute.call_count == 4
-        dropped = [conn.execute.call_args_list[i][0][0] for i in range(4)]
+        dropped = [str(conn.execute.call_args_list[i][0][0]) for i in range(4)]
         assert any("function_state" in d for d in dropped)
         assert any("execution_history" in d for d in dropped)
         assert any("reactive_functions" in d for d in dropped)
@@ -209,8 +209,8 @@ class TestDropAllTables:
         drop_all_tables(conn)
 
         for call_args in conn.execute.call_args_list:
-            sql = call_args[0][0]
-            assert "CASCADE" in sql
+            sql_str = str(call_args[0][0])
+            assert "CASCADE" in sql_str
 
     def test_commits_after_drop(self):
         conn = MagicMock()
@@ -222,7 +222,7 @@ class TestDropAllTables:
         conn = MagicMock()
         drop_all_tables(conn)
 
-        call_sqls = [c[0][0] for c in conn.execute.call_args_list]
+        call_sqls = [str(c[0][0]) for c in conn.execute.call_args_list]
         # function_state and execution_history should be dropped before reactive_functions
         state_idx = next(i for i, s in enumerate(call_sqls) if "function_state" in s)
         history_idx = next(i for i, s in enumerate(call_sqls) if "execution_history" in s)

@@ -10,7 +10,7 @@ import os
 import platform
 import re
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -448,7 +448,7 @@ def _get_recent_apt_history() -> list[dict[str, Any]]:
     try:
         from datetime import timedelta
 
-        cutoff = datetime.utcnow() - timedelta(hours=24)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
         history_file = Path("/var/log/apt/history.log")
 
         if history_file.exists():
@@ -460,7 +460,7 @@ def _get_recent_apt_history() -> list[dict[str, Any]]:
                     date_str = line.split(":", 1)[1].strip()
                     try:
                         # Format: 2024-01-26  15:30:00
-                        ts = datetime.strptime(date_str, "%Y-%m-%d  %H:%M:%S")
+                        ts = datetime.strptime(date_str, "%Y-%m-%d  %H:%M:%S").replace(tzinfo=timezone.utc)
                         if ts < cutoff:
                             continue
                         current_entry = {"timestamp": ts.isoformat()}
@@ -550,7 +550,7 @@ def collect_snapshot(
         kernel_modules=tuple(_get_kernel_modules()) if include_kernel_modules else (),
         docker_images=tuple(_get_docker_image_versions()) if include_docker_images else (),
         recent_apt_history=tuple(_get_recent_apt_history()) if include_apt_history else (),
-        collected_at=datetime.utcnow(),
+        collected_at=datetime.now(timezone.utc),
     )
 
 
@@ -996,7 +996,7 @@ def _get_cert_expiry() -> list[dict[str, Any]]:
                         from email.utils import parsedate_to_datetime
 
                         expiry = parsedate_to_datetime(date_str)
-                        days = (expiry - datetime.utcnow().replace(tzinfo=expiry.tzinfo)).days
+                        days = (expiry - datetime.now(timezone.utc).replace(tzinfo=expiry.tzinfo)).days
                         results.append(
                             {
                                 "endpoint": endpoint,

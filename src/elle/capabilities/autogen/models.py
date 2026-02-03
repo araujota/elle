@@ -9,7 +9,7 @@ Defines data structures for:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal
 
@@ -60,7 +60,7 @@ class DiscoveryResult(BaseModel, frozen=True):
     )
     total_scanned: int = Field(0, description="Total binaries scanned")
     with_man_pages: int = Field(0, description="Binaries with man pages")
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # =============================================================================
@@ -241,7 +241,7 @@ class FullValidationResult(BaseModel, frozen=True):
     stages: tuple[ValidationResult, ...] = Field(default_factory=tuple)
     overall_passed: bool = Field(False)
     trust_level: TrustLevel = Field(TrustLevel.THIRD_PARTY)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # =============================================================================
@@ -260,7 +260,7 @@ class StoredCapability(BaseModel, frozen=True):
     capability_class_code: str = Field(..., description="Generated capability class code")
     source_command: str = Field(..., description="Source command name")
     man_page_hash: str = Field(..., description="Hash of man page for versioning")
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     trust_level: TrustLevel = Field(TrustLevel.THIRD_PARTY)
     approved: bool = Field(False, description="Whether approved for use")
     enabled: bool = Field(True, description="Whether enabled")

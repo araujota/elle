@@ -12,7 +12,7 @@ whether a capability requires user confirmation before execution.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Literal
 
@@ -125,7 +125,7 @@ class AutonomyPreferences(BaseModel):
         description="Earned autonomy configuration",
     )
     updated_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When preferences were last updated",
     )
 
@@ -146,7 +146,7 @@ class AutonomyOverride(BaseModel):
         description="When autonomy was earned (if reason=earned)",
     )
     updated_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When this override was last updated",
     )
 
@@ -329,7 +329,7 @@ class AutonomyStore:
                     prefs.earned_autonomy.min_executions,
                     prefs.earned_autonomy.min_success_rate,
                     prefs.earned_autonomy.cooldown_after_failure,
-                    datetime.utcnow().isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
                 ),
             )
 
@@ -393,7 +393,7 @@ class AutonomyStore:
         from elle.storage.engine import get_conn
 
         with get_conn(schema=self._schema) as conn:
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             earned_at = now if reason == "earned" and autonomous else None
 
             conn.execute(
@@ -482,7 +482,7 @@ class AutonomyStore:
         from elle.storage.engine import get_conn
 
         with get_conn(schema=self._schema) as conn:
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
 
             # Get current stats
             stats = self.get_stats(capability_name)

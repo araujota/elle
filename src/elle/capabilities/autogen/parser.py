@@ -40,16 +40,25 @@ def read_man_page(command: str) -> str | None:
         Raw man page text or None.
     """
     try:
-        # Use col -b to strip formatting codes
-        result = subprocess.run(
-            f"man {command} 2>/dev/null | col -b",
-            shell=True,  # nosec B602 - man page retrieval requires pipe through col
+        # Get raw man page text
+        man_result = subprocess.run(
+            ["man", command],
+            capture_output=True,
+            timeout=10,
+        )
+        if man_result.returncode != 0 or not man_result.stdout:
+            return None
+
+        # Strip formatting codes via col -b
+        col_result = subprocess.run(
+            ["col", "-b"],
+            input=man_result.stdout,
             capture_output=True,
             text=True,
             timeout=10,
         )
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout
+        if col_result.returncode == 0 and col_result.stdout.strip():
+            return col_result.stdout
     except Exception as e:
         logger.debug(f"Failed to read man page for {command}: {e}")
 

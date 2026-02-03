@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -50,7 +50,7 @@ class KeyRotationResult(BaseModel):
     backup_path: str | None = Field(default=None, description="Path to config backup")
     error: str | None = Field(default=None, description="Error message if failed")
     rotated_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When rotation was attempted",
     )
     steps_completed: tuple[str, ...] = Field(
@@ -265,7 +265,7 @@ def rotate_keys_safely(
 
     # Create backup
     backup_dir = Path("/var/lib/elle/backups/wireguard")
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     backup_path = backup_dir / f"{interface}_{timestamp}.conf"
 
     try:

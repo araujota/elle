@@ -21,7 +21,7 @@ Covers:
 """
 
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -110,7 +110,7 @@ class TestRemediationPlanModel:
         assert 0.0 <= plan.confidence <= 1.0
 
     def test_create_full(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         plan = _make_plan(
             executed=True,
             executed_at=now,

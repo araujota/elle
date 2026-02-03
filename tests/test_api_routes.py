@@ -482,7 +482,7 @@ class TestGetEvents:
                         auth=mock_auth,
                     )
                 assert exc_info.value.status_code == 500
-                assert "database error" in str(exc_info.value.detail)
+                assert exc_info.value.detail == "Internal server error"
         finally:
             routes_mod._daemon = original
 
@@ -1012,7 +1012,7 @@ class TestGetIncidentDetail:
                         auth=mock_auth,
                     )
                 assert exc_info.value.status_code == 500
-                assert "connection lost" in str(exc_info.value.detail)
+                assert exc_info.value.detail == "Internal server error"
         finally:
             routes_mod._daemon = original
 
@@ -1456,7 +1456,7 @@ class TestExecuteIncidentPlan:
                         auth=mock_auth,
                     )
                 assert exc_info.value.status_code == 500
-                assert "something broke" in str(exc_info.value.detail)
+                assert exc_info.value.detail == "Internal server error"
         finally:
             routes_mod._daemon = original
 
@@ -1561,11 +1561,19 @@ class TestHealthCheck:
 
         daemon = _make_mock_daemon(healthy=True)
         original = routes_mod._daemon
+        # Reset health cache to avoid stale results (M4)
+        routes_mod._health_cache = None
+        routes_mod._health_cache_ts = 0.0
         try:
             routes_mod._daemon = daemon
-            result = await routes_mod.health_check()
+            with patch("elle.storage.engine.get_pool") as mock_pool:
+                mock_conn = MagicMock()
+                mock_pool.return_value.connection.return_value.__enter__ = lambda s: mock_conn
+                mock_pool.return_value.connection.return_value.__exit__ = lambda s, *a: None
+                result = await routes_mod.health_check()
             assert result["status"] == "healthy"
             assert result["uptime_sec"] == 100
+            assert result["database"] == "connected"
         finally:
             routes_mod._daemon = original
 
@@ -1576,12 +1584,17 @@ class TestHealthCheck:
 
         daemon = _make_mock_daemon(healthy=False)
         original = routes_mod._daemon
+        # Reset health cache to avoid stale results from prior tests (M4)
+        routes_mod._health_cache = None
+        routes_mod._health_cache_ts = 0.0
         try:
             routes_mod._daemon = daemon
             result = await routes_mod.health_check()
-            assert result["status"] == "unhealthy"
+            assert result["status"] == "degraded"
         finally:
             routes_mod._daemon = original
+            routes_mod._health_cache = None
+            routes_mod._health_cache_ts = 0.0
 
     @pytest.mark.asyncio
     async def test_health_daemon_not_initialized(self) -> None:
@@ -1661,7 +1674,7 @@ class TestGetMetrics:
                 with pytest.raises(HTTPException) as exc_info:
                     await routes_mod.get_metrics(auth=mock_auth)
                 assert exc_info.value.status_code == 500
-                assert "metrics broken" in str(exc_info.value.detail)
+                assert exc_info.value.detail == "Internal server error"
         finally:
             routes_mod._daemon = original
 

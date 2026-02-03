@@ -13,7 +13,7 @@ Usage:
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from elle.capabilities.autogen.intelligence.extractors import get_extractors
 from elle.capabilities.autogen.intelligence.models import (
@@ -186,7 +186,7 @@ class IntelligenceAggregator:
             completions=completions,
             systemd_units=tuple(systemd_units),
             extraction_sources=tuple(sources),
-            extraction_timestamp=datetime.utcnow(),
+            extraction_timestamp=datetime.now(timezone.utc),
             primary_binary=primary_binary,
             token_estimate=0,  # Calculate below
         )

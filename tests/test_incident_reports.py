@@ -6,7 +6,7 @@ All database dependencies are mocked so no PostgreSQL instance is required.
 """
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import psycopg
@@ -44,7 +44,7 @@ from elle.daemon.incidents.reports import (
 # Helpers: build fake domain objects
 # =============================================================================
 
-NOW = datetime.utcnow()
+NOW = datetime.now(timezone.utc)
 
 
 def _make_incident(

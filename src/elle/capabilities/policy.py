@@ -80,9 +80,8 @@ def evaluate_capability(
         return evaluate(request, audit=audit)
 
     except ImportError:
-        logger.warning("Policy module not available, allowing capability")
-        # Return a permissive result if policy module unavailable
-        return _create_allow_result()
+        logger.error("Policy module not available, denying capability execution (fail-closed)")
+        raise RuntimeError("Policy module is required for capability execution but could not be imported") from None
     except Exception as e:
         logger.error(f"Policy evaluation failed: {e}")
         # On error, default to requiring confirmation
@@ -143,7 +142,7 @@ def _create_allow_result() -> PolicyEvaluationResult:
         )
     except ImportError:
         # If we can't import, create a minimal compatible object
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         class _MinimalResult:
             allowed = True
@@ -156,7 +155,7 @@ def _create_allow_result() -> PolicyEvaluationResult:
             should_proceed = True
             message = None
             justification_prompt = None
-            evaluated_at = datetime.now()
+            evaluated_at = datetime.now(timezone.utc)
             evaluation_time_ms = 0.0
 
         return _MinimalResult()  # type: ignore
@@ -184,7 +183,7 @@ def _create_confirm_result(message: str) -> PolicyEvaluationResult:
             message=message,
         )
     except ImportError:
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         class _MinimalResult:
             allowed = True
@@ -197,7 +196,7 @@ def _create_confirm_result(message: str) -> PolicyEvaluationResult:
             should_proceed = True
             message = message
             justification_prompt = None
-            evaluated_at = datetime.now()
+            evaluated_at = datetime.now(timezone.utc)
             evaluation_time_ms = 0.0
 
         return _MinimalResult()  # type: ignore

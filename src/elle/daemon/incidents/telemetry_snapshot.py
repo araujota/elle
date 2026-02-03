@@ -17,7 +17,7 @@ import os
 import re
 import socket
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -312,7 +312,7 @@ class TelemetrySnapshot(BaseModel):
     )
 
     # Metadata
-    collected_at: datetime = Field(default_factory=datetime.utcnow)
+    collected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     hostname: str = Field(default="", description="System hostname")
     uptime_sec: int = Field(ge=0, default=0, description="System uptime in seconds")
 
@@ -884,7 +884,7 @@ def collect_telemetry_snapshot(
         ),
         gpu=_collect_gpu_metrics(),
         services=tuple(service_snapshots),
-        collected_at=datetime.utcnow(),
+        collected_at=datetime.now(timezone.utc),
         hostname=_get_hostname(),
         uptime_sec=_get_uptime_sec(),
     )

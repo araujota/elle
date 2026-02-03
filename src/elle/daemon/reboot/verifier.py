@@ -13,7 +13,7 @@ import logging
 import re
 import socket
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -451,7 +451,7 @@ async def run_verification(
     Returns:
         Dict with check results.
     """
-    start = datetime.utcnow()
+    start = datetime.now(timezone.utc)
 
     # Route to appropriate checker
     if verification.check_type == "command":
@@ -506,7 +506,7 @@ async def run_verification(
         stdout = ""
         stderr = f"Unknown check type: {verification.check_type}"
 
-    end = datetime.utcnow()
+    end = datetime.now(timezone.utc)
     duration_ms = int((end - start).total_seconds() * 1000)
 
     return {
@@ -615,7 +615,7 @@ async def check_critical_services() -> VerificationResult:
                 "stdout": stdout[:256],
                 "stderr": stderr[:256],
                 "duration_ms": 0,
-                "executed_at": datetime.utcnow(),
+                "executed_at": datetime.now(timezone.utc),
             }
         )
 

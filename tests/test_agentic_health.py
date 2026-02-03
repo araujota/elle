@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -126,22 +126,22 @@ class TestLoopStats:
     def test_duration_ms_with_end_time(self):
         """Test duration calculation when end_time is set."""
         stats = LoopStats()
-        stats.start_time = datetime(2025, 1, 15, 12, 0, 0)
-        stats.end_time = datetime(2025, 1, 15, 12, 0, 5)
+        stats.start_time = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        stats.end_time = datetime(2025, 1, 15, 12, 0, 5, tzinfo=timezone.utc)
         assert stats.duration_ms == 5000.0
 
     def test_duration_ms_without_end_time(self):
         """Test duration calculation when still running (no end_time)."""
         stats = LoopStats()
-        stats.start_time = datetime(2025, 1, 15, 12, 0, 0)
-        # duration_ms should use datetime.utcnow() which will be > start_time
+        stats.start_time = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        # duration_ms should use datetime.now(timezone.utc) which will be > start_time
         assert stats.duration_ms > 0
 
     def test_duration_seconds(self):
         """Test duration_seconds property."""
         stats = LoopStats()
-        stats.start_time = datetime(2025, 1, 15, 12, 0, 0)
-        stats.end_time = datetime(2025, 1, 15, 12, 0, 10)
+        stats.start_time = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        stats.end_time = datetime(2025, 1, 15, 12, 0, 10, tzinfo=timezone.utc)
         assert stats.duration_seconds == 10.0
 
     def test_mutable_fields(self):
@@ -577,7 +577,7 @@ class TestLoopTracker:
     def test_check_max_duration_not_exceeded(self, config):
         """Test max duration check when under the limit."""
         tracker = LoopTracker(config)
-        tracker.stats.start_time = datetime.utcnow()
+        tracker.stats.start_time = datetime.now(timezone.utc)
 
         exceeded, message = tracker.check_max_duration()
         assert exceeded is False
@@ -589,7 +589,7 @@ class TestLoopTracker:
         # Set start_time far in the past to exceed 1-second limit
         from datetime import timedelta
 
-        tracker.stats.start_time = datetime.utcnow() - timedelta(seconds=10)
+        tracker.stats.start_time = datetime.now(timezone.utc) - timedelta(seconds=10)
 
         exceeded, message = tracker.check_max_duration()
         assert exceeded is True
@@ -617,7 +617,7 @@ class TestLoopTracker:
             async with tracker:
                 # Override start_time AFTER __aenter__ sets it, so
                 # the duration check sees an elapsed time exceeding the limit.
-                tracker.stats.start_time = datetime.utcnow() - timedelta(seconds=10)
+                tracker.stats.start_time = datetime.now(timezone.utc) - timedelta(seconds=10)
                 async with tracker.track_iteration(1):
                     pass
 

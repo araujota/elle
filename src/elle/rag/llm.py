@@ -33,8 +33,10 @@ Usage:
 
 from __future__ import annotations
 
+import atexit
 import json
 import logging
+import threading
 import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal
@@ -516,6 +518,13 @@ class LLM:
     def __exit__(self, *args: Any) -> None:
         self.close()
 
+    def __del__(self) -> None:
+        """Ensure HTTP client is closed on garbage collection."""
+        try:
+            self.close()
+        except Exception:
+            pass
+
     # -------------------------------------------------------------------------
     # Availability and Model Detection
     # -------------------------------------------------------------------------
@@ -631,6 +640,8 @@ class LLM:
             LLMTimeoutError: If the request times out.
             LLMError: If the API returns an error.
         """
+        if len(prompt) > 200_000:
+            raise LLMError("Prompt exceeds size limit (200K chars)")
         return self._generate(
             prompt=prompt,
             system=system,
@@ -687,8 +698,16 @@ class LLM:
                 f"Request timed out after {timeout}s. Try increasing timeout or reducing max_tokens."
             ) from e
         except httpx.HTTPStatusError as e:
+            import re as _re
+
+            sanitized = _re.sub(
+                r"(api[_-]?key|token|password|secret)\s*[:=]\s*\S+",
+                r"\1=**REDACTED**",
+                e.response.text[:200],
+                flags=_re.IGNORECASE,
+            )
             raise LLMError(
-                f"LLM API error: {e.response.text}",
+                f"LLM API error: {sanitized}",
                 status_code=e.response.status_code,
             ) from e
 
@@ -939,8 +958,16 @@ class LLM:
         except httpx.TimeoutException as e:
             raise LLMTimeoutError(f"Chat request timed out after {timeout or self.config.timeout}s") from e
         except httpx.HTTPStatusError as e:
+            import re as _re
+
+            sanitized = _re.sub(
+                r"(api[_-]?key|token|password|secret)\s*[:=]\s*\S+",
+                r"\1=**REDACTED**",
+                e.response.text[:200],
+                flags=_re.IGNORECASE,
+            )
             raise LLMError(
-                f"LLM chat API error: {e.response.text}",
+                f"LLM chat API error: {sanitized}",
                 status_code=e.response.status_code,
             ) from e
 
@@ -1336,6 +1363,8 @@ class LLMSession:
         """Streaming chat request via provider."""
         start_time = time.time()
         collected_content = ""
+        MAX_STREAM_CONTENT = 10 * 1024 * 1024  # 10MB
+        MAX_TOOL_CALLS = 50
         tool_calls: list[ToolCall] = []
         model = self.llm.model
         prompt_tokens = None
@@ -1363,10 +1392,16 @@ class LLMSession:
 
             if chunk.content:
                 collected_content += chunk.content
+                if len(collected_content) > MAX_STREAM_CONTENT:
+                    logger.warning("Stream content exceeded size limit")
+                    break
                 stream_callback(chunk.content)
 
             # Collect tool calls
             for tc in chunk.tool_calls:
+                if len(tool_calls) >= MAX_TOOL_CALLS:
+                    logger.warning("Max tool calls per stream exceeded")
+                    continue
                 tc_name = tc.get("name", "")
                 tc_args = tc.get("arguments", {})
                 if tc_name:
@@ -1442,6 +1477,7 @@ class LLMSession:
 # =============================================================================
 
 _llm: LLM | None = None
+_llm_lock = threading.Lock()
 
 
 def _load_llm_config_from_toml() -> LLMConfig:
@@ -1486,11 +1522,27 @@ def get_llm(config: LLMConfig | None = None) -> LLM:
         The LLM singleton.
     """
     global _llm
-    if _llm is None:
-        if config is None:
-            config = _load_llm_config_from_toml()
-        _llm = LLM(config)
-    return _llm
+    if _llm is not None:
+        return _llm
+    with _llm_lock:
+        if _llm is None:
+            if config is None:
+                config = _load_llm_config_from_toml()
+            _llm = LLM(config)
+        return _llm
+
+
+def _cleanup_llm() -> None:
+    """Close the LLM singleton on process exit."""
+    global _llm
+    if _llm is not None:
+        try:
+            _llm.close()
+        except Exception:
+            pass
+
+
+atexit.register(_cleanup_llm)
 
 
 def reset_llm() -> None:

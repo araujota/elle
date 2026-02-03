@@ -1,6 +1,6 @@
 """Tests for Reactive Functions models."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -326,7 +326,7 @@ class TestRateLimitState:
         """Test creating rate limit state."""
         state = RateLimitState(
             function_id="func-123",
-            last_execution=datetime.utcnow(),
+            last_execution=datetime.now(timezone.utc),
             daily_executions=5,
             daily_reset_date="2024-01-01",
         )

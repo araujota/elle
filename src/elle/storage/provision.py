@@ -18,10 +18,12 @@ import logging
 import os
 import secrets
 import shutil
+import stat
 import subprocess
 from pathlib import Path
 
 import psycopg
+from psycopg import sql
 
 from elle.storage.config import EXTENSIONS, SCHEMAS, PostgresConfig
 
@@ -133,7 +135,7 @@ def ensure_pg_role(username: str = "elle") -> None:
         username: Role name to create.
     """
     result = _run(
-        ["psql", "-tAc", f"SELECT 1 FROM pg_roles WHERE rolname = '{username}'"],  # nosec B608
+        ["psql", "-tAc", "SELECT 1 FROM pg_roles WHERE rolname = :'name'", "-v", f"name={username}"],
         user="postgres",
         check=False,
     )
@@ -157,7 +159,7 @@ def ensure_database(config: PostgresConfig) -> None:
         config: Connection configuration.
     """
     result = _run(
-        ["psql", "-tAc", f"SELECT 1 FROM pg_database WHERE datname = '{config.dbname}'"],  # nosec B608
+        ["psql", "-tAc", "SELECT 1 FROM pg_database WHERE datname = :'name'", "-v", f"name={config.dbname}"],
         user="postgres",
         check=False,
     )
@@ -190,7 +192,7 @@ def install_extensions(config: PostgresConfig) -> None:
     with psycopg.connect(conninfo) as conn:
         conn.autocommit = True
         for ext in EXTENSIONS:
-            conn.execute(f"CREATE EXTENSION IF NOT EXISTS {ext}")
+            conn.execute(sql.SQL("CREATE EXTENSION IF NOT EXISTS {}").format(sql.Identifier(ext)))
             logger.info("Extension '%s' ready", ext)
 
 
@@ -209,12 +211,18 @@ def create_schemas(config: PostgresConfig) -> None:
     with psycopg.connect(conninfo) as conn:
         conn.autocommit = True
         for schema in SCHEMAS:
-            conn.execute(f"CREATE SCHEMA IF NOT EXISTS {schema} AUTHORIZATION {config.user}")
+            conn.execute(
+                sql.SQL("CREATE SCHEMA IF NOT EXISTS {} AUTHORIZATION {}").format(
+                    sql.Identifier(schema), sql.Identifier(config.user)
+                )
+            )
             logger.info("Schema '%s' ready", schema)
 
         # Grant usage to the elle role
         for schema in SCHEMAS:
-            conn.execute(f"GRANT ALL ON SCHEMA {schema} TO {config.user}")
+            conn.execute(
+                sql.SQL("GRANT ALL ON SCHEMA {} TO {}").format(sql.Identifier(schema), sql.Identifier(config.user))
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -278,17 +286,27 @@ def ensure_encryption_key(key_path: str = "/etc/elle/db.key") -> None:
         key_path: Path to the key file.
     """
     path = Path(key_path)
-    if path.exists():
-        logger.info("Encryption key already exists at %s", key_path)
-        return
 
     # Ensure parent directory exists
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Generate 256-bit (32-byte) key
+    # Generate 256-bit (32-byte) key -- atomic write with restrictive perms
     key = secrets.token_hex(32)
-    path.write_text(key)
-    os.chmod(path, 0o400)
+    try:
+        fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, stat.S_IRUSR | stat.S_IWUSR)
+    except FileExistsError:
+        logger.info("Encryption key already exists at %s (O_EXCL)", key_path)
+        return
+    try:
+        os.write(fd, key.encode("utf-8"))
+        try:
+            os.fsync(fd)
+        except OSError:
+            pass  # Best-effort durability
+        # Set read-only after write (M19)
+        os.fchmod(fd, stat.S_IRUSR)
+    finally:
+        os.close(fd)
     logger.info("Generated encryption key at %s", key_path)
 
 

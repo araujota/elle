@@ -17,7 +17,7 @@ Covers:
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -113,16 +113,16 @@ class TestConstants:
     """Tests for module-level constants."""
 
     def test_ca_validity_days(self):
-        """CA validity is 10 years."""
-        assert CA_VALIDITY_DAYS == 3650
+        """CA validity is 1 year (C13 hardening)."""
+        assert CA_VALIDITY_DAYS == 365
 
     def test_server_validity_days(self):
-        """Server cert validity is 1 year."""
-        assert SERVER_VALIDITY_DAYS == 365
+        """Server cert validity is 180 days (C13 hardening)."""
+        assert SERVER_VALIDITY_DAYS == 180
 
     def test_client_validity_days(self):
-        """Client cert validity is 1 year."""
-        assert CLIENT_VALIDITY_DAYS == 365
+        """Client cert validity is 180 days (C13 hardening)."""
+        assert CLIENT_VALIDITY_DAYS == 180
 
     def test_rsa_key_size(self):
         """RSA key size is 4096 bits."""
@@ -702,7 +702,7 @@ class TestVerifyClientCert:
         mock_ca_cert = MagicMock()
         mock_client_cert = MagicMock()
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         if not_valid_before is None:
             not_valid_before = now - timedelta(days=1)
         if not_valid_after is None:
@@ -770,7 +770,7 @@ class TestVerifyClientCert:
     @patch("elle.mobile.crypto.x509")
     def test_cert_not_yet_valid_returns_false(self, mock_x509):
         """Cert with future not_valid_before returns (False, error)."""
-        future = datetime.utcnow() + timedelta(days=1)
+        future = datetime.now(timezone.utc) + timedelta(days=1)
         crypto, mock_paths, mock_ca_cert, mock_client_cert = self._setup_verify(not_valid_before=future)
 
         mock_x509.load_pem_x509_certificate.return_value = mock_client_cert
@@ -787,7 +787,7 @@ class TestVerifyClientCert:
     @patch("elle.mobile.crypto.x509")
     def test_expired_cert_returns_false(self, mock_x509):
         """Cert with past not_valid_after returns (False, error)."""
-        past = datetime.utcnow() - timedelta(days=1)
+        past = datetime.now(timezone.utc) - timedelta(days=1)
         crypto, mock_paths, mock_ca_cert, mock_client_cert = self._setup_verify(not_valid_after=past)
 
         mock_x509.load_pem_x509_certificate.return_value = mock_client_cert

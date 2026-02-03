@@ -11,9 +11,11 @@ mobile gateway. It handles:
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -82,6 +84,85 @@ class ErrorResponse(BaseModel):
 
     error: str
     code: str
+
+
+class _PairRateLimiter:
+    """Rate limiter for pairing endpoint (H23): 5 attempts/minute per IP."""
+
+    def __init__(self, max_attempts: int = 5, window_sec: float = 60.0) -> None:
+        self._max = max_attempts
+        self._window = window_sec
+        self._lock = threading.Lock()
+        self._attempts: dict[str, list[float]] = {}
+
+    def is_allowed(self, client_ip: str) -> bool:
+        now = time.monotonic()
+        cutoff = now - self._window
+        with self._lock:
+            timestamps = [t for t in self._attempts.get(client_ip, []) if t > cutoff]
+            if len(timestamps) >= self._max:
+                self._attempts[client_ip] = timestamps
+                return False
+            timestamps.append(now)
+            self._attempts[client_ip] = timestamps
+            # Evict stale IPs to prevent memory growth
+            if len(self._attempts) > 10000:
+                self._attempts.clear()
+            return True
+
+
+_pair_limiter = _PairRateLimiter()
+
+
+class HealthResponse(BaseModel):
+    """Health check response."""
+
+    status: str
+    internal_api: str
+    timestamp: str
+
+
+class DeviceListResponse(BaseModel):
+    """Response for listing devices."""
+
+    devices: list[dict[str, Any]]
+
+
+class DeviceRevokeResponse(BaseModel):
+    """Response for revoking a device."""
+
+    status: str
+    device_id: str
+
+
+class DeviceElevateResponse(BaseModel):
+    """Response for elevating a device."""
+
+    status: str
+    device_id: str
+    elevated_role: str
+    expires_at: str
+
+
+class DeviceStatusResponse(BaseModel):
+    """Response for device status."""
+
+    device: dict[str, Any]
+    elevation: dict[str, Any] | None
+
+
+class AuditLogResponse(BaseModel):
+    """Response for audit log."""
+
+    entries: list[dict[str, Any]]
+
+
+class EventsStatusResponse(BaseModel):
+    """Response for events status."""
+
+    available: bool
+    client_count: int
+    gateway_available: bool
 
 
 # ============================================================================
@@ -186,7 +267,8 @@ def create_mobile_gateway(
         try:
             return deps.authenticator.authenticate(client_cert_pem, client_ip)
         except AuthenticationError as e:
-            raise HTTPException(status_code=401, detail=str(e)) from None
+            logger.warning("Authentication failed: %s", e)
+            raise HTTPException(status_code=401, detail="Authentication failed") from None
 
     def require_localhost(request: Request) -> None:
         """Ensure request is from localhost."""
@@ -209,6 +291,10 @@ def create_mobile_gateway(
         This endpoint is called by the mobile app after scanning the QR code.
         """
         client_ip = request.client.host if request.client else "unknown"
+
+        # Rate limit pairing attempts (H23)
+        if not _pair_limiter.is_allowed(client_ip):
+            raise HTTPException(status_code=429, detail="Too many pairing attempts")
 
         try:
             result = deps.pairing.complete_pairing(
@@ -241,7 +327,8 @@ def create_mobile_gateway(
                 success=False,
                 error=str(e),
             )
-            raise HTTPException(status_code=400, detail=str(e)) from None
+            logger.warning("Pairing failed: %s", e)
+            raise HTTPException(status_code=400, detail="Pairing failed") from None
 
     # ========================================================================
     # Authenticated API Endpoints
@@ -290,7 +377,8 @@ def create_mobile_gateway(
                 success=False,
                 error=str(e),
             )
-            raise HTTPException(status_code=e.status_code, detail=str(e)) from None
+            logger.warning("Chat proxy error: %s", e)
+            raise HTTPException(status_code=e.status_code, detail="Request failed") from None
 
     @app.get("/v1/models")
     async def list_models(
@@ -301,16 +389,17 @@ def create_mobile_gateway(
             result = await deps.proxy.proxy_models(auth)
             return JSONResponse(result)
         except ProxyError as e:
-            raise HTTPException(status_code=e.status_code, detail=str(e)) from None
+            logger.warning("Models proxy error: %s", e)
+            raise HTTPException(status_code=e.status_code, detail="Request failed") from None
 
-    @app.get("/health")
+    @app.get("/health", response_model=HealthResponse)
     async def health_check() -> dict[str, Any]:
         """Health check endpoint."""
         internal_ok = await deps.proxy.check_internal_api()
         return {
             "status": "healthy",
             "internal_api": "connected" if internal_ok else "disconnected",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     # ========================================================================
@@ -350,7 +439,8 @@ def create_mobile_gateway(
                 success=False,
                 error=str(e),
             )
-            raise HTTPException(status_code=e.status_code, detail=str(e)) from None
+            logger.exception("Config proxy error")
+            raise HTTPException(status_code=e.status_code, detail="Configuration request failed") from None
 
     @app.put("/v1/config")
     async def update_config(
@@ -388,13 +478,14 @@ def create_mobile_gateway(
                 success=False,
                 error=str(e),
             )
-            raise HTTPException(status_code=e.status_code, detail=str(e)) from None
+            logger.exception("Config update error")
+            raise HTTPException(status_code=e.status_code, detail="Configuration update failed") from None
 
     # ========================================================================
     # Local Management Endpoints (localhost only)
     # ========================================================================
 
-    @app.get("/devices", dependencies=[Depends(require_localhost)])
+    @app.get("/devices", dependencies=[Depends(require_localhost)], response_model=DeviceListResponse)
     async def list_devices() -> dict[str, Any]:
         """List all paired devices (localhost only)."""
         devices = deps.store.list_devices()
@@ -417,6 +508,7 @@ def create_mobile_gateway(
     @app.delete(
         "/devices/{device_id}",
         dependencies=[Depends(require_localhost)],
+        response_model=DeviceRevokeResponse,
     )
     async def revoke_device(device_id: str, request: Request) -> dict[str, str]:
         """Revoke a device's access (localhost only)."""
@@ -444,6 +536,7 @@ def create_mobile_gateway(
     @app.post(
         "/devices/{device_id}/elevate",
         dependencies=[Depends(require_localhost)],
+        response_model=DeviceElevateResponse,
     )
     async def elevate_device(
         device_id: str,
@@ -488,11 +581,13 @@ def create_mobile_gateway(
                 success=False,
                 error=str(e),
             )
-            raise HTTPException(status_code=400, detail=str(e)) from None
+            logger.exception("Elevation error")
+            raise HTTPException(status_code=400, detail="Elevation request failed") from None
 
     @app.get(
         "/devices/{device_id}/status",
         dependencies=[Depends(require_localhost)],
+        response_model=DeviceStatusResponse,
     )
     async def device_status(device_id: str) -> dict[str, Any]:
         """Get detailed status for a device (localhost only)."""
@@ -516,7 +611,7 @@ def create_mobile_gateway(
             "elevation": elevation_status,
         }
 
-    @app.get("/audit", dependencies=[Depends(require_localhost)])
+    @app.get("/audit", dependencies=[Depends(require_localhost)], response_model=AuditLogResponse)
     async def get_audit_log(hours: int = 24, limit: int = 100) -> dict[str, Any]:
         """Get recent audit log entries (localhost only)."""
         entries = deps.audit.get_recent(hours=hours, limit=limit)
@@ -594,7 +689,7 @@ def create_mobile_gateway(
             },
         )
 
-    @app.get("/events/status", dependencies=[Depends(require_localhost)])
+    @app.get("/events/status", dependencies=[Depends(require_localhost)], response_model=EventsStatusResponse)
     async def events_status() -> dict[str, Any]:
         """Get status of the event stream (localhost only)."""
         from elle.daemon.notifications.mobile_push import get_mobile_notifier

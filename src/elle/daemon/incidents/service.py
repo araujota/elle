@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from elle.daemon.incidents.models import IncidentVaultStatus
 from elle.daemon.incidents.retriever import generate_case_text, get_status
@@ -135,7 +135,7 @@ class IncidentVaultService:
         """Handle incidents that have been open too long."""
         with get_conn(schema="incidents") as conn:
             # Get old open incidents (more than 24 hours)
-            cutoff = datetime.utcnow() - timedelta(hours=24)
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
 
             cursor = conn.cursor()
             cursor.execute(

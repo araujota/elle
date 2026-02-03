@@ -8,8 +8,11 @@ Dynamically creates:
 
 from __future__ import annotations
 
+import ast
 import logging
+import os
 import re
+from pathlib import Path
 from typing import Any
 
 from elle.capabilities.autogen.models import (
@@ -96,6 +99,62 @@ def sanitize_identifier(name: str) -> str:
     ):
         name = name + "_"
     return name or "value"
+
+
+# =============================================================================
+# AST Safety Validation
+# =============================================================================
+
+# AST node types that are forbidden in generated capability code
+_FORBIDDEN_CALLS = frozenset(
+    {
+        "os.system",
+        "subprocess.call",
+        "subprocess.run",
+        "subprocess.Popen",
+        "eval",
+        "exec",
+        "__import__",
+        "compile",
+        "globals",
+        "locals",
+        "getattr",
+        "setattr",
+        "delattr",
+        "open",
+    }
+)
+
+
+def validate_generated_ast(code: str, label: str = "generated code") -> None:
+    """Validate generated code AST for forbidden patterns.
+
+    Parses the code and rejects AST nodes that reference dangerous
+    functions like os.system, eval, exec, __import__, etc.
+
+    Args:
+        code: Python source code to validate.
+        label: Human-readable label for error messages.
+
+    Raises:
+        ValueError: If code contains forbidden patterns.
+    """
+    try:
+        tree = ast.parse(code)
+    except SyntaxError as e:
+        raise ValueError(f"Syntax error in {label}: {e}") from e
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            # Check direct calls: eval(), exec(), etc.
+            if isinstance(func, ast.Name) and func.id in _FORBIDDEN_CALLS:
+                raise ValueError(f"Forbidden call to '{func.id}' in {label}")
+            # Check attribute calls: os.system(), subprocess.call(), etc.
+            if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+                full_name = f"{func.value.id}.{func.attr}"
+                if full_name in _FORBIDDEN_CALLS:
+                    raise ValueError(f"Forbidden call to '{full_name}' in {label}")
 
 
 # =============================================================================
@@ -224,9 +283,9 @@ def generate_capability_class_code(spec: GeneratedCapabilitySpec) -> str:
     input_class = base_name + "Input"
     output_class = base_name + "Output"
 
-    # Escape command template for string
-    cmd_template = spec.command_template.replace("\\", "\\\\").replace('"', '\\"')
-    verify_template = (spec.verify_command or "").replace("\\", "\\\\").replace('"', '\\"')
+    # Use repr() for safe embedding -- handles all special chars
+    cmd_template_repr = repr(spec.command_template)
+    verify_template_repr = repr(spec.verify_command or "")
 
     lines = [
         "from __future__ import annotations",
@@ -279,7 +338,8 @@ def generate_capability_class_code(spec: GeneratedCapabilitySpec) -> str:
             "",
             "    def _build_command(self, input_data: Any) -> str:",
             '        """Build command string from input."""',
-            f'        template = "{cmd_template}"',
+            "        import shlex",
+            f"        template = {cmd_template_repr}",
             "        # Substitute input fields",
             "        if hasattr(input_data, 'model_dump'):",
             "            values = input_data.model_dump()",
@@ -289,7 +349,7 @@ def generate_capability_class_code(spec: GeneratedCapabilitySpec) -> str:
             "            values = {}",
             "        for key, value in values.items():",
             "            if value is not None:",
-            '                template = template.replace("{" + key + "}", str(value))',
+            '                template = template.replace("{" + key + "}", shlex.quote(str(value)))',
             "        return template",
             "",
             "    def dry_run(self, input_data: Any) -> DryRunResult:",
@@ -305,23 +365,17 @@ def generate_capability_class_code(spec: GeneratedCapabilitySpec) -> str:
             '        """Execute the capability."""',
             "        command = self._build_command(input_data)",
             "        try:",
-            "            result = subprocess.run(",
+            "            from elle.cli.subprocess_runner import run_safe, RunMode",
+            "            safe_result = run_safe(",
             "                command,",
-            "                shell=True,  # nosec B602",
-            "                capture_output=True,",
-            "                text=True,",
-            "                timeout=60,",
+            "                timeout=60.0,",
+            "                mode=RunMode.CAPTURE,",
+            "                check_denylist_flag=True,",
             "            )",
             "            return {",
-            "                'success': result.returncode == 0,",
-            "                'output': result.stdout + result.stderr,",
-            "                'return_code': result.returncode,",
-            "            }",
-            "        except subprocess.TimeoutExpired:",
-            "            return {",
-            "                'success': False,",
-            "                'output': 'Command timed out',",
-            "                'return_code': -1,",
+            "                'success': safe_result.exit_code == 0,",
+            "                'output': (safe_result.stdout or '') + (safe_result.stderr or ''),",
+            "                'return_code': safe_result.exit_code,",
             "            }",
             "        except Exception as e:",
             "            return {",
@@ -339,7 +393,8 @@ def generate_capability_class_code(spec: GeneratedCapabilitySpec) -> str:
                 "",
                 "    def verify(self, input_data: Any, run_result: Any) -> bool:",
                 '        """Verify the operation completed successfully."""',
-                f'        template = "{verify_template}"',
+                "        import shlex",
+                f"        template = {verify_template_repr}",
                 "        if hasattr(input_data, 'model_dump'):",
                 "            values = input_data.model_dump()",
                 "        elif isinstance(input_data, dict):",
@@ -348,15 +403,16 @@ def generate_capability_class_code(spec: GeneratedCapabilitySpec) -> str:
                 "            values = {}",
                 "        for key, value in values.items():",
                 "            if value is not None:",
-                '                template = template.replace("{" + key + "}", str(value))',
+                '                template = template.replace("{" + key + "}", shlex.quote(str(value)))',
                 "        try:",
-                "            result = subprocess.run(",
+                "            from elle.cli.subprocess_runner import run_safe, RunMode",
+                "            safe_result = run_safe(",
                 "                template,",
-                "                shell=True,  # nosec B602",
-                "                capture_output=True,",
-                "                timeout=30,",
+                "                timeout=30.0,",
+                "                mode=RunMode.CAPTURE,",
+                "                check_denylist_flag=True,",
                 "            )",
-                "            return result.returncode == 0",
+                "            return safe_result.exit_code == 0",
                 "        except Exception:",
                 "            return False",
             ]
@@ -397,6 +453,11 @@ def compile_capability_class(
         Compiled capability class or None on error.
     """
     try:
+        # Validate generated code before execution
+        validate_generated_ast(input_model_code, "input model")
+        validate_generated_ast(output_model_code, "output model")
+        validate_generated_ast(capability_code, "capability class")
+
         # Compile input model
         input_namespace: dict[str, Any] = {}
         exec(input_model_code, input_namespace)  # nosec B102
@@ -428,6 +489,30 @@ def compile_capability_class(
 # =============================================================================
 # Factory Functions
 # =============================================================================
+
+
+def compute_code_hmac(code: str) -> str:
+    """Compute HMAC-SHA256 of generated code for integrity verification.
+
+    Uses the ELLE autogen key from environment or /etc/elle/db.key.
+    Falls back to a warning if no key is available (dev mode).
+
+    Args:
+        code: Source code to hash.
+
+    Returns:
+        Hex-encoded HMAC-SHA256 digest.
+    """
+    import hashlib
+    import hmac
+
+    key = os.environ.get("ELLE_AUTOGEN_KEY", "")
+    if not key:
+        try:
+            key = Path("/etc/elle/db.key").read_text().strip()
+        except (OSError, FileNotFoundError) as exc:
+            raise RuntimeError("HMAC key required: set ELLE_AUTOGEN_KEY or create /etc/elle/db.key") from exc
+    return hmac.new(key.encode(), code.encode(), hashlib.sha256).hexdigest()
 
 
 def create_capability_from_spec(

@@ -7,7 +7,7 @@ when summary is None vs populated.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from pydantic import ValidationError
@@ -155,7 +155,7 @@ class TestSyscallSummary:
 
     def test_full(self):
         nc = NetworkConnection(addr="1.2.3.4", port=443)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         s = SyscallSummary(
             command="apt install foo",
             pid=100,

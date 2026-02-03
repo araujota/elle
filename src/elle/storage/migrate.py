@@ -16,10 +16,12 @@ Usage:
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from collections.abc import Callable
 
 import psycopg
+from psycopg import sql
 
 logger = logging.getLogger(__name__)
 
@@ -82,16 +84,20 @@ def _ensure_meta_table(conn: psycopg.Connection, schema: str) -> None:
         conn: Active connection.
         schema: Schema name (used for qualified table name).
     """
-    conn.execute(f"""
-        CREATE TABLE IF NOT EXISTS {schema}._meta (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL
-        )
-    """)
+    conn.execute(
+        sql.SQL("""
+            CREATE TABLE IF NOT EXISTS {}._meta (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """).format(sql.Identifier(schema))
+    )
 
 
 def run_migrations(conn: psycopg.Connection, schema: str) -> int:
     """Apply all pending migrations for *schema*.
+
+    Uses a PostgreSQL advisory lock to prevent concurrent migration runs.
 
     Args:
         conn: Active connection with search_path already set.
@@ -100,31 +106,42 @@ def run_migrations(conn: psycopg.Connection, schema: str) -> int:
     Returns:
         The schema version after migrations.
     """
-    _ensure_meta_table(conn, schema)
-    current = get_schema_version(conn, schema)
-    target = _target_versions.get(schema, 0)
+    # Advisory lock keyed on schema name to prevent concurrent migrations (M12: deterministic)
+    lock_bytes = hashlib.sha256(schema.encode()).digest()[:4]
+    lock_id = int.from_bytes(lock_bytes, "big") & 0x7FFFFFFF
+    conn.execute("SELECT pg_advisory_lock(%s)", (lock_id,))
+    conn.execute("SET LOCAL statement_timeout = '300s'")
+    try:
+        _ensure_meta_table(conn, schema)
+        current = get_schema_version(conn, schema)
+        target = _target_versions.get(schema, 0)
 
-    if current >= target:
+        if current >= target:
+            return current
+
+        pending = [(v, fn) for (v, fn) in _migrations.get(schema, []) if v > current]
+
+        for version, fn in pending:
+            logger.info("Migrating %s: v%d -> v%d", schema, current, version)
+            fn(conn)
+            conn.execute(
+                """
+                INSERT INTO _meta (key, value)
+                VALUES ('schema_version', %s)
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+                """,
+                (str(version),),
+            )
+            current = version
+
+        conn.commit()
+        logger.info("Schema %s is now at v%d", schema, current)
         return current
-
-    pending = [(v, fn) for (v, fn) in _migrations.get(schema, []) if v > current]
-
-    for version, fn in pending:
-        logger.info("Migrating %s: v%d -> v%d", schema, current, version)
-        fn(conn)
-        conn.execute(
-            """
-            INSERT INTO _meta (key, value)
-            VALUES ('schema_version', %s)
-            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
-            """,
-            (str(version),),
-        )
-        current = version
-
-    conn.commit()
-    logger.info("Schema %s is now at v%d", schema, current)
-    return current
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.execute("SELECT pg_advisory_unlock(%s)", (lock_id,))
 
 
 def run_all_migrations(conn: psycopg.Connection) -> dict[str, int]:

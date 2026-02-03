@@ -491,7 +491,7 @@ class TestPad:
 
 class TestTimeAgoEdge:
     def test_naive_datetime_treated_as_utc(self):
-        past = datetime.utcnow() - timedelta(minutes=10)
+        past = datetime.now(timezone.utc) - timedelta(minutes=10)
         result = _time_ago(past)
         assert "10m ago" in result
 

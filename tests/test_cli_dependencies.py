@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -501,7 +501,7 @@ class TestDependencyRegistry:
         from elle.cli.dependencies import DependencyRegistry
 
         registry = DependencyRegistry()
-        registry._cache["test"] = (datetime.utcnow(), MagicMock())
+        registry._cache["test"] = (datetime.now(timezone.utc), MagicMock())
         registry.clear_cache()
         assert len(registry._cache) == 0
 

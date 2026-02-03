@@ -25,7 +25,7 @@ Covers:
 """
 
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -144,8 +144,8 @@ def _make_device(
         role=role,
         status=status,
         cert_fingerprint=FAKE_FINGERPRINT,
-        paired_at=paired_at or datetime.utcnow(),
-        last_seen_at=last_seen_at or datetime.utcnow(),
+        paired_at=paired_at or datetime.now(timezone.utc),
+        last_seen_at=last_seen_at or datetime.now(timezone.utc),
     )
 
 
@@ -173,7 +173,7 @@ def _make_elevation(
     return Elevation(
         device_id=device_id,
         elevated_role=elevated_role,
-        expires_at=datetime.utcnow() + timedelta(minutes=10),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
         granted_by="api",
     )
 
@@ -507,7 +507,7 @@ class TestPairEndpoint:
         )
 
         assert resp.status_code == 400
-        assert "Token expired" in resp.json()["detail"]
+        assert resp.json()["detail"] == "Pairing failed"
 
         # Audit should record failure.
         deps.audit.log_pair.assert_called_once()
@@ -618,7 +618,7 @@ class TestChatCompletions:
             pytest.skip("Auth dependency not overridden in this environment")
 
         assert resp.status_code == 502
-        assert "upstream down" in resp.json()["detail"]
+        assert resp.json()["detail"] == "Request failed"
 
         deps.audit.log_request.assert_called()
         last_call_kwargs = deps.audit.log_request.call_args[1]
@@ -799,7 +799,7 @@ class TestListDevices:
     """Tests for GET /devices (localhost only)."""
 
     def test_returns_device_list(self, client, deps):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         device = _make_device(paired_at=now, last_seen_at=now)
         deps.store.list_devices.return_value = [device]
 
@@ -839,7 +839,7 @@ class TestListDevices:
 
     def test_multiple_devices_listed(self, client, deps):
         """Multiple devices are all returned in the list."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         devices = [
             _make_device(device_id="d1", name="Phone", paired_at=now, last_seen_at=now),
             _make_device(device_id="d2", name="Tablet", paired_at=now, last_seen_at=now),
@@ -853,7 +853,7 @@ class TestListDevices:
 
     def test_device_response_role_and_status_are_enum_values(self, client, deps):
         """DeviceResponse serialises role and status as string enum values."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         device = _make_device(
             role=MobileRole.MOBILE_OPERATOR,
             status=DeviceStatus.PAIRED,
@@ -991,7 +991,7 @@ class TestElevateDevice:
             json={"ttl": "999h"},
         )
         assert resp.status_code == 400
-        assert "TTL too long" in resp.json()["detail"]
+        assert resp.json()["detail"] == "Elevation request failed"
 
         deps.audit.log_elevate.assert_called_once()
         call_kwargs = deps.audit.log_elevate.call_args[1]
@@ -1060,7 +1060,7 @@ class TestDeviceStatus:
     """Tests for GET /devices/{device_id}/status."""
 
     def test_status_found(self, client, deps):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         device = _make_device(paired_at=now, last_seen_at=now)
         deps.store.get_device.return_value = device
         deps.elevation.get_elevation_status.return_value = {
@@ -1102,7 +1102,7 @@ class TestDeviceStatus:
 
     def test_status_includes_elevation_data(self, client, deps):
         """Status endpoint returns elevation information."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         device = _make_device(paired_at=now, last_seen_at=now)
         deps.store.get_device.return_value = device
         deps.elevation.get_elevation_status.return_value = {
@@ -1130,7 +1130,7 @@ class TestGetAuditLog:
     def test_returns_entries(self, client, deps):
         from elle.mobile.models import MobileAuditAction, MobileAuditEntry
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         entry = MobileAuditEntry(
             timestamp=now,
             device_id="dev-001",
@@ -1170,7 +1170,7 @@ class TestGetAuditLog:
         """All expected fields are present in audit entries."""
         from elle.mobile.models import MobileAuditAction, MobileAuditEntry
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         entry = MobileAuditEntry(
             timestamp=now,
             device_id="dev-002",
@@ -1320,7 +1320,7 @@ class TestGetAuthDependency:
 
         resp = client.get("/v1/models")
         assert resp.status_code == 401
-        assert "Client certificate required" in resp.json()["detail"]
+        assert resp.json()["detail"] == "Authentication failed"
 
     def test_auth_error_returns_401(self, client, deps):
         """AuthenticationError from authenticator results in 401."""
@@ -1328,7 +1328,7 @@ class TestGetAuthDependency:
 
         resp = client.get("/v1/models")
         assert resp.status_code == 401
-        assert "Device revoked" in resp.json()["detail"]
+        assert resp.json()["detail"] == "Authentication failed"
 
     def test_cert_invalid_returns_401(self, client, deps):
         """CERT_INVALID error code results in 401."""
@@ -1336,7 +1336,7 @@ class TestGetAuthDependency:
 
         resp = client.get("/v1/models")
         assert resp.status_code == 401
-        assert "Certificate expired" in resp.json()["detail"]
+        assert resp.json()["detail"] == "Authentication failed"
 
     def test_device_unknown_returns_401(self, client, deps):
         """DEVICE_UNKNOWN error code results in 401."""

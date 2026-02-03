@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
@@ -41,7 +41,7 @@ def _make_incident(
         summary=summary,
         symptoms=symptoms,
         domain=domain,
-        created_at=created_at or datetime.utcnow(),
+        created_at=created_at or datetime.now(timezone.utc),
         fingerprint=Fingerprint(entities=entities),
     )
 
@@ -131,9 +131,9 @@ class TestGetEventTime:
 
     def test_missing_ts_returns_now(self):
         search = MultiHopSearch()
-        before = datetime.utcnow()
+        before = datetime.now(timezone.utc)
         result = search._get_event_time({})
-        after = datetime.utcnow()
+        after = datetime.now(timezone.utc)
         assert before <= result <= after
 
     def test_none_ts_returns_now(self):
@@ -368,7 +368,7 @@ class TestBuildChains:
 
     def test_two_close_incidents_build_chain(self):
         search = MultiHopSearch()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         inc1 = _make_incident(
             incident_id="inc-1",
             title="Disk full",
@@ -390,7 +390,7 @@ class TestBuildChains:
 
     def test_items_too_far_apart_no_link(self):
         search = MultiHopSearch()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         inc1 = _make_incident(
             incident_id="inc-1",
             created_at=now - timedelta(hours=2),
@@ -406,7 +406,7 @@ class TestBuildChains:
 
     def test_chain_with_events(self):
         search = MultiHopSearch()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         events = {
             "evt-1": {
                 "event_id": "evt-1",
@@ -422,7 +422,7 @@ class TestBuildChains:
 
     def test_low_confidence_filtered(self):
         search = MultiHopSearch(config=MultiHopConfig(min_confidence=0.99))
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         events = {
             "evt-1": {"event_id": "evt-1", "ts": now - timedelta(minutes=8)},
             "evt-2": {"event_id": "evt-2", "ts": now},
@@ -479,7 +479,7 @@ class TestKeywordRerank:
 
 class TestTemporalRerank:
     def test_close_time_scores_higher(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         inc_close = _make_incident(incident_id="close", created_at=now - timedelta(hours=1))
         inc_far = _make_incident(incident_id="far", created_at=now - timedelta(hours=24))
         sr_close = _make_search_result(incident=inc_close, score=1.0)
@@ -488,7 +488,7 @@ class TestTemporalRerank:
         assert reranked[0].incident.incident_id == "close"
 
     def test_prefer_before_boosts_earlier(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         inc_before = _make_incident(incident_id="before", created_at=now - timedelta(hours=1))
         inc_after = _make_incident(incident_id="after", created_at=now + timedelta(hours=1))
         sr_before = _make_search_result(incident=inc_before, score=1.0)
@@ -497,7 +497,7 @@ class TestTemporalRerank:
         assert reranked[0].incident.incident_id == "before"
 
     def test_prefer_after_boosts_later(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         inc_before = _make_incident(incident_id="before", created_at=now - timedelta(hours=1))
         inc_after = _make_incident(incident_id="after", created_at=now + timedelta(hours=1))
         sr_before = _make_search_result(incident=inc_before, score=1.0)
@@ -506,7 +506,7 @@ class TestTemporalRerank:
         assert reranked[0].incident.incident_id == "after"
 
     def test_custom_decay(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         inc = _make_incident(created_at=now - timedelta(hours=6))
         sr = _make_search_result(incident=inc, score=1.0)
         reranked_slow = temporal_rerank([sr], now, decay_hours=24.0)
@@ -514,7 +514,7 @@ class TestTemporalRerank:
         assert reranked_slow[0].score > reranked_fast[0].score
 
     def test_empty_results(self):
-        reranked = temporal_rerank([], datetime.utcnow())
+        reranked = temporal_rerank([], datetime.now(timezone.utc))
         assert reranked == []
 
 
@@ -540,7 +540,7 @@ class TestMultiHopSearchIntegration:
         mock_search.return_value = []
 
         search = MultiHopSearch(config=MultiHopConfig(max_iterations=1))
-        event = {"event_id": "evt-1", "ts": datetime.utcnow(), "message": "test"}
+        event = {"event_id": "evt-1", "ts": datetime.now(timezone.utc), "message": "test"}
         result = search.search("test query", initial_event=event)
 
         assert result.initial_event_id == "evt-1"
@@ -569,7 +569,7 @@ class TestMultiHopSearchIntegration:
 
     @patch("elle.daemon.incidents.multihop.incident_search")
     def test_search_with_high_relevance_results(self, mock_search):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         inc = _make_incident(created_at=now, entities=("nginx",))
         mock_search.return_value = [_make_search_result(incident=inc, score=0.9)]
 
@@ -580,7 +580,7 @@ class TestMultiHopSearchIntegration:
 
     @patch("elle.daemon.incidents.multihop.incident_search")
     def test_search_best_chain_selected(self, mock_search):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         inc1 = _make_incident(incident_id="inc-1", created_at=now - timedelta(minutes=2), entities=("sda1",))
         inc2 = _make_incident(incident_id="inc-2", created_at=now, entities=("sda1",))
         mock_search.return_value = [

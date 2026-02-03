@@ -9,7 +9,7 @@ with automatic verification and GRUB-based rollback.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -180,8 +180,8 @@ class RebootIntent(BaseModel):
         default=None,
         description="Linked incident ID (if triggered by incident)",
     )
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Intent buffer (what we're trying to achieve)
     goal: str = Field(description="High-level goal of this reboot")

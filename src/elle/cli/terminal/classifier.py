@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
@@ -708,7 +708,7 @@ class IntentClassifier:
             self._log_path.mkdir(parents=True, exist_ok=True)
 
             log_entry = ClassificationLog(
-                timestamp=datetime.now(),
+                timestamp=datetime.now(timezone.utc),
                 input_text=text,
                 result=result,
                 session_cwd=str(session.cwd),

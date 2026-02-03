@@ -21,7 +21,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from elle.cli.agentic.tools import (
-    BLOCKED_COMMANDS,
     EXECUTE_CAPABILITY_SPEC,
     GET_SYSTEM_INFO_SPEC,
     LIST_CAPABILITIES_SPEC,
@@ -653,13 +652,12 @@ class TestShellCommand:
 
     @pytest.mark.asyncio
     async def test_blocked_rm_rf(self) -> None:
-        """rm -rf is blocked."""
-        args = ShellCommandInput(command="rm -rf /tmp/important")
+        """rm -rf / is blocked by centralized denylist."""
+        args = ShellCommandInput(command="rm -rf /")
         result = await shell_command(args)
 
         assert result.success is False
-        assert "blocked for safety" in (result.error or "")
-        assert "rm -rf" in (result.error or "")
+        assert "blocked for safety" in (result.error or "").lower() or "denied" in (result.error or "").lower()
 
     @pytest.mark.asyncio
     async def test_blocked_sudo(self) -> None:
@@ -1158,19 +1156,22 @@ class TestToolSpecs:
 
 
 class TestBlockedCommands:
-    """Tests for the BLOCKED_COMMANDS safety set."""
+    """Tests for centralized denylist enforcement via check_denylist()."""
 
-    def test_blocked_set_contains_expected(self) -> None:
-        """BLOCKED_COMMANDS includes critical unsafe patterns."""
-        assert "rm -rf" in BLOCKED_COMMANDS
-        assert "sudo" in BLOCKED_COMMANDS
-        assert "mkfs" in BLOCKED_COMMANDS
-        assert "shutdown" in BLOCKED_COMMANDS
-        assert "reboot" in BLOCKED_COMMANDS
+    def test_check_denylist_blocks_dangerous_commands(self) -> None:
+        """check_denylist rejects critical unsafe patterns."""
+        from elle.cli.subprocess_runner import check_denylist
 
-    def test_blocked_set_is_frozenset(self) -> None:
-        """BLOCKED_COMMANDS is immutable."""
-        assert isinstance(BLOCKED_COMMANDS, frozenset)
+        for cmd in ("rm -rf /", "sudo rm", "mkfs /dev/sda", "shutdown now"):
+            denied, reason, explanation = check_denylist(cmd)
+            assert denied, f"Expected '{cmd}' to be denied"
+
+    def test_check_denylist_allows_safe_commands(self) -> None:
+        """check_denylist allows harmless read-only commands."""
+        from elle.cli.subprocess_runner import check_denylist
+
+        denied, _, _ = check_denylist("ls -la")
+        assert not denied
 
 
 # =============================================================================

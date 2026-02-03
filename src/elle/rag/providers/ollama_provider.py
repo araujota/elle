@@ -221,7 +221,14 @@ class OllamaProvider(LLMProvider):
         ) as response:
             response.raise_for_status()
 
+            STREAM_CHUNK_TIMEOUT = 30.0
+            last_chunk_time = time.monotonic()
             for line in response.iter_lines():
+                now = time.monotonic()
+                if now - last_chunk_time > STREAM_CHUNK_TIMEOUT:
+                    logger.warning(f"Ollama stream stalled for {STREAM_CHUNK_TIMEOUT}s")
+                    raise TimeoutError(f"Ollama stream stalled for {STREAM_CHUNK_TIMEOUT}s")
+                last_chunk_time = now
                 if not line:
                     continue
 
@@ -283,3 +290,9 @@ class OllamaProvider(LLMProvider):
 
     def close(self) -> None:
         self._client.close()
+
+    def __enter__(self) -> OllamaProvider:
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        self.close()

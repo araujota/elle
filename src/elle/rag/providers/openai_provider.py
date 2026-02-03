@@ -275,3 +275,9 @@ class OpenAIProvider(LLMProvider):
 
     def close(self) -> None:
         self._client.close()
+
+    def __enter__(self) -> OpenAIProvider:
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        self.close()

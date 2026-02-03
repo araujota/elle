@@ -1,6 +1,6 @@
 """Tests for Docker environment variable store."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -132,10 +132,10 @@ class TestDockerEnvStore:
         assert not store.has_saved_values("mysql")
 
     def test_saved_var_has_updated_at(self, store):
-        before = datetime.utcnow()
+        before = datetime.now(timezone.utc)
         values = [EnvVarValue(name="VAR1", value="value1")]
         store.save_values("postgres", values)
-        after = datetime.utcnow()
+        after = datetime.now(timezone.utc)
 
         saved = store.get_saved_values("postgres")
         assert len(saved) == 1

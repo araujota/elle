@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shlex
 import socket
 import time
 from collections.abc import Callable
@@ -67,6 +68,10 @@ MUTATING_TOOLS = frozenset(["execute_capability"])
 
 # Progress callback type: (stage, description, iteration) -> None
 ProgressCallback = Callable[[str, str, int], None]
+
+# Response size limits (C3)
+MAX_COLLECTED_RESPONSE_BYTES = 2 * 1024 * 1024  # 2MB
+MAX_STREAM_BYTES = 10 * 1024 * 1024  # 10MB
 
 
 def is_agentic_loop_enabled() -> bool:
@@ -327,6 +332,7 @@ class AgenticLoop:
         self.prefetch_context = prefetch_context
         self.enable_audit = enable_audit
         self.enable_verification = enable_verification
+        self.tool_call_timeout: float = 120.0
 
         self._llm: LLM | None = None
         self._retrieval_pipeline: UnifiedRetrievalPipeline | None = None
@@ -617,12 +623,12 @@ class AgenticLoop:
                 os_info=os_info,
             )
 
-            # 3. Build initial user message with retrieval context
-            user_message = input.query_text
+            # 3. Build initial user message with retrieval context (H8: boundary markers)
+            user_message = f"[USER_QUERY]\n{input.query_text}\n[/USER_QUERY]"
             if retrieval_context:
                 context_str = retrieval_context.format_for_prompt()
                 if context_str:
-                    user_message = f"{input.query_text}\n\n---\n\n{context_str}"
+                    user_message = f"[USER_QUERY]\n{input.query_text}\n[/USER_QUERY]\n\n[SYSTEM_CONTEXT]\n{context_str}\n[/SYSTEM_CONTEXT]"
 
             # 4. Create LLM session with tools
             ollama_tools = self.tools.to_ollama_tools()
@@ -648,7 +654,10 @@ class AgenticLoop:
                 if response.completion_tokens:
                     total_completion_tokens += response.completion_tokens
 
-                collected_response = response.content
+                collected_response = response.content.replace("\x00", "") if response.content else ""
+                if len(collected_response.encode("utf-8", errors="replace")) > MAX_COLLECTED_RESPONSE_BYTES:
+                    logger.warning("Initial response exceeded size limit, truncating")
+                    collected_response = collected_response[:MAX_COLLECTED_RESPONSE_BYTES]
                 iterations = 1
 
                 # 6. Tool call loop with verification and health monitoring
@@ -674,18 +683,36 @@ class AgenticLoop:
                         break
 
                     # Execute all tool calls
-                    for tool_call in response.tool_calls:
-                        logger.debug(f"Executing tool: {tool_call.name} with args {tool_call.arguments}")
+                    MAX_TOOLS_PER_ITERATION = 5
+                    for tools_this_iteration, tool_call in enumerate(response.tool_calls, 1):
+                        if tools_this_iteration > MAX_TOOLS_PER_ITERATION:
+                            logger.warning(f"Exceeded per-iteration tool limit ({MAX_TOOLS_PER_ITERATION})")
+                            break
+                        args_repr = str(tool_call.arguments)[:500]
+                        logger.debug(f"Executing tool: {tool_call.name} with args {args_repr}")
 
                         if progress_callback:
                             progress_callback("act", f"Executing {tool_call.name}...", iterations)
 
-                        # Execute the tool
-                        result = await self.tools.execute(
-                            tool_call.name,
-                            tool_call.arguments,
-                            confirm_callback=confirm_callback,
-                        )
+                        # Execute the tool with per-call timeout (H1)
+                        try:
+                            result = await asyncio.wait_for(
+                                self.tools.execute(
+                                    tool_call.name,
+                                    tool_call.arguments,
+                                    confirm_callback=confirm_callback,
+                                ),
+                                timeout=self.tool_call_timeout,
+                            )
+                        except (TimeoutError, asyncio.TimeoutError):
+                            from elle.cli.agentic.tools import ToolResult
+
+                            result = ToolResult(
+                                success=False,
+                                output="",
+                                error=f"Tool call timed out after {self.tool_call_timeout}s",
+                            )
+                            logger.warning(f"Tool call {tool_call.name} timed out after {self.tool_call_timeout}s")
 
                         # Verify mutating operations with read-only commands
                         verified = False
@@ -740,18 +767,30 @@ class AgenticLoop:
                         stream_callback("\n")
 
                     # Continue from where we left off (KV cache preserved)
-                    response = await session.continue_after_tool(
-                        stream_callback=stream_callback,
-                        temperature=self.temperature,
-                        max_tokens=self.max_tokens,
-                    )
+                    try:
+                        response = await asyncio.wait_for(
+                            session.continue_after_tool(
+                                stream_callback=stream_callback,
+                                temperature=self.temperature,
+                                max_tokens=self.max_tokens,
+                            ),
+                            timeout=self.tool_call_timeout,
+                        )
+                    except (TimeoutError, asyncio.TimeoutError):
+                        logger.error("LLM continuation call timed out")
+                        break
 
                     if response.prompt_tokens:
                         total_prompt_tokens += response.prompt_tokens
                     if response.completion_tokens:
                         total_completion_tokens += response.completion_tokens
 
-                    collected_response = response.content
+                    collected_response = response.content.replace("\x00", "") if response.content else ""
+                    # Enforce response size limit (C3)
+                    if len(collected_response.encode("utf-8", errors="replace")) > MAX_COLLECTED_RESPONSE_BYTES:
+                        logger.warning("Response exceeded size limit, truncating")
+                        collected_response = collected_response[:MAX_COLLECTED_RESPONSE_BYTES]
+                        break
 
                 # Notify if exiting due to max iterations
                 if response.has_tool_calls and iterations >= self.max_iterations:
@@ -832,6 +871,9 @@ class AgenticLoop:
                 incident_id=incident_id,
             )
 
+        except asyncio.CancelledError:
+            raise
+
         except Exception as e:
             logger.exception("Agentic loop failed")
             duration_ms = int((time.time() - start_time) * 1000)
@@ -852,7 +894,7 @@ class AgenticLoop:
             )
 
             return AgenticLoopResult(
-                response=f"An error occurred: {e}",
+                response="An unexpected error occurred. Check logs for details.",
                 success=False,
                 iterations=iterations or 1,
                 total_duration_ms=duration_ms,
@@ -1058,15 +1100,16 @@ class AgenticLoop:
             elif domain == "network":
                 return await self._verify_network(verification_id, tool_call_id, capability_name, capability_args)
 
-            # Default: trust the result if operation succeeded
+            # Default: fail-secure for unknown domains (H10)
             else:
+                logger.warning(f"No verification strategy for domain: {domain}")
                 return VerificationResult(
                     verification_id=verification_id,
                     tool_call_id=tool_call_id,
-                    passed=result.success,
-                    method="result_trust",
-                    evidence=f"No specific verification for {domain} domain. "
-                    f"Trusting capability result: success={result.success}",
+                    passed=False,
+                    method="unimplemented",
+                    evidence=f"No verification strategy for {domain} domain. "
+                    f"Failing secure until verification is implemented.",
                 )
 
         except Exception as e:
@@ -1148,7 +1191,9 @@ class AgenticLoop:
             # Verify file exists and is readable
             verify_result = await self.tools.execute(
                 "shell_command",
-                {"command": f"test -f '{file_path}' && stat '{file_path}' && head -1 '{file_path}'"},
+                {
+                    "command": f"test -f {shlex.quote(file_path)} && stat {shlex.quote(file_path)} && head -1 {shlex.quote(file_path)}"
+                },
             )
             passed = verify_result.success
             method = "stat_check"
@@ -1160,7 +1205,7 @@ class AgenticLoop:
             # Verify file no longer exists
             verify_result = await self.tools.execute(
                 "shell_command",
-                {"command": f"test ! -e '{file_path}' && echo 'File successfully deleted'"},
+                {"command": f"test ! -e {shlex.quote(file_path)} && echo 'File successfully deleted'"},
             )
             passed = verify_result.success
             method = "existence_check"
@@ -1171,7 +1216,7 @@ class AgenticLoop:
             # Verify destination exists
             verify_result = await self.tools.execute(
                 "shell_command",
-                {"command": f"test -e '{dest}' && stat '{dest}'"},
+                {"command": f"test -e {shlex.quote(dest)} && stat {shlex.quote(dest)}"},
             )
             passed = verify_result.success
             method = "copy_check"
@@ -1181,7 +1226,7 @@ class AgenticLoop:
             # Verify permissions/ownership changed
             verify_result = await self.tools.execute(
                 "shell_command",
-                {"command": f"ls -la '{file_path}'"},
+                {"command": f"ls -la {shlex.quote(file_path)}"},
             )
             passed = verify_result.success
             method = "permission_check"
@@ -1220,7 +1265,7 @@ class AgenticLoop:
             # Verify container is running
             verify_result = await self.tools.execute(
                 "shell_command",
-                {"command": f"docker inspect -f '{{{{.State.Running}}}}' '{container}'"},
+                {"command": f"docker inspect -f '{{{{.State.Running}}}}' {shlex.quote(container)}"},
             )
             passed = verify_result.success and "true" in verify_result.output.lower()
             evidence = f"Container running: {verify_result.output.strip()}"
@@ -1229,7 +1274,7 @@ class AgenticLoop:
             # Verify container is stopped
             verify_result = await self.tools.execute(
                 "shell_command",
-                {"command": f"docker inspect -f '{{{{.State.Running}}}}' '{container}'"},
+                {"command": f"docker inspect -f '{{{{.State.Running}}}}' {shlex.quote(container)}"},
             )
             passed = verify_result.success and "false" in verify_result.output.lower()
             evidence = f"Container stopped: {verify_result.output.strip()}"
@@ -1238,7 +1283,7 @@ class AgenticLoop:
             # Verify container no longer exists
             verify_result = await self.tools.execute(
                 "shell_command",
-                {"command": f"docker inspect '{container}' 2>&1 || echo 'REMOVED'"},
+                {"command": f"docker inspect {shlex.quote(container)} 2>&1 || echo 'REMOVED'"},
             )
             passed = "REMOVED" in verify_result.output or "No such" in verify_result.output
             evidence = "Container removed" if passed else f"Container still exists: {container}"
@@ -1281,7 +1326,7 @@ class AgenticLoop:
             # Verify package is installed
             verify_result = await self.tools.execute(
                 "shell_command",
-                {"command": f"dpkg -s '{package}' 2>&1 | grep -E 'Status|Version'"},
+                {"command": f"dpkg -s {shlex.quote(package)} 2>&1 | grep -E 'Status|Version'"},
             )
             passed = verify_result.success and "installed" in verify_result.output.lower()
             evidence = f"Package status: {verify_result.output.strip()}"
@@ -1290,7 +1335,7 @@ class AgenticLoop:
             # Verify package is removed
             verify_result = await self.tools.execute(
                 "shell_command",
-                {"command": f"dpkg -s '{package}' 2>&1"},
+                {"command": f"dpkg -s {shlex.quote(package)} 2>&1"},
             )
             passed = not verify_result.success or "not installed" in verify_result.output.lower()
             evidence = "Package removed" if passed else f"Package still installed: {verify_result.output[:200]}"
@@ -1333,7 +1378,7 @@ class AgenticLoop:
             # Verify config file is valid
             verify_result = await self.tools.execute(
                 "shell_command",
-                {"command": f"test -f '{config_path}' && head -10 '{config_path}'"},
+                {"command": f"test -f {shlex.quote(config_path)} && head -10 {shlex.quote(config_path)}"},
             )
             passed = verify_result.success
             evidence = f"Config file content: {verify_result.output[:300]}"
@@ -1342,7 +1387,7 @@ class AgenticLoop:
             if config_path.endswith(".json"):
                 syntax_check = await self.tools.execute(
                     "shell_command",
-                    {"command": f"python3 -m json.tool '{config_path}' > /dev/null 2>&1 && echo 'VALID'"},
+                    {"command": f"python3 -m json.tool {shlex.quote(config_path)} > /dev/null 2>&1 && echo 'VALID'"},
                 )
                 if syntax_check.success and "VALID" in syntax_check.output:
                     evidence += " | JSON syntax: valid"
@@ -1350,11 +1395,24 @@ class AgenticLoop:
                     passed = False
                     evidence += " | JSON syntax: INVALID"
             elif config_path.endswith((".yaml", ".yml")):
-                syntax_check = await self.tools.execute(
-                    "shell_command",
-                    {
-                        "command": f"python3 -c \"import yaml; yaml.safe_load(open('{config_path}'))\" 2>&1 && echo 'VALID'"
-                    },
+                # H5: Use Python-native YAML validation instead of shell
+                try:
+                    import yaml
+
+                    with open(config_path) as _cfg_f:
+                        yaml.safe_load(_cfg_f)
+                    syntax_check_success = True
+                    syntax_check_output = "VALID"
+                except Exception as _yaml_err:
+                    syntax_check_success = False
+                    syntax_check_output = str(_yaml_err)
+                # Build a pseudo-result for compatibility
+                from elle.cli.agentic.tools import ToolResult as _ToolResult
+
+                syntax_check = _ToolResult(
+                    tool_name="yaml_validate",
+                    success=syntax_check_success,
+                    output=syntax_check_output,
                 )
                 if syntax_check.success and "VALID" in syntax_check.output:
                     evidence += " | YAML syntax: valid"
@@ -1400,7 +1458,7 @@ class AgenticLoop:
             verify_result = await self.tools.execute(
                 "shell_command",
                 {
-                    "command": f"ufw status 2>/dev/null | grep -E '{port}|ALLOW' || iptables -L -n 2>/dev/null | head -20"
+                    "command": f"ufw status 2>/dev/null | grep -E {shlex.quote(str(port) + '|ALLOW')} || iptables -L -n 2>/dev/null | head -20"
                 },
             )
             passed = verify_result.success
@@ -1410,7 +1468,9 @@ class AgenticLoop:
             port = args.get("port", "")
             verify_result = await self.tools.execute(
                 "shell_command",
-                {"command": f"ufw status 2>/dev/null | grep -E '{port}|DENY' || iptables -L -n 2>/dev/null | head -20"},
+                {
+                    "command": f"ufw status 2>/dev/null | grep -E {shlex.quote(str(port) + '|DENY')} || iptables -L -n 2>/dev/null | head -20"
+                },
             )
             passed = verify_result.success
             evidence = f"Firewall status: {verify_result.output[:300]}"
@@ -1419,7 +1479,7 @@ class AgenticLoop:
             interface = args.get("interface") or args.get("name") or "wg0"
             verify_result = await self.tools.execute(
                 "shell_command",
-                {"command": f"wg show {interface} 2>&1 || ip link show {interface} 2>&1"},
+                {"command": f"wg show {shlex.quote(interface)} 2>&1 || ip link show {shlex.quote(interface)} 2>&1"},
             )
             passed = verify_result.success
             evidence = f"WireGuard status: {verify_result.output[:300]}"

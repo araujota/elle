@@ -9,10 +9,11 @@ Storage backend: PostgreSQL via psycopg (schema ``reboot``).
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import psycopg
+from psycopg import sql
 
 from elle.common.pydantic_compat import safe_model_dump
 from elle.daemon.reboot.models import (
@@ -77,7 +78,7 @@ def create_intent(
         The created RebootIntent.
     """
     intent_id = str(uuid.uuid4())
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     def _run(c: psycopg.Connection) -> RebootIntent:
         cursor = c.cursor()
@@ -395,7 +396,7 @@ def update_intent_status(
     """
 
     def _run(c: psycopg.Connection) -> RebootIntent | None:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         updates = ["updated_at = %s", "status = %s"]
         values: list[Any] = [serialize_datetime(now), status]
@@ -424,10 +425,9 @@ def update_intent_status(
         values.append(intent_id)
 
         cursor = c.cursor()
-        cursor.execute(
-            f"UPDATE reboot_intents SET {', '.join(updates)} WHERE id = %s",  # nosec B608
-            values,
-        )
+        set_clause = sql.SQL(", ").join(sql.SQL(u) for u in updates)
+        query = sql.SQL("UPDATE reboot_intents SET {} WHERE id = %s").format(set_clause)
+        cursor.execute(query, values)
 
         if cursor.rowcount == 0:
             return None
@@ -460,7 +460,7 @@ def mark_rebooting(
     """
 
     def _run(c: psycopg.Connection) -> RebootIntent | None:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         cursor = c.cursor()
         cursor.execute(
@@ -501,7 +501,7 @@ def cancel_intent(
     """
 
     def _run(c: psycopg.Connection) -> RebootIntent | None:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         cursor = c.cursor()
         cursor.execute(
@@ -773,7 +773,7 @@ def update_verification_result(
     """
 
     def _run(c: psycopg.Connection) -> PendingVerification | None:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         cursor = c.cursor()
         cursor.execute(

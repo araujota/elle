@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from typing import Any
 
 import httpx
@@ -173,6 +174,7 @@ class OllamaClient:
         temperature: float | None = None,
         keep_alive: str | None = None,
         num_ctx: int | None = None,
+        timeout: float | None = None,
     ) -> OllamaResponse:
         """Generate a completion.
 
@@ -211,8 +213,10 @@ class OllamaClient:
         if json_mode:
             payload["format"] = "json"
 
+        effective_timeout = timeout or self.config.timeout
+
         try:
-            response = self._client.post("/api/generate", json=payload)
+            response = self._client.post("/api/generate", json=payload, timeout=effective_timeout)
             response.raise_for_status()
             data = response.json()
 
@@ -313,12 +317,14 @@ class OllamaClient:
         self,
         model: str,
         text: str,
+        timeout: float | None = None,
     ) -> list[float]:
         """Generate an embedding vector for text.
 
         Args:
             model: Embedding model name (e.g., "nomic-embed-text").
             text: Text to embed.
+            timeout: Per-request timeout in seconds. Uses client default if None.
 
         Returns:
             Embedding vector as a list of floats.
@@ -331,6 +337,7 @@ class OllamaClient:
             response = self._client.post(
                 "/api/embeddings",
                 json={"model": model, "prompt": text},
+                timeout=timeout,
             )
             response.raise_for_status()
             data = response.json()
@@ -377,17 +384,20 @@ class OllamaClient:
         return embeddings
 
 
-# Module-level client instance
+# Module-level client instance (thread-safe)
 _client: OllamaClient | None = None
+_client_lock = threading.Lock()
 
 
 def get_client() -> OllamaClient:
-    """Get the shared Ollama client instance.
+    """Get the shared Ollama client instance (thread-safe).
 
     Returns:
         The OllamaClient singleton.
     """
     global _client
     if _client is None:
-        _client = OllamaClient()
+        with _client_lock:
+            if _client is None:
+                _client = OllamaClient()
     return _client

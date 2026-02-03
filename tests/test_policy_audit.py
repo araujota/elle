@@ -429,22 +429,11 @@ class TestEnsureFileOpen:
 
         logger = PolicyAuditLogger(audit_path=audit_path)
 
-        # Patch open to succeed for append but fail for reading (counting entries)
-        original_open = open
-        call_count = 0
-
-        def patched_open(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                # First call: open for append (succeeds)
-                return original_open(*args, **kwargs)
-            elif call_count == 2:
-                # Second call: open for counting (fails)
-                raise PermissionError("cannot read")
-            return original_open(*args, **kwargs)
-
-        with patch("builtins.open", side_effect=patched_open):
+        # The source uses os.open + os.fdopen for the append operation,
+        # then builtins.open for counting existing entries.
+        # We let os.open/os.fdopen succeed normally but make the
+        # builtins.open call (used for counting) raise an error.
+        with patch("builtins.open", side_effect=PermissionError("cannot read")):
             logger._ensure_file_open()
 
         # The entry count should fallback to 0 due to the read error

@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 
 import psycopg
+from psycopg import sql
 
 from elle.storage.migrate import register_migration
 
@@ -137,5 +138,5 @@ def drop_all_tables(conn: psycopg.Connection) -> None:
     """
     tables = ["embeddings", "chunks", "docs", "meta", "_meta"]
     for table in tables:
-        conn.execute(f"DROP TABLE IF EXISTS {table} CASCADE")
+        conn.execute(sql.SQL("DROP TABLE IF EXISTS {} CASCADE").format(sql.Identifier(table)))
     conn.commit()

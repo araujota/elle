@@ -31,7 +31,7 @@ import asyncio
 import logging
 import time
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any
 
@@ -79,7 +79,7 @@ class DependencyCheckResult(BaseModel):
     message: str = Field(default="", description="Status message")
     fallback_message: str = Field(default="", description="User-facing fallback guidance")
     latency_ms: float | None = Field(default=None, description="Check latency")
-    checked_at: datetime = Field(default_factory=datetime.utcnow)
+    checked_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     details: dict[str, Any] = Field(default_factory=dict)
 
     @property
@@ -101,7 +101,7 @@ class SystemCapabilities(BaseModel):
 
     messages: tuple[str, ...] = Field(default_factory=tuple, description="Status messages for user notification")
 
-    checked_at: datetime = Field(default_factory=datetime.utcnow)
+    checked_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @property
     def can_classify_with_llm(self) -> bool:
@@ -439,7 +439,7 @@ class DependencyRegistry:
         # Check cache
         if not force and name in self._cache:
             cached_time, cached_result = self._cache[name]
-            if datetime.utcnow() - cached_time < self._cache_ttl:
+            if datetime.now(timezone.utc) - cached_time < self._cache_ttl:
                 return cached_result
 
         # Get checker
@@ -457,7 +457,7 @@ class DependencyRegistry:
         result = await checker.check()
 
         # Cache result
-        self._cache[name] = (datetime.utcnow(), result)
+        self._cache[name] = (datetime.now(timezone.utc), result)
 
         return result
 

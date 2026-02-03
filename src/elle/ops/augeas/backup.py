@@ -12,7 +12,7 @@ import hashlib
 import json
 import logging
 import shutil
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -64,13 +64,13 @@ class BackupManager:
 
         # Ensure backup root exists
         try:
-            self.backup_root.mkdir(parents=True, exist_ok=True)
+            self.backup_root.mkdir(parents=True, exist_ok=True, mode=0o700)
         except PermissionError:
             logger.warning(f"Cannot create backup directory {self.backup_root}, will use temporary directory")
             import tempfile
 
             self.backup_root = Path(tempfile.gettempdir()) / "elle-backups"
-            self.backup_root.mkdir(parents=True, exist_ok=True)
+            self.backup_root.mkdir(parents=True, exist_ok=True, mode=0o700)
 
     def backup(
         self,
@@ -96,9 +96,9 @@ class BackupManager:
 
         # Determine domain and create backup directory
         domain = detect_domain(file_path)
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
         backup_dir = self.backup_root / domain / timestamp
-        backup_dir.mkdir(parents=True, exist_ok=True)
+        backup_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 
         # Backup file name preserves original name
         backup_file = backup_dir / file_path.name
@@ -118,7 +118,7 @@ class BackupManager:
                 domain=domain,
                 sha256=sha256,
                 size_bytes=size,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
                 metadata=metadata or {},
             )
 
@@ -357,7 +357,7 @@ class BackupManager:
         """
         max_age = max_age_days or self.retention_days
         max_keep = max_count or MAX_BACKUPS_PER_DOMAIN
-        cutoff = datetime.utcnow() - timedelta(days=max_age)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=max_age)
         deleted = 0
 
         domains = [domain] if domain else [d.name for d in self.backup_root.iterdir() if d.is_dir()]
@@ -383,7 +383,7 @@ class BackupManager:
 
                 # Delete if too old
                 try:
-                    mtime = datetime.fromtimestamp(ts_dir.stat().st_mtime)
+                    mtime = datetime.fromtimestamp(ts_dir.stat().st_mtime, tz=timezone.utc)
                     if mtime < cutoff:
                         should_delete = True
                 except Exception:

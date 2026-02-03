@@ -10,7 +10,7 @@ Covers:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -48,7 +48,7 @@ def _make_incident(
         summary=summary,
         symptoms=symptoms,
         domain=domain,
-        created_at=created_at or datetime.utcnow(),
+        created_at=created_at or datetime.now(timezone.utc),
         fingerprint=Fingerprint(entities=entities),
     )
 
@@ -76,7 +76,7 @@ class TestSearchEventsEntityExpansion:
     def test_entity_search_expands_results(self):
         """When entities are provided, _search_events queries by entity too (lines 131-133)."""
         search = MultiHopSearch(config=MultiHopConfig(max_iterations=1))
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # Create mock event dicts
         text_event = {
@@ -134,7 +134,7 @@ class TestSearchEventsEntityModuleImport:
     def test_entity_search_imports_and_queries(self):
         """Entity-based search uses query_events for each entity (lines 271-279)."""
         search = MultiHopSearch(config=MultiHopConfig(max_iterations=1))
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         evt1 = MagicMock()
         evt1.model_dump = MagicMock(
@@ -187,7 +187,7 @@ class TestSearchHopEntityExtraction:
         mock_search.return_value = []
 
         search = MultiHopSearch(config=MultiHopConfig(max_iterations=1))
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         mock_events = [
             {
@@ -220,7 +220,7 @@ class TestSearchHopEntityExtraction:
     @patch("elle.daemon.incidents.multihop.incident_search")
     def test_hop_extracts_entities_from_incidents_and_events(self, mock_search):
         """Entities from both incidents and events are merged (lines 209-214)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         inc = _make_incident(entities=("nginx",), created_at=now)
         mock_search.return_value = [_make_search_result(incident=inc, score=0.9)]
 
@@ -254,7 +254,7 @@ class TestBuildChainsTemporalChain:
     def test_three_event_chain_builds_links(self):
         """Three temporally close events produce a chain with 2 links."""
         search = MultiHopSearch(config=MultiHopConfig(min_confidence=0.0))
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         events = {
             "evt-1": {
@@ -294,7 +294,7 @@ class TestBuildChainsTemporalChain:
     def test_mixed_incidents_and_events_chain(self):
         """Chain with both incidents and events."""
         search = MultiHopSearch(config=MultiHopConfig(min_confidence=0.0))
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         inc = _make_incident(
             incident_id="inc-1",
@@ -333,7 +333,7 @@ class TestSearchKeywordExpansion:
     @patch("elle.daemon.incidents.multihop.incident_search")
     def test_keyword_expansion_modifies_query(self, mock_search):
         """When new keywords are extracted, they are appended to the query (line 152)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         inc = _make_incident(
             title="nginx timeout error",
             summary="nginx connection refused",
@@ -409,7 +409,7 @@ class TestSearchEntityExpansionPath:
     @patch("elle.daemon.incidents.multihop.incident_search")
     def test_entity_expansion_changes_query(self, mock_search):
         """When expand_entities is True and new entities found, query updates (line 149)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # First search returns incident with entities
         inc = _make_incident(

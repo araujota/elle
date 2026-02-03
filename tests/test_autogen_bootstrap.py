@@ -17,7 +17,7 @@ Covers:
 
 import json
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -1296,7 +1296,7 @@ class TestSetBootstrapComplete:
     @patch("elle.__version__", "1.2.3")
     def test_writes_state(self):
         result = BootstrapResult()
-        result.completed_at = datetime(2025, 6, 15, 12, 0, 0)
+        result.completed_at = datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
         result.packages_succeeded = 10
         result.capabilities_saved = 25
 
@@ -1333,7 +1333,7 @@ class TestSetBootstrapComplete:
     def test_write_permission_error(self):
         """PermissionError during write is caught, does not raise."""
         result = BootstrapResult()
-        result.completed_at = datetime(2025, 1, 1)
+        result.completed_at = datetime(2025, 1, 1, tzinfo=timezone.utc)
 
         mock_file = MagicMock()
         mock_parent = MagicMock()

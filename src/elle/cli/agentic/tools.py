@@ -18,13 +18,15 @@ Each tool has:
 from __future__ import annotations
 
 import logging
+import re
+import shlex
 import time
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -398,11 +400,6 @@ EXECUTE_CAPABILITY_SPEC = ToolSpec(
                 "type": "object",
                 "description": "Arguments for the capability",
             },
-            "skip_confirmation": {
-                "type": "boolean",
-                "default": False,
-                "description": "Skip user confirmation (use with caution)",
-            },
         },
         "required": ["capability_name"],
     },
@@ -546,9 +543,21 @@ async def get_system_info(args: GetSystemInfoInput) -> ToolResult:
     """Execute get_system_info tool."""
     from elle.cli.subprocess_runner import RunMode, run_safe
 
+    _safe_filter = re.compile(r"^[a-zA-Z0-9._@:/-]+$")
+
     start_time = time.time()
     aspect = args.aspect
     filter_val = args.filter
+
+    # Validate filter_val to prevent shell injection
+    if filter_val and not _safe_filter.match(filter_val):
+        return ToolResult(
+            tool_name="get_system_info",
+            success=False,
+            output="",
+            error="Invalid filter: contains disallowed characters",
+            duration_ms=0,
+        )
 
     try:
         output_str = ""
@@ -564,7 +573,7 @@ async def get_system_info(args: GetSystemInfoInput) -> ToolResult:
         elif aspect == SystemInfoAspect.SERVICES:
             cmd = "systemctl list-units --type=service --state=running,failed"
             if filter_val:
-                cmd = f"systemctl status {filter_val} --no-pager"
+                cmd = f"systemctl status {shlex.quote(filter_val)} --no-pager"
             result = run_safe(cmd, timeout=10.0, mode=RunMode.CAPTURE)
             output_str = result.stdout if result.success else f"Error: {result.stderr}"
 
@@ -579,7 +588,7 @@ async def get_system_info(args: GetSystemInfoInput) -> ToolResult:
         elif aspect == SystemInfoAspect.CONTAINERS:
             cmd = "docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Ports}}'"
             if filter_val:
-                cmd = f"docker inspect {filter_val} --format '{{{{json .}}}}' | head -100"
+                cmd = f"docker inspect {shlex.quote(filter_val)} --format '{{{{json .}}}}' | head -100"
             result = run_safe(cmd, timeout=10.0, mode=RunMode.CAPTURE)
             output_str = result.stdout if result.success else f"Error: {result.stderr}"
 
@@ -602,7 +611,7 @@ async def get_system_info(args: GetSystemInfoInput) -> ToolResult:
         elif aspect == SystemInfoAspect.RECENT_EVENTS:
             cmd = "journalctl --no-pager -p warning -n 30 --since '1 hour ago'"
             if filter_val:
-                cmd = f"journalctl --no-pager -u {filter_val} -n 50 --since '1 hour ago'"
+                cmd = f"journalctl --no-pager -u {shlex.quote(filter_val)} -n 50 --since '1 hour ago'"
             result = run_safe(cmd, timeout=10.0, mode=RunMode.CAPTURE)
             output_str = result.stdout if result.success else f"Error: {result.stderr}"
 
@@ -640,23 +649,7 @@ class ShellCommandInput(BaseModel):
     timeout: float = Field(default=30.0, ge=1.0, le=120.0, description="Timeout in seconds")
 
 
-# Commands that are blocked for safety
-BLOCKED_COMMANDS = frozenset(
-    [
-        "rm -rf",
-        "mkfs",
-        "dd if=",
-        "dd of=/dev",
-        "> /dev/sd",
-        "chmod -R 777 /",
-        "shutdown",
-        "reboot",
-        "init 0",
-        "init 6",
-        ":()",  # fork bomb
-        "sudo",
-    ]
-)
+# BLOCKED_COMMANDS removed — denylist is enforced via check_denylist() from subprocess_runner
 
 
 SHELL_COMMAND_SPEC = ToolSpec(
@@ -690,21 +683,20 @@ SHELL_COMMAND_SPEC = ToolSpec(
 
 async def shell_command(args: ShellCommandInput) -> ToolResult:
     """Execute shell_command tool."""
-    from elle.cli.subprocess_runner import RunMode, run_safe
+    from elle.cli.subprocess_runner import RunMode, check_denylist, run_safe
 
     start_time = time.time()
 
-    # Safety check
-    cmd_lower = args.command.lower()
-    for blocked in BLOCKED_COMMANDS:
-        if blocked in cmd_lower:
-            return ToolResult(
-                tool_name="shell_command",
-                success=False,
-                output="",
-                error=f"Command blocked for safety: {blocked}",
-                duration_ms=0,
-            )
+    # Safety check via centralized denylist (case-insensitive for LLM commands)
+    denied, reason, explanation = check_denylist(args.command.lower())
+    if denied:
+        return ToolResult(
+            tool_name="shell_command",
+            success=False,
+            output="",
+            error=f"Command blocked for safety: {explanation or reason}",
+            duration_ms=0,
+        )
 
     try:
         result = run_safe(
@@ -1119,6 +1111,14 @@ class ToolRegistry:
                     output="",
                     error=f"No handler for tool: {tool_name}",
                 )
+        except ValidationError as e:
+            logger.warning(f"Tool argument validation failed: {tool_name}: {e}")
+            return ToolResult(
+                tool_name=tool_name,
+                success=False,
+                output="",
+                error=f"Invalid arguments for {tool_name}",
+            )
         except Exception as e:
             logger.exception(f"Tool execution failed: {tool_name}")
             return ToolResult(

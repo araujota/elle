@@ -236,8 +236,9 @@ class REPL:
             Tuple of (status, api_port). Status is "running", "starting", or "stopped".
             api_port is only set when status is "running".
         """
-        # Default API port
-        api_port = 8377
+        from elle.daemon.config import get_daemon_port
+
+        api_port = get_daemon_port()
 
         try:
             import httpx

@@ -14,6 +14,7 @@ import asyncio
 import logging
 import re
 from datetime import datetime
+from typing import Any
 
 from elle.cli.terminal.renderer import Colors
 from elle.common.session import Session
@@ -328,6 +329,27 @@ def render_intent_detail(intent_id: str) -> str:
         return f"{Colors.RED}Error loading intent: {e}{Colors.RESET}"
 
 
+def _record_reboot_action(
+    action: str,
+    target: str,
+    success: bool,
+    details: dict[str, Any] | None = None,
+) -> None:
+    """Record a reboot management action to the incident vault."""
+    try:
+        from elle.cli.agentic.incident_recorder import record_arm_action
+
+        record_arm_action(
+            arm_name="reboot_management",
+            action=action,
+            target=target,
+            success=success,
+            details=details,
+        )
+    except Exception:
+        logger.debug("Failed to record reboot action", exc_info=True)
+
+
 def handle_cancel() -> str:
     """Handle cancel command.
 
@@ -360,6 +382,7 @@ def handle_cancel() -> str:
         if active.status == "pending":
             result = asyncio.run(manager.cancel_pending_reboot(active.id))
             if result:
+                _record_reboot_action("cancel_reboot", active.id, True, {"goal": active.goal})
                 return f"{Colors.GREEN}Pending reboot cancelled: {active.goal}{Colors.RESET}"
 
         return (
@@ -399,11 +422,13 @@ def handle_confirm() -> str:
         result = asyncio.run(manager.force_confirm_boot(active.id))
 
         if result and result.status == "completed":
+            _record_reboot_action("confirm_boot", active.id, True, {"goal": active.goal})
             return (
                 f"{Colors.GREEN}Boot confirmed successfully!{Colors.RESET}\n"
                 f"{Colors.DIM}Reboot marked as completed: {active.goal}{Colors.RESET}"
             )
         else:
+            _record_reboot_action("confirm_boot", active.id, False)
             return f"{Colors.RED}Failed to confirm boot.{Colors.RESET}"
 
     except Exception as e:
@@ -430,6 +455,7 @@ def handle_rollback() -> str:
             )
 
         # Confirm with user
+        _record_reboot_action("rollback_initiated", active.id, True, {"goal": active.goal})
         lines = [
             f"{Colors.BOLD_YELLOW}WARNING: This will reboot the system!{Colors.RESET}",
             "",

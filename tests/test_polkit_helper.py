@@ -153,7 +153,14 @@ class TestWritePrivileged:
         target = tmp_path / "testfile.conf"
         target.write_text("old content")
 
-        with patch.object(helper, "_run_pkexec", new_callable=AsyncMock) as mock_pkexec:
+        # Mock resolve() to return an allowed path and is_symlink() to return False
+        mock_resolved = MagicMock()
+        mock_resolved.is_symlink.return_value = False
+        mock_resolved.__str__ = lambda self: "/etc/testfile.conf"
+        with (
+            patch("elle.security.polkit_helper.Path.resolve", return_value=mock_resolved),
+            patch.object(helper, "_run_pkexec", new_callable=AsyncMock) as mock_pkexec,
+        ):
             mock_pkexec.return_value = PolkitResult(success=True)
             result = await helper.write_privileged(target, "new content")
         assert result.success is True
@@ -161,7 +168,14 @@ class TestWritePrivileged:
     @pytest.mark.asyncio
     async def test_write_temp_file_failure(self):
         helper = PolkitHelper()
-        with patch("elle.security.polkit_helper.tempfile.NamedTemporaryFile", side_effect=OSError("disk full")):
+        # Mock resolve() so path passes the whitelist check
+        mock_resolved = MagicMock()
+        mock_resolved.is_symlink.return_value = False
+        mock_resolved.__str__ = lambda self: "/etc/test"
+        with (
+            patch("elle.security.polkit_helper.Path.resolve", return_value=mock_resolved),
+            patch("elle.security.polkit_helper.tempfile.NamedTemporaryFile", side_effect=OSError("disk full")),
+        ):
             result = await helper.write_privileged("/etc/test", "content")
         assert result.success is False
         assert "temp file" in result.error
@@ -170,7 +184,14 @@ class TestWritePrivileged:
     async def test_write_pkexec_failure(self, tmp_path):
         helper = PolkitHelper()
         target = tmp_path / "testfile"
-        with patch.object(helper, "_run_pkexec", new_callable=AsyncMock) as mock_pkexec:
+        # Mock resolve() to return an allowed path
+        mock_resolved = MagicMock()
+        mock_resolved.is_symlink.return_value = False
+        mock_resolved.__str__ = lambda self: "/etc/testfile"
+        with (
+            patch("elle.security.polkit_helper.Path.resolve", return_value=mock_resolved),
+            patch.object(helper, "_run_pkexec", new_callable=AsyncMock) as mock_pkexec,
+        ):
             mock_pkexec.return_value = PolkitResult(success=False, error="denied")
             result = await helper.write_privileged(target, "content")
         assert result.success is False
@@ -181,7 +202,14 @@ class TestWritePrivileged:
         target = tmp_path / "testfile"
         target.write_text("old")
 
-        with patch.object(helper, "_run_pkexec", new_callable=AsyncMock) as mock_pkexec:
+        # Mock resolve() to return an allowed path
+        mock_resolved = MagicMock()
+        mock_resolved.is_symlink.return_value = False
+        mock_resolved.__str__ = lambda self: "/etc/testfile"
+        with (
+            patch("elle.security.polkit_helper.Path.resolve", return_value=mock_resolved),
+            patch.object(helper, "_run_pkexec", new_callable=AsyncMock) as mock_pkexec,
+        ):
             mock_pkexec.return_value = PolkitResult(success=True)
             result = await helper.write_privileged(target, "new", preserve_permissions=True)
         assert result.success is True
@@ -192,7 +220,14 @@ class TestWritePrivileged:
     async def test_write_no_preserve(self, tmp_path):
         helper = PolkitHelper()
         target = tmp_path / "newfile"
-        with patch.object(helper, "_run_pkexec", new_callable=AsyncMock) as mock_pkexec:
+        # Mock resolve() to return an allowed path
+        mock_resolved = MagicMock()
+        mock_resolved.is_symlink.return_value = False
+        mock_resolved.__str__ = lambda self: "/var/lib/elle/newfile"
+        with (
+            patch("elle.security.polkit_helper.Path.resolve", return_value=mock_resolved),
+            patch.object(helper, "_run_pkexec", new_callable=AsyncMock) as mock_pkexec,
+        ):
             mock_pkexec.return_value = PolkitResult(success=True)
             result = await helper.write_privileged(target, "content", preserve_permissions=False)
         assert result.success is True
@@ -214,7 +249,7 @@ class TestRunValidator:
         mock_result.stdout = "ok"
         mock_result.stderr = ""
         with patch("elle.security.polkit_helper.subprocess.run", return_value=mock_result):
-            result = await helper.run_validator(["echo", "test"])
+            result = await helper.run_validator(["sshd", "-t"])
         assert result.success is True
 
     @pytest.mark.asyncio
@@ -225,14 +260,14 @@ class TestRunValidator:
             patch.object(helper, "_run_pkexec", new_callable=AsyncMock) as mock_pkexec,
         ):
             mock_pkexec.return_value = PolkitResult(success=True)
-            result = await helper.run_validator(["restricted-cmd"])
+            result = await helper.run_validator(["nginx", "-t"])
         assert result.success is True
 
     @pytest.mark.asyncio
     async def test_timeout(self):
         helper = PolkitHelper()
         with patch("elle.security.polkit_helper.subprocess.run", side_effect=sp.TimeoutExpired("cmd", 60)):
-            result = await helper.run_validator(["slow"])
+            result = await helper.run_validator(["sshd", "-t"])
         assert result.success is False
         assert "timed out" in result.error
 
@@ -240,9 +275,17 @@ class TestRunValidator:
     async def test_command_not_found(self):
         helper = PolkitHelper()
         with patch("elle.security.polkit_helper.subprocess.run", side_effect=FileNotFoundError):
-            result = await helper.run_validator(["nonexistent"])
+            result = await helper.run_validator(["named-checkconf"])
         assert result.success is False
         assert "not found" in result.error
+
+    @pytest.mark.asyncio
+    async def test_validator_not_whitelisted(self):
+        """Non-whitelisted validators are rejected."""
+        helper = PolkitHelper()
+        result = await helper.run_validator(["curl", "http://example.com"])
+        assert result.success is False
+        assert "not whitelisted" in result.error
 
 
 # ---------------------------------------------------------------------------

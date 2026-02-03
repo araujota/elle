@@ -137,8 +137,8 @@ class TestEvaluateCapability:
         assert request.command == "service.restart"
         assert request.domain == "capability.service"
 
-    def test_import_error_returns_allow(self):
-        """When the policy module cannot be imported, allow by default."""
+    def test_import_error_raises_runtime_error(self):
+        """When the policy module cannot be imported, fail-closed with RuntimeError (H4)."""
         cap = self._make_mock_capability(name="s.r", domain="service", risk="low")
         mock_input = MagicMock()
 
@@ -151,10 +151,8 @@ class TestEvaluateCapability:
             return _real_import(name, *args, **kwargs)
 
         with patch("builtins.__import__", side_effect=_failing_import):
-            result = evaluate_capability(cap, mock_input)
-
-        assert result.allowed is True
-        assert result.requires_confirmation is False
+            with pytest.raises(RuntimeError, match="Policy module is required"):
+                evaluate_capability(cap, mock_input)
 
     @patch("elle.policy.evaluate", side_effect=RuntimeError("boom"))
     def test_exception_returns_confirm_result(self, _mock_evaluate):

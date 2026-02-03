@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -310,11 +310,11 @@ class TestRecencyWeighting:
 
     def test_recency_weight_recent(self):
         """Test that recent incidents have high weight."""
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         from elle.daemon.incidents.retriever import _compute_recency_weight
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         weight = _compute_recency_weight(now)
 
         # Very recent should have weight close to 1
@@ -322,14 +322,14 @@ class TestRecencyWeighting:
 
     def test_recency_weight_decay(self):
         """Test that recency weight decays over time."""
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
 
         from elle.daemon.incidents.retriever import (
             RECENCY_HALF_LIFE_DAYS,
             _compute_recency_weight,
         )
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         # After exactly one half-life, weight should be ~0.5
         old = now - timedelta(days=RECENCY_HALF_LIFE_DAYS)
         weight = _compute_recency_weight(old)
@@ -338,12 +338,12 @@ class TestRecencyWeighting:
 
     def test_recency_weight_minimum(self):
         """Test that very old incidents still have minimum weight."""
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
 
         from elle.daemon.incidents.retriever import _compute_recency_weight
 
         # 2 years old
-        very_old = datetime.utcnow() - timedelta(days=730)
+        very_old = datetime.now(timezone.utc) - timedelta(days=730)
         weight = _compute_recency_weight(very_old)
 
         # Should still be >= 0.1 (minimum weight)
@@ -351,7 +351,7 @@ class TestRecencyWeighting:
 
     def test_recency_affects_ranking(self, conn):
         """Test that recent incidents rank higher than old ones."""
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
 
         # Create two similar incidents - one old, one recent
         old_incident = create_incident_draft(
@@ -370,7 +370,7 @@ class TestRecencyWeighting:
         finalize_outcome(old_incident.incident_id, "improved", conn=conn)
 
         # Manually backdate the old incident
-        old_time = (datetime.utcnow() - timedelta(days=90)).isoformat()
+        old_time = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
         conn.execute(
             "UPDATE incidents SET updated_at = %s WHERE id = %s",
             (old_time, old_incident.incident_id),
@@ -839,7 +839,7 @@ class TestRecencyWeightingExtended:
         """Test that future dates still produce valid weights."""
         from elle.daemon.incidents.retriever import _compute_recency_weight
 
-        future = datetime.utcnow() + timedelta(days=1)
+        future = datetime.now(timezone.utc) + timedelta(days=1)
         weight = _compute_recency_weight(future)
         # Future date should produce weight >= 1.0 or close to it
         assert weight >= 0.9
@@ -848,7 +848,7 @@ class TestRecencyWeightingExtended:
         """Test that recency weight decreases as time increases."""
         from elle.daemon.incidents.retriever import _compute_recency_weight
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         weights = []
         for days in [0, 7, 30, 90, 365]:
             w = _compute_recency_weight(now - timedelta(days=days))
@@ -862,7 +862,7 @@ class TestRecencyWeightingExtended:
         """Test that all recency weights are positive."""
         from elle.daemon.incidents.retriever import _compute_recency_weight
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         for days in [0, 1, 7, 30, 90, 365, 730, 1000]:
             w = _compute_recency_weight(now - timedelta(days=days))
             assert w > 0

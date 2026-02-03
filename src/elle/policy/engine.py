@@ -7,8 +7,9 @@ returns decisions with required actions.
 from __future__ import annotations
 
 import logging
+import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 from elle.policy.audit import log_evaluation
 from elle.policy.loader import load_policy
@@ -135,7 +136,7 @@ class PolicyEngine:
             requires_preview=requires_preview,
             message=message,
             justification_prompt=justification_prompt,
-            evaluated_at=datetime.now(),
+            evaluated_at=datetime.now(timezone.utc),
             evaluation_time_ms=elapsed_ms,
         )
 
@@ -259,18 +260,22 @@ class PolicyEngine:
 # =============================================================================
 
 _engine: PolicyEngine | None = None
+_engine_lock = threading.Lock()
 
 
 def get_policy_engine() -> PolicyEngine:
-    """Get the shared policy engine instance.
+    """Get the shared policy engine instance (thread-safe).
 
     Returns:
         PolicyEngine singleton.
     """
     global _engine
-    if _engine is None:
-        _engine = PolicyEngine()
-    return _engine
+    if _engine is not None:
+        return _engine
+    with _engine_lock:
+        if _engine is None:
+            _engine = PolicyEngine()
+        return _engine
 
 
 def evaluate(

@@ -9,6 +9,9 @@ Implements:
 
 from __future__ import annotations
 
+import logging
+import re
+import time
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -27,10 +30,12 @@ from elle.daemon.api.models import (
     SnapshotResponse,
     StatusResponse,
 )
+from elle.daemon.api.openai_models import ExecutionMode
 
 if TYPE_CHECKING:
     from elle.daemon.main import ElledDaemon
 
+logger = logging.getLogger(__name__)
 
 # Router instance - will be configured with daemon reference
 router = APIRouter(prefix="/v1", tags=["v1"])
@@ -61,6 +66,38 @@ def get_daemon() -> ElledDaemon:
     if _daemon is None:
         raise HTTPException(status_code=503, detail="Daemon not initialized")
     return _daemon
+
+
+# Regex for validating search parameters (M8)
+_SAFE_SEARCH_RE = re.compile(r"^[\w\s\-./:%@#*?()]+$", re.UNICODE)
+_MAX_SEARCH_LEN = 200
+
+
+def _validate_search(search: str | None) -> str | None:
+    """Validate and sanitize a search parameter (M8).
+
+    Args:
+        search: Raw search string from query parameter.
+
+    Returns:
+        The validated search string, or None.
+
+    Raises:
+        HTTPException: If the search string is invalid.
+    """
+    if search is None:
+        return None
+    if len(search) > _MAX_SEARCH_LEN:
+        raise HTTPException(status_code=400, detail=f"Search query too long (max {_MAX_SEARCH_LEN} chars)")
+    if not _SAFE_SEARCH_RE.match(search):
+        raise HTTPException(status_code=400, detail="Search query contains invalid characters")
+    return search
+
+
+# Health endpoint TTL cache (M4)
+_health_cache: dict[str, Any] | None = None
+_health_cache_ts: float = 0.0
+_HEALTH_TTL_SEC = 10.0
 
 
 @router.get(
@@ -142,6 +179,9 @@ async def get_events(
     _ = auth
     get_daemon()  # Verify daemon is running
 
+    # Validate search parameter (M8)
+    search = _validate_search(search)
+
     try:
         from elle.daemon.telemetry.store import count_events, query_events, search_events
 
@@ -189,7 +229,8 @@ async def get_events(
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.exception("Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get(
@@ -213,6 +254,9 @@ async def get_incidents(
     """Query incidents with filters. Requires authentication."""
     _ = auth
     get_daemon()  # Verify daemon is running
+
+    # Validate search parameter (M8)
+    search = _validate_search(search)
 
     try:
         from elle.daemon.incidents.store import list_incidents
@@ -257,7 +301,8 @@ async def get_incidents(
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.exception("Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get(
@@ -352,7 +397,8 @@ async def get_incident(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.exception("Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post(
@@ -374,9 +420,13 @@ async def execute_incident_plan(
     (stored in prepared_plan_json). Called when the user clicks
     "Execute Now" on a forecast warning notification.
 
-    Requires authentication.
+    Requires authentication with EXECUTE mode.
     """
-    _ = auth
+    if not auth.can_use_mode(ExecutionMode.EXECUTE):
+        raise HTTPException(
+            status_code=403,
+            detail="Execution mode 'execute' not allowed for this authentication",
+        )
     get_daemon()  # Verify daemon is running
 
     try:
@@ -397,18 +447,47 @@ async def execute_incident_plan(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.exception("Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/health")
 async def health_check() -> dict[str, Any]:
-    """Simple health check endpoint."""
+    """Health check endpoint with database connectivity status.
+
+    Results are cached for 10 seconds (M4) to avoid hammering the
+    database on high-frequency polling.
+    """
+    global _health_cache, _health_cache_ts
+
+    now = time.monotonic()
+    if _health_cache is not None and (now - _health_cache_ts) < _HEALTH_TTL_SEC:
+        return _health_cache
+
     daemon = get_daemon()
     status = daemon.get_status()
-    return {
-        "status": "healthy" if status.healthy else "unhealthy",
+
+    db_ok = False
+    try:
+        from elle.storage.engine import get_pool
+
+        pool = get_pool()
+        with pool.connection() as conn:
+            conn.execute("SELECT 1")
+        db_ok = True
+    except Exception:
+        pass
+
+    overall = "healthy" if (status.healthy and db_ok) else "degraded"
+    result: dict[str, Any] = {
+        "status": overall,
         "uptime_sec": status.uptime_sec,
+        "database": "connected" if db_ok else "unavailable",
     }
+
+    _health_cache = result
+    _health_cache_ts = now
+    return result
 
 
 @router.get(
@@ -442,7 +521,8 @@ async def get_metrics(
         return metrics.model_dump(mode="json")
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.exception("Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get(
@@ -483,4 +563,5 @@ async def get_prometheus_metrics(
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.exception("Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e

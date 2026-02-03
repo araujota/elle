@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -210,7 +210,7 @@ class TestManVaultService:
 
     def test_needs_incremental_recent(self):
         svc = self._make_service()
-        recent = datetime.now().isoformat()
+        recent = datetime.now(timezone.utc).isoformat()
         with (
             patch("elle.daemon.manvault.service.get_conn") as mock_conn,
             patch("elle.daemon.manvault.service.get_meta", return_value=recent),
@@ -222,7 +222,7 @@ class TestManVaultService:
 
     def test_needs_incremental_old(self):
         svc = self._make_service()
-        old = (datetime.now() - timedelta(days=2)).isoformat()
+        old = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
         with (
             patch("elle.daemon.manvault.service.get_conn") as mock_conn,
             patch("elle.daemon.manvault.service.get_meta", return_value=old),

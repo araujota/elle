@@ -5,6 +5,11 @@ all routes and middleware, including the OpenAI-compatible
 chat completions endpoint.
 """
 
+from __future__ import annotations
+
+import logging
+import threading
+import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -24,8 +29,46 @@ from elle.daemon.api.vault_routes import set_manvault_service
 if TYPE_CHECKING:
     from elle.daemon.main import ElledDaemon
 
+logger = logging.getLogger(__name__)
 
-def create_app(daemon: "ElledDaemon") -> FastAPI:
+
+# =============================================================================
+# Rate Limiter (M1)
+# =============================================================================
+
+
+class _RateLimiter:
+    """Sliding window rate limiter (per-IP, 60 requests/min)."""
+
+    def __init__(self, max_requests: int = 60, window_sec: float = 60.0) -> None:
+        self._max_requests = max_requests
+        self._window_sec = window_sec
+        self._lock = threading.Lock()
+        self._requests: dict[str, list[float]] = {}
+
+    def is_allowed(self, client_ip: str) -> bool:
+        now = time.monotonic()
+        cutoff = now - self._window_sec
+        with self._lock:
+            timestamps = self._requests.get(client_ip, [])
+            timestamps = [t for t in timestamps if t > cutoff]
+            if not timestamps:
+                self._requests.pop(client_ip, None)
+            if len(timestamps) >= self._max_requests:
+                self._requests[client_ip] = timestamps
+                return False
+            timestamps.append(now)
+            self._requests[client_ip] = timestamps
+            # Evict all entries if map grows too large (H12)
+            if len(self._requests) > 10000:
+                self._requests.clear()
+            return True
+
+
+_rate_limiter = _RateLimiter()
+
+
+def create_app(daemon: ElledDaemon) -> FastAPI:
     """Create and configure the FastAPI application.
 
     Args:
@@ -34,6 +77,12 @@ def create_app(daemon: "ElledDaemon") -> FastAPI:
     Returns:
         Configured FastAPI application.
     """
+    # Conditionally disable API docs on non-localhost (M2)
+    api_host = daemon.config.api.host if daemon.config else "127.0.0.1"
+    is_localhost = api_host in ("127.0.0.1", "localhost", "::1")
+    docs_url = "/docs" if is_localhost else None
+    redoc_url = "/redoc" if is_localhost else None
+
     app = FastAPI(
         title="elled API",
         description=(
@@ -42,24 +91,29 @@ def create_app(daemon: "ElledDaemon") -> FastAPI:
             "for programmatic access to ELLE's capabilities."
         ),
         version="0.1.0",
-        docs_url="/docs",
-        redoc_url="/redoc",
+        docs_url=docs_url,
+        redoc_url=redoc_url,
     )
 
-    # Configure CORS for local access
-    # Allows both GET (status/events) and POST (chat completions)
+    # Configure CORS for local access only — pin to configured port
+    api_port = daemon.config.api.port if daemon.config else 8377
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:*", "http://127.0.0.1:*"],
+        allow_origins=[
+            f"http://127.0.0.1:{api_port}",
+            f"http://localhost:{api_port}",
+        ],
         allow_credentials=True,
         allow_methods=["GET", "POST"],
-        allow_headers=["*", "Authorization"],
+        allow_headers=["Authorization", "Content-Type"],
     )
 
     # Get session token from daemon's token manager
     session_token = None
     if hasattr(daemon, "_session_token_manager") and daemon._session_token_manager is not None:
         session_token = daemon._session_token_manager.token
+        if session_token is None:
+            logger.warning("Session token is None; API auth may be impaired")
 
     # Set up authentication middleware with session token
     auth_middleware = AuthMiddleware(
@@ -70,9 +124,22 @@ def create_app(daemon: "ElledDaemon") -> FastAPI:
     @app.middleware("http")
     async def auth_middleware_handler(request: Request, call_next: Callable[[Request], Any]) -> Response:
         """Middleware to authenticate requests and attach auth context."""
-        # Skip auth for docs (local development only) and health endpoints
-        # Note: /docs and /redoc are only exposed on localhost
-        if request.url.path in ("/docs", "/redoc", "/openapi.json", "/v1/health", "/"):
+        # Rate limit ALL endpoints including health (M1)
+        client_ip = request.client.host if request.client else "unknown"
+        if not _rate_limiter.is_allowed(client_ip):
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Rate limit exceeded"},
+                headers={"Retry-After": "60"},
+            )
+
+        # Skip auth for health endpoint
+        skip_paths = {"/v1/health", "/"}
+        if is_localhost:
+            skip_paths.update({"/docs", "/redoc", "/openapi.json"})
+        if request.url.path in skip_paths:
             response: Response = await call_next(request)
             return response
 
@@ -80,15 +147,20 @@ def create_app(daemon: "ElledDaemon") -> FastAPI:
             auth_context = await auth_middleware(request)
             request.state.auth_context = auth_context
         except Exception as e:
-            # Re-raise auth errors to reject unauthenticated requests
             from fastapi import HTTPException
 
             if isinstance(e, HTTPException):
                 raise
-            # Other errors - let request proceed but log
+            # Fail closed: do not let request proceed on auth infrastructure errors
             import logging
 
-            logging.getLogger(__name__).debug(f"Auth middleware error: {e}")
+            logging.getLogger(__name__).error(f"Auth middleware error: {e}")
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "Authentication service unavailable"},
+            )
 
         response = await call_next(request)
         return response

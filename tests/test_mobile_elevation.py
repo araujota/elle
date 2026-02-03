@@ -7,7 +7,7 @@ error paths for 90%+ branch coverage of elle.mobile.elevation.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -102,7 +102,7 @@ def paired_device(store):
         role=MobileRole.MOBILE_READONLY,
         status=DeviceStatus.PAIRED,
         cert_fingerprint="abc123",
-        paired_at=datetime.utcnow(),
+        paired_at=datetime.now(timezone.utc),
     )
     return store.create_device(device)
 
@@ -116,7 +116,7 @@ def operator_device(store):
         role=MobileRole.MOBILE_OPERATOR,
         status=DeviceStatus.PAIRED,
         cert_fingerprint="op456",
-        paired_at=datetime.utcnow(),
+        paired_at=datetime.now(timezone.utc),
     )
     return store.create_device(device)
 
@@ -147,7 +147,7 @@ class TestGrantElevation:
             MobileRole.MOBILE_OPERATOR,
         )
         assert elevation.is_active()
-        remaining = (elevation.expires_at - datetime.utcnow()).total_seconds()
+        remaining = (elevation.expires_at - datetime.now(timezone.utc)).total_seconds()
         assert 590 < remaining <= 600
 
     def test_grant_elevation_custom_granted_by(self, elevation_manager, paired_device):
@@ -324,9 +324,9 @@ class TestGetEffectiveRole:
         expired_elevation = Elevation(
             device_id=paired_device.device_id,
             elevated_role=MobileRole.MOBILE_OPERATOR,
-            expires_at=datetime.utcnow() - timedelta(seconds=60),
+            expires_at=datetime.now(timezone.utc) - timedelta(seconds=60),
             granted_by="cli",
-            created_at=datetime.utcnow() - timedelta(seconds=660),
+            created_at=datetime.now(timezone.utc) - timedelta(seconds=660),
         )
         store._elevations[paired_device.device_id] = expired_elevation
         effective = elevation_manager.get_effective_role(paired_device)
@@ -376,9 +376,9 @@ class TestGetElevationStatus:
         expired = Elevation(
             device_id=paired_device.device_id,
             elevated_role=MobileRole.MOBILE_OPERATOR,
-            expires_at=datetime.utcnow() - timedelta(seconds=10),
+            expires_at=datetime.now(timezone.utc) - timedelta(seconds=10),
             granted_by="cli",
-            created_at=datetime.utcnow() - timedelta(seconds=610),
+            created_at=datetime.now(timezone.utc) - timedelta(seconds=610),
         )
         store._elevations[paired_device.device_id] = expired
         status = elevation_manager.get_elevation_status(paired_device.device_id)
@@ -408,7 +408,7 @@ class TestListElevatedDevices:
                 role=MobileRole.MOBILE_READONLY,
                 status=DeviceStatus.PAIRED,
                 cert_fingerprint=f"fp-{i}",
-                paired_at=datetime.utcnow(),
+                paired_at=datetime.now(timezone.utc),
             )
             store.create_device(device)
 
@@ -432,9 +432,9 @@ class TestListElevatedDevices:
         orphan_elevation = Elevation(
             device_id="orphan-device",
             elevated_role=MobileRole.MOBILE_OPERATOR,
-            expires_at=datetime.utcnow() + timedelta(seconds=600),
+            expires_at=datetime.now(timezone.utc) + timedelta(seconds=600),
             granted_by="cli",
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
         store._elevations["orphan-device"] = orphan_elevation
 

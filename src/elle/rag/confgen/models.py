@@ -6,7 +6,7 @@ operations, results, and validation.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
@@ -158,7 +158,7 @@ class ConfigGenResult(BaseModel):
         description="Man pages or documentation used to generate this config",
     )
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When the result was generated",
     )
 

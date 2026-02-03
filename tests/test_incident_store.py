@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -598,7 +598,7 @@ class TestConfigState:
         """Test config state preserves modification time."""
         incident = create_incident_draft(title="Mtime test", conn=conn)
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         config_state = ConfigFileState(
             path="/etc/hosts",
             sha256_after="aabbcc",

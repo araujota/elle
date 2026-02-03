@@ -6,7 +6,7 @@ forecast generation, baseline updates, and aggregation storage.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
@@ -60,7 +60,7 @@ def aggregator_low_samples():
 def _insert_sample(conn, metric, value, ts=None):
     """Insert a metric sample directly into the database."""
     if ts is None:
-        ts = datetime.utcnow()
+        ts = datetime.now(timezone.utc)
     conn.execute(
         "INSERT INTO metric_samples (metric, value, ts) VALUES (%s, %s, %s)",
         (metric, value, serialize_datetime(ts)),
@@ -75,7 +75,7 @@ def _insert_baseline(conn, metric, mean, stddev, samples):
         "VALUES (%s, %s, %s, %s, %s) "
         "ON CONFLICT (metric) DO UPDATE SET baseline_mean=EXCLUDED.baseline_mean, "
         "baseline_stddev=EXCLUDED.baseline_stddev, samples=EXCLUDED.samples, updated_at=EXCLUDED.updated_at",
-        (metric, mean, stddev, samples, serialize_datetime(datetime.utcnow())),
+        (metric, mean, stddev, samples, serialize_datetime(datetime.now(timezone.utc))),
     )
     conn.commit()
 
@@ -221,7 +221,7 @@ class TestCollectSystemMetrics:
 
 class TestComputeTrendWindow:
     def test_trend_window_with_samples(self, aggregator, db):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         metric = "disk./.used_pct"
 
         # Insert samples across time windows
@@ -234,13 +234,13 @@ class TestComputeTrendWindow:
         assert trend.avg_1h is not None
 
     def test_trend_window_no_samples(self, aggregator, db):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         trend = aggregator._compute_trend_window("nonexistent.metric", 50.0, now, db)
         assert trend.current == 50.0
         assert trend.avg_1h is None
 
     def test_trend_window_rate_computation(self, aggregator, db):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         metric = "mem.used_pct"
 
         # Insert samples to create a measurable rate: older samples lower, newer higher
@@ -253,7 +253,7 @@ class TestComputeTrendWindow:
         assert isinstance(trend.rate_of_change_per_hour, float)
 
     def test_trend_window_anomaly_detection(self, aggregator_low_samples, db):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         metric = "cpu.load_1m"
 
         # Insert baseline
@@ -276,7 +276,7 @@ class TestComputeTrendWindow:
 
 class TestComputeForecast:
     def test_forecast_basic(self, aggregator, db):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         metric = "disk./.used_pct"
 
         # Insert some samples
@@ -383,24 +383,24 @@ class TestComputeForecast:
 
 class TestCheckAnomaly:
     def test_no_anomaly_no_baseline(self, aggregator, db):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         result = aggregator._check_anomaly("cpu.load_1m", 2.0, now, db)
         assert result is None
 
     def test_no_anomaly_insufficient_samples(self, aggregator, db):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         _insert_baseline(db, "cpu.load_1m", mean=2.0, stddev=0.5, samples=5)
         result = aggregator._check_anomaly("cpu.load_1m", 2.5, now, db)
         assert result is None
 
     def test_no_anomaly_zero_stddev(self, aggregator_low_samples, db):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         _insert_baseline(db, "cpu.load_1m", mean=2.0, stddev=0.0, samples=200)
         result = aggregator_low_samples._check_anomaly("cpu.load_1m", 2.5, now, db)
         assert result is None
 
     def test_anomaly_above_baseline(self, aggregator_low_samples, db):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         _insert_baseline(db, "cpu.load_1m", mean=2.0, stddev=0.5, samples=200)
         # z-score = (10 - 2) / 0.5 = 16.0, well above threshold of 2.0
         result = aggregator_low_samples._check_anomaly("cpu.load_1m", 10.0, now, db)
@@ -409,7 +409,7 @@ class TestCheckAnomaly:
         assert result.deviation_direction == "above"
 
     def test_anomaly_below_baseline(self, aggregator_low_samples, db):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         _insert_baseline(db, "mem.used_pct", mean=60.0, stddev=5.0, samples=200)
         # z-score = (30 - 60) / 5 = -6.0
         result = aggregator_low_samples._check_anomaly("mem.used_pct", 30.0, now, db)
@@ -418,7 +418,7 @@ class TestCheckAnomaly:
         assert result.deviation_direction == "below"
 
     def test_normal_value(self, aggregator_low_samples, db):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         _insert_baseline(db, "cpu.load_1m", mean=2.0, stddev=1.0, samples=200)
         # z-score = (2.5 - 2.0) / 1.0 = 0.5, below threshold of 2.0
         result = aggregator_low_samples._check_anomaly("cpu.load_1m", 2.5, now, db)
@@ -470,7 +470,7 @@ class TestBaseline:
 
 class TestStoreAggregations:
     def test_store_aggregations_with_data(self, aggregator, db):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         # Insert data for a tracked metric
         for i in range(5):
             _insert_sample(db, "disk./.used_pct", 80.0 + i, ts=now - timedelta(minutes=i * 10))
@@ -629,7 +629,7 @@ class TestGetTrendContext:
 
 class TestGetMetricTrend:
     def test_get_metric_trend_existing(self, db):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         _insert_sample(db, "cpu.load_1m", 2.5, ts=now)
 
         trend = get_metric_trend("cpu.load_1m", conn=db)
@@ -641,7 +641,7 @@ class TestGetMetricTrend:
         assert trend is None
 
     def test_get_metric_trend_with_aggregations(self, db):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         _insert_sample(db, "mem.used_pct", 70.0, ts=now)
 
         # Insert aggregation data
@@ -664,7 +664,7 @@ class TestGetMetricTrend:
 
 class TestCleanupOldSamples:
     def test_cleanup_removes_old_samples(self, db):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         old_ts = now - timedelta(hours=200)
         recent_ts = now - timedelta(hours=1)
 
@@ -678,14 +678,14 @@ class TestCleanupOldSamples:
         assert cursor.fetchone()[0] == 1
 
     def test_cleanup_retains_recent_samples(self, db):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         _insert_sample(db, "cpu.load_1m", 2.0, ts=now)
 
         deleted = cleanup_old_samples(retention_hours=168, conn=db)
         assert deleted == 0
 
     def test_cleanup_custom_retention(self, db):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         _insert_sample(db, "cpu.load_1m", 2.0, ts=now - timedelta(hours=25))
         _insert_sample(db, "cpu.load_1m", 2.5, ts=now)
 

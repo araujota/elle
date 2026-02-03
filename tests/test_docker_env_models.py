@@ -1,6 +1,6 @@
 """Tests for Docker environment variable models."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -168,7 +168,7 @@ class TestSavedEnvVar:
     """Tests for SavedEnvVar model."""
 
     def test_create_saved_var(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         saved = SavedEnvVar(
             image_family="postgres",
             name="POSTGRES_PASSWORD",
@@ -186,7 +186,7 @@ class TestSavedEnvVar:
             name="POSTGRES_PASSWORD",
             value="secret",
             sensitive=True,
-            updated_at=datetime.utcnow(),
+            updated_at=datetime.now(timezone.utc),
         )
         assert saved.sensitive
 

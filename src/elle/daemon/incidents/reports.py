@@ -6,7 +6,7 @@ efficacy summaries, and trend analysis.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from types import TracebackType
 from typing import Any, Literal
 
@@ -74,7 +74,7 @@ class IncidentFullReport(BaseModel):
 
     # Generated report content
     report_text: str
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     format: ReportFormat = "markdown"
 
 
@@ -88,7 +88,7 @@ class EfficacyReport(BaseModel):
 
     # Report content
     report_text: str
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     format: ReportFormat = "markdown"
 
 
@@ -112,7 +112,7 @@ class TrendReport(BaseModel):
 
     # Report content
     report_text: str
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # =============================================================================
@@ -238,7 +238,7 @@ class ReportGenerator:
                     keywords=keywords,
                     generated_at=datetime.fromisoformat(row["generated_at"])
                     if row["generated_at"]
-                    else datetime.utcnow(),
+                    else datetime.now(timezone.utc),
                     model_used=row["model_used"] or "",
                 )
         except psycopg.errors.UndefinedTable:
@@ -418,7 +418,7 @@ class ReportGenerator:
 
         # Footer
         lines.append("---")
-        lines.append(f"*Generated at {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}*")
+        lines.append(f"*Generated at {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}*")
 
         return "\n".join(lines)
 
@@ -437,7 +437,7 @@ class ReportGenerator:
             "actions": [a.model_dump(mode="json") for a in actions],
             "narrative": narrative.model_dump(mode="json") if narrative else None,
             "similar_incidents": [s.model_dump(mode="json") for s in similar],
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
         return json.dumps(data, indent=2, default=str)
 
@@ -660,7 +660,7 @@ class ReportGenerator:
         """
         from elle.daemon.incidents.store import list_incidents
 
-        to_time = datetime.utcnow()
+        to_time = datetime.now(timezone.utc)
         from_time = to_time - timedelta(days=days)
 
         # Get incidents in range

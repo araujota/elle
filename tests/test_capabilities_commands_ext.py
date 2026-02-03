@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -160,25 +160,25 @@ class TestFormatTimeAgo:
     def test_just_now(self):
         from elle.cli.capabilities_commands import format_time_ago
 
-        result = format_time_ago(datetime.utcnow() - timedelta(seconds=10))
+        result = format_time_ago(datetime.now(timezone.utc) - timedelta(seconds=10))
         assert result == "just now"
 
     def test_minutes_ago(self):
         from elle.cli.capabilities_commands import format_time_ago
 
-        result = format_time_ago(datetime.utcnow() - timedelta(minutes=5))
+        result = format_time_ago(datetime.now(timezone.utc) - timedelta(minutes=5))
         assert "m ago" in result
 
     def test_hours_ago(self):
         from elle.cli.capabilities_commands import format_time_ago
 
-        result = format_time_ago(datetime.utcnow() - timedelta(hours=3))
+        result = format_time_ago(datetime.now(timezone.utc) - timedelta(hours=3))
         assert "h ago" in result
 
     def test_days_ago(self):
         from elle.cli.capabilities_commands import format_time_ago
 
-        result = format_time_ago(datetime.utcnow() - timedelta(days=3))
+        result = format_time_ago(datetime.now(timezone.utc) - timedelta(days=3))
         assert "d ago" in result
 
     def test_old_date_formatted(self):
@@ -686,7 +686,7 @@ class TestRenderCapabilityDetail:
             dependencies=("systemd",),
         )
 
-        stats = _make_exec_stats(total=5, success=4, failed=1, last_at=datetime.utcnow())
+        stats = _make_exec_stats(total=5, success=4, failed=1, last_at=datetime.now(timezone.utc))
         mock_engine.return_value.get_autonomy_status.return_value = _make_autonomy_status(
             can_run=True, source="earned", stats=stats, earned_progress=0.75
         )

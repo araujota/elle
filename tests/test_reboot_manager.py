@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -1200,7 +1200,7 @@ class TestCleanupStaleIntents:
         mgr = RebootManager()
         stale_intent = _make_intent(
             status="rebooting",
-            updated_at=datetime.utcnow() - timedelta(hours=48),
+            updated_at=datetime.now(timezone.utc) - timedelta(hours=48),
         )
 
         with (
@@ -1216,7 +1216,7 @@ class TestCleanupStaleIntents:
         mgr = RebootManager()
         recent_intent = _make_intent(
             status="rebooting",
-            updated_at=datetime.utcnow(),
+            updated_at=datetime.now(timezone.utc),
         )
 
         with (
@@ -1230,11 +1230,11 @@ class TestCleanupStaleIntents:
     @pytest.mark.asyncio
     async def test_cleans_multiple_stale_intents(self):
         mgr = RebootManager()
-        old_time = datetime.utcnow() - timedelta(hours=48)
+        old_time = datetime.now(timezone.utc) - timedelta(hours=48)
         intents = [
             _make_intent(id="i1", status="rebooting", updated_at=old_time),
             _make_intent(id="i2", status="rebooting", updated_at=old_time),
-            _make_intent(id="i3", status="rebooting", updated_at=datetime.utcnow()),
+            _make_intent(id="i3", status="rebooting", updated_at=datetime.now(timezone.utc)),
         ]
 
         with (

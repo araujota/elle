@@ -11,7 +11,7 @@ Storage backend: PostgreSQL via psycopg (schema ``mobile``).
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import psycopg
@@ -234,10 +234,11 @@ class MobileStore:
         params.append(device_id)
 
         with get_conn(schema=PG_SCHEMA) as conn:
-            conn.execute(
-                f"UPDATE devices SET {', '.join(updates)} WHERE device_id = %s",  # nosec B608
-                params,
-            )
+            from psycopg import sql
+
+            set_clause = sql.SQL(", ").join(sql.SQL(u) for u in updates)
+            query = sql.SQL("UPDATE devices SET {} WHERE device_id = %s").format(set_clause)
+            conn.execute(query, params)
             return self.get_device(device_id)
 
     def delete_device(self, device_id: str) -> bool:
@@ -337,7 +338,7 @@ class MobileStore:
         Returns:
             Active elevation if one exists, None otherwise.
         """
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         with get_conn(schema=PG_SCHEMA) as conn:
             cursor = conn.execute(
                 """
@@ -358,7 +359,7 @@ class MobileStore:
         Returns:
             List of active elevations.
         """
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         with get_conn(schema=PG_SCHEMA) as conn:
             cursor = conn.execute(
                 "SELECT * FROM elevations WHERE expires_at > %s ORDER BY expires_at",
@@ -385,7 +386,7 @@ class MobileStore:
         Returns:
             Number of records removed.
         """
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         with get_conn(schema=PG_SCHEMA) as conn:
             cursor = conn.execute("DELETE FROM elevations WHERE expires_at <= %s", (now,))
             return cursor.rowcount
@@ -467,13 +468,38 @@ class MobileStore:
             cursor = conn.execute("UPDATE pairing_tokens SET used = TRUE WHERE token = %s", (token,))
             return cursor.rowcount > 0
 
+    def mark_token_used_atomic(self, token: str) -> PairingToken | None:
+        """Atomically mark a token as used and return it.
+
+        Uses UPDATE ... WHERE used=false to prevent race conditions (C17).
+
+        Args:
+            token: Token string.
+
+        Returns:
+            Token if successfully marked, None if not found or already used.
+        """
+        with get_conn(schema=PG_SCHEMA) as conn:
+            cursor = conn.execute(
+                """
+                UPDATE pairing_tokens SET used = TRUE
+                WHERE token = %s AND used = FALSE
+                RETURNING *
+                """,
+                (token,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return self._row_to_token(row)
+
     def cleanup_expired_tokens(self) -> int:
         """Remove expired pairing tokens.
 
         Returns:
             Number of tokens removed.
         """
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         with get_conn(schema=PG_SCHEMA) as conn:
             cursor = conn.execute("DELETE FROM pairing_tokens WHERE expires_at <= %s", (now,))
             return cursor.rowcount
@@ -510,3 +536,46 @@ class MobileStore:
             "expired_tokens": self.cleanup_expired_tokens(),
             "expired_elevations": self.cleanup_expired_elevations(),
         }
+
+    def add_to_revocation_list(self, fingerprint: str) -> None:
+        """Add a certificate fingerprint to the revocation list (C16).
+
+        Args:
+            fingerprint: SHA-256 certificate fingerprint.
+        """
+        with get_conn(schema=PG_SCHEMA) as conn:
+            conn.execute(
+                """
+                INSERT INTO revoked_certs (fingerprint, revoked_at)
+                VALUES (%s, %s)
+                ON CONFLICT (fingerprint) DO NOTHING
+                """,
+                (fingerprint, datetime.now(timezone.utc).isoformat()),
+            )
+
+    def get_revoked_fingerprints(self) -> set[str]:
+        """Get all revoked certificate fingerprints.
+
+        Returns:
+            Set of revoked fingerprints.
+        """
+        with get_conn(schema=PG_SCHEMA) as conn:
+            cursor = conn.execute("SELECT fingerprint FROM revoked_certs")
+            return {row["fingerprint"] for row in cursor.fetchall()}
+
+    def record_auth_failure(self, client_ip: str, reason: str, device_id: str = "") -> None:
+        """Record an authentication failure for audit (H24).
+
+        Args:
+            client_ip: Client IP address.
+            reason: Failure reason.
+            device_id: Optional device ID.
+        """
+        with get_conn(schema=PG_SCHEMA) as conn:
+            conn.execute(
+                """
+                INSERT INTO auth_failures (client_ip, reason, device_id, created_at)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (client_ip, reason, device_id, datetime.now(timezone.utc).isoformat()),
+            )

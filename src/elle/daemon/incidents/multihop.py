@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
 from elle.common.pydantic_compat import safe_model_dump
@@ -80,7 +80,7 @@ class MultiHopSearch:
         Returns:
             MultiHopResult with discovered chains and search metadata.
         """
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         hops: list[SearchHop] = []
         all_incidents: dict[str, IncidentSearchResult] = {}
         all_events: dict[str, dict[str, Any]] = {}
@@ -94,7 +94,7 @@ class MultiHopSearch:
             time_start = event_time - timedelta(hours=self.config.time_window_hours)
             all_events[initial_event.get("event_id", "")] = initial_event
         else:
-            time_end = datetime.utcnow()
+            time_end = datetime.now(timezone.utc)
             time_start = time_end - timedelta(hours=self.config.time_window_hours)
 
         current_query = query
@@ -167,7 +167,7 @@ class MultiHopSearch:
         if chains:
             best_chain = max(chains, key=lambda c: c.overall_confidence)
 
-        end_time = datetime.utcnow()
+        end_time = datetime.now(timezone.utc)
         duration_ms = int((end_time - start_time).total_seconds() * 1000)
 
         return MultiHopResult(
@@ -336,8 +336,8 @@ class MultiHopSearch:
         if isinstance(ts, datetime):
             return ts
         if isinstance(ts, str):
-            return parse_datetime(ts) or datetime.utcnow()
-        return datetime.utcnow()
+            return parse_datetime(ts) or datetime.now(timezone.utc)
+        return datetime.now(timezone.utc)
 
     def _build_chains(
         self,

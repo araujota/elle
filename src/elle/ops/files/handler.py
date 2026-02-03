@@ -6,10 +6,12 @@ and rollback support.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import shutil
-from datetime import datetime
+import stat as stat_mod
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -57,6 +59,8 @@ class FileHandler:
             temp_dir: Directory for temporary files during operations.
         """
         self._temp_dir = temp_dir or Path("/tmp/elle-file-ops")
+        self._temp_dir.mkdir(parents=True, exist_ok=True)
+        self._temp_dir.chmod(0o700)
         self._rollback_stack: list[tuple[FileOp, str | None]] = []
 
     # =========================================================================
@@ -155,6 +159,23 @@ class FileHandler:
         Returns:
             FileResult with outcome of all operations.
         """
+        # M24: Check disk space before executing operations
+        for op in request.operations:
+            dest_path = Path(op.dest) if op.dest else Path(op.source)
+            check_dir = dest_path.parent
+            while not check_dir.exists() and check_dir != check_dir.parent:
+                check_dir = check_dir.parent
+            if check_dir.exists():
+                usage = shutil.disk_usage(str(check_dir))
+                if usage.free < 10 * 1024 * 1024:  # 10MB minimum
+                    return FileResult(
+                        success=False,
+                        results=(),
+                        total_bytes=0,
+                        total_files=0,
+                        error=f"Insufficient disk space: {usage.free} bytes free on {check_dir}",
+                    )
+
         if request.dry_run:
             preview = self.preview(request)
             return FileResult(
@@ -303,6 +324,13 @@ class FileHandler:
             raise FileNotFoundError(str(source))
         if dest is None:
             raise ValueError("Move requires destination")
+
+        # H21: Symlink check on source and destination
+        if source.is_symlink():
+            raise ValueError(f"Source is a symlink: {source}")
+        if dest.exists() and dest.is_symlink():
+            raise ValueError(f"Destination is a symlink: {dest}")
+
         if dest.exists() and not op.overwrite:
             raise FileExistsError(str(dest))
 
@@ -352,6 +380,13 @@ class FileHandler:
             raise FileNotFoundError(str(source))
         if dest is None:
             raise ValueError("Copy requires destination")
+
+        # H21: Symlink check on source and destination
+        if source.is_symlink():
+            raise ValueError(f"Source is a symlink: {source}")
+        if dest.exists() and dest.is_symlink():
+            raise ValueError(f"Destination is a symlink: {dest}")
+
         if dest.exists() and not op.overwrite:
             raise FileExistsError(str(dest))
 
@@ -618,10 +653,28 @@ class FileHandler:
         # Create parent directories if needed
         source.parent.mkdir(parents=True, exist_ok=True)
 
-        # Write content
+        # Write content atomically via tempfile + rename
+        import tempfile
+
+        # H17: Check parent dir is not world-writable
+        parent_stat = source.parent.stat()
+        if parent_stat.st_mode & stat_mod.S_IWOTH:
+            raise FilePermissionError(str(source.parent), "write: parent directory is world-writable")
+
+        tmp_path: str | None = None
         try:
-            source.write_text(op.content, encoding=op.encoding)
+            fd, tmp_path = tempfile.mkstemp(dir=str(source.parent))
+            try:
+                os.write(fd, op.content.encode(op.encoding))
+            finally:
+                os.close(fd)
+            os.rename(tmp_path, str(source))
+            tmp_path = None  # Rename succeeded, no orphan to clean
         except Exception:
+            # Clean up orphaned temp file
+            if tmp_path is not None:
+                with contextlib.suppress(OSError):
+                    os.unlink(tmp_path)
             # Restore backup if write failed
             if backup_path:
                 shutil.copy2(backup_path, str(source))
@@ -720,7 +773,7 @@ class FileHandler:
     def _create_backup(self, path: Path) -> str:
         """Create a backup of a file/directory for rollback."""
         self._temp_dir.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
         backup_path = self._temp_dir / f"{path.name}_{timestamp}"
 
         if path.is_dir():
@@ -988,8 +1041,26 @@ def write_file(
         # Create parent directories if needed
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Write file
-        path.write_text(content, encoding=encoding)
+        # Write file atomically via tempfile + rename
+        import tempfile
+
+        tmp_path: str | None = None
+        fd, tmp_path = tempfile.mkstemp(dir=str(path.parent))
+        try:
+            try:
+                os.write(fd, content.encode(encoding))
+            finally:
+                os.close(fd)
+            os.rename(tmp_path, str(path))
+            tmp_path = None  # Rename succeeded, no orphan to clean
+        except Exception:
+            if tmp_path is not None:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+            raise
+
         bytes_written = len(content.encode(encoding))
 
         return WriteResult(

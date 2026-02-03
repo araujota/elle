@@ -139,8 +139,8 @@ class ConfigValidator:
                 )
             )
 
-        # Check forbidden paths
-        resolved = str(path.resolve()) if path.exists() else target_path
+        # Check forbidden paths — always resolve, even for non-existent paths
+        resolved = str(path.resolve())
         if resolved in FORBIDDEN_PATHS or target_path in FORBIDDEN_PATHS:
             issues.append(
                 ValidationIssue(

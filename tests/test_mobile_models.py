@@ -1,6 +1,6 @@
 """Tests for ELLE Mobile Gateway models."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -65,7 +65,7 @@ class TestElevation:
 
     def test_create_elevation(self):
         """Test creating an elevation."""
-        future = datetime.utcnow() + timedelta(minutes=10)
+        future = datetime.now(timezone.utc) + timedelta(minutes=10)
         elevation = Elevation(
             device_id="test-123",
             elevated_role=MobileRole.MOBILE_OPERATOR,
@@ -78,7 +78,7 @@ class TestElevation:
 
     def test_elevation_expired(self):
         """Test elevation expiration check."""
-        past = datetime.utcnow() - timedelta(minutes=10)
+        past = datetime.now(timezone.utc) - timedelta(minutes=10)
         elevation = Elevation(
             device_id="test-123",
             elevated_role=MobileRole.MOBILE_OPERATOR,
@@ -93,7 +93,7 @@ class TestPairingToken:
 
     def test_create_token(self):
         """Test creating a pairing token."""
-        future = datetime.utcnow() + timedelta(seconds=90)
+        future = datetime.now(timezone.utc) + timedelta(seconds=90)
         token = PairingToken(
             token="abc123def456",
             expires_at=future,
@@ -104,7 +104,7 @@ class TestPairingToken:
 
     def test_token_expired(self):
         """Test token expiration check."""
-        past = datetime.utcnow() - timedelta(seconds=10)
+        past = datetime.now(timezone.utc) - timedelta(seconds=10)
         token = PairingToken(
             token="abc123def456",
             expires_at=past,
@@ -113,7 +113,7 @@ class TestPairingToken:
 
     def test_token_used(self):
         """Test used token is not valid."""
-        future = datetime.utcnow() + timedelta(seconds=90)
+        future = datetime.now(timezone.utc) + timedelta(seconds=90)
         token = PairingToken(
             token="abc123def456",
             expires_at=future,

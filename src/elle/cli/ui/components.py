@@ -5,7 +5,7 @@ Building blocks for consistent visual language across ELLE.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from rich.panel import Panel
@@ -263,7 +263,7 @@ def time_ago(dt: datetime) -> str:
     Returns:
         Human-readable string like "2m ago", "1h ago", "3d ago"
     """
-    now = datetime.now()
+    now = datetime.now(timezone.utc) if dt.tzinfo else datetime.now()
     delta = now - dt
 
     if delta < timedelta(seconds=60):

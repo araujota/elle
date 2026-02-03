@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from elle.daemon.manvault.embedder import ManVaultEmbedder, get_embedder
 from elle.daemon.manvault.indexer import (
@@ -176,7 +176,7 @@ class ManVaultService:
                 return True
 
             last_dt = datetime.fromisoformat(last_indexed)
-            return datetime.now() - last_dt > timedelta(seconds=INCREMENTAL_INDEX_INTERVAL)
+            return datetime.now(timezone.utc) - last_dt > timedelta(seconds=INCREMENTAL_INDEX_INTERVAL)
 
     async def _do_core_seed(self) -> int:
         """Seed core commands in background thread.
@@ -227,7 +227,7 @@ class ManVaultService:
             added, updated = await asyncio.to_thread(index_incremental)
             if added or updated:
                 logger.info(f"Incremental index: {added} added, {updated} updated")
-            self._last_incremental = datetime.now()
+            self._last_incremental = datetime.now(timezone.utc)
             return added, updated
         except Exception as e:
             logger.error(f"Incremental index failed: {e}")
@@ -270,7 +270,13 @@ class ManVaultService:
             logger.warning("Indexing already in progress")
             return
 
-        asyncio.create_task(self._do_full_index())
+        self._index_task = asyncio.create_task(self._do_full_index())
+
+        def _on_index_done(t: asyncio.Task) -> None:  # type: ignore[type-arg]
+            if not t.cancelled() and t.exception() is not None:
+                logger.error("Index task failed: %s", t.exception())
+
+        self._index_task.add_done_callback(_on_index_done)
 
     def get_status(self) -> ManVaultStatus:
         """Get current service status.

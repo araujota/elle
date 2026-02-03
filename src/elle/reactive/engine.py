@@ -7,10 +7,11 @@ records everything to the incident vault.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
@@ -43,6 +44,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+MAX_STATE_CACHE_SIZE = 1000
+
+
 class ReactiveEngine:
     """Core execution engine for reactive functions.
 
@@ -73,6 +77,7 @@ class ReactiveEngine:
         """
         self._executor = executor
         self._state_cache: dict[str, tuple[datetime, dict[str, Any]]] = {}
+        self._rate_limit_locks: dict[str, asyncio.Lock] = {}
 
     @property
     def executor(self) -> CapabilityExecutor:
@@ -115,7 +120,7 @@ class ReactiveEngine:
                 record = ExecutionRecord(
                     function_id=func.id,
                     function_name=func.name,
-                    triggered_at=datetime.utcnow(),
+                    triggered_at=datetime.now(timezone.utc),
                     trigger_event=_event_to_dict(event),
                     condition_result=False,
                     condition_explanation=f"Processing error: {e}",
@@ -213,7 +218,7 @@ class ReactiveEngine:
                 record = ExecutionRecord(
                     function_id=func.id,
                     function_name=func.name,
-                    triggered_at=datetime.utcnow(),
+                    triggered_at=datetime.now(timezone.utc),
                     trigger_event=_forecast_to_dict(forecast),
                     condition_result=False,
                     condition_explanation=f"Processing error: {e}",
@@ -464,18 +469,21 @@ class ReactiveEngine:
             ExecutionRecord, or None if rate-limited or condition failed.
         """
         start_time = time.time()
-        triggered_at = datetime.utcnow()
+        triggered_at = datetime.now(timezone.utc)
 
-        # 2. Check rate limits
+        # 2. Check rate limits (M11: under async lock to prevent double-execution)
+        # H29: allowed_hours check moved inside the rate limit lock block
         if not skip_rate_limit:
-            if not self._check_rate_limit(func):
-                logger.debug(f"Function {func.name} rate-limited")
-                return None
+            rate_lock = self._get_rate_lock(func.id)
+            async with rate_lock:
+                if not self._check_rate_limit(func):
+                    logger.debug(f"Function {func.name} rate-limited")
+                    return None
 
-            # Check allowed hours
-            if not self._check_allowed_hours(func.policy):
-                logger.debug(f"Function {func.name} outside allowed hours")
-                return None
+                # Check allowed hours (inside lock to prevent TOCTOU)
+                if not self._check_allowed_hours(func.policy):
+                    logger.debug(f"Function {func.name} outside allowed hours")
+                    return None
 
         # 3. Build context (probes state, gathers system metrics)
         context = await self._build_context(func, event, context_override)
@@ -600,9 +608,11 @@ class ReactiveEngine:
                     if action.on_failure == "stop":
                         break
 
-        # 6. Update rate limit state
+        # 6. Update rate limit state (M11: under async lock)
         if not skip_rate_limit:
-            self._update_rate_limit(func)
+            rate_lock = self._get_rate_lock(func.id)
+            async with rate_lock:
+                self._update_rate_limit(func)
 
         # 7. Notify on failure if configured
         if not overall_success and func.policy.escalate_on_failure:
@@ -692,7 +702,7 @@ class ReactiveEngine:
             cache_key = f"{func.id}:{key}"
             if cache_key in self._state_cache:
                 cached_time, cached_value = self._state_cache[cache_key]
-                age = (datetime.utcnow() - cached_time).total_seconds()
+                age = (datetime.now(timezone.utc) - cached_time).total_seconds()
                 if age < probe_spec.cache_ttl:
                     state[key] = cached_value.get("value")
                     continue
@@ -701,8 +711,12 @@ class ReactiveEngine:
             try:
                 value = await self._run_probe(probe_spec.probe)
                 state[key] = value
+                # H28: Evict oldest cache entry when exceeding max size
+                if len(self._state_cache) >= MAX_STATE_CACHE_SIZE:
+                    oldest_key = next(iter(self._state_cache))
+                    del self._state_cache[oldest_key]
                 self._state_cache[cache_key] = (
-                    datetime.utcnow(),
+                    datetime.now(timezone.utc),
                     {"value": value},
                 )
             except Exception as e:
@@ -733,7 +747,7 @@ class ReactiveEngine:
         # Placeholder - would gather basic system state
         # Could integrate with SystemSnapshot collection
         return {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     async def _execute_action(
@@ -768,6 +782,20 @@ class ReactiveEngine:
                     execution_time_ms=int((time.time() - start_time) * 1000),
                 )
 
+            # Risk-level gating (C3): block high/critical from reactive execution
+            spec = capability.spec
+            risk = getattr(spec, "risk", "medium")
+            if risk in ("high", "critical"):
+                logger.warning(f"Reactive function blocked {action.capability} (risk={risk})")
+                return ActionResult(
+                    capability=action.capability,
+                    success=False,
+                    error=f"Capability {action.capability} has risk '{risk}' -- use agent loop",
+                    execution_time_ms=int((time.time() - start_time) * 1000),
+                )
+
+            skip_confirmation = risk in ("none", "low")
+
             # Create input model instance
             input_model = self._create_input_model(capability, resolved_input)
 
@@ -776,7 +804,7 @@ class ReactiveEngine:
                 action.capability,
                 input_model,
                 incident_id=incident_id,
-                require_confirmation=False,  # Reactive functions don't wait for confirmation
+                require_confirmation=not skip_confirmation,
             )
 
             return ActionResult(
@@ -832,6 +860,25 @@ class ReactiveEngine:
             setattr(generic, k, v)
         return generic
 
+    def _get_rate_lock(self, function_id: str) -> asyncio.Lock:
+        """Get or create an async lock for a reactive function's rate limiting.
+
+        Evicts the oldest entry when the dict exceeds 500 entries to prevent
+        unbounded growth from deleted functions.
+
+        Args:
+            function_id: The function ID.
+
+        Returns:
+            asyncio.Lock for the function.
+        """
+        if function_id not in self._rate_limit_locks:
+            if len(self._rate_limit_locks) >= 500:
+                oldest_key = next(iter(self._rate_limit_locks))
+                del self._rate_limit_locks[oldest_key]
+            self._rate_limit_locks[function_id] = asyncio.Lock()
+        return self._rate_limit_locks[function_id]
+
     def _check_rate_limit(self, func: ReactiveFunction) -> bool:
         """Check if function execution is allowed by rate limits.
 
@@ -842,7 +889,7 @@ class ReactiveEngine:
             True if execution is allowed.
         """
         state = get_rate_limit_state(func.id)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         today = now.strftime("%Y-%m-%d")
 
         # Check daily limit
@@ -873,7 +920,7 @@ class ReactiveEngine:
             return True
 
         start_hour, end_hour = policy.allowed_hours
-        current_hour = datetime.utcnow().hour
+        current_hour = datetime.now(timezone.utc).hour
 
         if start_hour <= end_hour:
             return start_hour <= current_hour < end_hour
@@ -888,7 +935,7 @@ class ReactiveEngine:
             func: The reactive function.
         """
         state = get_rate_limit_state(func.id)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         today = now.strftime("%Y-%m-%d")
 
         # Reset daily counter if new day
@@ -978,8 +1025,11 @@ def _parse_interval(interval_str: str) -> timedelta:
         return timedelta(minutes=5)
 
 
+_DANGEROUS_REGEX = re.compile(r"(.+[+*])\1|(\(.+[+*]\))[+*]|(\([^)]*\|[^)]*\))[+*]")
+
+
 def _regex_match(pattern: str, text: str) -> bool:
-    """Check if text matches a regex pattern.
+    """Check if text matches a regex pattern with ReDoS protection.
 
     Args:
         pattern: Regex pattern.
@@ -988,6 +1038,19 @@ def _regex_match(pattern: str, text: str) -> bool:
     Returns:
         True if pattern matches.
     """
+    # Reject patterns that are too long
+    if len(pattern) > 200:
+        logger.warning(f"Regex pattern too long ({len(pattern)} chars), falling back to literal match")
+        return pattern in text
+
+    # Reject patterns with nested quantifiers (ReDoS risk)
+    if _DANGEROUS_REGEX.search(pattern):
+        logger.warning("Regex pattern has nested quantifiers (ReDoS risk), falling back to literal match")
+        return pattern in text
+
+    # Limit match text to 10KB
+    text = text[:10240]
+
     try:
         return bool(re.search(pattern, text))
     except re.error:

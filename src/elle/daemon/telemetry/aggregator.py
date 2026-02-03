@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 import psycopg
@@ -299,7 +299,7 @@ def record_metric(
             ensure_aggregation_schema(c)
 
         if ts is None:
-            ts = datetime.utcnow()
+            ts = datetime.now(timezone.utc)
 
         cursor = c.cursor()
         cursor.execute(
@@ -329,7 +329,7 @@ def record_metrics_batch(
             ensure_aggregation_schema(c)
 
         if ts is None:
-            ts = datetime.utcnow()
+            ts = datetime.now(timezone.utc)
 
         ts_str = serialize_datetime(ts)
         cursor = c.cursor()
@@ -389,7 +389,7 @@ class TrendAggregator:
             if conn is None:
                 ensure_aggregation_schema(c)
 
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
 
             # Collect and record current metrics
             current_metrics = collect_system_metrics()
@@ -710,7 +710,7 @@ class TrendAggregator:
                 SET baseline_mean = %s, baseline_stddev = %s, samples = %s, updated_at = %s
                 WHERE metric = %s
                 """,
-                (new_mean, new_stddev, new_samples, serialize_datetime(datetime.utcnow()), metric),
+                (new_mean, new_stddev, new_samples, serialize_datetime(datetime.now(timezone.utc)), metric),
             )
         else:
             # First sample
@@ -719,7 +719,7 @@ class TrendAggregator:
                 INSERT INTO metric_baselines (metric, baseline_mean, baseline_stddev, samples, updated_at)
                 VALUES (%s, %s, %s, %s, %s)
                 """,
-                (metric, current_value, 0.0, 1, serialize_datetime(datetime.utcnow())),
+                (metric, current_value, 0.0, 1, serialize_datetime(datetime.now(timezone.utc))),
             )
 
         conn.commit()
@@ -760,7 +760,7 @@ class TrendAggregator:
     ) -> None:
         """Store computed aggregations in database."""
         cursor = conn.cursor()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         for metric in TRACKED_METRICS:
             for window, delta in [
@@ -891,7 +891,7 @@ def cleanup_old_samples(
         if conn is None:
             ensure_aggregation_schema(c)
 
-        cutoff = datetime.utcnow() - timedelta(hours=retention_hours)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=retention_hours)
         cursor = c.cursor()
         cursor.execute(
             "DELETE FROM metric_samples WHERE ts < %s",

@@ -14,7 +14,7 @@ Elevations are:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from elle.mobile.config import MobileGatewayConfig, get_mobile_config
@@ -103,7 +103,7 @@ class ElevationManager:
         self.store.revoke_elevation(device_id)
 
         # Create new elevation
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         elevation = Elevation(
             device_id=device_id,
             elevated_role=target_role,
@@ -179,7 +179,7 @@ class ElevationManager:
         }
 
         if elevation and elevation.is_active():
-            remaining = (elevation.expires_at - datetime.utcnow()).total_seconds()
+            remaining = (elevation.expires_at - datetime.now(timezone.utc)).total_seconds()
             result.update(
                 {
                     "elevated": True,
@@ -205,7 +205,7 @@ class ElevationManager:
         for elevation in elevations:
             device = self.store.get_device(elevation.device_id)
             if device:
-                remaining = (elevation.expires_at - datetime.utcnow()).total_seconds()
+                remaining = (elevation.expires_at - datetime.now(timezone.utc)).total_seconds()
                 result.append(
                     {
                         "device_id": device.device_id,

@@ -603,9 +603,8 @@ class TestApplyOperations:
                     ),
                 },
             ),
-            patch("asyncio.get_event_loop") as mock_loop,
+            patch("asyncio.run", return_value=mock_edit_result),
         ):
-            mock_loop.return_value.run_until_complete.return_value = mock_edit_result
             error = service._apply_operations(result)
 
         assert error is None
@@ -632,9 +631,8 @@ class TestApplyOperations:
                     ),
                 },
             ),
-            patch("asyncio.get_event_loop") as mock_loop,
+            patch("asyncio.run", return_value=mock_edit_result),
         ):
-            mock_loop.return_value.run_until_complete.return_value = mock_edit_result
             error = service._apply_operations(result)
 
         assert error == "augeas failed"

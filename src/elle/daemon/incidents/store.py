@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import Any, cast
 
 import psycopg
+from psycopg import sql
 
 from elle.common.pydantic_compat import safe_model_dump
 from elle.daemon.incidents.anonymize import AnonymizedIncidentReport
@@ -228,10 +229,9 @@ def update_incident(
 
         values.append(incident_id)
 
-        result = c.execute(
-            f"UPDATE incidents SET {', '.join(updates)} WHERE id = %s",  # nosec B608
-            values,
-        )
+        set_clause = sql.SQL(", ").join(sql.SQL(u) for u in updates)
+        query = sql.SQL("UPDATE incidents SET {} WHERE id = %s").format(set_clause)
+        result = c.execute(query, values)
 
         if result.rowcount == 0:
             return None

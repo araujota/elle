@@ -18,7 +18,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from elle.daemon.telemetry.queue import TelemetryQueue
@@ -116,7 +116,7 @@ class WireguardWatcher:
         if not stats:
             return
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         now_ts = int(now.timestamp())
 
         for interface, interface_stats in stats.items():
@@ -201,6 +201,7 @@ class WireguardWatcher:
         Returns:
             Dict mapping interface names to their stats.
         """
+        proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
                 "wg",
@@ -211,8 +212,10 @@ class WireguardWatcher:
                 stderr=asyncio.subprocess.DEVNULL,
             )
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+            returncode = proc.returncode
+            proc = None  # communicate() already reaped
 
-            if proc.returncode != 0:
+            if returncode != 0:
                 return None
 
             return self._parse_wg_dump(stdout.decode())
@@ -222,10 +225,31 @@ class WireguardWatcher:
             return None
         except (TimeoutError, asyncio.TimeoutError):
             logger.warning("WireGuard command timed out")
+            # Kill and reap the timed-out process (M6)
+            if proc is not None:
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    pass
+                try:
+                    await proc.wait()
+                except Exception:
+                    pass
             return None
         except Exception as e:
             logger.error(f"Failed to get WireGuard stats: {e}")
             return None
+        finally:
+            # Ensure process is reaped (M6)
+            if proc is not None and proc.returncode is None:
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    pass
+                try:
+                    await proc.wait()
+                except Exception:
+                    pass
 
     def _parse_wg_dump(self, output: str) -> dict[str, dict[str, Any]]:
         """Parse `wg show all dump` output.
@@ -290,7 +314,7 @@ class WireguardWatcher:
             raw: Raw event data.
         """
         event = {
-            "ts": datetime.utcnow().isoformat(),
+            "ts": datetime.now(timezone.utc).isoformat(),
             "source": "wireguard",
             "category": category,
             "severity": severity,
@@ -343,7 +367,7 @@ def get_wireguard_summary() -> dict[str, Any] | None:
         total_tx = 0
         peers_online = 0
         peers_total = 0
-        now = int(datetime.utcnow().timestamp())
+        now = int(datetime.now(timezone.utc).timestamp())
 
         interfaces: list[dict[str, Any]] = []
         for name, iface_stats in stats.items():

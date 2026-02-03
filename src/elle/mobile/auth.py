@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -174,7 +174,7 @@ class MobileAuthenticator:
             )
 
         # Update last seen
-        self.store.update_device(device_id, last_seen_at=datetime.utcnow())
+        self.store.update_device(device_id, last_seen_at=datetime.now(timezone.utc))
 
         # Compute fingerprint for context
         fingerprint = self.crypto.compute_fingerprint(client_cert_pem)

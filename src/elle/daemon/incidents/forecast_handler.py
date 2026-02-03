@@ -18,7 +18,7 @@ DAEMON (trends) -> SIGNALS (reactive/engine) -> INCIDENT REPORT (this module)
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -73,7 +73,7 @@ class RemediationPlan(BaseModel):
         default="agent_loop",
         description="What generated this plan",
     )
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     confidence: float = Field(
         default=0.5,
         ge=0.0,
@@ -158,8 +158,8 @@ def create_forecast_incident(
 
     return {
         "id": incident_id,
-        "created_at": datetime.utcnow().isoformat(),
-        "updated_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
         "domain": domain,
         "severity": severity,
         "status": "open",
@@ -399,7 +399,7 @@ async def _generate_remediation_plan(
             steps=tuple(steps),
             capabilities_to_execute=tuple(capabilities),
             confidence=forecast.confidence,
-            generated_at=datetime.utcnow(),
+            generated_at=datetime.now(timezone.utc),
         )
 
     except Exception as e:
@@ -416,7 +416,7 @@ async def _generate_remediation_plan(
             steps=(),
             capabilities_to_execute=(),
             confidence=0.0,
-            generated_at=datetime.utcnow(),
+            generated_at=datetime.now(timezone.utc),
         )
 
 
@@ -515,7 +515,7 @@ async def _update_incident_outcome(
             incident_id,
             outcome=outcome,
             status=status,
-            metrics={"plan_executed_at": datetime.utcnow().isoformat()},
+            metrics={"plan_executed_at": datetime.now(timezone.utc).isoformat()},
         )
     except ImportError:
         logger.debug("Incident store not available")

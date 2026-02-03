@@ -10,7 +10,7 @@ Covers:
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -60,8 +60,8 @@ def _make_paired_device(
         role=role,
         status=status,
         cert_fingerprint=FAKE_FINGERPRINT,
-        paired_at=datetime.utcnow(),
-        last_seen_at=datetime.utcnow(),
+        paired_at=datetime.now(timezone.utc),
+        last_seen_at=datetime.now(timezone.utc),
     )
 
 
@@ -72,9 +72,9 @@ def _make_elevation(
 ) -> Elevation:
     """Build an Elevation that is either active or expired."""
     if active:
-        expires_at = datetime.utcnow() + timedelta(minutes=10)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
     else:
-        expires_at = datetime.utcnow() - timedelta(minutes=10)
+        expires_at = datetime.now(timezone.utc) - timedelta(minutes=10)
     return Elevation(
         device_id=device_id,
         elevated_role=elevated_role,
@@ -141,7 +141,7 @@ class TestMobileAuthContext:
             device_name="My Phone",
             role=MobileRole.MOBILE_READONLY,
             effective_role=MobileRole.MOBILE_OPERATOR,
-            elevation_expires_at=datetime.utcnow() + timedelta(minutes=10),
+            elevation_expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
             client_ip=CLIENT_IP,
             cert_fingerprint=FAKE_FINGERPRINT,
         )

@@ -174,7 +174,7 @@ class DaemonStatusDisplay:
         """Format datetime as 'X ago' string."""
         from datetime import timezone
 
-        now = datetime.now(timezone.utc) if dt.tzinfo else datetime.now()
+        now = datetime.now(timezone.utc) if dt.tzinfo else datetime.now(timezone.utc)
         delta = now - dt
         seconds = int(delta.total_seconds())
 
@@ -347,6 +347,22 @@ def _handle_explain(_: str) -> str:
     return explainer.explain()
 
 
+def _record_daemon_action(action: str, success: bool, details: dict[str, Any] | None = None) -> None:
+    """Record a daemon management action to the incident vault."""
+    try:
+        from elle.cli.agentic.incident_recorder import record_arm_action
+
+        record_arm_action(
+            arm_name="daemon_management",
+            action=action,
+            target="elled",
+            success=success,
+            details=details,
+        )
+    except Exception:
+        logger.debug("Failed to record daemon action", exc_info=True)
+
+
 def _handle_start(_: str) -> str:
     """Handle 'daemon start' command."""
     try:
@@ -358,21 +374,22 @@ def _handle_start(_: str) -> str:
         )
 
         if result.returncode == 0:
+            _record_daemon_action("start", True)
             return "Daemon started successfully.\n\nUse 'daemon status' to verify."
         else:
-            # Try system-level if user-level fails
-            result = subprocess.run(
-                ["sudo", "systemctl", "start", "elled"],
-                capture_output=True,
-                text=True,
-                timeout=10.0,
-            )
-            if result.returncode == 0:
+            # Try system-level via Polkit (no ambient sudo)
+            from elle.security.polkit_helper import start_service_sync
+
+            pk_result = start_service_sync("elled")
+            if pk_result.success:
+                _record_daemon_action("start", True, {"level": "system"})
                 return "Daemon started successfully (system-level).\n\nUse 'daemon status' to verify."
 
-            return f"Failed to start daemon:\n{result.stderr or result.stdout}"
+            _record_daemon_action("start", False)
+            return f"Failed to start daemon:\n{pk_result.error or 'unknown error'}"
 
     except subprocess.TimeoutExpired:
+        _record_daemon_action("start", False, {"error": "timeout"})
         return "Timeout starting daemon. Check systemctl manually."
     except FileNotFoundError:
         return "systemctl not found. Cannot start daemon on this system."
@@ -391,21 +408,22 @@ def _handle_stop(_: str) -> str:
         )
 
         if result.returncode == 0:
+            _record_daemon_action("stop", True)
             return "Daemon stopped."
         else:
-            # Try system-level
-            result = subprocess.run(
-                ["sudo", "systemctl", "stop", "elled"],
-                capture_output=True,
-                text=True,
-                timeout=10.0,
-            )
-            if result.returncode == 0:
+            # Try system-level via Polkit (no ambient sudo)
+            from elle.security.polkit_helper import stop_service_sync
+
+            pk_result = stop_service_sync("elled")
+            if pk_result.success:
+                _record_daemon_action("stop", True, {"level": "system"})
                 return "Daemon stopped (system-level)."
 
-            return f"Failed to stop daemon:\n{result.stderr or result.stdout}"
+            _record_daemon_action("stop", False)
+            return f"Failed to stop daemon:\n{pk_result.error or 'unknown error'}"
 
     except subprocess.TimeoutExpired:
+        _record_daemon_action("stop", False, {"error": "timeout"})
         return "Timeout stopping daemon."
     except FileNotFoundError:
         return "systemctl not found."
@@ -424,21 +442,22 @@ def _handle_restart(_: str) -> str:
         )
 
         if result.returncode == 0:
+            _record_daemon_action("restart", True)
             return "Daemon restarted successfully.\n\nUse 'daemon status' to verify."
         else:
-            # Try system-level
-            result = subprocess.run(
-                ["sudo", "systemctl", "restart", "elled"],
-                capture_output=True,
-                text=True,
-                timeout=15.0,
-            )
-            if result.returncode == 0:
+            # Try system-level via Polkit (no ambient sudo)
+            from elle.security.polkit_helper import restart_service_sync
+
+            pk_result = restart_service_sync("elled")
+            if pk_result.success:
+                _record_daemon_action("restart", True, {"level": "system"})
                 return "Daemon restarted successfully (system-level)."
 
-            return f"Failed to restart daemon:\n{result.stderr or result.stdout}"
+            _record_daemon_action("restart", False)
+            return f"Failed to restart daemon:\n{pk_result.error or 'unknown error'}"
 
     except subprocess.TimeoutExpired:
+        _record_daemon_action("restart", False, {"error": "timeout"})
         return "Timeout restarting daemon."
     except FileNotFoundError:
         return "systemctl not found."

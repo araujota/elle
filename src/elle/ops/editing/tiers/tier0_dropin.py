@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 from elle.ops.editing.models import (
@@ -287,7 +288,7 @@ class Tier0DropIn(BaseTier):
 
         # Add header comment
         lines.append(f"# ELLE drop-in override for {file_path.name}")
-        lines.append(f"# Created: {datetime.utcnow().isoformat()}")
+        lines.append(f"# Created: {datetime.now(timezone.utc).isoformat()}")
         lines.append("")
 
         # Generate content based on file type
@@ -339,6 +340,10 @@ class Tier0DropIn(BaseTier):
         priority: int,
     ) -> Path:
         """Determine the path for the drop-in file."""
+        # M22: Validate name parameter to prevent path traversal
+        if name and (not re.match(r"^[a-zA-Z0-9._-]+$", name) or ".." in name):
+            raise ValueError("Invalid drop-in name")
+
         if not dropin_dir:
             dropin_dir = str(file_path) + ".d"
 

@@ -324,16 +324,24 @@ class TestFileWriteCapability:
 
         assert result.requires_confirmation is True
 
+    @patch("elle.capabilities.core.file.os.rename")
+    @patch("elle.capabilities.core.file.os.close")
+    @patch("elle.capabilities.core.file.os.write")
+    @patch("tempfile.mkstemp", return_value=(99, "/tmp/.tmp123"))
     @patch("elle.capabilities.core.file.os.chmod")
     @patch("elle.capabilities.core.file.shutil.copy2")
     @patch("elle.capabilities.core.file.Path")
-    def test_run_success_with_backup(self, mock_path_cls, mock_copy2, mock_chmod):
+    def test_run_success_with_backup(
+        self, mock_path_cls, mock_copy2, mock_chmod, mock_mkstemp, mock_write, mock_close, mock_rename
+    ):
         """Run creates backup and writes content successfully."""
         content = "new content"
         mock_p = MagicMock()
         mock_p.exists.return_value = True
         mock_p.parent.mkdir = MagicMock()
-        mock_p.write_text = MagicMock()
+        mock_p.parent.exists.return_value = True
+        mock_p.parent.is_symlink.return_value = False
+        mock_p.__str__ = MagicMock(return_value="/tmp/test.txt")
         mock_path_cls.return_value = mock_p
 
         inp = FileWriteInput(path="/tmp/test.txt", content=content, create_backup=True)
@@ -344,16 +352,23 @@ class TestFileWriteCapability:
         assert result.output.backup_path is not None
         assert result.output.created is False
         mock_copy2.assert_called_once()
-        mock_p.write_text.assert_called_once_with(content)
+        mock_write.assert_called_once_with(99, content.encode("utf-8"))
+        mock_rename.assert_called_once()
 
+    @patch("elle.capabilities.core.file.os.rename")
+    @patch("elle.capabilities.core.file.os.close")
+    @patch("elle.capabilities.core.file.os.write")
+    @patch("tempfile.mkstemp", return_value=(99, "/tmp/.tmp456"))
     @patch("elle.capabilities.core.file.os.chmod")
     @patch("elle.capabilities.core.file.Path")
-    def test_run_new_file_created(self, mock_path_cls, mock_chmod):
+    def test_run_new_file_created(self, mock_path_cls, mock_chmod, mock_mkstemp, mock_write, mock_close, mock_rename):
         """Run marks created=True for new files."""
         mock_p = MagicMock()
         mock_p.exists.return_value = False
         mock_p.parent.mkdir = MagicMock()
-        mock_p.write_text = MagicMock()
+        mock_p.parent.is_symlink.return_value = False
+        mock_p.parent.exists.return_value = True
+        mock_p.__str__ = MagicMock(return_value="/tmp/new.txt")
         mock_path_cls.return_value = mock_p
 
         inp = FileWriteInput(path="/tmp/new.txt", content="hello", create_backup=True)
@@ -363,14 +378,20 @@ class TestFileWriteCapability:
         assert result.output.created is True
         assert result.output.backup_path is None
 
+    @patch("elle.capabilities.core.file.os.rename")
+    @patch("elle.capabilities.core.file.os.close")
+    @patch("elle.capabilities.core.file.os.write")
+    @patch("tempfile.mkstemp", return_value=(99, "/tmp/.tmp789"))
     @patch("elle.capabilities.core.file.os.chmod")
     @patch("elle.capabilities.core.file.Path")
-    def test_run_sets_file_mode(self, mock_path_cls, mock_chmod):
+    def test_run_sets_file_mode(self, mock_path_cls, mock_chmod, mock_mkstemp, mock_write, mock_close, mock_rename):
         """Run sets file permissions when mode is specified."""
         mock_p = MagicMock()
         mock_p.exists.return_value = False
         mock_p.parent.mkdir = MagicMock()
-        mock_p.write_text = MagicMock()
+        mock_p.parent.is_symlink.return_value = False
+        mock_p.parent.exists.return_value = True
+        mock_p.__str__ = MagicMock(return_value="/tmp/script.sh")
         mock_path_cls.return_value = mock_p
 
         inp = FileWriteInput(path="/tmp/script.sh", content="#!/bin/bash", mode=0o755)
@@ -379,13 +400,18 @@ class TestFileWriteCapability:
         assert result.success is True
         mock_chmod.assert_called_once_with(mock_p, 0o755)
 
+    @patch("elle.capabilities.core.file.os.close")
+    @patch("elle.capabilities.core.file.os.write", side_effect=OSError("No space left on device"))
+    @patch("tempfile.mkstemp", return_value=(99, "/tmp/.tmperr"))
     @patch("elle.capabilities.core.file.Path")
-    def test_run_write_error(self, mock_path_cls):
+    def test_run_write_error(self, mock_path_cls, mock_mkstemp, mock_write, mock_close):
         """Run returns failure when write raises OSError."""
         mock_p = MagicMock()
         mock_p.exists.return_value = False
         mock_p.parent.mkdir = MagicMock()
-        mock_p.write_text.side_effect = OSError("No space left on device")
+        mock_p.parent.is_symlink.return_value = False
+        mock_p.parent.exists.return_value = True
+        mock_p.__str__ = MagicMock(return_value="/tmp/test.txt")
         mock_path_cls.return_value = mock_p
 
         inp = FileWriteInput(path="/tmp/test.txt", content="data")
@@ -830,6 +856,8 @@ class TestFileCopyCapability:
         mock_src = MagicMock()
         mock_dst = MagicMock()
         mock_dst.parent.mkdir = MagicMock()
+        mock_dst.parent.is_symlink.return_value = False
+        mock_dst.parent.exists.return_value = True
         mock_stat = MagicMock()
         mock_stat.st_size = 512
         mock_dst.stat.return_value = mock_stat
@@ -850,6 +878,8 @@ class TestFileCopyCapability:
         mock_src = MagicMock()
         mock_dst = MagicMock()
         mock_dst.parent.mkdir = MagicMock()
+        mock_dst.parent.is_symlink.return_value = False
+        mock_dst.parent.exists.return_value = True
         mock_path_cls.side_effect = [mock_src, mock_dst]
 
         inp = FileCopyInput(source="/tmp/src.txt", destination="/tmp/dst.txt")
@@ -1087,12 +1117,17 @@ class TestFileDiffCapability:
         mock_p.name = "test.txt"
         mock_path_cls.return_value = mock_p
 
-        # Pre-populate snapshot store
-        _snapshot_store["test_snap"] = {
-            "path": "/tmp/test.txt",
-            "content": old_content,
-            "sha256": _sha256(old_content),
-        }
+        # Pre-populate snapshot store (entries are (timestamp, data) tuples)
+        import time as _time
+
+        _snapshot_store["test_snap"] = (
+            _time.time(),
+            {
+                "path": "/tmp/test.txt",
+                "content": old_content,
+                "sha256": _sha256(old_content),
+            },
+        )
 
         try:
             inp = FileDiffInput(path="/tmp/test.txt", snapshot_id="test_snap")
@@ -1211,7 +1246,7 @@ class TestFileWatchSnapshotCapability:
 
         assert result.success is True
         assert result.output.snapshot_id == "my_snap_id"
-        assert _snapshot_store["my_snap_id"]["content"] == content
+        assert _snapshot_store["my_snap_id"][1]["content"] == content
 
         # Clean up
         _snapshot_store.pop("my_snap_id", None)

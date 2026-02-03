@@ -9,6 +9,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -21,6 +22,26 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Polkit Action IDs
 # =============================================================================
+
+
+# Regex for validating names passed to privileged operations
+_SAFE_NAME = re.compile(r"^[a-z][a-z0-9._-]*$")
+
+
+def _validate_name(name: str, label: str) -> None:
+    """Validate a name argument before passing to privileged execution.
+
+    Args:
+        name: Value to validate.
+        label: Human-readable label for error messages.
+
+    Raises:
+        ValueError: If the name contains disallowed characters.
+    """
+    if not _SAFE_NAME.match(name):
+        raise ValueError(f"Invalid {label}: {name!r}")
+    if ".." in name:
+        raise ValueError(f"Invalid {label}: consecutive dots not allowed in {name!r}")
 
 
 class PolkitAction:
@@ -40,6 +61,10 @@ class PolkitAction:
     # Service management
     MANAGE_CRON = "com.elle.ops.manage-cron"
     MANAGE_SERVICES = "com.elle.ops.manage-services"
+
+    # File operations (split from EDIT_SYSTEM_CONFIG)
+    DELETE_SYSTEM_FILE = "com.elle.ops.delete-system-file"
+    BACKUP_SYSTEM_FILE = "com.elle.ops.backup-system-file"
 
     # Reading privileged files
     READ_PRIVILEGED_LOGS = "com.elle.ops.read-privileged-logs"
@@ -131,6 +156,22 @@ class PolkitHelper:
         """
         file_path = Path(file_path)
 
+        # Validate path is within allowed directories (H18)
+        resolved = file_path.resolve()
+        allowed_prefixes = (Path("/etc"), Path("/usr/local/etc"), Path("/var/lib/elle"))
+        if not any(str(resolved).startswith(str(p)) for p in allowed_prefixes):
+            return PolkitResult(
+                success=False,
+                error=f"Path not in allowed directories: {file_path}",
+                exit_code=-1,
+            )
+        if resolved.is_symlink():
+            return PolkitResult(
+                success=False,
+                error=f"Target is a symlink: {file_path}",
+                exit_code=-1,
+            )
+
         # Get original permissions if preserving
         original_mode = None
         original_owner = None
@@ -189,7 +230,13 @@ class PolkitHelper:
             return result
 
         finally:
-            # Clean up temp file
+            # Zero-fill temp file before unlink (M25)
+            try:
+                sz = os.path.getsize(tmp_path)
+                with open(tmp_path, "wb") as _f:
+                    _f.write(b"\x00" * sz)
+            except OSError:
+                pass
             with contextlib.suppress(Exception):
                 os.unlink(tmp_path)
 
@@ -207,6 +254,30 @@ class PolkitHelper:
         Returns:
             PolkitResult with validation output.
         """
+        # Validate command against whitelist (H19)
+        _ALLOWED_VALIDATORS = frozenset(
+            {
+                "sshd",
+                "nginx",
+                "named-checkconf",
+                "systemd-analyze",
+                "apachectl",
+                "httpd",
+                "postconf",
+                "named-checkzone",
+                "visudo",
+                "apache2ctl",
+            }
+        )
+        if command:
+            binary = Path(command[0]).name
+            if binary not in _ALLOWED_VALIDATORS:
+                return PolkitResult(
+                    success=False,
+                    error=f"Validator not whitelisted: {binary}",
+                    exit_code=-1,
+                )
+
         # First try without privilege
         try:
             result = subprocess.run(
@@ -455,6 +526,8 @@ class PolkitHelper:
         Returns:
             PolkitResult with outcome.
         """
+        _validate_name(group_name, "group name")
+
         # Check if group already exists
         try:
             import grp
@@ -482,6 +555,9 @@ class PolkitHelper:
         Returns:
             PolkitResult with outcome.
         """
+        _validate_name(username, "username")
+        _validate_name(group_name, "group name")
+
         return await self._run_pkexec(
             ["usermod", "-aG", group_name, username],
             PolkitAction.SETUP_MANAGE_GROUPS,
@@ -496,6 +572,8 @@ class PolkitHelper:
         Returns:
             PolkitResult with outcome.
         """
+        _validate_name(service_name, "service name")
+
         return await self._run_pkexec(
             ["systemctl", "start", service_name],
             PolkitAction.SETUP_MANAGE_DAEMON,
@@ -510,6 +588,7 @@ class PolkitHelper:
         Returns:
             PolkitResult with outcome.
         """
+        _validate_name(service_name, "service name")
         return await self._run_pkexec(
             ["systemctl", "stop", service_name],
             PolkitAction.SETUP_MANAGE_DAEMON,
@@ -524,6 +603,7 @@ class PolkitHelper:
         Returns:
             PolkitResult with outcome.
         """
+        _validate_name(service_name, "service name")
         return await self._run_pkexec(
             ["systemctl", "enable", service_name],
             PolkitAction.SETUP_MANAGE_DAEMON,
@@ -543,6 +623,12 @@ class PolkitHelper:
         Returns:
             PolkitResult with outcome.
         """
+        if not re.match(r"^[a-zA-Z0-9._-]+$", rules_filename) or ".." in rules_filename:
+            return PolkitResult(
+                success=False,
+                error=f"Invalid rules filename: {rules_filename}",
+                exit_code=-1,
+            )
         rules_path = f"/etc/polkit-1/rules.d/{rules_filename}"
         return await self.write_privileged(
             rules_path,
@@ -745,7 +831,13 @@ def write_privileged_sync(
         return result
 
     finally:
-        # Clean up temp file
+        # Zero-fill temp file before unlink (M25)
+        try:
+            sz = os.path.getsize(tmp_path)
+            with open(tmp_path, "wb") as _f:
+                _f.write(b"\x00" * sz)
+        except OSError:
+            pass
         with contextlib.suppress(Exception):
             os.unlink(tmp_path)
 
@@ -759,6 +851,7 @@ def create_group_sync(group_name: str) -> PolkitResult:
     Returns:
         PolkitResult with outcome.
     """
+    _validate_name(group_name, "group name")
     import grp
 
     # Check if group already exists
@@ -787,6 +880,8 @@ def add_user_to_group_sync(username: str, group_name: str) -> PolkitResult:
     Returns:
         PolkitResult with outcome.
     """
+    _validate_name(username, "username")
+    _validate_name(group_name, "group name")
     return run_privileged_sync(
         ["usermod", "-aG", group_name, username],
         PolkitAction.SETUP_MANAGE_GROUPS,
@@ -803,8 +898,45 @@ def start_service_sync(service_name: str, timeout: float = 30.0) -> PolkitResult
     Returns:
         PolkitResult with outcome.
     """
+    _validate_name(service_name, "service name")
     return run_privileged_sync(
         ["systemctl", "start", service_name],
+        PolkitAction.SETUP_MANAGE_DAEMON,
+        timeout=timeout,
+    )
+
+
+def stop_service_sync(service_name: str, timeout: float = 30.0) -> PolkitResult:
+    """Stop a systemd service synchronously.
+
+    Args:
+        service_name: Service name.
+        timeout: Timeout in seconds.
+
+    Returns:
+        PolkitResult with outcome.
+    """
+    _validate_name(service_name, "service name")
+    return run_privileged_sync(
+        ["systemctl", "stop", service_name],
+        PolkitAction.SETUP_MANAGE_DAEMON,
+        timeout=timeout,
+    )
+
+
+def restart_service_sync(service_name: str, timeout: float = 30.0) -> PolkitResult:
+    """Restart a systemd service synchronously.
+
+    Args:
+        service_name: Service name.
+        timeout: Timeout in seconds.
+
+    Returns:
+        PolkitResult with outcome.
+    """
+    _validate_name(service_name, "service name")
+    return run_privileged_sync(
+        ["systemctl", "restart", service_name],
         PolkitAction.SETUP_MANAGE_DAEMON,
         timeout=timeout,
     )
@@ -819,6 +951,7 @@ def enable_service_sync(service_name: str) -> PolkitResult:
     Returns:
         PolkitResult with outcome.
     """
+    _validate_name(service_name, "service name")
     return run_privileged_sync(
         ["systemctl", "enable", service_name],
         PolkitAction.SETUP_MANAGE_DAEMON,
@@ -838,6 +971,12 @@ def install_polkit_rules_sync(
     Returns:
         PolkitResult with outcome.
     """
+    if not re.match(r"^[a-zA-Z0-9._-]+$", rules_filename) or ".." in rules_filename:
+        return PolkitResult(
+            success=False,
+            error=f"Invalid rules filename: {rules_filename}",
+            exit_code=-1,
+        )
     rules_path = f"/etc/polkit-1/rules.d/{rules_filename}"
     return write_privileged_sync(
         rules_path,

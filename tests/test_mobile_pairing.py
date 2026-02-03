@@ -15,7 +15,7 @@ Covers:
 """
 
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -315,9 +315,9 @@ class TestInitiatePairing:
         config = _make_config(pairing_token_ttl_seconds=120, overlay_host="10.0.0.5")
         pm = _build_pairing_manager(config=config, store=mock_store, crypto=mock_crypto)
 
-        before = datetime.utcnow()
+        before = datetime.now(timezone.utc)
         payload, token = pm.initiate_pairing()
-        after = datetime.utcnow()
+        after = datetime.now(timezone.utc)
 
         expected_min = before + timedelta(seconds=120)
         expected_max = after + timedelta(seconds=120)
@@ -380,7 +380,7 @@ class TestCompletePairing:
 
     def test_successful_pairing_completion(self):
         """complete_pairing returns PairingResult with device and certs."""
-        future = datetime.utcnow() + timedelta(seconds=90)
+        future = datetime.now(timezone.utc) + timedelta(seconds=90)
         mock_token = PairingToken(
             token="abc123",
             expires_at=future,
@@ -388,7 +388,7 @@ class TestCompletePairing:
         )
 
         mock_store = MagicMock()
-        mock_store.get_token.return_value = mock_token
+        mock_store.mark_token_used_atomic.return_value = mock_token
 
         mock_client_cert = MagicMock()
         mock_client_cert.fingerprint = FAKE_FINGERPRINT
@@ -413,40 +413,35 @@ class TestCompletePairing:
     def test_invalid_token_raises_error(self):
         """complete_pairing raises PairingError for invalid (unknown) token."""
         mock_store = MagicMock()
-        mock_store.get_token.return_value = None
+        mock_store.mark_token_used_atomic.return_value = None
 
         pm = _build_pairing_manager(store=mock_store)
 
-        with pytest.raises(PairingError, match="Invalid pairing token"):
+        with pytest.raises(PairingError, match="Invalid or already-used pairing token"):
             pm.complete_pairing("nonexistent", "My Phone")
 
     def test_used_token_raises_error(self):
         """complete_pairing raises PairingError for already-used token."""
-        future = datetime.utcnow() + timedelta(seconds=90)
-        used_token = PairingToken(
-            token="abc123",
-            expires_at=future,
-            used=True,
-        )
-
         mock_store = MagicMock()
-        mock_store.get_token.return_value = used_token
+        # Atomic mark returns None when token was already used (0 rows updated)
+        mock_store.mark_token_used_atomic.return_value = None
 
         pm = _build_pairing_manager(store=mock_store)
 
-        with pytest.raises(PairingError, match="already used"):
+        with pytest.raises(PairingError, match="Invalid or already-used pairing token"):
             pm.complete_pairing("abc123", "My Phone")
 
     def test_expired_token_raises_error(self):
         """complete_pairing raises PairingError for expired token."""
-        past = datetime.utcnow() - timedelta(seconds=10)
+        past = datetime.now(timezone.utc) - timedelta(seconds=10)
         expired_token = PairingToken(
             token="abc123",
             expires_at=past,
         )
 
         mock_store = MagicMock()
-        mock_store.get_token.return_value = expired_token
+        # Atomic mark succeeds (returns the token) but it is expired
+        mock_store.mark_token_used_atomic.return_value = expired_token
 
         pm = _build_pairing_manager(store=mock_store)
 
@@ -454,8 +449,8 @@ class TestCompletePairing:
             pm.complete_pairing("abc123", "My Phone")
 
     def test_token_marked_used_before_cert_generation(self):
-        """complete_pairing marks token as used immediately."""
-        future = datetime.utcnow() + timedelta(seconds=90)
+        """complete_pairing atomically marks token as used."""
+        future = datetime.now(timezone.utc) + timedelta(seconds=90)
         mock_token = PairingToken(
             token="abc123",
             expires_at=future,
@@ -463,7 +458,7 @@ class TestCompletePairing:
         )
 
         mock_store = MagicMock()
-        mock_store.get_token.return_value = mock_token
+        mock_store.mark_token_used_atomic.return_value = mock_token
 
         mock_client_cert = MagicMock()
         mock_client_cert.fingerprint = FAKE_FINGERPRINT
@@ -476,11 +471,11 @@ class TestCompletePairing:
         pm = _build_pairing_manager(store=mock_store, crypto=mock_crypto)
         pm.complete_pairing("abc123", "My Phone")
 
-        mock_store.mark_token_used.assert_called_once_with("abc123")
+        mock_store.mark_token_used_atomic.assert_called_once_with("abc123")
 
     def test_device_created_in_store(self):
         """complete_pairing calls store.create_device with the new device."""
-        future = datetime.utcnow() + timedelta(seconds=90)
+        future = datetime.now(timezone.utc) + timedelta(seconds=90)
         mock_token = PairingToken(
             token="abc123",
             expires_at=future,
@@ -488,7 +483,7 @@ class TestCompletePairing:
         )
 
         mock_store = MagicMock()
-        mock_store.get_token.return_value = mock_token
+        mock_store.mark_token_used_atomic.return_value = mock_token
 
         mock_client_cert = MagicMock()
         mock_client_cert.fingerprint = FAKE_FINGERPRINT
@@ -511,14 +506,14 @@ class TestCompletePairing:
 
     def test_client_certificate_generated_with_device_id_and_name(self):
         """complete_pairing passes device_id and name to crypto."""
-        future = datetime.utcnow() + timedelta(seconds=90)
+        future = datetime.now(timezone.utc) + timedelta(seconds=90)
         mock_token = PairingToken(
             token="abc123",
             expires_at=future,
         )
 
         mock_store = MagicMock()
-        mock_store.get_token.return_value = mock_token
+        mock_store.mark_token_used_atomic.return_value = mock_token
 
         mock_client_cert = MagicMock()
         mock_client_cert.fingerprint = FAKE_FINGERPRINT
@@ -540,14 +535,14 @@ class TestCompletePairing:
         """Device ID generated during complete_pairing is a valid UUID."""
         import uuid
 
-        future = datetime.utcnow() + timedelta(seconds=90)
+        future = datetime.now(timezone.utc) + timedelta(seconds=90)
         mock_token = PairingToken(
             token="abc123",
             expires_at=future,
         )
 
         mock_store = MagicMock()
-        mock_store.get_token.return_value = mock_token
+        mock_store.mark_token_used_atomic.return_value = mock_token
 
         mock_client_cert = MagicMock()
         mock_client_cert.fingerprint = FAKE_FINGERPRINT
@@ -566,14 +561,14 @@ class TestCompletePairing:
 
     def test_device_timestamps_set(self):
         """Device paired_at and created_at are set during pairing."""
-        future = datetime.utcnow() + timedelta(seconds=90)
+        future = datetime.now(timezone.utc) + timedelta(seconds=90)
         mock_token = PairingToken(
             token="abc123",
             expires_at=future,
         )
 
         mock_store = MagicMock()
-        mock_store.get_token.return_value = mock_token
+        mock_store.mark_token_used_atomic.return_value = mock_token
 
         mock_client_cert = MagicMock()
         mock_client_cert.fingerprint = FAKE_FINGERPRINT
@@ -583,10 +578,10 @@ class TestCompletePairing:
         mock_crypto = MagicMock()
         mock_crypto.generate_client_certificate.return_value = mock_client_cert
 
-        before = datetime.utcnow()
+        before = datetime.now(timezone.utc)
         pm = _build_pairing_manager(store=mock_store, crypto=mock_crypto)
         result = pm.complete_pairing("abc123", "My Phone")
-        after = datetime.utcnow()
+        after = datetime.now(timezone.utc)
 
         assert result.device.paired_at is not None
         assert result.device.created_at is not None
@@ -1119,8 +1114,8 @@ class TestPairingFlow:
         # Step 1: Initiate
         payload, token = pm.initiate_pairing(role=MobileRole.MOBILE_OPERATOR)
 
-        # Simulate store returning the token during completion
-        mock_store.get_token.return_value = token
+        # Simulate store returning the token during atomic mark
+        mock_store.mark_token_used_atomic.return_value = token
 
         # Step 2: Complete
         result = pm.complete_pairing(token.token, "Test Phone")
@@ -1133,7 +1128,7 @@ class TestPairingFlow:
 
         # Verify interactions
         mock_store.create_token.assert_called_once()
-        mock_store.mark_token_used.assert_called_once_with(token.token)
+        mock_store.mark_token_used_atomic.assert_called_once_with(token.token)
         mock_store.create_device.assert_called_once()
 
     def test_pairing_with_instructions(self):

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from rich.console import Console
 from rich.panel import Panel
@@ -106,7 +106,11 @@ def format_time_ago(dt: datetime | None) -> str:
     if dt is None:
         return "never"
 
-    delta = datetime.utcnow() - dt
+    # If dt is naive, assume UTC
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    delta = datetime.now(timezone.utc) - dt
     if delta < timedelta(minutes=1):
         return "just now"
     elif delta < timedelta(hours=1):
@@ -523,6 +527,17 @@ async def handle_autonomy_command(input_text: str, session: Session) -> EngineRe
             level = AutonomyLevel(level_str)
             autonomy.store.set_base_level(level)
             output = f"Autonomy level set to: [cyan]{level.value}[/cyan]"
+            try:
+                from elle.cli.agentic.incident_recorder import record_arm_action
+
+                record_arm_action(
+                    arm_name="autonomy_config",
+                    action="set_level",
+                    target=level.value,
+                    success=True,
+                )
+            except Exception:
+                logger.debug("Failed to record autonomy action", exc_info=True)
         except ValueError:
             valid = ", ".join(l.value for l in AutonomyLevel)
             output = f"Invalid level: {level_str}. Valid levels: {valid}"
@@ -544,6 +559,18 @@ async def handle_autonomy_command(input_text: str, session: Session) -> EngineRe
             output = "Earned autonomy [yellow]disabled[/yellow]"
         else:
             output = f"Invalid value: {value}. Use 'on' or 'off'"
+        if value in ("on", "enable", "true", "1", "off", "disable", "false", "0"):
+            try:
+                from elle.cli.agentic.incident_recorder import record_arm_action
+
+                record_arm_action(
+                    arm_name="autonomy_config",
+                    action="earn_toggle",
+                    target=value,
+                    success=True,
+                )
+            except Exception:
+                logger.debug("Failed to record earn toggle", exc_info=True)
         return EngineResult(
             output=output,
             session=session,
@@ -558,6 +585,17 @@ async def handle_autonomy_command(input_text: str, session: Session) -> EngineRe
         if registry.get(cap_name):
             autonomy.store.set_override(cap_name, True, reason="manual")
             output = f"Granted autonomous execution to [cyan]{cap_name}[/cyan]"
+            try:
+                from elle.cli.agentic.incident_recorder import record_arm_action
+
+                record_arm_action(
+                    arm_name="autonomy_config",
+                    action="grant",
+                    target=cap_name,
+                    success=True,
+                )
+            except Exception:
+                logger.debug("Failed to record autonomy action", exc_info=True)
         else:
             output = f"Capability not found: {cap_name}"
         return EngineResult(
@@ -574,6 +612,17 @@ async def handle_autonomy_command(input_text: str, session: Session) -> EngineRe
         if registry.get(cap_name):
             autonomy.store.set_override(cap_name, False, reason="manual")
             output = f"Revoked autonomy from [cyan]{cap_name}[/cyan]"
+            try:
+                from elle.cli.agentic.incident_recorder import record_arm_action
+
+                record_arm_action(
+                    arm_name="autonomy_config",
+                    action="revoke",
+                    target=cap_name,
+                    success=True,
+                )
+            except Exception:
+                logger.debug("Failed to record autonomy action", exc_info=True)
         else:
             output = f"Capability not found: {cap_name}"
         return EngineResult(

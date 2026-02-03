@@ -10,7 +10,7 @@ The audit_log table lives in the same schema as the mobile store.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import psycopg
@@ -311,7 +311,7 @@ class MobileAuditStore:
         Returns:
             List of recent audit entries.
         """
-        since = datetime.utcnow() - timedelta(hours=hours)
+        since = datetime.now(timezone.utc) - timedelta(hours=hours)
         return self.query(since=since, limit=limit)
 
     def get_device_history(self, device_id: str, limit: int = 50) -> list[MobileAuditEntry]:
@@ -336,7 +336,7 @@ class MobileAuditStore:
         Returns:
             List of failed audit entries.
         """
-        since = datetime.utcnow() - timedelta(hours=hours)
+        since = datetime.now(timezone.utc) - timedelta(hours=hours)
 
         with get_conn(schema=PG_SCHEMA) as conn:
             cursor = conn.execute(
@@ -359,7 +359,7 @@ class MobileAuditStore:
         Returns:
             Number of entries deleted.
         """
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
         with get_conn(schema=PG_SCHEMA) as conn:
             cursor = conn.execute(

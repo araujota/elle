@@ -6,7 +6,7 @@ actions, similarity features, provenance tracking, and semantic diffs.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -181,7 +181,7 @@ class SystemSnapshot(BaseModel):
 
     # Collected at timestamp
     collected_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When this snapshot was collected",
     )
 
@@ -390,7 +390,7 @@ class IncidentAction(BaseModel):
     )
 
     # Timing
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     duration_ms: int | None = Field(default=None, description="Execution duration")
 
 
@@ -407,7 +407,7 @@ class IncidentSnapshot(BaseModel):
     incident_id: str = Field(description="Parent incident UUID")
     which: Literal["pre", "post"] = Field(description="Before or after actions")
     snapshot: SystemSnapshot = Field(description="The system state")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class Precondition(BaseModel):
@@ -444,8 +444,8 @@ class IncidentReport(BaseModel):
 
     # Identity
     incident_id: str = Field(description="UUID for this incident")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Classification
     domain: IncidentDomain = Field(default="other")
@@ -878,7 +878,7 @@ class DecisionRecord(BaseModel):
         description="Commands planned to execute",
     )
     decided_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When the decision was made",
     )
 

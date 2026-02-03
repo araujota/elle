@@ -7,7 +7,7 @@ what actually works on THIS machine.
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 
 import psycopg
 
@@ -47,7 +47,7 @@ def record_outcome(
         outcome: The outcome (improved, partial, no_change, worse).
     """
     with get_conn(schema=PG_SCHEMA) as conn:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # Update domain efficacy
         _update_domain_efficacy(incident.domain, outcome, now, conn)

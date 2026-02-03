@@ -9,7 +9,7 @@ This module defines the core data models used throughout the mobile gateway:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -58,7 +58,9 @@ class PairedDevice(BaseModel):
     cert_fingerprint: str = Field(..., description="SHA-256 fingerprint of client certificate")
     paired_at: datetime | None = Field(default=None, description="Timestamp when pairing completed")
     last_seen_at: datetime | None = Field(default=None, description="Last successful request timestamp")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="When pairing was initiated")
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="When pairing was initiated"
+    )
 
     model_config = {"frozen": True}
 
@@ -81,13 +83,15 @@ class Elevation(BaseModel):
     elevated_role: MobileRole = Field(..., description="Elevated role level")
     expires_at: datetime = Field(..., description="Elevation expiration time")
     granted_by: str = Field(..., description="Source of elevation grant")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="When elevation was granted")
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="When elevation was granted"
+    )
 
     model_config = {"frozen": True}
 
     def is_active(self) -> bool:
         """Check if this elevation is still active."""
-        return datetime.utcnow() < self.expires_at
+        return datetime.now(timezone.utc) < self.expires_at
 
 
 class PairingToken(BaseModel):
@@ -108,13 +112,15 @@ class PairingToken(BaseModel):
     expires_at: datetime = Field(..., description="Token expiration time")
     role: MobileRole = Field(default=MobileRole.MOBILE_READONLY, description="Role for paired device")
     used: bool = Field(default=False, description="Whether token has been used")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="When token was created")
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="When token was created"
+    )
 
     model_config = {"frozen": True}
 
     def is_valid(self) -> bool:
         """Check if this token is still valid (not expired or used)."""
-        return not self.used and datetime.utcnow() < self.expires_at
+        return not self.used and datetime.now(timezone.utc) < self.expires_at
 
 
 class QRPayload(BaseModel):
@@ -172,7 +178,7 @@ class MobileAuditEntry(BaseModel):
         ip_address: Client IP address
     """
 
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="When action occurred")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="When action occurred")
     device_id: str | None = Field(default=None, description="Device identifier")
     device_name: str | None = Field(default=None, description="Device name")
     action: MobileAuditAction = Field(..., description="Type of action")

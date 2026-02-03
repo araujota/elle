@@ -6,7 +6,7 @@ conditions, actions, policies, and execution records.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -340,11 +340,11 @@ class ReactiveFunction(BaseModel):
 
     # Timestamps
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When the function was created",
     )
     updated_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When the function was last modified",
     )
     created_by: str = Field(
@@ -425,7 +425,7 @@ class ExecutionRecord(BaseModel):
 
     # Timing
     triggered_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When the function was triggered",
     )
 

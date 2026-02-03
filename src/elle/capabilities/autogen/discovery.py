@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from elle.capabilities.autogen.models import (
@@ -289,14 +289,14 @@ def discover_all_binaries(
                             binaries=tuple(binaries),
                             total_scanned=total_scanned,
                             with_man_pages=with_man,
-                            timestamp=datetime.utcnow(),
+                            timestamp=datetime.now(timezone.utc),
                         )
 
     return DiscoveryResult(
         binaries=tuple(binaries),
         total_scanned=total_scanned,
         with_man_pages=with_man,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
     )
 
 
@@ -324,7 +324,7 @@ def discover_specific_commands(commands: list[str]) -> DiscoveryResult:
         binaries=tuple(binaries),
         total_scanned=total_scanned,
         with_man_pages=with_man,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
     )
 
 

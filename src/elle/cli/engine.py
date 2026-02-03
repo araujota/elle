@@ -1974,6 +1974,20 @@ Validates package operations before execution to detect potential issues.
                     f"Type 'fix' for help, 'explain' for syscall details.{Colors.RESET}"
                 )
 
+            # Record shell passthrough to incident vault
+            try:
+                from elle.cli.agentic.incident_recorder import record_arm_action
+
+                record_arm_action(
+                    arm_name="shell_passthrough",
+                    action="execute_command",
+                    target=command[:200],
+                    success=process.returncode == 0,
+                    details={"exit_code": process.returncode, "cwd": str(session.cwd)},
+                )
+            except Exception:
+                logger.debug("Failed to record shell passthrough", exc_info=True)
+
             return EngineResult(
                 output="\n".join(output_parts),
                 session=new_session,
@@ -2077,6 +2091,25 @@ Validates package operations before execution to detect potential issues.
             timeout=self.DEFAULT_TIMEOUT,
             mode=mode,
         )
+
+        # Record shell passthrough to incident vault
+        try:
+            from elle.cli.agentic.incident_recorder import record_arm_action
+
+            record_arm_action(
+                arm_name="shell_passthrough",
+                action="execute_command",
+                target=command[:200],
+                success=result.success,
+                details={
+                    "exit_code": result.exit_code,
+                    "cwd": str(session.cwd),
+                    "denied": result.denied,
+                    "timed_out": result.timed_out,
+                },
+            )
+        except Exception:
+            logger.debug("Failed to record shell passthrough", exc_info=True)
 
         # Update session with results
         new_session = session.with_command_result(

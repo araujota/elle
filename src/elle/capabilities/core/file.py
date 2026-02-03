@@ -13,6 +13,7 @@ import hashlib
 import logging
 import os
 import shutil
+import stat as stat_mod
 import time
 from pathlib import Path
 from typing import Any
@@ -70,6 +71,41 @@ def _is_forbidden_path(path: Path) -> bool:
         if path_str == forbidden or path_str.startswith(forbidden + "/"):
             return True
     return False
+
+
+def _check_symlink_safety(path: Path) -> str | None:
+    """Advisory symlink check. The definitive guard is O_NOFOLLOW in I/O."""
+    try:
+        st = os.lstat(str(path))
+    except OSError:
+        return None
+    if stat_mod.S_ISLNK(st.st_mode):
+        target = path.resolve()
+        if _is_forbidden_path(target):
+            return f"Symlink {path} points to forbidden path {target}"
+    return None
+
+
+def _safe_open_no_follow(path: Path, flags: int, mode: int = 0o644) -> int:
+    """Open a file with O_NOFOLLOW, raising OSError(ELOOP) if symlink."""
+    return os.open(str(path), flags | os.O_NOFOLLOW, mode)
+
+
+def _any_parent_forbidden(path: Path) -> str | None:
+    """Check if any parent directory resolves to a forbidden path."""
+    try:
+        resolved = str(path.resolve())
+    except (OSError, ValueError):
+        return None
+    # Walk up the path string to check each ancestor
+    parts = resolved.split("/")
+    for i in range(2, len(parts)):
+        ancestor = "/".join(parts[:i])
+        if not ancestor:
+            continue
+        if ancestor in FORBIDDEN_PATHS:
+            return f"Cannot create under forbidden path: {ancestor}"
+    return None
 
 
 def _is_sensitive_path(path: Path) -> bool:
@@ -390,8 +426,57 @@ class FileWriteCapability(BaseCapability[FileWriteInput, FileWriteOutput]):
         """Write content to the file."""
         start_time = time.time()
         path = Path(input.path)
+
+        # Advisory symlink check
+        if err := _check_symlink_safety(path):
+            return CapabilityResult(
+                success=False,
+                error=err,
+                execution_time_ms=int((time.time() - start_time) * 1000),
+            )
+
+        # O_NOFOLLOW probe: if path exists and is a symlink, reject atomically
+        try:
+            if path.exists():
+                try:
+                    probe_fd = _safe_open_no_follow(path, os.O_RDONLY)
+                    os.close(probe_fd)
+                except OSError as e:
+                    import errno
+
+                    if e.errno == errno.ELOOP:
+                        return CapabilityResult(
+                            success=False,
+                            error=f"Refusing to follow symlink: {path}",
+                            execution_time_ms=int((time.time() - start_time) * 1000),
+                        )
+                    # Other OS errors (permission, etc.) -- let the write attempt handle them
+        except Exception:
+            pass  # Don't let probe failures block the write
+
+        # Check resolved path against forbidden list
+        try:
+            resolved = path.resolve()
+            if _is_forbidden_path(resolved):
+                return CapabilityResult(
+                    success=False,
+                    error=f"Resolved path is forbidden: {resolved}",
+                    execution_time_ms=int((time.time() - start_time) * 1000),
+                )
+        except (OSError, ValueError):
+            pass
+
+        # Parent directory validation (M7)
+        if err := _any_parent_forbidden(path):
+            return CapabilityResult(
+                success=False,
+                error=err,
+                execution_time_ms=int((time.time() - start_time) * 1000),
+            )
+
         backup_path = None
         created = not path.exists()
+        tmp_path: str | None = None
 
         try:
             # Create backup if requested and file exists
@@ -400,9 +485,40 @@ class FileWriteCapability(BaseCapability[FileWriteInput, FileWriteOutput]):
                 shutil.copy2(path, backup_path)
                 logger.info(f"Created backup: {backup_path}")
 
-            # Write content
+            # Write content atomically via tempfile + rename
+            import tempfile
+
+            # Symlink check on parent directory
+            if path.parent.exists() and path.parent.is_symlink():
+                raise ValueError("Parent directory is a symlink")
+
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(input.content)
+            fd, tmp_path = tempfile.mkstemp(dir=str(path.parent))
+            try:
+                os.write(fd, input.content.encode("utf-8"))
+                try:
+                    os.fsync(fd)
+                except OSError:
+                    pass  # Best-effort durability
+            finally:
+                os.close(fd)
+
+            # Pre-rename race guard: verify target hasn't become a symlink
+            try:
+                st = os.lstat(str(path))
+                if stat_mod.S_ISLNK(st.st_mode):
+                    os.unlink(tmp_path)
+                    tmp_path = None
+                    return CapabilityResult(
+                        success=False,
+                        error=f"Race detected: {path} became a symlink before rename",
+                        execution_time_ms=int((time.time() - start_time) * 1000),
+                    )
+            except OSError:
+                pass  # File doesn't exist yet or not accessible, safe to proceed
+
+            os.rename(tmp_path, str(path))
+            tmp_path = None  # Rename succeeded, no orphan to clean
 
             # Set mode if specified
             if input.mode is not None:
@@ -436,6 +552,12 @@ class FileWriteCapability(BaseCapability[FileWriteInput, FileWriteOutput]):
             )
 
         except Exception as e:
+            # Clean up orphaned temp file
+            if tmp_path is not None:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
             return CapabilityResult(
                 success=False,
                 error=str(e),
@@ -601,6 +723,33 @@ class FileDeleteCapability(BaseCapability[FileDeleteInput, FileDeleteOutput]):
         """Delete the file."""
         start_time = time.time()
         path = Path(input.path)
+
+        # Advisory symlink check
+        if err := _check_symlink_safety(path):
+            return CapabilityResult(
+                success=False,
+                error=err,
+                execution_time_ms=int((time.time() - start_time) * 1000),
+            )
+
+        # O_NOFOLLOW probe: reject symlinks to forbidden paths atomically
+        if path.exists():
+            try:
+                probe_fd = _safe_open_no_follow(path, os.O_RDONLY)
+                os.close(probe_fd)
+            except OSError as e:
+                import errno
+
+                if e.errno == errno.ELOOP:
+                    # It's a symlink -- check if target is forbidden
+                    target = path.resolve()
+                    if _is_forbidden_path(target):
+                        return CapabilityResult(
+                            success=False,
+                            error=f"Refusing to follow symlink to forbidden path: {target}",
+                            execution_time_ms=int((time.time() - start_time) * 1000),
+                        )
+
         backup_path = None
 
         if not path.exists():
@@ -783,7 +932,27 @@ class FileCopyCapability(BaseCapability[FileCopyInput, FileCopyOutput]):
         src = Path(input.source)
         dst = Path(input.destination)
 
+        for p in (src, dst):
+            if err := _check_symlink_safety(p):
+                return CapabilityResult(
+                    success=False,
+                    error=err,
+                    execution_time_ms=int((time.time() - start_time) * 1000),
+                )
+
+        # Parent directory validation (M7)
+        if err := _any_parent_forbidden(dst):
+            return CapabilityResult(
+                success=False,
+                error=err,
+                execution_time_ms=int((time.time() - start_time) * 1000),
+            )
+
         try:
+            # Symlink check on parent directory
+            if dst.parent.exists() and dst.parent.is_symlink():
+                raise ValueError("Parent directory is a symlink")
+
             # Ensure destination directory exists
             dst.parent.mkdir(parents=True, exist_ok=True)
 
@@ -1076,10 +1245,15 @@ class FileDiffCapability(BaseCapability[FileDiffInput, FileDiffOutput]):
         """
         # Try to load from file watch snapshot store
         try:
-            from elle.capabilities.core.file import _snapshot_store
+            from elle.capabilities.core.file import _SNAPSHOT_TTL_SECONDS, _snapshot_store
 
-            snapshot = _snapshot_store.get(snapshot_id)
-            if snapshot:
+            entry = _snapshot_store.get(snapshot_id)
+            if entry:
+                stored_time, snapshot = entry
+                # Check TTL - discard if older than 1 hour
+                if time.time() - stored_time > _SNAPSHOT_TTL_SECONDS:
+                    del _snapshot_store[snapshot_id]
+                    return None
                 return snapshot.get("content")
         except Exception:
             pass
@@ -1091,7 +1265,9 @@ class FileDiffCapability(BaseCapability[FileDiffInput, FileDiffOutput]):
 # =============================================================================
 
 # Simple in-memory snapshot store (could be backed by SQLite in production)
-_snapshot_store: dict[str, dict[str, Any]] = {}
+MAX_SNAPSHOTS = 100
+_SNAPSHOT_TTL_SECONDS = 3600  # 1 hour
+_snapshot_store: dict[str, tuple[float, dict[str, Any]]] = {}
 
 
 class FileWatchSnapshotInput(BaseModel):
@@ -1160,7 +1336,7 @@ class FileWatchSnapshotCapability(BaseCapability[FileWatchSnapshotInput, FileWat
     def run(self, input: FileWatchSnapshotInput) -> CapabilityResult:
         """Take the snapshot."""
         import uuid
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         start_time = time.time()
         path = Path(input.path)
@@ -1176,19 +1352,27 @@ class FileWatchSnapshotCapability(BaseCapability[FileWatchSnapshotInput, FileWat
             content = path.read_text()
             sha = hashlib.sha256(content.encode()).hexdigest()
             size = len(content.encode())
-            timestamp = datetime.utcnow().isoformat()
+            timestamp = datetime.now(timezone.utc).isoformat()
 
             # Generate or use provided snapshot ID
             snapshot_id = input.snapshot_id or f"{path.name}_{uuid.uuid4().hex[:8]}"
 
-            # Store snapshot
-            _snapshot_store[snapshot_id] = {
-                "path": input.path,
-                "content": content,
-                "sha256": sha,
-                "size_bytes": size,
-                "timestamp": timestamp,
-            }
+            # Evict oldest entry if at capacity
+            if len(_snapshot_store) >= MAX_SNAPSHOTS:
+                oldest_key = next(iter(_snapshot_store))
+                del _snapshot_store[oldest_key]
+
+            # Store snapshot with timestamp for TTL enforcement
+            _snapshot_store[snapshot_id] = (
+                time.time(),
+                {
+                    "path": input.path,
+                    "content": content,
+                    "sha256": sha,
+                    "size_bytes": size,
+                    "timestamp": timestamp,
+                },
+            )
 
             return CapabilityResult(
                 success=True,

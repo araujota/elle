@@ -86,7 +86,7 @@ def parse_datetime(raw: str | None) -> datetime | None:
 def utcnow() -> datetime:
     """Return the current UTC time as a timezone-aware datetime.
 
-    Replaces the deprecated ``datetime.utcnow()`` pattern.
+    Replaces the deprecated ``datetime.now(timezone.utc)`` pattern.
 
     Returns:
         Current UTC datetime with tzinfo set.

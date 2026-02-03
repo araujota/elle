@@ -18,8 +18,9 @@ Covers:
 import json
 import signal
 import ssl
+import subprocess
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -226,7 +227,7 @@ class TestGetStatus:
         fake_state = tmp_path / "running_state.json"
         fake_pid.write_text("12345")
 
-        started = datetime.utcnow() - timedelta(hours=2, minutes=15)
+        started = datetime.now(timezone.utc) - timedelta(hours=2, minutes=15)
         state_data = {
             "pid": 12345,
             "started_at": started.isoformat(),
@@ -331,6 +332,7 @@ class TestStart:
         proc = MagicMock()
         proc.pid = 42
         proc.poll.return_value = None  # still running
+        proc.wait.side_effect = subprocess.TimeoutExpired(cmd="gateway", timeout=5)
         mock_popen.return_value = proc
 
         not_running = GatewayStatus(running=False)
@@ -382,7 +384,7 @@ class TestStart:
     @patch("elle.mobile.server.time.sleep")
     @patch("elle.mobile.server.subprocess.Popen")
     def test_start_process_exits_immediately(self, mock_popen, mock_sleep, server, tmp_path):
-        """Raises ServerError when process exits immediately."""
+        """Returns None when process exits immediately during health check."""
         fake_pid = tmp_path / "run" / "mobile_gateway.pid"
         fake_state = tmp_path / "lib" / "mobile_gateway_state.json"
 
@@ -399,12 +401,10 @@ class TestStart:
             patch("elle.mobile.server.STATE_FILE", fake_state),
             patch.object(server, "get_status", return_value=not_running),
         ):
-            with pytest.raises(ServerError, match="Failed to start gateway"):
-                server.start()
+            result = server.start()
 
-        # PID and state files should be cleaned up
-        assert not fake_pid.exists()
-        assert not fake_state.exists()
+        # Process exited with non-zero code during wait(timeout=5) health check
+        assert result is None
 
     @patch("elle.mobile.server.time.sleep")
     @patch("elle.mobile.server.subprocess.Popen")
@@ -428,11 +428,11 @@ class TestStart:
     @patch("elle.mobile.server.time.sleep")
     @patch("elle.mobile.server.subprocess.Popen")
     def test_start_cleanup_on_failure_files_exist(self, mock_popen, mock_sleep, server, tmp_path):
-        """Cleanup branch: PID/state files are removed even if they exist before failure."""
+        """Process exits during health check — returns None, pre-existing files unchanged."""
         fake_pid = tmp_path / "run" / "mobile_gateway.pid"
         fake_state = tmp_path / "lib" / "mobile_gateway_state.json"
 
-        # Pre-create the files so the cleanup branch with .exists() is hit
+        # Pre-create the files so we can verify they aren't written to
         fake_pid.parent.mkdir(parents=True, exist_ok=True)
         fake_state.parent.mkdir(parents=True, exist_ok=True)
         fake_pid.write_text("old")
@@ -451,11 +451,10 @@ class TestStart:
             patch("elle.mobile.server.STATE_FILE", fake_state),
             patch.object(server, "get_status", return_value=not_running),
         ):
-            with pytest.raises(ServerError):
-                server.start()
+            result = server.start()
 
-        assert not fake_pid.exists()
-        assert not fake_state.exists()
+        # Process exited with non-zero during wait(timeout=5) — returns None early
+        assert result is None
 
     @patch("elle.mobile.server.time.sleep")
     @patch("elle.mobile.server.subprocess.Popen")

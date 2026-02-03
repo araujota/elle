@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -107,7 +107,7 @@ class TestEventProcessing:
 
         event = {
             "id": "event-1",
-            "ts": datetime.utcnow(),
+            "ts": datetime.now(timezone.utc),
             "severity": "critical",
             "category": "oom",
             "message": "Out of memory: Killed process nginx",
@@ -132,7 +132,7 @@ class TestEventProcessing:
 
         event = {
             "id": "event-1",
-            "ts": datetime.utcnow(),
+            "ts": datetime.now(timezone.utc),
             "severity": "warning",
             "category": "disk",
             "message": "Disk usage high",
@@ -153,14 +153,14 @@ class TestEventProcessing:
 
         event1 = {
             "id": "event-1",
-            "ts": datetime.utcnow(),
+            "ts": datetime.now(timezone.utc),
             "severity": "warning",
             "category": "net",
             "message": "Connection to eth0 failed",
         }
         event2 = {
             "id": "event-2",
-            "ts": datetime.utcnow(),
+            "ts": datetime.now(timezone.utc),
             "severity": "warning",
             "category": "net",
             "message": "Connection to eth0 refused",
@@ -289,7 +289,7 @@ class TestGetEventTime:
 
     def test_datetime_passthrough(self, corr):
         """datetime value is returned as-is."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         event = {"ts": now}
         assert corr._get_event_time(event) == now
 
@@ -328,8 +328,8 @@ class TestCleanBuffer:
     def test_removes_old_events(self):
         """Events older than 2x time_window are removed."""
         corr = IncidentCorrelator(time_window_sec=60)
-        old_time = datetime.utcnow() - timedelta(seconds=200)
-        recent_time = datetime.utcnow()
+        old_time = datetime.now(timezone.utc) - timedelta(seconds=200)
+        recent_time = datetime.now(timezone.utc)
         corr._event_buffer = [
             {"ts": old_time, "message": "old"},
             {"ts": recent_time, "message": "recent"},
@@ -341,7 +341,7 @@ class TestCleanBuffer:
     def test_keeps_recent_events(self):
         """Events within 2x time_window are kept."""
         corr = IncidentCorrelator(time_window_sec=300)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         corr._event_buffer = [
             {"ts": now - timedelta(seconds=100), "message": "a"},
             {"ts": now - timedelta(seconds=200), "message": "b"},
@@ -663,7 +663,7 @@ class TestCheckForIncidentPattern:
     ):
         """Returns existing active incident for same correlation key."""
         corr = IncidentCorrelator(min_events_for_incident=1)
-        event = {"message": "eth0 connection lost", "id": "e1", "ts": datetime.utcnow()}
+        event = {"message": "eth0 connection lost", "id": "e1", "ts": datetime.now(timezone.utc)}
         corr._event_buffer.append(event)
 
         # Set up active incident for the correlation key
@@ -689,7 +689,7 @@ class TestCheckForIncidentPattern:
         mock_create.return_value = mock_incident
 
         corr = IncidentCorrelator(min_events_for_incident=1)
-        event = {"message": "eth0 connection lost", "id": "e1", "ts": datetime.utcnow()}
+        event = {"message": "eth0 connection lost", "id": "e1", "ts": datetime.now(timezone.utc)}
         corr._event_buffer.append(event)
 
         result = corr._check_for_incident_pattern(event)
@@ -700,7 +700,7 @@ class TestCheckForIncidentPattern:
     def test_below_threshold_returns_none(self):
         """Returns None when event count is below threshold."""
         corr = IncidentCorrelator(min_events_for_incident=10)
-        event = {"message": "eth0 issue", "ts": datetime.utcnow()}
+        event = {"message": "eth0 issue", "ts": datetime.now(timezone.utc)}
         corr._event_buffer.append(event)
 
         result = corr._check_for_incident_pattern(event)
@@ -725,14 +725,14 @@ class TestProcessEventMocked:
         mock_create.return_value = mock_incident
 
         corr = IncidentCorrelator(critical_triggers_immediate=True, min_events_for_incident=100)
-        event = {"severity": "critical", "message": "OOM kill", "ts": datetime.utcnow()}
+        event = {"severity": "critical", "message": "OOM kill", "ts": datetime.now(timezone.utc)}
         result = corr.process_event(event)
         assert result == "inc-crit"
 
     def test_non_critical_added_to_buffer(self):
         """Non-critical events are added to buffer."""
         corr = IncidentCorrelator(min_events_for_incident=100)
-        event = {"severity": "info", "message": "Normal log", "ts": datetime.utcnow()}
+        event = {"severity": "info", "message": "Normal log", "ts": datetime.now(timezone.utc)}
         corr.process_event(event)
         assert len(corr._event_buffer) == 1
 
@@ -750,7 +750,7 @@ class TestProcessEventMocked:
             critical_triggers_immediate=False,
             min_events_for_incident=100,
         )
-        event = {"severity": "critical", "message": "OOM kill", "ts": datetime.utcnow()}
+        event = {"severity": "critical", "message": "OOM kill", "ts": datetime.now(timezone.utc)}
         result = corr.process_event(event)
         assert result is None  # Below threshold, no immediate trigger
 

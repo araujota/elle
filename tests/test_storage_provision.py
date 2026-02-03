@@ -311,7 +311,8 @@ class TestEnsurePgRole:
         ensure_pg_role()
 
         psql_cmd = mock_run.call_args[0][0]
-        assert "'elle'" in psql_cmd[2]
+        # psql variable binding: -v name=elle
+        assert "name=" in psql_cmd[-1] and "elle" in psql_cmd[-1]
 
     @patch("elle.storage.provision._run")
     def test_psql_check_runs_as_postgres(self, mock_run):
@@ -371,7 +372,8 @@ class TestEnsureDatabase:
         ensure_database(cfg)
 
         psql_cmd = mock_run.call_args[0][0]
-        assert "mydb" in psql_cmd[2]
+        # psql variable binding: -v name=mydb
+        assert "name=" in psql_cmd[-1] and "mydb" in psql_cmd[-1]
 
     @patch("elle.storage.provision._run")
     def test_database_check_empty_stdout_triggers_creation(self, mock_run):
@@ -410,8 +412,14 @@ class TestInstallExtensions:
 
         assert mock_conn.autocommit is True
         assert mock_conn.execute.call_count == len(EXTENSIONS)
+        # SQL is now parameterized via sql.Identifier; verify each extension
+        for call_args in mock_conn.execute.call_args_list:
+            sql_obj = call_args[0][0]
+            rendered = sql_obj.as_string(None)
+            assert "CREATE EXTENSION IF NOT EXISTS" in rendered
+        rendered_exts = [call_args[0][0].as_string(None) for call_args in mock_conn.execute.call_args_list]
         for ext in EXTENSIONS:
-            mock_conn.execute.assert_any_call(f"CREATE EXTENSION IF NOT EXISTS {ext}")
+            assert any(f'"{ext}"' in r for r in rendered_exts), f"Extension {ext} not found"
 
     @patch("elle.storage.provision.psycopg.connect")
     def test_conninfo_format(self, mock_connect):
@@ -462,9 +470,17 @@ class TestCreateSchemas:
         expected_calls = 2 * len(SCHEMAS)
         assert mock_conn.execute.call_count == expected_calls
 
+        from psycopg import sql
+
         for schema in SCHEMAS:
-            mock_conn.execute.assert_any_call(f"CREATE SCHEMA IF NOT EXISTS {schema} AUTHORIZATION ellerole")
-            mock_conn.execute.assert_any_call(f"GRANT ALL ON SCHEMA {schema} TO ellerole")
+            mock_conn.execute.assert_any_call(
+                sql.SQL("CREATE SCHEMA IF NOT EXISTS {} AUTHORIZATION {}").format(
+                    sql.Identifier(schema), sql.Identifier("ellerole")
+                )
+            )
+            mock_conn.execute.assert_any_call(
+                sql.SQL("GRANT ALL ON SCHEMA {} TO {}").format(sql.Identifier(schema), sql.Identifier("ellerole"))
+            )
 
     @patch("elle.storage.provision.psycopg.connect")
     def test_conninfo_format(self, mock_connect):
@@ -615,29 +631,43 @@ class TestRunInitialMigrations:
 class TestEnsureEncryptionKey:
     """Tests for ensure_encryption_key."""
 
-    @patch("elle.storage.provision.os.chmod")
+    @patch("elle.storage.provision.os.close")
+    @patch("elle.storage.provision.os.fchmod")
+    @patch("elle.storage.provision.os.fsync")
+    @patch("elle.storage.provision.os.write")
+    @patch("elle.storage.provision.os.open", side_effect=FileExistsError)
     @patch("elle.storage.provision.secrets.token_hex")
     @patch("elle.storage.provision.Path")
-    def test_key_already_exists(self, mock_path_cls, mock_token, mock_chmod):
-        """When the key file exists, nothing is generated."""
+    def test_key_already_exists(
+        self, mock_path_cls, mock_token, mock_os_open, mock_os_write, mock_os_fsync, mock_os_fchmod, mock_os_close
+    ):
+        """When the key file exists, os.open raises FileExistsError (O_EXCL) and nothing is generated."""
         mock_path = MagicMock()
-        mock_path.exists.return_value = True
+        mock_path.__str__ = MagicMock(return_value="/etc/elle/db.key")
         mock_path_cls.return_value = mock_path
 
         ensure_encryption_key("/etc/elle/db.key")
 
-        mock_path.exists.assert_called_once()
-        mock_token.assert_not_called()
-        mock_path.write_text.assert_not_called()
-        mock_chmod.assert_not_called()
+        mock_path.parent.mkdir.assert_called_once_with(parents=True, exist_ok=True)
+        mock_os_write.assert_not_called()
+        mock_os_fchmod.assert_not_called()
+        mock_os_close.assert_not_called()
 
-    @patch("elle.storage.provision.os.chmod")
+    @patch("elle.storage.provision.os.close")
+    @patch("elle.storage.provision.os.fchmod")
+    @patch("elle.storage.provision.os.fsync")
+    @patch("elle.storage.provision.os.write")
+    @patch("elle.storage.provision.os.open", return_value=42)
     @patch("elle.storage.provision.secrets.token_hex")
     @patch("elle.storage.provision.Path")
-    def test_key_generated_when_missing(self, mock_path_cls, mock_token, mock_chmod):
-        """When the key file does not exist, a new key is generated."""
+    def test_key_generated_when_missing(
+        self, mock_path_cls, mock_token, mock_os_open, mock_os_write, mock_os_fsync, mock_os_fchmod, mock_os_close
+    ):
+        """When the key file does not exist, a new key is generated atomically."""
+        import stat
+
         mock_path = MagicMock()
-        mock_path.exists.return_value = False
+        mock_path.__str__ = MagicMock(return_value="/etc/elle/db.key")
         mock_path_cls.return_value = mock_path
         mock_token.return_value = "a1b2c3d4" * 8  # 64 hex chars = 32 bytes
 
@@ -645,16 +675,24 @@ class TestEnsureEncryptionKey:
 
         mock_path.parent.mkdir.assert_called_once_with(parents=True, exist_ok=True)
         mock_token.assert_called_once_with(32)
-        mock_path.write_text.assert_called_once_with("a1b2c3d4" * 8)
-        mock_chmod.assert_called_once_with(mock_path, 0o400)
+        mock_os_write.assert_called_once_with(42, ("a1b2c3d4" * 8).encode("utf-8"))
+        mock_os_fsync.assert_called_once_with(42)
+        mock_os_fchmod.assert_called_once_with(42, stat.S_IRUSR)
+        mock_os_close.assert_called_once_with(42)
 
-    @patch("elle.storage.provision.os.chmod")
+    @patch("elle.storage.provision.os.close")
+    @patch("elle.storage.provision.os.fchmod")
+    @patch("elle.storage.provision.os.fsync")
+    @patch("elle.storage.provision.os.write")
+    @patch("elle.storage.provision.os.open", return_value=42)
     @patch("elle.storage.provision.secrets.token_hex")
     @patch("elle.storage.provision.Path")
-    def test_parent_directory_created(self, mock_path_cls, mock_token, mock_chmod):
+    def test_parent_directory_created(
+        self, mock_path_cls, mock_token, mock_os_open, mock_os_write, mock_os_fsync, mock_os_fchmod, mock_os_close
+    ):
         """Ensures parent directory is created with parents=True."""
         mock_path = MagicMock()
-        mock_path.exists.return_value = False
+        mock_path.__str__ = MagicMock(return_value="/some/deep/path/key.bin")
         mock_path_cls.return_value = mock_path
         mock_token.return_value = "deadbeef" * 8
 
@@ -662,27 +700,49 @@ class TestEnsureEncryptionKey:
 
         mock_path.parent.mkdir.assert_called_once_with(parents=True, exist_ok=True)
 
-    @patch("elle.storage.provision.os.chmod")
+    @patch("elle.storage.provision.os.close")
+    @patch("elle.storage.provision.os.fchmod")
+    @patch("elle.storage.provision.os.fsync")
+    @patch("elle.storage.provision.os.write")
+    @patch("elle.storage.provision.os.open", return_value=42)
     @patch("elle.storage.provision.secrets.token_hex")
     @patch("elle.storage.provision.Path")
-    def test_file_permissions_0400(self, mock_path_cls, mock_token, mock_chmod):
-        """The key file is created with mode 0o400 (owner read only)."""
+    def test_file_permissions_0400(
+        self, mock_path_cls, mock_token, mock_os_open, mock_os_write, mock_os_fsync, mock_os_fchmod, mock_os_close
+    ):
+        """The key file is created with O_EXCL and fchmod sets read-only after write."""
+        import os as real_os
+        import stat
+
         mock_path = MagicMock()
-        mock_path.exists.return_value = False
+        mock_path.__str__ = MagicMock(return_value="/etc/elle/test.key")
         mock_path_cls.return_value = mock_path
         mock_token.return_value = "ff" * 32
 
-        ensure_encryption_key("/tmp/test.key")
+        ensure_encryption_key("/etc/elle/test.key")
 
-        mock_chmod.assert_called_once_with(mock_path, 0o400)
+        # Verify os.open was called with O_EXCL (atomic creation) and S_IRUSR | S_IWUSR
+        mock_os_open.assert_called_once_with(
+            "/etc/elle/test.key",
+            real_os.O_WRONLY | real_os.O_CREAT | real_os.O_EXCL,
+            stat.S_IRUSR | stat.S_IWUSR,
+        )
+        # Verify fchmod sets read-only (S_IRUSR) after write
+        mock_os_fchmod.assert_called_once_with(42, stat.S_IRUSR)
 
-    @patch("elle.storage.provision.os.chmod")
+    @patch("elle.storage.provision.os.close")
+    @patch("elle.storage.provision.os.fchmod")
+    @patch("elle.storage.provision.os.fsync")
+    @patch("elle.storage.provision.os.write")
+    @patch("elle.storage.provision.os.open", side_effect=FileExistsError)
     @patch("elle.storage.provision.secrets.token_hex")
     @patch("elle.storage.provision.Path")
-    def test_default_key_path(self, mock_path_cls, mock_token, mock_chmod):
+    def test_default_key_path(
+        self, mock_path_cls, mock_token, mock_os_open, mock_os_write, mock_os_fsync, mock_os_fchmod, mock_os_close
+    ):
         """Default key path is /etc/elle/db.key."""
         mock_path = MagicMock()
-        mock_path.exists.return_value = True
+        mock_path.__str__ = MagicMock(return_value="/etc/elle/db.key")
         mock_path_cls.return_value = mock_path
 
         ensure_encryption_key()

@@ -11,7 +11,7 @@ Capabilities:
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
@@ -308,7 +308,7 @@ class FileEditCapability(BaseCapability[FileEditInput, FileEditOutput]):
         """Execute file edit using tier stack."""
         import asyncio
 
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
 
         try:
             from elle.ops.editing import (
@@ -391,7 +391,7 @@ class FileEditCapability(BaseCapability[FileEditInput, FileEditOutput]):
                     validation_passed=result.validation.passed if result.validation else True,
                 )
 
-                end_time = datetime.utcnow()
+                end_time = datetime.now(timezone.utc)
                 duration_ms = int((end_time - start_time).total_seconds() * 1000)
 
                 return CapabilityResult(
@@ -428,7 +428,7 @@ class FileEditCapability(BaseCapability[FileEditInput, FileEditOutput]):
                     validation_passed=False,
                 )
 
-                end_time = datetime.utcnow()
+                end_time = datetime.now(timezone.utc)
                 duration_ms = int((end_time - start_time).total_seconds() * 1000)
 
                 return CapabilityResult(
@@ -446,7 +446,7 @@ class FileEditCapability(BaseCapability[FileEditInput, FileEditOutput]):
                 )
 
         except Exception as e:
-            end_time = datetime.utcnow()
+            end_time = datetime.now(timezone.utc)
             duration_ms = int((end_time - start_time).total_seconds() * 1000)
 
             return CapabilityResult(

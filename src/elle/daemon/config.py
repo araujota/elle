@@ -365,7 +365,7 @@ def load_config(config_path: Path | None = None) -> Config:
     api_auth = ApiAuthConfig(
         allow_anonymous=_get_env(
             "API_AUTH_ALLOW_ANONYMOUS",
-            api_auth_section.get("allow_anonymous", True),
+            api_auth_section.get("allow_anonymous", False),
         ),
         api_keys_db_path=(Path(api_keys_db_path_str) if api_keys_db_path_str else None),
         elle_uid=api_auth_section.get("elle_uid"),
@@ -543,6 +543,17 @@ def get_config() -> Config:
     if _config is None:
         _config = load_config()
     return _config
+
+
+def get_daemon_port() -> int:
+    """Get the daemon API port from configuration.
+
+    Falls back to 8377 if config cannot be loaded.
+    """
+    try:
+        return get_config().api.port
+    except Exception:
+        return 8377
 
 
 def set_config(config: Config) -> None:

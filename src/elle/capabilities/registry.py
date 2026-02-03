@@ -10,6 +10,7 @@ Provides a central registry for capabilities, enabling:
 from __future__ import annotations
 
 import logging
+import threading
 from typing import TYPE_CHECKING, Any
 
 from elle.capabilities.exceptions import (
@@ -268,6 +269,7 @@ class CapabilityRegistry:
 # =============================================================================
 
 _registry: CapabilityRegistry | None = None
+_registry_lock = threading.Lock()
 
 
 def get_registry() -> CapabilityRegistry:
@@ -277,10 +279,13 @@ def get_registry() -> CapabilityRegistry:
         The global CapabilityRegistry singleton.
     """
     global _registry
-    if _registry is None:
-        _registry = CapabilityRegistry()
-        _load_core_capabilities(_registry)
-    return _registry
+    if _registry is not None:
+        return _registry
+    with _registry_lock:
+        if _registry is None:
+            _registry = CapabilityRegistry()
+            _load_core_capabilities(_registry)
+        return _registry
 
 
 def reset_registry() -> None:

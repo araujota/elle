@@ -40,7 +40,7 @@ import time
 from collections.abc import AsyncIterator, Coroutine
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, TypeVar
 
@@ -137,7 +137,7 @@ class AbortReason(Enum):
 class LoopStats:
     """Statistics for a loop execution."""
 
-    start_time: datetime = field(default_factory=datetime.utcnow)
+    start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     end_time: datetime | None = None
     iterations: int = 0
     llm_calls: int = 0
@@ -153,7 +153,7 @@ class LoopStats:
         """Total duration in milliseconds."""
         if self.end_time:
             return (self.end_time - self.start_time).total_seconds() * 1000
-        return (datetime.utcnow() - self.start_time).total_seconds() * 1000
+        return (datetime.now(timezone.utc) - self.start_time).total_seconds() * 1000
 
     @property
     def duration_seconds(self) -> float:
@@ -472,11 +472,11 @@ class LoopTracker:
 
     async def __aenter__(self) -> LoopTracker:
         self._state = LoopState.RUNNING
-        self.stats.start_time = datetime.utcnow()
+        self.stats.start_time = datetime.now(timezone.utc)
         return self
 
     async def __aexit__(self, *args: Any) -> None:
-        self.stats.end_time = datetime.utcnow()
+        self.stats.end_time = datetime.now(timezone.utc)
         if self._state == LoopState.RUNNING:
             self._state = LoopState.COMPLETED
 

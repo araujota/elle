@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -25,7 +25,7 @@ def _mock_event(**overrides: Any) -> MagicMock:
     """Create a mock TelemetryEvent."""
     defaults: dict[str, Any] = {
         "event_id": "evt-001",
-        "ts": datetime.utcnow(),
+        "ts": datetime.now(timezone.utc),
         "source": "journal",
         "severity": "warning",
         "category": "disk",

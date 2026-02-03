@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from elle.daemon.reboot.grub import (
@@ -209,6 +209,16 @@ class RebootManager:
         intent = mark_rebooting(intent_id, current_boot_id or "unknown")
         if not intent:
             raise RebootManagerError("Failed to mark intent as rebooting")
+
+        # Ensure pre-reboot write is durable (H12)
+        try:
+            from elle.storage.engine import get_conn
+
+            with get_conn(schema="reboot") as conn:
+                conn.execute("PRAGMA wal_checkpoint(FULL)")
+                conn.commit()
+        except Exception as e:
+            logger.warning(f"Could not confirm pre-reboot write durability: {e}")
 
         # Countdown
         for remaining in range(countdown_seconds, 0, -1):
@@ -434,6 +444,15 @@ class RebootManager:
 
         # Start rollback timer (can be cancelled by user)
         self._rollback_task = asyncio.create_task(self._delayed_rollback(intent))
+
+        def _on_rollback_done(task: asyncio.Task) -> None:
+            if task.cancelled():
+                return
+            exc = task.exception()
+            if exc:
+                logger.error(f"Rollback task failed: {exc}", exc_info=exc)
+
+        self._rollback_task.add_done_callback(_on_rollback_done)
 
         return get_intent(intent.id) or intent
 
@@ -750,7 +769,7 @@ class RebootManager:
         Returns:
             Number of intents cleaned up.
         """
-        threshold = datetime.utcnow() - timedelta(hours=STALE_REBOOT_THRESHOLD_HOURS)
+        threshold = datetime.now(timezone.utc) - timedelta(hours=STALE_REBOOT_THRESHOLD_HOURS)
         intents = get_intents_by_status("rebooting")
         cleaned = 0
 

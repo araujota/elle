@@ -10,7 +10,7 @@ Provides the system prompt that instructs the LLM on:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def get_system_prompt(
@@ -28,7 +28,7 @@ def get_system_prompt(
     Returns:
         Complete system prompt string.
     """
-    ts = timestamp or datetime.now()
+    ts = timestamp or datetime.now(timezone.utc)
     host = hostname or "localhost"
     os_str = os_info or "Ubuntu 24.04 LTS"
 

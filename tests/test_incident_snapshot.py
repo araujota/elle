@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, mock_open, patch
 
@@ -158,9 +158,9 @@ class TestSnapshotCollection:
 
     def test_snapshot_has_timestamp(self):
         """Test that snapshot has a collection timestamp."""
-        before = datetime.utcnow()
+        before = datetime.now(timezone.utc)
         snapshot = collect_snapshot()
-        after = datetime.utcnow()
+        after = datetime.now(timezone.utc)
 
         assert before <= snapshot.collected_at <= after
 
@@ -1609,7 +1609,7 @@ class TestGetRecentAptHistory:
     def test_apt_history_normal(self):
         """Parse recent apt operations from history log."""
         # Use a date far enough in the future to be within 24 hours of utcnow()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         date_str = now.strftime("%Y-%m-%d  %H:%M:%S")
         content = f"Start-Date: {date_str}\nCommandline: apt install nginx\nInstall: nginx (1.18.0)\n\n"
         with patch.object(Path, "exists", return_value=True), patch.object(Path, "read_text", return_value=content):
@@ -2122,7 +2122,7 @@ class TestAptHistoryEdgeCases:
 
     def test_apt_history_upgrade_action(self):
         """Upgrade entries are parsed (lines 477-480)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         date_str = now.strftime("%Y-%m-%d  %H:%M:%S")
         content = f"Start-Date: {date_str}\nCommandline: apt upgrade\nUpgrade: openssl (3.0.1 => 3.0.2)\n\n"
         with patch.object(Path, "exists", return_value=True), patch.object(Path, "read_text", return_value=content):
@@ -2132,7 +2132,7 @@ class TestAptHistoryEdgeCases:
 
     def test_apt_history_remove_action(self):
         """Remove entries are parsed (lines 482-485)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         date_str = now.strftime("%Y-%m-%d  %H:%M:%S")
         content = f"Start-Date: {date_str}\nCommandline: apt remove nginx\nRemove: nginx (1.18.0)\n\n"
         with patch.object(Path, "exists", return_value=True), patch.object(Path, "read_text", return_value=content):
@@ -2503,7 +2503,7 @@ class TestAptHistoryParsing:
 
     def test_apt_history_upgrade_action(self):
         """Parse Upgrade action from apt history (lines 476-480)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         date_str = now.strftime("%Y-%m-%d  %H:%M:%S")
         content = (
             f"Start-Date: {date_str}\n"
@@ -2522,7 +2522,7 @@ class TestAptHistoryParsing:
 
     def test_apt_history_remove_action(self):
         """Parse Remove action from apt history (lines 481-485)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         date_str = now.strftime("%Y-%m-%d  %H:%M:%S")
         content = f"Start-Date: {date_str}\nCommandline: apt remove nginx\nRemove: nginx:amd64 (1.18.0-6ubuntu1)\n\n"
         with (

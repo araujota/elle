@@ -192,6 +192,8 @@ class StateCache:
         self._docker_state = DockerState()
         self._network_state = NetworkState()
         self._listeners: tuple[Listener, ...] = ()
+        self._docker_task: asyncio.Task[None] | None = None
+        self._network_task: asyncio.Task[None] | None = None
 
         self._last_docker_refresh: datetime | None = None
         self._last_network_refresh: datetime | None = None
@@ -214,13 +216,27 @@ class StateCache:
         # Initial refresh
         await self._refresh_all()
 
-        # Start background tasks
-        asyncio.create_task(self._docker_refresh_loop())
-        asyncio.create_task(self._network_refresh_loop())
+        # Start background tasks with error tracking
+        self._docker_task = asyncio.create_task(self._docker_refresh_loop())
+        self._network_task = asyncio.create_task(self._network_refresh_loop())
+        self._docker_task.add_done_callback(self._task_error_handler)
+        self._network_task.add_done_callback(self._task_error_handler)
+
+    @staticmethod
+    def _task_error_handler(task: asyncio.Task[None]) -> None:
+        """Log unhandled exceptions from background refresh tasks."""
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc:
+            logger.error("Background refresh task failed: %s", exc, exc_info=exc)
 
     async def stop(self) -> None:
         """Stop the state cache."""
         self._running = False
+        for task in (self._docker_task, self._network_task):
+            if task and not task.done():
+                task.cancel()
         logger.info("StateCache stopped")
 
     async def _refresh_all(self) -> None:

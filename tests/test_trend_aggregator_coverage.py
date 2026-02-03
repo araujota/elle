@@ -281,13 +281,13 @@ class TestRecordMetric:
             mock_schema.assert_called_once_with(pooled)
 
     def test_default_timestamp(self, mock_conn):
-        """When ts is None, datetime.utcnow() is used."""
+        """When ts is None, datetime.now(timezone.utc) is used."""
         with patch("elle.daemon.telemetry.aggregator.datetime") as mock_dt:
             fake_now = datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
-            mock_dt.utcnow.return_value = fake_now
+            mock_dt.now.return_value = fake_now
             mock_dt.side_effect = lambda *a, **k: datetime(*a, **k)
             record_metric("mem.used_pct", 65.0, conn=mock_conn)
-            mock_dt.utcnow.assert_called_once()
+            mock_dt.now.assert_called_once_with(timezone.utc)
 
     def test_explicit_timestamp(self, mock_conn):
         """Explicit ts is passed through to the INSERT."""
@@ -583,7 +583,7 @@ class TestCheckAnomaly:
         cursor = mock_conn.cursor.return_value
         cursor.fetchone.return_value = None  # _get_baseline returns None
 
-        result = aggregator._check_anomaly("mem.used_pct", 80.0, datetime.utcnow(), mock_conn)
+        result = aggregator._check_anomaly("mem.used_pct", 80.0, datetime.now(timezone.utc), mock_conn)
         assert result is None
 
     def test_insufficient_samples_returns_none(self, aggregator, mock_conn):
@@ -597,7 +597,7 @@ class TestCheckAnomaly:
             "updated_at": "2025-06-01T00:00:00+00:00",
         }
 
-        result = aggregator._check_anomaly("mem.used_pct", 80.0, datetime.utcnow(), mock_conn)
+        result = aggregator._check_anomaly("mem.used_pct", 80.0, datetime.now(timezone.utc), mock_conn)
         assert result is None
 
     def test_zero_stddev_returns_none(self, aggregator_low_threshold, mock_conn):
@@ -611,7 +611,7 @@ class TestCheckAnomaly:
             "updated_at": "2025-06-01T00:00:00+00:00",
         }
 
-        result = aggregator_low_threshold._check_anomaly("mem.used_pct", 80.0, datetime.utcnow(), mock_conn)
+        result = aggregator_low_threshold._check_anomaly("mem.used_pct", 80.0, datetime.now(timezone.utc), mock_conn)
         assert result is None
 
     def test_positive_z_score_above(self, aggregator_low_threshold, mock_conn):

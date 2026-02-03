@@ -6,7 +6,7 @@ evidence, and lifecycle states.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -230,7 +230,7 @@ class CapabilityResult(BaseModel):
         description="Time taken to execute in milliseconds",
     )
     executed_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When the capability was executed",
     )
 

@@ -1,6 +1,6 @@
 """Tests for narrative and multi-hop search models."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -19,7 +19,7 @@ class TestCausalLink:
 
     def test_create_causal_link(self):
         """Test creating a causal link."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         link = CausalLink(
             cause_type="event",
             cause_id="evt-001",
@@ -44,7 +44,7 @@ class TestCausalLink:
 
     def test_causal_link_defaults(self):
         """Test CausalLink default values."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         link = CausalLink(
             cause_type="condition",
             cause_id="cond-001",
@@ -63,7 +63,7 @@ class TestCausalLink:
 
     def test_causal_link_frozen(self):
         """Test that CausalLink is immutable."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         link = CausalLink(
             cause_type="event",
             cause_id="evt-001",
@@ -84,7 +84,7 @@ class TestCausalChain:
 
     def test_create_causal_chain(self):
         """Test creating a causal chain."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         link1 = CausalLink(
             cause_type="event",
             cause_id="evt-001",
@@ -128,7 +128,7 @@ class TestCausalChain:
 
     def test_compute_overall_confidence(self):
         """Test computing overall confidence."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         links = tuple(
             [
                 CausalLink(
@@ -194,7 +194,7 @@ class TestSearchHop:
 
     def test_create_search_hop(self):
         """Test creating a search hop."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         hop = SearchHop(
             iteration=0,
             query="postgresql crash",

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from pydantic import ValidationError
@@ -387,9 +387,9 @@ class TestJQResult:
 
     def test_completed_at_auto_set(self) -> None:
         """Test that completed_at is automatically set."""
-        before = datetime.utcnow()
+        before = datetime.now(timezone.utc)
         result = JQResult(success=True)
-        after = datetime.utcnow()
+        after = datetime.now(timezone.utc)
         assert before <= result.completed_at <= after
 
     def test_parsed_output_complex_type(self) -> None:
@@ -633,9 +633,9 @@ class TestJQEditResult:
 
     def test_completed_at_auto_set(self) -> None:
         """Test that completed_at is automatically set."""
-        before = datetime.utcnow()
+        before = datetime.now(timezone.utc)
         result = JQEditResult(success=True, file_path="/tmp/test.json")
-        after = datetime.utcnow()
+        after = datetime.now(timezone.utc)
         assert before <= result.completed_at <= after
 
     def test_requires_privilege_flag(self) -> None:

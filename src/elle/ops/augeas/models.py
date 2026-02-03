@@ -6,7 +6,7 @@ results, and related types for the Augeas-based editing system.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -157,7 +157,7 @@ class AugeasEditResult(BaseModel):
         description="Whether privileged access was required",
     )
     completed_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When the operation completed",
     )
 
@@ -253,7 +253,7 @@ class BatchEditResult(BaseModel):
         description="Error message if batch failed",
     )
     completed_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When the batch completed",
     )
 
@@ -280,7 +280,7 @@ class BackupRecord(BaseModel):
     sha256: str = Field(description="SHA256 hash of original file")
     size_bytes: int = Field(ge=0, description="File size in bytes")
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When the backup was created",
     )
     metadata: dict[str, Any] = Field(

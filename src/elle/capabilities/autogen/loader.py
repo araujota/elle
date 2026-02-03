@@ -13,7 +13,11 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from elle.capabilities.autogen.factory import compile_capability_class
+from elle.capabilities.autogen.factory import (
+    compile_capability_class,
+    compute_code_hmac,
+    validate_generated_ast,
+)
 from elle.capabilities.autogen.models import (
     GeneratedCapabilitySpec,
     StoredCapability,
@@ -94,6 +98,20 @@ def _compile_core_capability(stored: StoredCapability) -> type | None:
 
         # Build execution namespace with necessary imports
         namespace: dict[str, Any] = {}
+
+        # Validate AST before execution (C2)
+        validate_generated_ast(stored.capability_class_code, f"core capability {stored.capability_name}")
+
+        # Verify HMAC integrity if stored (C1)
+        if hasattr(stored, "code_hmac") and stored.code_hmac:
+            try:
+                expected = compute_code_hmac(stored.capability_class_code)
+            except RuntimeError as e:
+                logger.error(f"Cannot verify HMAC for {stored.capability_name}: {e}")
+                return None
+            if stored.code_hmac != expected:
+                logger.error(f"HMAC mismatch for {stored.capability_name} - code may have been tampered with")
+                return None
 
         # Execute the capability class code which includes:
         # - Imports

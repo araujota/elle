@@ -27,7 +27,7 @@ import asyncio
 import logging
 import uuid
 from collections.abc import AsyncIterator
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
@@ -100,7 +100,7 @@ class MobileNotificationEvent(BaseModel):
     )
     event_type: MobileEventType = Field(description="Type of event")
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When the event was created",
     )
 
@@ -156,7 +156,7 @@ class MobileClientConnection:
     def __init__(self, device_id: str, device_name: str):
         self.device_id = device_id
         self.device_name = device_name
-        self.connected_at = datetime.utcnow()
+        self.connected_at = datetime.now(timezone.utc)
         self.queue: asyncio.Queue[MobileNotificationEvent] = asyncio.Queue()
         self._closed = False
 

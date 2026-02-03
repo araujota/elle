@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import subprocess
 from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
@@ -83,12 +84,17 @@ def detect_hardware() -> HardwareProfile:
     # Detect GPUs (nvidia-smi presence)
     gpu_count = 0
     try:
-        result = os.popen("nvidia-smi --query-gpu=count --format=csv,noheader 2>/dev/null")  # nosec B605
-        output = result.read().strip()
-        result.close()
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=count", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            stderr=subprocess.DEVNULL,
+        )
+        output = result.stdout.strip()
         if output:
             gpu_count = int(output.split("\n")[0].strip())
-    except (OSError, ValueError):
+    except (OSError, ValueError, subprocess.TimeoutExpired):
         pass
 
     profile = HardwareProfile(

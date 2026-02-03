@@ -8,7 +8,7 @@ other service.
 """
 
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -401,7 +401,7 @@ def _build_row(
     """Return a dict simulating a database row from audit_log."""
     return {
         "id": id_,
-        "timestamp": timestamp or datetime.utcnow(),
+        "timestamp": timestamp or datetime.now(timezone.utc),
         "device_id": device_id,
         "device_name": device_name,
         "action": action,
@@ -461,7 +461,7 @@ class TestQuery:
         assert MobileAuditAction.REVOKE.value in params
 
     def test_query_with_since_and_until(self, mock_conn):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         since = now - timedelta(hours=2)
         until = now
 
@@ -512,7 +512,7 @@ class TestQuery:
         cursor = MagicMock()
         cursor.fetchall.return_value = []
         mock_conn.execute.return_value = cursor
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         with patch("elle.mobile.audit.get_conn") as patched_gc:
             patched_gc.return_value = _fake_get_conn(mock_conn)
@@ -708,7 +708,7 @@ class TestCleanupOldEntries:
         params = mock_conn.execute.call_args[0][1]
         cutoff_str = params[0]
         cutoff_dt = datetime.fromisoformat(cutoff_str)
-        expected_approx = datetime.utcnow() - timedelta(days=7)
+        expected_approx = datetime.now(timezone.utc) - timedelta(days=7)
         assert abs((cutoff_dt - expected_approx).total_seconds()) < 5
 
 
@@ -721,7 +721,7 @@ class TestRowToEntry:
     """Tests for MobileAuditStore._row_to_entry()."""
 
     def test_row_with_datetime_object(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         row = _build_row(timestamp=now, action="elevate", device_id="d5")
         s = MobileAuditStore(config=_make_config())
         entry = s._row_to_entry(row)
@@ -732,7 +732,7 @@ class TestRowToEntry:
         assert entry.success is True
 
     def test_row_with_iso_string_timestamp(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         row = _build_row(timestamp=now.isoformat(), action="revoke", device_id="d6")
         s = MobileAuditStore(config=_make_config())
         entry = s._row_to_entry(row)
@@ -775,7 +775,7 @@ class TestRowToEntry:
         assert entry.success is False
 
     def test_row_all_fields_populated(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         row = _build_row(
             timestamp=now,
             device_id="full-device",

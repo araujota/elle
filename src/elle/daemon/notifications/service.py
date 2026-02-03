@@ -24,6 +24,7 @@ import logging
 import os
 import shutil
 import subprocess
+import threading
 from collections.abc import Callable
 from functools import lru_cache
 from typing import Any
@@ -47,6 +48,22 @@ logger = logging.getLogger(__name__)
 APP_NAME = "ELLE"
 APP_ID = "com.elle.assistant"
 
+# Background task tracking to prevent fire-and-forget tasks from being GC'd
+_background_tasks: set[asyncio.Task[Any]] = set()
+
+
+def _track_task(task: asyncio.Task[Any]) -> None:
+    """Track a background asyncio task and log errors on completion."""
+    _background_tasks.add(task)
+
+    def _done(t: asyncio.Task[Any]) -> None:
+        _background_tasks.discard(t)
+        if not t.cancelled() and t.exception() is not None:
+            logger.error("Background notification task failed: %s", t.exception())
+
+    task.add_done_callback(_done)
+
+
 # Terminal emulators to try (in order of preference)
 TERMINAL_EMULATORS = [
     ("gnome-terminal", ["gnome-terminal", "--", "elle"]),
@@ -62,6 +79,7 @@ TERMINAL_EMULATORS = [
 
 # Notification history (for rate limiting)
 _notification_history: dict[str, float] = {}
+_notification_history_lock = threading.Lock()
 RATE_LIMIT_SECONDS = 5  # Minimum seconds between identical notifications
 
 
@@ -198,16 +216,42 @@ def _create_action_callback(
 
         # Handle the action
         if action.command:
-            # Custom command
+            # Custom command — route through denylist check
             try:
-                subprocess.Popen(
-                    action.command,
-                    shell=True,  # nosec B602 - notification action commands from trusted config
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
+                from elle.cli.subprocess_runner import check_denylist
+
+                is_denied, _reason, _msg = check_denylist(action.command)
+                if is_denied:
+                    logger.warning(f"Blocked denylisted notification command: {action.command[:100]}")
+                else:
+                    import shlex
+
+                    args = shlex.split(action.command)
+                    proc = subprocess.Popen(
+                        args,
+                        shell=False,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    try:
+                        proc.wait(timeout=30)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait(timeout=5)
+                        logger.warning("Notification action command timed out after 30s")
             except Exception as e:
                 logger.error(f"Failed to execute action command: {e}")
+            try:
+                from elle.cli.agentic.incident_recorder import record_arm_action
+
+                record_arm_action(
+                    arm_name="notification_action",
+                    action="execute_command",
+                    target=action.command[:200],
+                    success=True,
+                )
+            except Exception:
+                logger.debug("Failed to record notification action", exc_info=True)
 
         elif action.id in ("open", "investigate", "view", "default"):
             # Open ELLE REPL with context
@@ -387,13 +431,19 @@ def _open_elle_repl(
         if "DISPLAY" not in env:
             env["DISPLAY"] = ":0"
 
-        subprocess.Popen(
+        proc = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             env=env,
             start_new_session=True,
         )
+        # Ensure the child process started (M3)
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            # Terminal is running as expected (interactive process)
+            pass
         logger.info(f"Opened ELLE REPL in {name}")
         return True
 
@@ -413,10 +463,15 @@ def _execute_forecast_plan(incident_id: str) -> None:
     try:
         import httpx
 
+        from elle.daemon.config import get_config
+
+        config = get_config()
+        port = config.api.port
+
         # Call the local daemon API to execute the plan
         with httpx.Client(timeout=5.0) as client:
             client.post(
-                f"http://127.0.0.1:7773/v1/incident/{incident_id}/execute-plan",
+                f"http://127.0.0.1:{port}/v1/incident/{incident_id}/execute-plan",
             )
         logger.info(f"Triggered plan execution for incident: {incident_id}")
     except Exception as e:
@@ -431,7 +486,12 @@ def _cancel_reboot(intent_id: str) -> None:
         from elle.daemon.reboot import get_manager
 
         manager = get_manager()
-        asyncio.create_task(manager.cancel_pending_reboot(intent_id))
+        try:
+            loop = asyncio.get_running_loop()
+            task = loop.create_task(manager.cancel_pending_reboot(intent_id))
+            _track_task(task)
+        except RuntimeError:
+            logger.debug("No running event loop for cancel_reboot task")
         logger.info(f"Cancelled reboot intent: {intent_id}")
     except Exception as e:
         logger.error(f"Failed to cancel reboot: {e}")
@@ -443,26 +503,28 @@ def _cancel_reboot(intent_id: str) -> None:
 
 
 def _should_send(notification: Notification) -> bool:
-    """Check if notification should be sent (rate limiting)."""
+    """Check if notification should be sent (rate limiting, thread-safe)."""
     import time
 
     # Create a key from notification content
     key = f"{notification.category}:{notification.title}:{notification.body[:50]}"
 
     now = time.time()
-    last_sent = _notification_history.get(key, 0)
 
-    if now - last_sent < RATE_LIMIT_SECONDS:
-        logger.debug(f"Rate limiting notification: {notification.title}")
-        return False
+    with _notification_history_lock:
+        last_sent = _notification_history.get(key, 0)
 
-    _notification_history[key] = now
+        if now - last_sent < RATE_LIMIT_SECONDS:
+            logger.debug(f"Rate limiting notification: {notification.title}")
+            return False
 
-    # Clean old entries
-    cutoff = now - 60
-    for k in list(_notification_history.keys()):
-        if _notification_history[k] < cutoff:
-            del _notification_history[k]
+        _notification_history[key] = now
+
+        # Clean old entries
+        cutoff = now - 60
+        for k in list(_notification_history.keys()):
+            if _notification_history[k] < cutoff:
+                del _notification_history[k]
 
     return True
 
@@ -518,7 +580,12 @@ def _push_to_mobile(notification: Notification) -> None:
         notifier = get_mobile_notifier()
         if notifier.is_available():
             # Run async push in background
-            asyncio.create_task(notifier.push_notification(notification))
+            try:
+                loop = asyncio.get_running_loop()
+                task = loop.create_task(notifier.push_notification(notification))
+                _track_task(task)
+            except RuntimeError:
+                logger.debug("No running event loop for mobile push task")
     except Exception as e:
         logger.debug(f"Mobile push failed: {e}")
 

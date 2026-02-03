@@ -22,7 +22,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
@@ -157,7 +157,7 @@ class ConfigChangeRecord(BaseModel):
     risk: ConfigRisk | None = Field(default=None)
 
     # Timing
-    detected_at: datetime = Field(default_factory=datetime.utcnow)
+    detected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # =============================================================================
@@ -265,7 +265,7 @@ class ConfigChangeTracker:
             backup_available=backup_path is not None,
             backup_path=backup_path,
             risk=risk,
-            detected_at=datetime.utcnow(),
+            detected_at=datetime.now(timezone.utc),
         )
 
         # Create incident
@@ -514,7 +514,7 @@ class ConfigChangeTracker:
         """
         try:
             # Create backup filename with timestamp
-            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
             backup_name = f"{path.name}.{timestamp}.{sha256[:8]}"
             backup_path = self._backup_dir / backup_name
 

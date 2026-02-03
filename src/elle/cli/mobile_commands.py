@@ -229,6 +229,19 @@ def _mobile_up(args: list[str], session: Session) -> tuple[str, bool]:
         lines.append(f"{Colors.DIM}Use '/mobile status' to check gateway status{Colors.RESET}")
         lines.append(f"{Colors.DIM}Use '/mobile down' to stop the gateway{Colors.RESET}")
 
+        try:
+            from elle.cli.agentic.incident_recorder import record_arm_action
+
+            record_arm_action(
+                arm_name="mobile_gateway",
+                action="gateway_start",
+                target=f"{status.bind_host}:{status.bind_port}",
+                success=True,
+                details={"pid": status.pid, "role": role},
+            )
+        except Exception:
+            pass
+
         return "\n".join(lines), True
 
     except ServerError as e:
@@ -247,6 +260,17 @@ def _mobile_down(session: Session) -> tuple[str, bool]:
         stopped = server.stop()
 
         if stopped:
+            try:
+                from elle.cli.agentic.incident_recorder import record_arm_action
+
+                record_arm_action(
+                    arm_name="mobile_gateway",
+                    action="gateway_stop",
+                    target="mobile_gateway",
+                    success=True,
+                )
+            except Exception:
+                pass
             return f"\n{Colors.GREEN}Mobile gateway stopped{Colors.RESET}\n", True
         else:
             return f"\n{Colors.YELLOW}Gateway was not running{Colors.RESET}\n", True

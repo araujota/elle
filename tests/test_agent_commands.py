@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -53,35 +53,35 @@ class TestFormatTime:
     def test_just_now(self):
         from elle.cli.agent_commands import _format_time
 
-        now = datetime.now().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         result = _format_time(now)
         assert result == "just now"
 
     def test_minutes_ago(self):
         from elle.cli.agent_commands import _format_time
 
-        t = (datetime.now() - timedelta(minutes=5)).isoformat()
+        t = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
         result = _format_time(t)
         assert "m ago" in result
 
     def test_hours_ago(self):
         from elle.cli.agent_commands import _format_time
 
-        t = (datetime.now() - timedelta(hours=3)).isoformat()
+        t = (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat()
         result = _format_time(t)
         assert "h ago" in result
 
     def test_yesterday(self):
         from elle.cli.agent_commands import _format_time
 
-        t = (datetime.now() - timedelta(days=1)).isoformat()
+        t = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
         result = _format_time(t)
         assert result == "yesterday"
 
     def test_days_ago(self):
         from elle.cli.agent_commands import _format_time
 
-        t = (datetime.now() - timedelta(days=4)).isoformat()
+        t = (datetime.now(timezone.utc) - timedelta(days=4)).isoformat()
         result = _format_time(t)
         assert "d ago" in result
 

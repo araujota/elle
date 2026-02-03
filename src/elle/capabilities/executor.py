@@ -13,7 +13,9 @@ Provides the main entry point for executing capabilities with:
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import threading
 import time
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
@@ -222,9 +224,14 @@ class CapabilityExecutor:
         if needs_confirm:
             if confirm_callback:
                 try:
-                    confirmed = await confirm_callback(dry_run_result)
+                    confirmed = await asyncio.wait_for(
+                        confirm_callback(dry_run_result),
+                        timeout=300.0,
+                    )
                     if not confirmed:
                         raise CapabilityCancelledError("User cancelled")
+                except (TimeoutError, asyncio.TimeoutError) as e:
+                    raise CapabilityCancelledError("Confirmation timed out after 300s") from e
                 except CapabilityCancelledError:
                     raise
                 except Exception as e:
@@ -493,6 +500,7 @@ class CapabilityExecutor:
 # =============================================================================
 
 _executor: CapabilityExecutor | None = None
+_executor_lock = threading.Lock()
 
 
 def get_executor() -> CapabilityExecutor:
@@ -502,9 +510,12 @@ def get_executor() -> CapabilityExecutor:
         The global CapabilityExecutor singleton.
     """
     global _executor
-    if _executor is None:
-        _executor = CapabilityExecutor()
-    return _executor
+    if _executor is not None:
+        return _executor
+    with _executor_lock:
+        if _executor is None:
+            _executor = CapabilityExecutor()
+        return _executor
 
 
 def reset_executor() -> None:

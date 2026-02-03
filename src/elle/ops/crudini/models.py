@@ -6,7 +6,7 @@ the crudini command-line tool.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -116,7 +116,7 @@ class CrudiniResult(BaseModel):
         description="crudini process exit code",
     )
     completed_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When the operation completed",
     )
 
@@ -205,7 +205,7 @@ class CrudiniEditResult(BaseModel):
         description="Whether privileged access was required",
     )
     completed_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When the operation completed",
     )
 

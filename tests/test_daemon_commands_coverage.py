@@ -182,7 +182,7 @@ class TestDaemonStatusDisplay:
 
     def test_format_time_ago_naive(self) -> None:
         d = self._display()
-        dt = datetime.now() - timedelta(minutes=10)
+        dt = datetime.now(timezone.utc) - timedelta(minutes=10)
         result = d._format_time_ago(dt)
         assert "m ago" in result
 
@@ -230,21 +230,17 @@ class TestHandleStart:
         assert "started successfully" in output
 
     def test_user_level_fail_system_success(self) -> None:
-        call_count = 0
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stderr = "not found"
+        mock_result.stdout = ""
+        mock_pk = MagicMock()
+        mock_pk.success = True
 
-        def mock_run(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            r = MagicMock()
-            if call_count == 1:
-                r.returncode = 1
-                r.stderr = "not found"
-                r.stdout = ""
-            else:
-                r.returncode = 0
-            return r
-
-        with patch("elle.cli.daemon_commands.subprocess.run", side_effect=mock_run):
+        with (
+            patch("elle.cli.daemon_commands.subprocess.run", return_value=mock_result),
+            patch("elle.security.polkit_helper.start_service_sync", return_value=mock_pk),
+        ):
             output = _handle_start("")
         assert "system-level" in output
 
@@ -253,7 +249,14 @@ class TestHandleStart:
         mock_result.returncode = 1
         mock_result.stderr = "error msg"
         mock_result.stdout = ""
-        with patch("elle.cli.daemon_commands.subprocess.run", return_value=mock_result):
+        mock_pk = MagicMock()
+        mock_pk.success = False
+        mock_pk.error = "polkit denied"
+
+        with (
+            patch("elle.cli.daemon_commands.subprocess.run", return_value=mock_result),
+            patch("elle.security.polkit_helper.start_service_sync", return_value=mock_pk),
+        ):
             output = _handle_start("")
         assert "Failed" in output
 
@@ -296,21 +299,17 @@ class TestHandleStop:
         assert "stopped" in output.lower()
 
     def test_user_fail_system_success(self) -> None:
-        call_count = 0
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stderr = ""
+        mock_result.stdout = ""
+        mock_pk = MagicMock()
+        mock_pk.success = True
 
-        def mock_run(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            r = MagicMock()
-            if call_count == 1:
-                r.returncode = 1
-                r.stderr = ""
-                r.stdout = ""
-            else:
-                r.returncode = 0
-            return r
-
-        with patch("elle.cli.daemon_commands.subprocess.run", side_effect=mock_run):
+        with (
+            patch("elle.cli.daemon_commands.subprocess.run", return_value=mock_result),
+            patch("elle.security.polkit_helper.stop_service_sync", return_value=mock_pk),
+        ):
             output = _handle_stop("")
         assert "system-level" in output
 
@@ -319,7 +318,14 @@ class TestHandleStop:
         mock_result.returncode = 1
         mock_result.stderr = "err"
         mock_result.stdout = ""
-        with patch("elle.cli.daemon_commands.subprocess.run", return_value=mock_result):
+        mock_pk = MagicMock()
+        mock_pk.success = False
+        mock_pk.error = "polkit denied"
+
+        with (
+            patch("elle.cli.daemon_commands.subprocess.run", return_value=mock_result),
+            patch("elle.security.polkit_helper.stop_service_sync", return_value=mock_pk),
+        ):
             output = _handle_stop("")
         assert "Failed" in output
 
@@ -362,21 +368,17 @@ class TestHandleRestart:
         assert "restarted" in output.lower()
 
     def test_user_fail_system_success(self) -> None:
-        call_count = 0
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stderr = ""
+        mock_result.stdout = ""
+        mock_pk = MagicMock()
+        mock_pk.success = True
 
-        def mock_run(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            r = MagicMock()
-            if call_count == 1:
-                r.returncode = 1
-                r.stderr = ""
-                r.stdout = ""
-            else:
-                r.returncode = 0
-            return r
-
-        with patch("elle.cli.daemon_commands.subprocess.run", side_effect=mock_run):
+        with (
+            patch("elle.cli.daemon_commands.subprocess.run", return_value=mock_result),
+            patch("elle.security.polkit_helper.restart_service_sync", return_value=mock_pk),
+        ):
             output = _handle_restart("")
         assert "system-level" in output
 
@@ -385,7 +387,14 @@ class TestHandleRestart:
         mock_result.returncode = 1
         mock_result.stderr = "err"
         mock_result.stdout = ""
-        with patch("elle.cli.daemon_commands.subprocess.run", return_value=mock_result):
+        mock_pk = MagicMock()
+        mock_pk.success = False
+        mock_pk.error = "polkit denied"
+
+        with (
+            patch("elle.cli.daemon_commands.subprocess.run", return_value=mock_result),
+            patch("elle.security.polkit_helper.restart_service_sync", return_value=mock_pk),
+        ):
             output = _handle_restart("")
         assert "Failed" in output
 

@@ -16,7 +16,7 @@ from __future__ import annotations
 import hashlib
 import os
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -277,7 +277,7 @@ class ControlSurfaceSnapshot(BaseModel):
     hardware: HardwareIdentitySurface = Field(default_factory=HardwareIdentitySurface)
 
     # Metadata
-    collected_at: datetime = Field(default_factory=datetime.utcnow)
+    collected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     def surface_hashes(self) -> dict[str, str]:
         """Compute hashes for all surfaces.
@@ -797,5 +797,5 @@ def collect_control_surface(
         network_control=_collect_network_control_surface(),
         kernel_policy=_collect_kernel_policy_surface(),
         hardware=_collect_hardware_identity_surface(),
-        collected_at=datetime.utcnow(),
+        collected_at=datetime.now(timezone.utc),
     )

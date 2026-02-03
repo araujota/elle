@@ -15,7 +15,7 @@ import logging
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -132,7 +132,7 @@ OPTIONAL_PACKAGES: tuple[tuple[str, PackageCategory], ...] = (
 class BootstrapResult:
     """Result of bootstrap capability generation."""
 
-    started_at: datetime = field(default_factory=datetime.utcnow)
+    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: datetime | None = None
 
     # Package counts
@@ -155,7 +155,7 @@ class BootstrapResult:
     def duration_seconds(self) -> float:
         """Get duration in seconds."""
         if self.completed_at is None:
-            return (datetime.utcnow() - self.started_at).total_seconds()
+            return (datetime.now(timezone.utc) - self.started_at).total_seconds()
         return (self.completed_at - self.started_at).total_seconds()
 
     @property
@@ -442,7 +442,7 @@ class BootstrapRunner:
                 result.packages_failed += 1
                 result.failed_packages.append((pkg_name, error or "Unknown error"))
 
-        result.completed_at = datetime.utcnow()
+        result.completed_at = datetime.now(timezone.utc)
         logger.info(
             f"Bootstrap complete: {result.packages_succeeded}/{total} succeeded, "
             f"{result.capabilities_saved} capabilities saved"

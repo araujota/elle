@@ -7,7 +7,7 @@ and defines additional models for probe results and queue items.
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -55,7 +55,7 @@ class TelemetryEvent(BaseModel):
 
     # Timestamp
     ts: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="Event timestamp",
     )
 
@@ -132,7 +132,7 @@ class ProbeResult(BaseModel):
     # Probe identification
     probe_name: str = Field(description="Name of the probe")
     ts: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="Probe execution timestamp",
     )
 

@@ -7,7 +7,7 @@ narratives from those chains.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -157,7 +157,7 @@ class Narrative(BaseModel):
 
     # Metadata
     generated_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When this narrative was generated",
     )
     model_used: str = Field(
@@ -233,7 +233,7 @@ class MultiHopResult(BaseModel):
     total_incidents_examined: int = Field(ge=0, default=0)
 
     # Timing
-    search_started: datetime = Field(default_factory=datetime.utcnow)
+    search_started: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     search_completed: datetime | None = Field(default=None)
     duration_ms: int | None = Field(default=None)
 

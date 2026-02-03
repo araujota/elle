@@ -1,6 +1,6 @@
 """Tests for ELLE Mobile Gateway storage."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -176,7 +176,7 @@ class TestElevationOperations:
         elevation = Elevation(
             device_id="test-device-1",
             elevated_role=MobileRole.MOBILE_OPERATOR,
-            expires_at=datetime.utcnow() + timedelta(minutes=10),
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
             granted_by="cli",
         )
         created = store.create_elevation(elevation)
@@ -194,7 +194,7 @@ class TestElevationOperations:
         elevation = Elevation(
             device_id="test-device-1",
             elevated_role=MobileRole.MOBILE_OPERATOR,
-            expires_at=datetime.utcnow() + timedelta(minutes=10),
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
             granted_by="cli",
         )
         store.create_elevation(elevation)
@@ -215,7 +215,7 @@ class TestElevationOperations:
         elevation = Elevation(
             device_id="test-device-1",
             elevated_role=MobileRole.MOBILE_OPERATOR,
-            expires_at=datetime.utcnow() - timedelta(minutes=10),
+            expires_at=datetime.now(timezone.utc) - timedelta(minutes=10),
             granted_by="cli",
         )
         store.create_elevation(elevation)
@@ -235,7 +235,7 @@ class TestElevationOperations:
         elevation = Elevation(
             device_id="test-device-1",
             elevated_role=MobileRole.MOBILE_OPERATOR,
-            expires_at=datetime.utcnow() + timedelta(minutes=10),
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
             granted_by="cli",
         )
         store.create_elevation(elevation)
@@ -254,7 +254,7 @@ class TestTokenOperations:
         """Test creating a token."""
         token = PairingToken(
             token="test-token-123",
-            expires_at=datetime.utcnow() + timedelta(seconds=90),
+            expires_at=datetime.now(timezone.utc) + timedelta(seconds=90),
         )
         created = store.create_token(token)
         assert created.token == "test-token-123"
@@ -263,7 +263,7 @@ class TestTokenOperations:
         """Test retrieving a token."""
         token = PairingToken(
             token="test-token-123",
-            expires_at=datetime.utcnow() + timedelta(seconds=90),
+            expires_at=datetime.now(timezone.utc) + timedelta(seconds=90),
         )
         store.create_token(token)
 
@@ -275,7 +275,7 @@ class TestTokenOperations:
         """Test marking a token as used."""
         token = PairingToken(
             token="test-token-123",
-            expires_at=datetime.utcnow() + timedelta(seconds=90),
+            expires_at=datetime.now(timezone.utc) + timedelta(seconds=90),
         )
         store.create_token(token)
 
@@ -289,14 +289,14 @@ class TestTokenOperations:
         # Create expired token
         expired = PairingToken(
             token="expired-token",
-            expires_at=datetime.utcnow() - timedelta(seconds=10),
+            expires_at=datetime.now(timezone.utc) - timedelta(seconds=10),
         )
         store.create_token(expired)
 
         # Create valid token
         valid = PairingToken(
             token="valid-token",
-            expires_at=datetime.utcnow() + timedelta(seconds=90),
+            expires_at=datetime.now(timezone.utc) + timedelta(seconds=90),
         )
         store.create_token(valid)
 

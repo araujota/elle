@@ -307,16 +307,14 @@ class TestDetectHardware:
 
     def test_detect_gpu_nvidia(self):
         """Detects GPU via nvidia-smi output."""
+        mock_run_result = MagicMock()
+        mock_run_result.stdout = "2\n"
         with (
             patch("os.cpu_count", return_value=4),
             patch("builtins.open", side_effect=OSError),
             patch("os.statvfs", side_effect=OSError),
-            patch("os.popen") as mock_popen,
+            patch("elle.daemon.telemetry.hardware_profile.subprocess.run", return_value=mock_run_result),
         ):
-            mock_result = MagicMock()
-            mock_result.read.return_value = "2\n"
-            mock_result.close = MagicMock()
-            mock_popen.return_value = mock_result
             profile = detect_hardware()
             assert profile.gpu_count == 2
 

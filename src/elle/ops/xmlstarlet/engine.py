@@ -10,7 +10,7 @@ import logging
 import shutil
 import subprocess
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -1009,5 +1009,5 @@ class XMLStarletEngine:
             backup_path=backup_path,
             validation_passed=validation_passed,
             changes=tuple(changes),
-            completed_at=datetime.utcnow(),
+            completed_at=datetime.now(timezone.utc),
         )

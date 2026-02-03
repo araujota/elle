@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import cast
 
 from elle.capabilities.dependencies.models import (
@@ -130,7 +130,7 @@ class DependencyPreferenceStore:
         Returns:
             The created/updated DependencyPreference.
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         with get_conn(schema=PG_SCHEMA) as conn:
             cursor = conn.cursor()
@@ -347,7 +347,7 @@ class DependencyPreferenceStore:
         """
         from datetime import timedelta
 
-        cutoff = datetime.utcnow() - timedelta(hours=within_hours)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=within_hours)
 
         with get_conn(schema=PG_SCHEMA) as conn:
             cursor = conn.cursor()

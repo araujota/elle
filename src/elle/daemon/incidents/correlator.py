@@ -22,9 +22,11 @@ Agentic Integration:
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
+import threading
 from collections.abc import Callable, Coroutine
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from elle.daemon.incidents.models import IncidentDomain
@@ -35,6 +37,8 @@ from elle.daemon.incidents.store import (
     link_events,
     update_incident,
 )
+
+logger = logging.getLogger(__name__)
 
 # Type for the incident callback
 OnIncidentCreated = Callable[[str], Coroutine[Any, Any, None]] | Callable[[str], None] | None
@@ -92,6 +96,7 @@ class IncidentCorrelator:
         min_events_for_incident: int = 1,
         critical_triggers_immediate: bool = True,
         on_incident_created: OnIncidentCreated = None,
+        max_buffer_size: int = 10000,
     ):
         """Initialize the correlator.
 
@@ -101,14 +106,17 @@ class IncidentCorrelator:
             critical_triggers_immediate: If True, critical events trigger immediately.
             on_incident_created: Optional callback when an incident is created.
                                  Called with incident_id. Can be sync or async.
+            max_buffer_size: Maximum number of events in the buffer (M3).
         """
         self.time_window_sec = time_window_sec
         self.min_events_for_incident = min_events_for_incident
         self.critical_triggers_immediate = critical_triggers_immediate
         self._on_incident_created = on_incident_created
+        self._max_buffer_size = max_buffer_size
 
         # Event buffer for correlation
         self._event_buffer: list[dict[str, Any]] = []
+        self._buffer_lock = threading.Lock()
 
         # Active incident tracking
         self._active_incidents: dict[str, str] = {}  # key -> incident_id
@@ -125,11 +133,18 @@ class IncidentCorrelator:
         Returns:
             Incident ID if an incident was created/updated, None otherwise.
         """
-        # Add to buffer
-        self._event_buffer.append(event)
+        # Add to buffer with lock (C6)
+        with self._buffer_lock:
+            self._event_buffer.append(event)
 
-        # Clean old events from buffer
-        self._clean_buffer()
+            # Trim buffer to max size (M3) -- drop oldest events first
+            if len(self._event_buffer) > self._max_buffer_size:
+                dropped = len(self._event_buffer) - self._max_buffer_size
+                logger.warning("Correlator buffer overflow: dropped %d oldest events", dropped)
+                self._event_buffer = self._event_buffer[-self._max_buffer_size :]
+
+            # Clean old events from buffer
+            self._clean_buffer()
 
         # Check for immediate trigger (critical severity)
         if self.critical_triggers_immediate and event.get("severity") == "critical":
@@ -208,7 +223,7 @@ class IncidentCorrelator:
 
     def _clean_buffer(self) -> None:
         """Remove old events from the buffer."""
-        cutoff = datetime.utcnow() - timedelta(seconds=self.time_window_sec * 2)
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=self.time_window_sec * 2)
         self._event_buffer = [e for e in self._event_buffer if self._get_event_time(e) > cutoff]
 
     def _get_event_time(self, event: dict[str, Any]) -> datetime:
@@ -218,7 +233,7 @@ class IncidentCorrelator:
             return ts
         if isinstance(ts, str):
             return datetime.fromisoformat(ts)
-        return datetime.utcnow()
+        return datetime.now(timezone.utc)
 
     def _detect_domain(self, text: str) -> IncidentDomain:
         """Detect incident domain from text."""
@@ -251,7 +266,7 @@ class IncidentCorrelator:
     ) -> str | None:
         """Check if events form a pattern warranting an incident."""
         key = self._get_correlation_key(event)
-        cutoff = datetime.utcnow() - timedelta(seconds=self.time_window_sec)
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=self.time_window_sec)
 
         # Count related events in window
         related = [

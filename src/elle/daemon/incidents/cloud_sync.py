@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import ssl
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -189,6 +189,11 @@ class CloudSyncClient:
             self._client = httpx.AsyncClient(
                 timeout=httpx.Timeout(self._timeout_sec),
                 verify=ssl_context if ssl_context else True,
+                limits=httpx.Limits(
+                    max_connections=10,
+                    max_keepalive_connections=5,
+                    keepalive_expiry=30.0,
+                ),
             )
         return self._client
 
@@ -220,12 +225,29 @@ class CloudSyncClient:
         client = await self._get_client()
         url = f"{self._endpoint}/v1/incidents"
 
+        # Exponential backoff retry (H10)
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            try:
+                response = await client.post(
+                    url,
+                    json=incident.model_dump(mode="json"),
+                )
+                response.raise_for_status()
+                break
+            except Exception as e:
+                last_exc = e
+                if attempt < 2:
+                    import asyncio
+                    import random
+
+                    delay = 0.5 * (2**attempt) + random.uniform(0, 0.5)  # noqa: S311
+                    logger.warning(f"Cloud submit attempt {attempt + 1} failed: {e}, retrying in {delay}s")
+                    await asyncio.sleep(delay)
+                else:
+                    raise last_exc from None
+
         try:
-            response = await client.post(
-                url,
-                json=incident.model_dump(mode="json"),
-            )
-            response.raise_for_status()
             data = response.json()
 
             return CloudSubmissionResult(
@@ -269,7 +291,7 @@ class CloudSyncClient:
         url = f"{self._endpoint}/v1/incidents/similar"
 
         try:
-            start_time = datetime.utcnow()
+            start_time = datetime.now(timezone.utc)
 
             payload = {
                 "fingerprint": fingerprint.model_dump(mode="json"),
@@ -285,7 +307,7 @@ class CloudSyncClient:
             response.raise_for_status()
             data = response.json()
 
-            query_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+            query_time_ms = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
 
             # Parse matches
             matches = []

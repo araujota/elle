@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 
 import psycopg
+from psycopg import sql
 
 from elle.storage.migrate import register_migration
 
@@ -145,6 +146,26 @@ def ensure_schema(conn: psycopg.Connection) -> None:
     run_migrations(conn, PG_SCHEMA)
 
 
+def prune_old_events(conn: psycopg.Connection, retention_days: int = 30) -> int:
+    """Delete events older than the retention period.
+
+    Args:
+        conn: Active psycopg connection (search_path should include 'telemetry').
+        retention_days: Number of days to retain.
+
+    Returns:
+        Number of rows deleted.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=retention_days)).isoformat()
+    result = conn.execute("DELETE FROM events WHERE ts < %s", (cutoff,))
+    deleted = result.rowcount if result.rowcount else 0
+    if deleted:
+        logger.info("Pruned %d events older than %d days", deleted, retention_days)
+    return deleted
+
+
 def get_table_stats(conn: psycopg.Connection) -> dict[str, int]:
     """Get row counts for telemetry tables.
 
@@ -157,7 +178,7 @@ def get_table_stats(conn: psycopg.Connection) -> dict[str, int]:
     stats: dict[str, int] = {}
     for table in ["events", "probe_results"]:
         try:
-            row = conn.execute(f"SELECT COUNT(*) AS cnt FROM {table}").fetchone()  # noqa: S608  # nosec B608
+            row = conn.execute(sql.SQL("SELECT COUNT(*) AS cnt FROM {}").format(sql.Identifier(table))).fetchone()
             stats[table] = row["cnt"] if row else 0
         except Exception:
             stats[table] = 0

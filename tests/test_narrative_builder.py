@@ -8,7 +8,7 @@ elle.daemon.incidents.narrative_builder.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -41,7 +41,7 @@ def _make_link(
     effect_type: str = "incident",
 ) -> CausalLink:
     """Helper to create a CausalLink for testing."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     return CausalLink(
         cause_type=cause_type,
         cause_id="cause-001",
@@ -67,7 +67,7 @@ def _make_chain(
     if links is None:
         links = (_make_link(),)
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     return CausalChain(
         chain_id=chain_id,
         root_cause=links[0] if links else None,
@@ -101,7 +101,7 @@ def single_link() -> CausalLink:
 @pytest.fixture
 def multi_link_chain() -> CausalChain:
     """Create a chain with multiple links."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     link1 = CausalLink(
         cause_type="condition",
         cause_id="cond-001",
@@ -893,7 +893,7 @@ class TestEdgeCases:
 
     def test_narrative_with_very_long_chain(self, builder: NarrativeBuilder) -> None:
         """Test narrative generation with a long chain of events."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         links = []
         for i in range(10):
             links.append(

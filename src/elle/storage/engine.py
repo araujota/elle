@@ -24,7 +24,9 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import threading
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 
@@ -42,6 +44,7 @@ logger = logging.getLogger(__name__)
 _pool: ConnectionPool | None = None
 _async_pool: AsyncConnectionPool | None = None
 _config: PostgresConfig | None = None
+_pool_lock = threading.Lock()
 
 
 def _on_connect(conn: psycopg.Connection) -> None:
@@ -85,20 +88,28 @@ def configure_pool(config: PostgresConfig | None = None) -> ConnectionPool:
     global _pool, _config
     if _pool is not None:
         return _pool
+    with _pool_lock:
+        if _pool is not None:
+            return _pool
 
-    cfg = config or PostgresConfig()
-    _config = cfg
+        cfg = config or PostgresConfig()
+        _config = cfg
 
-    _pool = ConnectionPool(
-        conninfo=cfg.conninfo,
-        min_size=cfg.min_pool_size,
-        max_size=cfg.max_pool_size,
-        max_idle=cfg.max_idle_sec,
-        kwargs={"row_factory": dict_row, "autocommit": False},
-        configure=_on_connect,
-    )
-    logger.info("PostgreSQL sync pool configured (%s)", cfg.conninfo)
-    return _pool
+        def _check_connection(conn: psycopg.Connection) -> None:
+            """Verify connection is alive before handing it out."""
+            conn.execute("SELECT 1")
+
+        _pool = ConnectionPool(
+            conninfo=cfg.conninfo,
+            min_size=cfg.min_pool_size,
+            max_size=cfg.max_pool_size,
+            max_idle=cfg.max_idle_sec,
+            kwargs={"row_factory": dict_row, "autocommit": False, "connect_timeout": 10},
+            configure=_on_connect,
+            check=_check_connection,
+        )
+        logger.info("PostgreSQL sync pool configured (%s)", cfg.conninfo_safe)
+        return _pool
 
 
 def configure_async_pool(config: PostgresConfig | None = None) -> AsyncConnectionPool:
@@ -113,20 +124,28 @@ def configure_async_pool(config: PostgresConfig | None = None) -> AsyncConnectio
     global _async_pool, _config
     if _async_pool is not None:
         return _async_pool
+    with _pool_lock:
+        if _async_pool is not None:
+            return _async_pool
 
-    cfg = config or _config or PostgresConfig()
-    _config = cfg
+        cfg = config or _config or PostgresConfig()
+        _config = cfg
 
-    _async_pool = AsyncConnectionPool(
-        conninfo=cfg.conninfo,
-        min_size=cfg.min_pool_size,
-        max_size=cfg.max_pool_size,
-        max_idle=cfg.max_idle_sec,
-        kwargs={"row_factory": dict_row, "autocommit": False},
-        configure=_on_connect_async,
-    )
-    logger.info("PostgreSQL async pool configured (%s)", cfg.conninfo)
-    return _async_pool
+        async def _check_connection_async(conn: psycopg.AsyncConnection) -> None:
+            """Verify async connection is alive before handing it out."""
+            await conn.execute("SELECT 1")
+
+        _async_pool = AsyncConnectionPool(
+            conninfo=cfg.conninfo,
+            min_size=cfg.min_pool_size,
+            max_size=cfg.max_pool_size,
+            max_idle=cfg.max_idle_sec,
+            kwargs={"row_factory": dict_row, "autocommit": False, "connect_timeout": 10},
+            configure=_on_connect_async,
+            check=_check_connection_async,
+        )
+        logger.info("PostgreSQL async pool configured (%s)", cfg.conninfo_safe)
+        return _async_pool
 
 
 def get_pool() -> ConnectionPool:
@@ -151,8 +170,26 @@ def get_async_pool() -> AsyncConnectionPool:
     return _async_pool
 
 
+async def close_pools_async() -> None:
+    """Close both pools asynchronously (preferred for daemon shutdown)."""
+    global _pool, _async_pool
+    if _async_pool is not None:
+        try:
+            await _async_pool.close()
+        except Exception:
+            logger.debug("Error closing async pool", exc_info=True)
+        _async_pool = None
+    if _pool is not None:
+        try:
+            _pool.close()
+        except Exception:
+            logger.debug("Error closing sync pool", exc_info=True)
+        _pool = None
+    logger.info("PostgreSQL pools closed")
+
+
 def close_pools() -> None:
-    """Close both pools (call during shutdown)."""
+    """Close both pools (sync fallback for non-async contexts)."""
     global _pool, _async_pool
     if _pool is not None:
         try:
@@ -162,7 +199,10 @@ def close_pools() -> None:
         _pool = None
     if _async_pool is not None:
         try:
-            _async_pool.close()  # type: ignore[unused-coroutine]
+            loop = asyncio.get_running_loop()
+            loop.create_task(_async_pool.close())
+        except RuntimeError:
+            asyncio.run(_async_pool.close())
         except Exception:
             logger.debug("Error closing async pool", exc_info=True)
         _async_pool = None

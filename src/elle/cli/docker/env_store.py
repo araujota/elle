@@ -8,7 +8,7 @@ Storage backend: PostgreSQL via psycopg (schema ``docker``).
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import psycopg
 
@@ -93,7 +93,7 @@ class DockerEnvStore:
             values: List of EnvVarValue to save.
         """
         family = extract_image_family(image)
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
 
         with get_conn(schema=PG_SCHEMA) as conn:
             cursor = conn.cursor()

@@ -12,7 +12,7 @@ These models support the /learn command's capability generation pipeline.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -214,7 +214,7 @@ class PackageIntelligence(BaseModel, frozen=True):
         description="Sources that contributed data",
     )
     extraction_timestamp: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When extraction occurred",
     )
     token_estimate: int = Field(

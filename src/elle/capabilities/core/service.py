@@ -10,6 +10,7 @@ Provides typed, policy-governed operations for systemd service management:
 from __future__ import annotations
 
 import logging
+import shlex
 import time
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -41,6 +42,8 @@ class ServiceInput(BaseModel):
     service: str = Field(
         description="Service name (e.g., 'nginx', 'ssh')",
         min_length=1,
+        max_length=256,
+        pattern=r"^[a-zA-Z0-9._\-]+$",
     )
     timeout_sec: int = Field(
         default=30,
@@ -96,7 +99,7 @@ def _run_systemctl(
     """
     from elle.cli.subprocess_runner import RunMode, run_safe
 
-    command = f"systemctl {action} {service}"
+    command = f"systemctl {action} {shlex.quote(service)}"
     result = run_safe(
         command,
         timeout=float(timeout),
@@ -120,7 +123,7 @@ def _get_service_state(service: str) -> tuple[str, str, int | None]:
 
     # Get active state
     result = run_safe(
-        f"systemctl is-active {service}",
+        f"systemctl is-active {shlex.quote(service)}",
         timeout=10.0,
         mode=RunMode.CAPTURE,
         check_denylist_flag=False,
@@ -129,7 +132,7 @@ def _get_service_state(service: str) -> tuple[str, str, int | None]:
 
     # Get detailed state
     result = run_safe(
-        f"systemctl show {service} --property=SubState,MainPID",
+        f"systemctl show {shlex.quote(service)} --property=SubState,MainPID",
         timeout=10.0,
         mode=RunMode.CAPTURE,
         check_denylist_flag=False,
@@ -605,7 +608,7 @@ class ServiceStatusCapability(BaseCapability[ServiceInput, ServiceStatusOutput])
 
         # Get comprehensive status
         result = run_safe(
-            f"systemctl show {input.service} --property=ActiveState,SubState,MainPID,Description,LoadState",
+            f"systemctl show {shlex.quote(input.service)} --property=ActiveState,SubState,MainPID,Description,LoadState",
             timeout=10.0,
             mode=RunMode.CAPTURE,
             check_denylist_flag=False,

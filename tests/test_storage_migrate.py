@@ -17,6 +17,11 @@ _mock_pg.errors = MagicMock()
 _mock_pg.errors.UndefinedTable = _UndefinedTable
 _mock_pg.Connection = MagicMock
 
+# Preserve real psycopg.sql module so parameterized SQL works
+from psycopg import sql as _real_sql  # noqa: E402
+
+_mock_pg.sql = _real_sql
+
 _mock_pg_rows = MagicMock()
 _mock_pg_pool = MagicMock()
 
@@ -26,6 +31,7 @@ _modules_to_mock = {
     "psycopg": _mock_pg,
     "psycopg.errors": _mock_pg.errors,
     "psycopg.rows": _mock_pg_rows,
+    "psycopg.sql": _real_sql,
     "psycopg_pool": _mock_pg_pool,
 }
 
@@ -162,8 +168,10 @@ class TestEnsureMetaTable:
         _ensure_meta_table(conn, "my_schema")
         conn.execute.assert_called_once()
         call_sql = conn.execute.call_args[0][0]
-        assert "my_schema._meta" in call_sql
-        assert "CREATE TABLE IF NOT EXISTS" in call_sql
+        # SQL is now a psycopg.sql.Composed object; render to string
+        rendered = call_sql.as_string(None)
+        assert '"my_schema"._meta' in rendered
+        assert "CREATE TABLE IF NOT EXISTS" in rendered
 
 
 # ===========================================================================
@@ -234,8 +242,14 @@ class TestRunMigrations:
 
         run_migrations(conn, "s")
 
-        # The execute calls should include INSERT INTO _meta for each version
-        insert_calls = [c for c in conn.execute.call_args_list if len(c[0]) >= 2 and isinstance(c[0][1], tuple)]
+        # The execute calls should include INSERT INTO _meta for each version.
+        # Filter specifically for _meta INSERT calls (advisory lock/unlock also
+        # pass tuple args, so we must match on the SQL text).
+        insert_calls = [
+            c
+            for c in conn.execute.call_args_list
+            if len(c[0]) >= 2 and isinstance(c[0][1], tuple) and "_meta" in str(c[0][0])
+        ]
         assert len(insert_calls) == 2
         assert insert_calls[0][0][1] == ("1",)
         assert insert_calls[1][0][1] == ("2",)

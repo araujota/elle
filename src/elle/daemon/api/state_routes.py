@@ -22,6 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from elle.daemon.api.auth import AuthContext, get_auth_context
+from elle.daemon.api.models import ErrorResponse
 
 if TYPE_CHECKING:
     from elle.daemon.telemetry.state_cache import StateCache
@@ -188,15 +189,6 @@ class RefreshResponse(BaseModel):
 
     success: bool = Field(description="Whether refresh succeeded")
     message: str = Field(description="Status message")
-
-
-class ErrorResponse(BaseModel):
-    """Error response."""
-
-    model_config = ConfigDict(frozen=True)
-
-    error: str = Field(description="Error message")
-    detail: str | None = Field(default=None, description="Detailed error info")
 
 
 # ============================================================================

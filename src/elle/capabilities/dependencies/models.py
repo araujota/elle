@@ -6,7 +6,7 @@ user preferences, and installation operations.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -112,8 +112,12 @@ class DependencyPreference(BaseModel):
 
     dependency: str = Field(description="DependencySpec.name")
     preference: PreferenceChoice = Field(description="What to do when dependency is missing")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="When preference was first set")
-    updated_at: datetime = Field(default_factory=datetime.utcnow, description="When preference was last updated")
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="When preference was first set"
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="When preference was last updated"
+    )
 
 
 # =============================================================================
@@ -148,4 +152,6 @@ class InstallationResult(BaseModel):
     installed_packages: tuple[str, ...] = Field(default_factory=tuple, description="Packages that were installed")
     error_message: str | None = Field(default=None, description="Error message if failed")
     duration_sec: float = Field(default=0.0, description="Time taken to install in seconds")
-    installed_at: datetime = Field(default_factory=datetime.utcnow, description="When installation was attempted")
+    installed_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="When installation was attempted"
+    )

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from elle.capabilities.autogen.models import (
@@ -455,5 +455,5 @@ def validate_capability(
         stages=tuple(results),
         overall_passed=overall_passed,
         trust_level=trust_level,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
     )

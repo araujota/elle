@@ -478,12 +478,14 @@ class TestCancelReboot:
     def test_cancel_reboot_calls_manager(self):
         mock_manager = MagicMock()
         mock_manager.cancel_pending_reboot = AsyncMock()
+        mock_loop = MagicMock()
+        mock_loop.create_task = MagicMock()
         with (
             patch("elle.daemon.reboot.get_manager", return_value=mock_manager),
-            patch("asyncio.create_task") as mock_task,
+            patch("asyncio.get_running_loop", return_value=mock_loop),
         ):
             _cancel_reboot("int-1")
-            mock_task.assert_called_once()
+            mock_loop.create_task.assert_called_once()
 
     def test_cancel_reboot_import_error(self):
         with patch.dict("sys.modules", {"elle.daemon.reboot": None}):
@@ -506,13 +508,15 @@ class TestPushToMobile:
         mock_notifier = MagicMock()
         mock_notifier.is_available.return_value = True
         mock_notifier.push_notification = AsyncMock()
+        mock_loop = MagicMock()
+        mock_loop.create_task = MagicMock()
         with (
             patch("elle.daemon.notifications.mobile_push.get_mobile_notifier", return_value=mock_notifier),
-            patch("asyncio.create_task") as mock_task,
+            patch("asyncio.get_running_loop", return_value=mock_loop),
         ):
             n = _make_notification()
             _push_to_mobile(n)
-            mock_task.assert_called_once()
+            mock_loop.create_task.assert_called_once()
 
     def test_push_when_not_available(self):
         mock_notifier = MagicMock()

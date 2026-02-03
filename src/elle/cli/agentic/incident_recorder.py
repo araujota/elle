@@ -217,13 +217,29 @@ def record_execution_to_incident(
             result_success = result.get("success", True) if isinstance(result, dict) else True
             result_duration = result.get("duration_ms", 0) if isinstance(result, dict) else 0
 
+            # Truncate arguments payload if >10KB to prevent unbounded storage (H7)
+            _MAX_PAYLOAD_BYTES = 10240
+            safe_arguments = arguments
+            try:
+                args_json = json.dumps(arguments)
+                if len(args_json) > _MAX_PAYLOAD_BYTES:
+                    safe_arguments = {}
+                    for k, v in arguments.items():
+                        v_str = json.dumps(v) if not isinstance(v, str) else v
+                        if len(v_str) > 500:
+                            safe_arguments[k] = v_str[:500] + "..._truncated"
+                        else:
+                            safe_arguments[k] = v
+            except (TypeError, ValueError):
+                safe_arguments = {"_truncated": str(arguments)[:500]}
+
             append_action(
                 incident_id=incident_id,
                 kind=kind,
                 command=command,
                 payload={
                     "tool_name": tool_name,
-                    "arguments": arguments,
+                    "arguments": safe_arguments,
                     "execution_id": execution_id,
                     "iteration": tc.get("iteration", 1),
                     "verified": tc.get("verified", False),
@@ -574,6 +590,9 @@ def record_arm_action(
             "gui_mapping": "gui",
             "reactive_functions": "service",
             "mobile_gateway": "auth",
+            "shell_passthrough": "shell",
+            "autonomy_config": "auth",
+            "notification_action": "service",
         }
         domain = arm_domains.get(arm_name, "other")
 

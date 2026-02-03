@@ -27,7 +27,7 @@ import json
 import logging
 import sys
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -478,7 +478,7 @@ class CoreCapabilityMigrator:
                         cap_data["capability_class_code"],
                         cap_data["source_module"],
                         cap_data["source_hash"],
-                        datetime.utcnow().isoformat(),
+                        datetime.now(timezone.utc).isoformat(),
                         "core",
                         True,
                         True,

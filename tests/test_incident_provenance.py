@@ -6,7 +6,7 @@ and config file state tracking.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -81,7 +81,7 @@ class TestProvenanceModels:
         citation = TelemetryCitation(
             event_ids=("evt-1", "evt-2"),
             event_summaries=("OOM killed nginx", "Memory pressure high"),
-            trigger_time=datetime.utcnow(),
+            trigger_time=datetime.now(timezone.utc),
         )
         assert len(citation.event_ids) == 2
         assert len(citation.event_summaries) == 2
@@ -152,7 +152,7 @@ class TestConfigFileState:
             sha256_before="abc123",
             sha256_after="def456",
             size_bytes=1024,
-            mtime=datetime.utcnow(),
+            mtime=datetime.now(timezone.utc),
             backup_path="/var/lib/elle/backups/ssh/20240101",
         )
         assert state.path == "/etc/ssh/sshd_config"

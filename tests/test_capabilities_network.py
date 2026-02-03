@@ -275,7 +275,7 @@ class TestWireGuardRestartCapability:
 
     @patch(f"{_NET}.time.sleep")
     @patch(f"{_NET}._interface_exists")
-    @patch(f"{_NET}._run_command")
+    @patch(f"{_NET}._run_privileged_command")
     @patch(f"{_NET}._is_wireguard_available", return_value=True)
     def test_run_success_was_up_no_handshake_verify(self, mock_avail, mock_cmd, mock_iface, mock_sleep):
         """Restart succeeds when interface was up; skip handshake verification."""
@@ -292,7 +292,7 @@ class TestWireGuardRestartCapability:
 
     @patch(f"{_NET}.time.sleep")
     @patch(f"{_NET}._interface_exists")
-    @patch(f"{_NET}._run_command")
+    @patch(f"{_NET}._run_privileged_command")
     @patch(f"{_NET}._is_wireguard_available", return_value=True)
     def test_run_was_down_brings_up(self, mock_avail, mock_cmd, mock_iface, mock_sleep):
         """When interface was down, only wg-quick up is called."""
@@ -309,7 +309,7 @@ class TestWireGuardRestartCapability:
 
     @patch(f"{_NET}.time.sleep")
     @patch(f"{_NET}._interface_exists")
-    @patch(f"{_NET}._run_command")
+    @patch(f"{_NET}._run_privileged_command")
     @patch(f"{_NET}._is_wireguard_available", return_value=True)
     def test_run_wg_quick_up_fails(self, mock_avail, mock_cmd, mock_iface, mock_sleep):
         """When wg-quick up fails, result is failure."""
@@ -323,7 +323,7 @@ class TestWireGuardRestartCapability:
     @patch(f"{_NET}.time.time")
     @patch(f"{_NET}.time.sleep")
     @patch(f"{_NET}._interface_exists")
-    @patch(f"{_NET}._run_command")
+    @patch(f"{_NET}._run_privileged_command")
     @patch(f"{_NET}._is_wireguard_available", return_value=True)
     def test_run_handshake_verified(self, mock_avail, mock_cmd, mock_iface, mock_sleep, mock_time):
         """Handshake verification succeeds when peer has recent handshake."""
@@ -346,7 +346,7 @@ class TestWireGuardRestartCapability:
         assert result.warnings == ()
 
     @patch(f"{_NET}._interface_exists")
-    @patch(f"{_NET}._run_command")
+    @patch(f"{_NET}._run_privileged_command")
     @patch(f"{_NET}._is_wireguard_available", return_value=True)
     def test_run_timeout_exception(self, mock_avail, mock_cmd, mock_iface):
         """subprocess.TimeoutExpired is caught and reported."""
@@ -358,7 +358,7 @@ class TestWireGuardRestartCapability:
         assert "timed out" in result.error
 
     @patch(f"{_NET}._interface_exists")
-    @patch(f"{_NET}._run_command")
+    @patch(f"{_NET}._run_privileged_command")
     @patch(f"{_NET}._is_wireguard_available", return_value=True)
     def test_run_generic_exception(self, mock_avail, mock_cmd, mock_iface):
         """Generic exceptions are caught and reported."""
@@ -419,7 +419,7 @@ class TestWireGuardRestartCapability:
         assert result.success is False
         assert "No output" in result.error
 
-    @patch(f"{_NET}._run_command")
+    @patch(f"{_NET}._run_privileged_command")
     def test_rollback_was_down_brings_down(self, mock_cmd):
         """If interface was down before restart, rollback brings it down."""
         mock_cmd.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
@@ -430,7 +430,7 @@ class TestWireGuardRestartCapability:
         assert result.success is True
         assert "wg0" in result.rolled_back
 
-    @patch(f"{_NET}._run_command", side_effect=RuntimeError("fail"))
+    @patch(f"{_NET}._run_privileged_command", side_effect=RuntimeError("fail"))
     def test_rollback_was_down_exception(self, mock_cmd):
         """Rollback failure when bringing interface down raises."""
         inp = WireGuardRestartInput(interface="wg0")
@@ -497,7 +497,7 @@ class TestWireGuardStatusCapability:
         assert result.output.is_up is False
         assert result.output.peers == ()
 
-    @patch(f"{_NET}._run_command")
+    @patch(f"{_NET}._run_privileged_command")
     @patch(f"{_NET}._interface_exists", return_value=True)
     @patch(f"{_NET}._is_wireguard_available", return_value=True)
     def test_run_wg_show_fails(self, mock_avail, mock_iface, mock_cmd):
@@ -510,9 +510,10 @@ class TestWireGuardStatusCapability:
         assert "wg show failed" in result.error
 
     @patch(f"{_NET}._run_command")
+    @patch(f"{_NET}._run_privileged_command")
     @patch(f"{_NET}._interface_exists", return_value=True)
     @patch(f"{_NET}._is_wireguard_available", return_value=True)
-    def test_run_success_with_peers_and_routes(self, mock_avail, mock_iface, mock_cmd):
+    def test_run_success_with_peers_and_routes(self, mock_avail, mock_iface, mock_priv_cmd, mock_cmd):
         """Full status check with peers and routing."""
         wg_output = (
             "interface: wg0\n"
@@ -525,12 +526,8 @@ class TestWireGuardStatusCapability:
             "  transfer: 100MiB received, 50MiB sent\n"
         )
         route_output = "10.0.0.0/24 dev wg0 scope link"
-        mock_cmd.side_effect = [
-            # wg show
-            subprocess.CompletedProcess(args=[], returncode=0, stdout=wg_output, stderr=""),
-            # ip route show
-            subprocess.CompletedProcess(args=[], returncode=0, stdout=route_output, stderr=""),
-        ]
+        mock_priv_cmd.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout=wg_output, stderr="")
+        mock_cmd.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout=route_output, stderr="")
         inp = WireGuardStatusInput(check_routing=True)
         result = self.cap.run(inp)
         assert result.success is True
@@ -545,24 +542,23 @@ class TestWireGuardStatusCapability:
         assert result.output.any_stale_handshakes is False
 
     @patch(f"{_NET}._run_command")
+    @patch(f"{_NET}._run_privileged_command")
     @patch(f"{_NET}._interface_exists", return_value=True)
     @patch(f"{_NET}._is_wireguard_available", return_value=True)
-    def test_run_stale_handshake_detected(self, mock_avail, mock_iface, mock_cmd):
+    def test_run_stale_handshake_detected(self, mock_avail, mock_iface, mock_priv_cmd, mock_cmd):
         """Peer with no handshake is detected as stale."""
         wg_output = (
             "interface: wg0\npeer: STALEP01234567890123\n  latest handshake: (none)\n  transfer: 0B received, 0B sent\n"
         )
-        mock_cmd.side_effect = [
-            subprocess.CompletedProcess(args=[], returncode=0, stdout=wg_output, stderr=""),
-            subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
-        ]
+        mock_priv_cmd.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout=wg_output, stderr="")
+        mock_cmd.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
         inp = WireGuardStatusInput(check_routing=True)
         result = self.cap.run(inp)
         assert result.success is True
         assert result.output.any_stale_handshakes is True
         assert result.output.peers[0].is_stale is True
 
-    @patch(f"{_NET}._run_command")
+    @patch(f"{_NET}._run_privileged_command")
     @patch(f"{_NET}._interface_exists", return_value=True)
     @patch(f"{_NET}._is_wireguard_available", return_value=True)
     def test_run_no_routing_check(self, mock_avail, mock_iface, mock_cmd):
@@ -578,7 +574,7 @@ class TestWireGuardStatusCapability:
 
     @patch(f"{_NET}._interface_exists", return_value=True)
     @patch(f"{_NET}._is_wireguard_available", return_value=True)
-    @patch(f"{_NET}._run_command", side_effect=RuntimeError("unexpected"))
+    @patch(f"{_NET}._run_privileged_command", side_effect=RuntimeError("unexpected"))
     def test_run_generic_exception(self, mock_cmd, mock_avail, mock_iface):
         inp = WireGuardStatusInput()
         result = self.cap.run(inp)
@@ -1053,7 +1049,7 @@ class TestWireGuardRotateKeysCapability:
         assert result.success is False
         assert "No backup path" in result.error
 
-    @patch(f"{_NET}._run_command")
+    @patch(f"{_NET}._run_privileged_command")
     @patch("shutil.copy2")
     def test_rollback_success(self, mock_copy, mock_cmd):
         """Rollback restores backup and restarts interface."""

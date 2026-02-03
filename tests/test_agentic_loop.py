@@ -1502,7 +1502,7 @@ class TestVerificationStrategies:
 
     @pytest.mark.asyncio
     async def test_verify_config_edit_yaml(self):
-        """_verify_config should validate YAML config files."""
+        """_verify_config should validate YAML config files via native yaml.safe_load."""
         loop = AgenticLoop(prefetch_context=False, enable_verification=True)
 
         call_count = 0
@@ -1510,20 +1510,23 @@ class TestVerificationStrategies:
         async def mock_execute_side_effect(tool_name, args, **kwargs):
             nonlocal call_count
             call_count += 1
-            if call_count == 1:
-                return ToolResult(
-                    tool_name="shell_command",
-                    success=True,
-                    output="key: value",
-                )
-            else:
-                return ToolResult(
-                    tool_name="shell_command",
-                    success=True,
-                    output="VALID",
-                )
+            # First call reads file content for diff evidence
+            return ToolResult(
+                tool_name="shell_command",
+                success=True,
+                output="key: value",
+            )
 
-        with patch.object(loop.tools, "execute", side_effect=mock_execute_side_effect):
+        # Mock open() and yaml.safe_load() since H5 uses native Python YAML validation
+        mock_file = MagicMock()
+        mock_file.__enter__ = MagicMock(return_value=mock_file)
+        mock_file.__exit__ = MagicMock(return_value=False)
+
+        with (
+            patch.object(loop.tools, "execute", side_effect=mock_execute_side_effect),
+            patch("builtins.open", return_value=mock_file),
+            patch("yaml.safe_load", return_value={"key": "value"}),
+        ):
             result = await loop._verify_config(
                 "ver-123",
                 "call-456",
@@ -1667,7 +1670,7 @@ class TestVerificationIntegration:
 
     @pytest.mark.asyncio
     async def test_verify_outcome_unknown_domain(self):
-        """_verify_outcome should trust result for unknown domains."""
+        """_verify_outcome should fail-secure for unknown domains (H10)."""
         loop = AgenticLoop(prefetch_context=False, enable_verification=True)
 
         mock_tool_call = MagicMock()
@@ -1683,9 +1686,9 @@ class TestVerificationIntegration:
 
         passed, verification = await loop._verify_outcome(mock_tool_call, mock_result)
 
-        assert passed is True
+        assert passed is False
         assert verification is not None
-        assert verification.method == "result_trust"
+        assert verification.method == "unimplemented"
 
     @pytest.mark.asyncio
     async def test_verify_outcome_non_execute_capability_tool(self):

@@ -121,7 +121,9 @@ class SystemSidebar(Container):
 
         try:
             # Check daemon status
-            api_port = 8377
+            from elle.daemon.config import get_daemon_port
+
+            api_port = get_daemon_port()
             import httpx
 
             response = httpx.get(f"http://localhost:{api_port}/health", timeout=1.0)

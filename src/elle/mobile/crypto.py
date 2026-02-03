@@ -12,7 +12,7 @@ Certificates are stored in /var/lib/elle/mobile/
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from typing import NamedTuple
@@ -28,9 +28,9 @@ logger = logging.getLogger(__name__)
 
 
 # Certificate validity periods
-CA_VALIDITY_DAYS = 3650  # 10 years
-SERVER_VALIDITY_DAYS = 365  # 1 year
-CLIENT_VALIDITY_DAYS = 365  # 1 year
+CA_VALIDITY_DAYS = 365  # 1 year (C13: reduced from 10 years)
+SERVER_VALIDITY_DAYS = 180  # 6 months (C13: reduced from 1 year)
+CLIENT_VALIDITY_DAYS = 180  # 6 months (C13: reduced from 1 year)
 
 # Key size
 RSA_KEY_SIZE = 4096
@@ -67,6 +67,28 @@ class MobileCrypto:
         """
         self.config = config or get_mobile_config()
         self.cert_dir = self.config.cert_dir
+        self._revocation_set: set[str] = set()
+
+    def _get_key_encryption(self) -> serialization.KeySerializationEncryption:
+        """Get encryption algorithm for private key serialization.
+
+        Uses a passphrase derived from the ELLE DB key (/etc/elle/db.key or
+        ELLE_AUTOGEN_KEY env var). Falls back to NoEncryption with a warning
+        if no key exists (backward compatibility for dev environments).
+
+        Returns:
+            BestAvailableEncryption with passphrase, or NoEncryption as fallback.
+        """
+        import os
+
+        passphrase = os.environ.get("ELLE_AUTOGEN_KEY", "")
+        if not passphrase:
+            try:
+                passphrase = Path("/etc/elle/db.key").read_text().strip()
+            except (OSError, FileNotFoundError):
+                logger.warning("No encryption key available; private keys will not be encrypted at rest")
+                return serialization.NoEncryption()
+        return serialization.BestAvailableEncryption(passphrase.encode())
 
     def ensure_certificates(self) -> CertificatePaths:
         """Ensure all required certificates exist, generating if needed.
@@ -132,7 +154,7 @@ class MobileCrypto:
             ]
         )
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         cert = (
             x509.CertificateBuilder()
             .subject_name(subject)
@@ -170,7 +192,7 @@ class MobileCrypto:
         key_pem = client_key.private_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption(),
+            encryption_algorithm=self._get_key_encryption(),
         )
         fingerprint = self.compute_fingerprint(cert_pem)
 
@@ -202,6 +224,27 @@ class MobileCrypto:
         cert = x509.load_pem_x509_certificate(cert_pem)
         return str(cert.fingerprint(hashes.SHA256()).hex())
 
+    def _is_revoked(self, fingerprint: str) -> bool:
+        """Check if a certificate fingerprint is in the revocation set."""
+        return fingerprint in self._revocation_set
+
+    def revoke_cert(self, fingerprint: str) -> None:
+        """Add a certificate fingerprint to the revocation set.
+
+        Args:
+            fingerprint: SHA-256 fingerprint to revoke.
+        """
+        self._revocation_set.add(fingerprint)
+        logger.info("Revoked certificate: %s", fingerprint[:16])
+
+    def load_revocation_set(self, fingerprints: set[str]) -> None:
+        """Load revocation set from persistent storage.
+
+        Args:
+            fingerprints: Set of revoked fingerprints.
+        """
+        self._revocation_set = set(fingerprints)
+
     def verify_client_cert(self, cert_pem: bytes) -> tuple[bool, str | None]:
         """Verify a client certificate against our CA.
 
@@ -221,7 +264,7 @@ class MobileCrypto:
                 return False, "Certificate not issued by our CA"
 
             # Check validity period
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             if client_cert.not_valid_before > now:
                 return False, "Certificate not yet valid"
             if client_cert.not_valid_after < now:
@@ -236,6 +279,11 @@ class MobileCrypto:
                 )
             except Exception:
                 return False, "Certificate signature invalid"
+
+            # Check revocation list (C16)
+            fingerprint = self.compute_fingerprint(cert_pem)
+            if self._is_revoked(fingerprint):
+                return False, "Certificate has been revoked"
 
             # Extract device_id from CN
             cn = client_cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
@@ -268,7 +316,7 @@ class MobileCrypto:
             ]
         )
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         ca_cert = (
             x509.CertificateBuilder()
             .subject_name(subject)
@@ -301,15 +349,20 @@ class MobileCrypto:
         # Write certificate
         cert_path.write_bytes(ca_cert.public_bytes(serialization.Encoding.PEM))
 
-        # Write key with restricted permissions
-        key_path.write_bytes(
-            ca_key.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.PKCS8,
-                encryption_algorithm=serialization.NoEncryption(),
-            )
+        # Write key with restricted permissions (atomic, no TOCTOU)
+        import os
+        import stat
+
+        key_bytes = ca_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=self._get_key_encryption(),
         )
-        key_path.chmod(0o600)
+        fd = os.open(str(key_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, stat.S_IRUSR | stat.S_IWUSR)
+        try:
+            os.write(fd, key_bytes)
+        finally:
+            os.close(fd)
 
         logger.info("Generated CA certificate: %s", cert_path)
 
@@ -361,7 +414,7 @@ class MobileCrypto:
             except ValueError:
                 san_names.append(x509.DNSName(self.config.overlay_host))
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         server_cert = (
             x509.CertificateBuilder()
             .subject_name(subject)
@@ -402,15 +455,20 @@ class MobileCrypto:
         # Write certificate
         server_cert_path.write_bytes(server_cert.public_bytes(serialization.Encoding.PEM))
 
-        # Write key with restricted permissions
-        server_key_path.write_bytes(
-            server_key.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.PKCS8,
-                encryption_algorithm=serialization.NoEncryption(),
-            )
+        # Write key with restricted permissions (atomic, no TOCTOU)
+        import os
+        import stat
+
+        key_bytes = server_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=self._get_key_encryption(),
         )
-        server_key_path.chmod(0o600)
+        fd = os.open(str(server_key_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, stat.S_IRUSR | stat.S_IWUSR)
+        try:
+            os.write(fd, key_bytes)
+        finally:
+            os.close(fd)
 
         logger.info("Generated server certificate: %s", server_cert_path)
 
@@ -419,11 +477,29 @@ class MobileCrypto:
         return x509.load_pem_x509_certificate(path.read_bytes())
 
     def _load_key(self, path: Path) -> rsa.RSAPrivateKey:
-        """Load a PEM private key from disk."""
-        return serialization.load_pem_private_key(
-            path.read_bytes(),
-            password=None,
-        )
+        """Load a PEM private key from disk.
+
+        Tries decrypting with the ELLE passphrase first, then falls back
+        to no password for migration of pre-existing unencrypted keys.
+        """
+        import os
+
+        key_data = path.read_bytes()
+        passphrase = os.environ.get("ELLE_AUTOGEN_KEY", "")
+        if not passphrase:
+            try:
+                passphrase = Path("/etc/elle/db.key").read_text().strip()
+            except (OSError, FileNotFoundError):
+                passphrase = ""
+
+        if passphrase:
+            try:
+                return serialization.load_pem_private_key(key_data, password=passphrase.encode())
+            except (ValueError, TypeError):
+                # Fall back to unencrypted for legacy keys
+                logger.debug("Encrypted load failed for %s, trying unencrypted (migration)", path)
+
+        return serialization.load_pem_private_key(key_data, password=None)
 
 
 def ipaddress_from_string(addr: str) -> IPv4Address | IPv6Address:

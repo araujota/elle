@@ -269,7 +269,7 @@ class TestGenerateCapabilityClassCode:
         spec = _make_spec(verify_command="pkg check {arg}")
         code = generate_capability_class_code(spec)
         assert "pkg check" in code
-        assert "subprocess.run" in code
+        assert "run_safe" in code
 
     def test_without_verify_command(self):
         spec = _make_spec(verify_command=None)

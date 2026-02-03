@@ -289,23 +289,28 @@ class TestClosePools:
 
     def test_close_async_pool(self):
         mock_pool = MagicMock()
+        # close_pools() falls back to asyncio.run(_async_pool.close()) when
+        # there is no running event loop, so .close() must return a coroutine.
+        mock_pool.close = AsyncMock()
         engine_mod._async_pool = mock_pool
 
         engine_mod.close_pools()
 
-        mock_pool.close.assert_called_once()
+        mock_pool.close.assert_awaited_once()
         assert engine_mod._async_pool is None
 
     def test_close_both_pools(self):
         mock_sync = MagicMock()
         mock_async = MagicMock()
+        # Async pool's .close() must return a coroutine for asyncio.run()
+        mock_async.close = AsyncMock()
         engine_mod._pool = mock_sync
         engine_mod._async_pool = mock_async
 
         engine_mod.close_pools()
 
         mock_sync.close.assert_called_once()
-        mock_async.close.assert_called_once()
+        mock_async.close.assert_awaited_once()
         assert engine_mod._pool is None
         assert engine_mod._async_pool is None
 
@@ -318,21 +323,33 @@ class TestClosePools:
         engine_mod.close_pools()
         assert engine_mod._pool is None
 
-    def test_close_handles_async_pool_exception(self):
+    @patch("elle.storage.engine.asyncio")
+    def test_close_handles_async_pool_exception(self, mock_asyncio):
         mock_pool = MagicMock()
-        mock_pool.close.side_effect = Exception("close failed")
         engine_mod._async_pool = mock_pool
+
+        # When there is a running event loop, create_task is used and the
+        # except Exception branch catches errors from the try block.
+        mock_loop = MagicMock()
+        mock_loop.create_task.side_effect = Exception("close failed")
+        mock_asyncio.get_running_loop.return_value = mock_loop
 
         engine_mod.close_pools()
         assert engine_mod._async_pool is None
 
-    def test_close_handles_both_pool_exceptions(self):
+    @patch("elle.storage.engine.asyncio")
+    def test_close_handles_both_pool_exceptions(self, mock_asyncio):
         mock_sync = MagicMock()
         mock_sync.close.side_effect = Exception("sync close failed")
         mock_async = MagicMock()
-        mock_async.close.side_effect = Exception("async close failed")
         engine_mod._pool = mock_sync
         engine_mod._async_pool = mock_async
+
+        # When there is a running event loop, create_task is used and the
+        # except Exception branch catches errors from the try block.
+        mock_loop = MagicMock()
+        mock_loop.create_task.side_effect = Exception("async close failed")
+        mock_asyncio.get_running_loop.return_value = mock_loop
 
         engine_mod.close_pools()
         assert engine_mod._pool is None
@@ -528,6 +545,8 @@ class TestPoolLifecycle:
         cfg: PostgresConfig,
     ):
         mock_async_pool = MagicMock()
+        # close_pools() falls back to asyncio.run() which needs a coroutine
+        mock_async_pool.close = AsyncMock()
         mock_async_cls.return_value = mock_async_pool
 
         pool = engine_mod.configure_async_pool(cfg)
@@ -535,7 +554,7 @@ class TestPoolLifecycle:
         assert engine_mod.get_async_pool() is mock_async_pool
 
         engine_mod.close_pools()
-        mock_async_pool.close.assert_called_once()
+        mock_async_pool.close.assert_awaited_once()
 
         with pytest.raises(RuntimeError):
             engine_mod.get_async_pool()

@@ -19,7 +19,7 @@ continues with local-only results.
 from __future__ import annotations
 
 from concurrent.futures import Future, ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import psycopg
@@ -285,8 +285,8 @@ def _create_cloud_incident_proxy(match: Any) -> IncidentReport:
     """
     return IncidentReport(
         incident_id=f"cloud:{match.cloud_id}",
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
         domain=match.domain,
         severity="info",
         status="resolved",
@@ -486,7 +486,7 @@ def get_prior_art(
                 "successful_actions": successful_actions,
                 "fingerprint_match": fingerprint_match,
                 "trigger_command": inc.trigger_command,
-                "days_ago": (datetime.utcnow() - inc.updated_at).days,
+                "days_ago": (datetime.now(timezone.utc) - inc.updated_at).days,
                 "source": result.source,
             }
             prior_art.append(art)
@@ -838,7 +838,7 @@ def _compute_recency_weight(updated_at: datetime) -> float:
     Returns:
         Recency weight between 0 and 1.
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     age_days = (now - updated_at).total_seconds() / 86400
 
     # Exponential decay with half-life

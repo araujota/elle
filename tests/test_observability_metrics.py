@@ -721,11 +721,41 @@ class TestGetSystemHealth:
 
     @pytest.mark.asyncio
     async def test_returns_default_health(self):
-        """Test that system health returns defaults."""
+        """Test that system health returns defaults when daemon is available."""
+        from unittest.mock import MagicMock, patch
+
         from elle.daemon.observability.metrics import _get_system_health
 
-        stats = await _get_system_health()
+        mock_status = MagicMock()
+        mock_status.healthy = True
+        mock_status.uptime_sec = 42
+
+        mock_daemon = MagicMock()
+        mock_daemon.get_status.return_value = mock_status
+
+        with patch.dict(
+            "sys.modules",
+            {"elle.daemon.api.routes": MagicMock(get_daemon=MagicMock(return_value=mock_daemon))},
+        ):
+            stats = await _get_system_health()
 
         assert stats["telemetryd_healthy"] is True
+        assert stats["daemon_uptime_sec"] == 42.0
+        assert stats["last_event_age_sec"] == -1.0
+
+    @pytest.mark.asyncio
+    async def test_returns_fallback_when_daemon_unavailable(self):
+        """Test that system health returns fallback defaults when daemon is unavailable."""
+        from unittest.mock import patch
+
+        from elle.daemon.observability.metrics import _get_system_health
+
+        with patch.dict(
+            "sys.modules",
+            {"elle.daemon.api.routes": None},
+        ):
+            stats = await _get_system_health()
+
+        assert stats["telemetryd_healthy"] is False
         assert stats["daemon_uptime_sec"] == 0.0
-        assert stats["last_event_age_sec"] == 0.0
+        assert stats["last_event_age_sec"] == -1.0

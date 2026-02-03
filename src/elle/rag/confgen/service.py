@@ -11,7 +11,7 @@ Orchestrates the complete configuration generation workflow:
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -265,7 +265,7 @@ class ConfigGenService:
             if not source.exists():
                 return None
 
-            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
             backup_dir = Path("/var/lib/elle/backups/confgen")
             backup_dir.mkdir(parents=True, exist_ok=True)
 
@@ -313,7 +313,19 @@ class ConfigGenService:
                 import asyncio
 
                 controller = get_controller()
-                edit_result = asyncio.get_event_loop().run_until_complete(controller.execute(request))
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    loop = None
+
+                if loop and loop.is_running():
+                    # Already in an async context; create a new thread to avoid deadlock
+                    import concurrent.futures
+
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                        edit_result = pool.submit(asyncio.run, controller.execute(request)).result(timeout=30)
+                else:
+                    edit_result = asyncio.run(controller.execute(request))
 
                 if not edit_result.success:
                     return edit_result.error

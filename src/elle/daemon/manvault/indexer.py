@@ -18,7 +18,7 @@ import logging
 import re
 import subprocess
 from collections.abc import Callable, Iterator
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import psycopg
@@ -589,7 +589,7 @@ def _index_page_impl(
         source_path=source_path or f"/usr/share/man/man{section}/{name}.{section}.gz",
         sha256=sha256,
         text=text,
-        updated_at=datetime.now(),
+        updated_at=datetime.now(timezone.utc),
     )
 
     # Upsert document
@@ -674,7 +674,7 @@ def _index_all_impl(
             progress_callback(i + 1, total)
 
     # Update indexed_at timestamp
-    set_meta(conn, "indexed_at", datetime.now().isoformat())
+    set_meta(conn, "indexed_at", datetime.now(timezone.utc).isoformat())
 
     logger.info(f"Indexed {count}/{total} man pages")
     return count

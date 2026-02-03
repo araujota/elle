@@ -412,9 +412,10 @@ class TestGetSystemHealth:
 
     @pytest.mark.asyncio
     async def test_system_health_returns_defaults(self):
-        """Should return default health stats."""
+        """Should return default/fallback health stats when daemon is unavailable."""
         stats = await _get_system_health()
 
-        assert stats["telemetryd_healthy"] is True
+        # Without a running daemon, get_daemon() raises -> fallback values
+        assert stats["telemetryd_healthy"] is False
         assert stats["daemon_uptime_sec"] == 0.0
-        assert stats["last_event_age_sec"] == 0.0
+        assert stats["last_event_age_sec"] == -1.0

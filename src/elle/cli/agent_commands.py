@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -402,7 +402,7 @@ def _format_time(iso_time: str) -> str:
     """Format ISO time as relative or absolute."""
     try:
         dt = datetime.fromisoformat(iso_time.replace("Z", "+00:00"))
-        now = datetime.now(dt.tzinfo) if dt.tzinfo else datetime.now()
+        now = datetime.now(dt.tzinfo) if dt.tzinfo else datetime.now(timezone.utc)
         delta = now - dt
 
         if delta.days == 0:

@@ -4,7 +4,7 @@ Tests the semantic diff generation for system snapshots
 and config file changes.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from elle.daemon.incidents.models import (
     ConfigFileState,
@@ -38,7 +38,7 @@ def make_snapshot(**overrides) -> SystemSnapshot:
         "mem_total_mb": 16384,
         "mem_free_mb": 8192,
         "mem_available_mb": 10240,
-        "collected_at": datetime.utcnow(),
+        "collected_at": datetime.now(timezone.utc),
     }
     defaults.update(overrides)
     return SystemSnapshot(**defaults)
@@ -74,7 +74,7 @@ class TestSemanticDiffModel:
 
     def test_semantic_diff_creation(self):
         """Test creating a SemanticDiff."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         then = now - timedelta(hours=1)
         diff = SemanticDiff(
             from_time=then,
@@ -94,16 +94,16 @@ class TestSemanticDiffModel:
     def test_semantic_diff_summary_empty(self):
         """Test summary with no changes."""
         diff = SemanticDiff(
-            from_time=datetime.utcnow(),
-            to_time=datetime.utcnow(),
+            from_time=datetime.now(timezone.utc),
+            to_time=datetime.now(timezone.utc),
         )
         assert "No significant changes" in diff.summary()
 
     def test_semantic_diff_summary_with_changes(self):
         """Test summary with changes."""
         diff = SemanticDiff(
-            from_time=datetime.utcnow(),
-            to_time=datetime.utcnow(),
+            from_time=datetime.now(timezone.utc),
+            to_time=datetime.now(timezone.utc),
             changes=(
                 SemanticChange(
                     category="kernel",
@@ -131,8 +131,8 @@ class TestSemanticDiffModel:
             for i in range(10)
         )
         diff = SemanticDiff(
-            from_time=datetime.utcnow(),
-            to_time=datetime.utcnow(),
+            from_time=datetime.now(timezone.utc),
+            to_time=datetime.now(timezone.utc),
             changes=changes,
         )
         summary = diff.summary()

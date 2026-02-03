@@ -239,8 +239,8 @@ async def search_manvault(
         )
 
     except Exception as e:
-        logger.error(f"Man Vault search failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.exception("Man Vault search failed")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 # ============================================================================
@@ -304,5 +304,5 @@ async def search_incidents(
             query=q,
         )
     except Exception as e:
-        logger.error(f"Incident search failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.exception("Incident search failed")
+        raise HTTPException(status_code=500, detail="Internal server error") from e

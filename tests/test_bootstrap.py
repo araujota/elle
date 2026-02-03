@@ -3,7 +3,7 @@
 Tests automatic capability generation for core packages.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -82,7 +82,7 @@ class TestBootstrapResult:
     def test_duration_calculation(self):
         """Test duration calculation."""
         result = BootstrapResult()
-        result.started_at = datetime.utcnow()
+        result.started_at = datetime.now(timezone.utc)
 
         # Duration should be small but positive
         assert result.duration_seconds >= 0

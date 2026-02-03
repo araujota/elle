@@ -6,7 +6,7 @@ forecasts, and anomaly detection.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -28,7 +28,7 @@ class MetricSample(BaseModel):
 
     metric: str = Field(description="Metric name (e.g., 'disk./.used_pct')")
     value: float = Field(description="Metric value")
-    ts: datetime = Field(default_factory=datetime.utcnow)
+    ts: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class WindowStats(BaseModel):
@@ -41,7 +41,7 @@ class WindowStats(BaseModel):
     min_value: float = Field(description="Minimum value in window")
     max_value: float = Field(description="Maximum value in window")
     sample_count: int = Field(ge=0, default=0)
-    computed_at: datetime = Field(default_factory=datetime.utcnow)
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class TrendWindow(BaseModel):
@@ -80,7 +80,7 @@ class TrendWindow(BaseModel):
 
     # Metadata
     sample_count: int = Field(ge=0, default=0)
-    computed_at: datetime = Field(default_factory=datetime.utcnow)
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class MetricBaseline(BaseModel):
@@ -95,7 +95,7 @@ class MetricBaseline(BaseModel):
     baseline_mean: float = Field(description="Baseline mean value")
     baseline_stddev: float = Field(ge=0, description="Baseline standard deviation")
     samples: int = Field(ge=0, default=0, description="Number of samples in baseline")
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # =============================================================================
@@ -204,7 +204,7 @@ class Forecast(BaseModel):
         default=False,
         description="Whether seasonal pattern was detected in data",
     )
-    computed_at: datetime = Field(default_factory=datetime.utcnow)
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # =============================================================================
@@ -242,7 +242,7 @@ class AnomalyResult(BaseModel):
     )
 
     # Metadata
-    detected_at: datetime = Field(default_factory=datetime.utcnow)
+    detected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # =============================================================================
@@ -306,7 +306,7 @@ class TrendContext(BaseModel):
     )
 
     # Metadata
-    computed_at: datetime = Field(default_factory=datetime.utcnow)
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     def get_metric(self, name: str) -> TrendWindow | None:
         """Get trend for a specific metric."""
@@ -405,7 +405,7 @@ class CorrelationAlert(BaseModel):
         default="",
         description="Suggested investigation or remediation",
     )
-    detected_at: datetime = Field(default_factory=datetime.utcnow)
+    detected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class TrendConfig(BaseModel):
@@ -618,7 +618,7 @@ def create_forecast_with_urgency(
         Forecast with all urgency fields populated.
     """
     if computed_at is None:
-        computed_at = datetime.utcnow()
+        computed_at = datetime.now(timezone.utc)
 
     # Get thresholds
     warning_threshold = WARNING_THRESHOLDS.get(metric)

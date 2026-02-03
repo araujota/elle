@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import fnmatch
 import re
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 from functools import lru_cache
 
 from elle.policy.models import Condition, MatchType, PolicyEvaluationRequest, TimeWindow
@@ -207,6 +207,14 @@ def match_domain(pattern: str, domain: str) -> bool:
     Returns:
         True if domain matches pattern.
     """
+    # ReDoS protection (M14): reject overly long inputs
+    if len(pattern) > 200 or len(domain) > 200:
+        return False
+
+    # Reject patterns with excessive wildcards
+    if pattern.count("*") > 10:
+        return False
+
     # Handle ** (recursive matching) first
     if "**" in pattern:
         # Convert to regex: ** matches one or more parts, * matches one part
@@ -219,7 +227,10 @@ def match_domain(pattern: str, domain: str) -> bool:
         # Replace ** placeholder with pattern for one or more parts
         regex = regex.replace("\x00DOUBLESTAR\x00", r".+")
         regex = "^" + regex + "$"
-        return bool(re.match(regex, domain))
+        try:
+            return bool(re.match(regex, domain))
+        except re.error:
+            return False
 
     # Simple matching without **
     parts_pattern = pattern.split(".")
@@ -259,7 +270,7 @@ def match_time_window(
         return True  # No windows means always matches
 
     if check_time is None:
-        check_time = datetime.now().time()
+        check_time = datetime.now(timezone.utc).time()
 
     return any(window.contains(check_time) for window in windows)
 

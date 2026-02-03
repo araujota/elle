@@ -8,7 +8,7 @@ and why.
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 import psycopg
 
@@ -108,7 +108,7 @@ class NarrativeBuilder:
             timeline=tuple(timeline),
             explanation=explanation,
             keywords=tuple(keywords),
-            generated_at=datetime.utcnow(),
+            generated_at=datetime.now(timezone.utc),
             model_used=model_used,
         )
 

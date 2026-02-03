@@ -466,6 +466,20 @@ def _react_enable(name: str | None, session: Session) -> tuple[str, bool]:
             return f"{Colors.YELLOW}Function already enabled: {name}{Colors.RESET}", True
 
         update_function(func.id, enabled=True)
+
+        try:
+            from elle.cli.agentic.incident_recorder import record_arm_action
+
+            record_arm_action(
+                arm_name="reactive_functions",
+                action="enable_function",
+                target=name,
+                success=True,
+                details={"function_id": func.id},
+            )
+        except Exception:
+            logger.debug("Failed to record enable action", exc_info=True)
+
         return f"{Colors.GREEN}Enabled reactive function: {name}{Colors.RESET}", True
 
     except Exception as e:
@@ -489,6 +503,20 @@ def _react_disable(name: str | None, session: Session) -> tuple[str, bool]:
             return f"{Colors.YELLOW}Function already disabled: {name}{Colors.RESET}", True
 
         update_function(func.id, enabled=False)
+
+        try:
+            from elle.cli.agentic.incident_recorder import record_arm_action
+
+            record_arm_action(
+                arm_name="reactive_functions",
+                action="disable_function",
+                target=name,
+                success=True,
+                details={"function_id": func.id},
+            )
+        except Exception:
+            logger.debug("Failed to record disable action", exc_info=True)
+
         return f"{Colors.YELLOW}Disabled reactive function: {name}{Colors.RESET}", True
 
     except Exception as e:

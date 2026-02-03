@@ -94,7 +94,9 @@ class MainScreen(Screen):
 
     def _get_daemon_status(self) -> tuple[str, int | None]:
         """Get daemon status and API port."""
-        api_port = 8377
+        from elle.daemon.config import get_daemon_port
+
+        api_port = get_daemon_port()
         try:
             import httpx
 

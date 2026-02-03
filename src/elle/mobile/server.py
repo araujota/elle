@@ -16,7 +16,7 @@ import ssl
 import subprocess
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from elle.mobile.config import MobileGatewayConfig, get_mobile_config
@@ -103,6 +103,13 @@ class GatewayServer:
                 stderr=subprocess.DEVNULL,
                 start_new_session=True,
             )
+            try:
+                process.wait(timeout=5)
+                if process.returncode != 0:
+                    logger.warning("Gateway process exited with code %d", process.returncode)
+                    return None
+            except subprocess.TimeoutExpired:
+                pass  # Expected — gateway server is still running
 
             # Write PID file
             PID_FILE.write_text(str(process.pid))
@@ -110,7 +117,7 @@ class GatewayServer:
             # Write state file
             state = {
                 "pid": process.pid,
-                "started_at": datetime.utcnow().isoformat(),
+                "started_at": datetime.now(timezone.utc).isoformat(),
                 "bind_host": self.config.bind_host,
                 "bind_port": self.config.bind_port,
             }
@@ -235,7 +242,7 @@ class GatewayServer:
         started_at = None
         if "started_at" in state:
             started_at = datetime.fromisoformat(state["started_at"])
-            uptime_seconds = (datetime.utcnow() - started_at).total_seconds()
+            uptime_seconds = (datetime.now(timezone.utc) - started_at).total_seconds()
 
         # Get device counts
         paired_count = self.store.count_devices()

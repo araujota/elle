@@ -6,7 +6,7 @@ execution tracking, and outcomes.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
@@ -575,7 +575,7 @@ class StepResult(BaseModel):
         default=None,
         description="Execution duration in milliseconds",
     )
-    executed_at: datetime = Field(default_factory=datetime.utcnow)
+    executed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class CheckResult(BaseModel):

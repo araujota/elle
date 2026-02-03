@@ -14,7 +14,7 @@ import io
 import logging
 import secrets
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import NamedTuple
 
 try:
@@ -107,7 +107,7 @@ class PairingManager:
 
         # Generate secure token
         token_value = secrets.token_hex(TOKEN_BYTES)
-        expires_at = datetime.utcnow() + timedelta(seconds=self.config.pairing_token_ttl_seconds)
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=self.config.pairing_token_ttl_seconds)
 
         token = PairingToken(
             token=token_value,
@@ -153,20 +153,15 @@ class PairingManager:
         Raises:
             PairingError: If token invalid, expired, or already used.
         """
-        # Validate token
-        token = self.store.get_token(token_value)
+        # Atomic token validation and consumption (C17)
+        # Uses UPDATE ... WHERE used=false to prevent race conditions
+        token = self.store.mark_token_used_atomic(token_value)
 
         if token is None:
-            raise PairingError("Invalid pairing token")
-
-        if token.used:
-            raise PairingError("Pairing token already used")
+            raise PairingError("Invalid or already-used pairing token")
 
         if not token.is_valid():
             raise PairingError("Pairing token expired")
-
-        # Mark token as used immediately to prevent race conditions
-        self.store.mark_token_used(token_value)
 
         # Generate device ID
         device_id = str(uuid.uuid4())
@@ -175,7 +170,7 @@ class PairingManager:
         client_cert = self.crypto.generate_client_certificate(device_id, device_name)
 
         # Create device record
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         device = PairedDevice(
             device_id=device_id,
             name=device_name,

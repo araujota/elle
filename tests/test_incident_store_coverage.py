@@ -351,7 +351,7 @@ class TestUpdateIncident:
         )
         assert result is not None
         # Verify the SQL includes multiple SET clauses
-        sql_arg = mock_conn.execute.call_args_list[0][0][0]
+        sql_arg = str(mock_conn.execute.call_args_list[0][0][0])
         assert "status = %s" in sql_arg
         assert "summary = %s" in sql_arg
         assert "tags_json = %s" in sql_arg
@@ -387,7 +387,7 @@ class TestUpdateIncident:
             confidence=0.95,
         )
         assert result is not None
-        sql_arg = mock_conn.execute.call_args_list[0][0][0]
+        sql_arg = str(mock_conn.execute.call_args_list[0][0][0])
         assert "symptoms_json = %s" in sql_arg
         assert "suspected_causes_json = %s" in sql_arg
         assert "root_cause = %s" in sql_arg

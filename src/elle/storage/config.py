@@ -6,7 +6,8 @@ Supports Unix socket (peer auth) by default, with optional TCP.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
 
 # All schemas managed in the single 'elle' database
 SCHEMAS = (
@@ -58,7 +59,8 @@ class PostgresConfig:
     max_pool_size: int = 10
     max_idle_sec: float = 300.0
     sslmode: str = "prefer"
-    encryption_key_path: str = "/etc/elle/db.key"
+    connect_timeout: int = 10
+    encryption_key_path: str = field(default_factory=lambda: os.environ.get("ELLE_DB_KEY", "/etc/elle/db.key"))
 
     @property
     def conninfo(self) -> str:
@@ -74,6 +76,7 @@ class PostgresConfig:
                 f"dbname={self.dbname}",
                 f"user={self.user}",
                 f"sslmode={self.sslmode}",
+                f"connect_timeout={self.connect_timeout}",
             ]
             if self.password:
                 parts.append(f"password={self.password}")
@@ -82,5 +85,18 @@ class PostgresConfig:
                 f"host={self.socket_dir}",
                 f"dbname={self.dbname}",
                 f"user={self.user}",
+                f"connect_timeout={self.connect_timeout}",
             ]
         return " ".join(parts)
+
+    @property
+    def conninfo_safe(self) -> str:
+        """Build a connection string with the password redacted for logging."""
+        import re
+
+        info = self.conninfo
+        return re.sub(r"password=\S+", "password=***", info)
+
+    def __repr__(self) -> str:
+        """Repr with password redacted to prevent leakage in tracebacks."""
+        return f"PostgresConfig(conninfo={self.conninfo_safe!r})"

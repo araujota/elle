@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import elle.storage.engine as _engine_mod
 from elle.daemon.config import ApiConfig, CloudSyncConfig, Config, QueueConfig
 from elle.daemon.main import (
     ElledDaemon,
@@ -60,6 +61,20 @@ def cfg(tmp_path):
 @pytest.fixture
 def daemon(cfg):
     return ElledDaemon(config=cfg)
+
+
+@pytest.fixture(autouse=True)
+def _reset_storage_pool():
+    """Prevent pool singletons from leaking between tests.
+
+    TestInitDatabase patches configure_pool but other tests may trigger
+    real pool creation.  Reset module-level state so no test inherits a
+    stale pool that tries to connect to PostgreSQL.
+    """
+    yield
+    _engine_mod._pool = None
+    _engine_mod._async_pool = None
+    _engine_mod._config = None
 
 
 # ---------------------------------------------------------------------------
@@ -145,9 +160,10 @@ class TestInitDatabase:
     @patch("elle.common.db.init_all_schemas", side_effect=RuntimeError("DB error"))
     @patch("elle.storage.engine.configure_pool")
     def test_init_db_error_logged(self, mock_pool, mock_init, daemon, caplog):
-        with caplog.at_level(logging.ERROR):
-            daemon._init_database()
-        assert "Failed to initialize database" in caplog.text
+        with caplog.at_level(logging.CRITICAL):
+            with pytest.raises(RuntimeError, match="DB error"):
+                daemon._init_database()
+        assert "Database initialization failed" in caplog.text
 
 
 # ---------------------------------------------------------------------------

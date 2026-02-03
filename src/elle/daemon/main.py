@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import fcntl
 import logging
 import os
 import signal
@@ -33,12 +34,15 @@ from elle.daemon.telemetry.telemetryd_watcher import (
     is_telemetryd_available,
 )
 from elle.storage.config import PostgresConfig
-from elle.storage.engine import close_pools, configure_pool
+from elle.storage.engine import close_pools_async, configure_pool
 
 logger = logging.getLogger(__name__)
 
 # Telemetryd socket path
 TELEMETRYD_SOCKET = Path("/run/elle/telemetry.sock")
+
+# PID file for daemon management
+PID_FILE = Path("/var/run/elle/elled.pid")
 
 
 class ElledDaemon:
@@ -89,6 +93,7 @@ class ElledDaemon:
         # Counters
         self._events_total = 0
         self._incidents_total = 0
+        self._correlate_semaphore = asyncio.Semaphore(10)
 
     @property
     def uptime_sec(self) -> int:
@@ -219,6 +224,17 @@ class ElledDaemon:
             )
         )
 
+        # Prune old telemetry events on startup
+        try:
+            from elle.daemon.telemetry.schema import prune_old_events
+            from elle.storage.engine import get_conn
+
+            with get_conn(schema="telemetry") as conn:
+                prune_old_events(conn, retention_days=30)
+                conn.commit()
+        except Exception as e:
+            logger.debug(f"Event pruning skipped: {e}")
+
         # Start cloud retry worker
         await self._start_cloud_retry_worker()
 
@@ -243,16 +259,28 @@ class ElledDaemon:
         logger.info("Stopping elled daemon")
         self.shutdown.set()
 
+        # Drain event queue before shutdown (H13)
+        if self.event_queue:
+            try:
+                while not self.event_queue.empty():
+                    events = await asyncio.wait_for(self.event_queue.get_batch(max_items=100, timeout=0.5), timeout=1.0)
+                    if events:
+                        await asyncio.to_thread(insert_events_batch, events)
+            except (TimeoutError, asyncio.TimeoutError):
+                logger.warning("Queue drain timed out, events may be lost")
+            except Exception as e:
+                logger.warning(f"Queue drain failed: {e}")
+
         # Cancel all tasks
         for task in self._tasks:
             task.cancel()
 
-        # Wait for tasks with timeout
+        # Wait for tasks with timeout (increased from 5s to 15s)
         if self._tasks:
             try:
                 await asyncio.wait_for(
                     asyncio.gather(*self._tasks, return_exceptions=True),
-                    timeout=5.0,
+                    timeout=15.0,
                 )
             except (TimeoutError, asyncio.TimeoutError):
                 logger.warning("Some tasks did not stop in time")
@@ -284,18 +312,71 @@ class ElledDaemon:
         await self._stop_warmup_service()
 
         # Close database connection pools
-        close_pools()
+        await close_pools_async()
 
         logger.info(f"elled stopped (uptime: {self.uptime_sec}s, events: {self._events_total})")
 
     async def run(self) -> None:
         """Run the daemon until shutdown."""
-        await self.start()
+        # Write PID file with advisory flock (H11)
+        self._pid_lock_fd: int | None = None
+        try:
+            PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+            lock_fd = os.open(str(PID_FILE), os.O_RDWR | os.O_CREAT, 0o644)
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                # Lock held by another process
+                try:
+                    old_pid = os.read(lock_fd, 32).decode().strip()
+                    logger.error("elled already running (PID %s, locked)", old_pid)
+                except Exception:
+                    logger.error("elled already running (PID file locked)")
+                os.close(lock_fd)
+                sys.exit(1)
+            # Lock acquired -- write PID directly to locked FD (M6)
+            os.ftruncate(lock_fd, 0)
+            os.lseek(lock_fd, 0, os.SEEK_SET)
+            os.write(lock_fd, str(os.getpid()).encode())
+            os.fsync(lock_fd)
+            self._pid_lock_fd = lock_fd
+        except SystemExit:
+            raise
+        except OSError as e:
+            logger.warning(f"Could not write PID file: {e}")
 
-        # Wait for shutdown signal
-        await self.shutdown.wait()
+        try:
+            # Install SIGHUP handler before start() so startup signals are handled
+            loop = asyncio.get_running_loop()
+            loop.add_signal_handler(signal.SIGHUP, self._handle_sighup)
 
-        await self.stop()
+            await self.start()
+
+            # Wait for shutdown signal
+            await self.shutdown.wait()
+
+            await self.stop()
+        finally:
+            # Release advisory lock and remove PID file
+            if self._pid_lock_fd is not None:
+                try:
+                    fcntl.flock(self._pid_lock_fd, fcntl.LOCK_UN)
+                    os.close(self._pid_lock_fd)
+                except OSError:
+                    pass
+                self._pid_lock_fd = None
+            PID_FILE.unlink(missing_ok=True)
+
+    def _handle_sighup(self) -> None:
+        """Handle SIGHUP for configuration reload."""
+        logger.info("Received SIGHUP, reloading configuration")
+        try:
+            new_config = load_config()
+            set_config(new_config)
+            self.config = new_config
+            logger.info("Configuration reloaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to reload configuration: {e}")
 
     def _init_database(self) -> None:
         """Initialize PostgreSQL connection pool and run all schema migrations."""
@@ -324,10 +405,11 @@ class ElledDaemon:
 
             init_all_schemas()
 
-            logger.debug("PostgreSQL database initialized (%s)", pg_config.conninfo)
+            logger.debug("PostgreSQL database initialized (%s)", pg_config.conninfo_safe)
 
         except Exception as e:
-            logger.error(f"Failed to initialize database: {e}")
+            logger.critical(f"Database initialization failed: {e}")
+            raise  # Fatal — daemon cannot operate without DB
 
     async def _warmup_models(self) -> None:
         """Pre-load LLM models into GPU memory for fast inference.
@@ -484,10 +566,15 @@ class ElledDaemon:
                     await asyncio.sleep(0.05)
                     continue
 
-                # Store events (uses connection pool internally)
+                # Store events via thread offload with timeout (C7)
                 try:
-                    inserted = insert_events_batch(events)
+                    inserted = await asyncio.wait_for(
+                        asyncio.to_thread(insert_events_batch, events),
+                        timeout=30.0,
+                    )
                     self._events_total += inserted
+                except (TimeoutError, asyncio.TimeoutError):
+                    logger.error(f"DB insert timed out, dropping {len(events)} events")
                 except Exception as e:
                     logger.error(f"Failed to store events: {e}")
 
@@ -732,6 +819,8 @@ def setup_logging(level: str = "INFO") -> None:
 async def run_daemon(config: Config | None = None) -> None:
     """Run the daemon with signal handling."""
     daemon = ElledDaemon(config)
+
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
 
     loop = asyncio.get_event_loop()
 

@@ -179,7 +179,7 @@ class TestEfficacyModels:
 
     def test_domain_efficacy_all_fields(self):
         """Test DomainEfficacy with all fields set."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         eff = DomainEfficacy(
             domain="disk",
             total_incidents=20,
@@ -284,7 +284,7 @@ class TestDecayedRate:
 
     def test_all_improved(self):
         """Test rate with all improved outcomes."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         rate = _compute_decayed_rate(
             improved=10,
             partial=0,
@@ -298,7 +298,7 @@ class TestDecayedRate:
 
     def test_all_worse(self):
         """Test rate with all worse outcomes."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         rate = _compute_decayed_rate(
             improved=0,
             partial=0,
@@ -312,7 +312,7 @@ class TestDecayedRate:
 
     def test_mixed_outcomes(self):
         """Test rate with mixed outcomes."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         rate = _compute_decayed_rate(
             improved=5,
             partial=3,
@@ -326,7 +326,7 @@ class TestDecayedRate:
 
     def test_decay_over_time(self):
         """Test that rate decays toward prior over time."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         old = now - timedelta(days=DECAY_HALF_LIFE_DAYS * 2)
 
         recent_rate = _compute_decayed_rate(
@@ -352,7 +352,7 @@ class TestDecayedRate:
 
     def test_zero_total(self):
         """Test rate with zero incidents returns prior."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         rate = _compute_decayed_rate(
             improved=0,
             partial=0,
@@ -366,7 +366,7 @@ class TestDecayedRate:
 
     def test_all_partial(self):
         """Test rate with all partial outcomes."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         rate = _compute_decayed_rate(
             improved=0,
             partial=10,
@@ -382,7 +382,7 @@ class TestDecayedRate:
 
     def test_all_no_change(self):
         """Test rate with all no_change outcomes."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         rate = _compute_decayed_rate(
             improved=0,
             partial=0,
@@ -398,7 +398,7 @@ class TestDecayedRate:
 
     def test_low_sample_confidence(self):
         """Test that low sample sizes regress more toward prior."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         rate_low = _compute_decayed_rate(
             improved=1,
             partial=0,
@@ -422,7 +422,7 @@ class TestDecayedRate:
 
     def test_confidence_at_min_samples(self):
         """Confidence reaches 1.0 at MIN_SAMPLES_FOR_CONFIDENCE."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         rate_at_min = _compute_decayed_rate(
             improved=MIN_SAMPLES_FOR_CONFIDENCE,
             partial=0,
@@ -446,7 +446,7 @@ class TestDecayedRate:
 
     def test_one_half_life_decay(self):
         """After one half-life, decay_factor is 0.5."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         one_hl = now - timedelta(days=DECAY_HALF_LIFE_DAYS)
         rate = _compute_decayed_rate(
             improved=10,
@@ -462,7 +462,7 @@ class TestDecayedRate:
 
     def test_rate_is_float(self):
         """The return type must be float."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         rate = _compute_decayed_rate(
             improved=3,
             partial=2,
@@ -476,7 +476,7 @@ class TestDecayedRate:
 
     def test_rate_bounded_0_1(self):
         """Result is always between 0.0 and 1.0."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         for improved, worse in [(0, 100), (100, 0), (50, 50)]:
             total = improved + worse
             rate = _compute_decayed_rate(
@@ -1575,7 +1575,7 @@ class TestRecordOutcomeIntegration:
     def test_record_outcome_worse_on_existing_domain(self, mock_get_conn, mock_parse_dt):
         """Recording 'worse' on an existing domain updates counters correctly."""
         # parse_datetime returns naive datetime to match utcnow() in source
-        mock_parse_dt.return_value = datetime.utcnow()
+        mock_parse_dt.return_value = datetime.now(timezone.utc)
 
         ctx, mock_conn, mock_cursor = _mock_conn_ctx()
         mock_get_conn.return_value = ctx

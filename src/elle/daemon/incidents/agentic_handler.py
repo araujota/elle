@@ -35,7 +35,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -83,7 +83,7 @@ class IncidentHandlingResult(BaseModel):
     tool_calls_count: int = Field(default=0, description="Number of tool calls made")
     duration_ms: int = Field(default=0, description="Total handling time")
     error: str | None = Field(default=None, description="Error message if failed")
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # =============================================================================
@@ -132,6 +132,7 @@ class IncidentAgenticHandler:
         # Track in-progress handlings
         self._in_progress: set[str] = set()
         self._semaphore = asyncio.Semaphore(max_concurrent)
+        self._handling_tasks: set[asyncio.Task[Any]] = set()
 
     async def handle_incident(
         self,
@@ -261,9 +262,29 @@ class IncidentAgenticHandler:
             should_auto_handle = self.auto_remediate and severity in ("critical", "error")
 
             if should_auto_handle:
+                # Bound pending tasks (C8)
+                MAX_PENDING_TASKS = 50
+                if len(self._handling_tasks) >= MAX_PENDING_TASKS:
+                    logger.warning(
+                        f"Too many pending handler tasks ({len(self._handling_tasks)}), "
+                        f"rejecting incident {incident_id[:8]}"
+                    )
+                    return
+
                 logger.info(f"Auto-handling critical incident: {incident_id[:8]} - {title}")
                 # Run in background to not block the correlator
-                asyncio.create_task(self.handle_incident(incident_id, auto_triggered=True))
+                task = asyncio.create_task(self.handle_incident(incident_id, auto_triggered=True))
+                self._handling_tasks.add(task)
+
+                def _on_task_done(t: asyncio.Task[Any]) -> None:
+                    self._handling_tasks.discard(t)
+                    if t.cancelled():
+                        return
+                    exc = t.exception()
+                    if exc:
+                        logger.error(f"Handler task failed: {exc}")
+
+                task.add_done_callback(_on_task_done)
             else:
                 # Just log and notify
                 logger.debug(f"Incident logged (no auto-handle): {incident_id[:8]}")
