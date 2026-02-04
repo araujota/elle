@@ -1,0 +1,10 @@
+/var/log/elle/*.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    maxsize 100M
+    create 0644 elle elle
+}

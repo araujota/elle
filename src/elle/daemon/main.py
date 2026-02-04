@@ -20,6 +20,7 @@ import logging
 import os
 import signal
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -95,6 +96,10 @@ class ElledDaemon:
         self._incidents_total = 0
         self._correlate_semaphore = asyncio.Semaphore(10)
 
+        # Log rate limiting (min 60s between repeated messages per key)
+        self._log_last_time: dict[str, float] = {}
+        self._log_suppressed: dict[str, int] = {}
+
     @property
     def uptime_sec(self) -> int:
         """Get daemon uptime in seconds."""
@@ -135,6 +140,23 @@ class ElledDaemon:
             healthy=len(errors) == 0,
             errors=tuple(errors),
         )
+
+    def _should_log(self, key: str) -> bool:
+        """Check if a log message should be emitted (rate-limited).
+
+        Returns True at most once per 60 seconds per key.
+        When returning True after suppression, logs the suppressed count.
+        """
+        now = time.monotonic()
+        last = self._log_last_time.get(key, 0.0)
+        if now - last < 60.0:
+            self._log_suppressed[key] = self._log_suppressed.get(key, 0) + 1
+            return False
+        suppressed = self._log_suppressed.pop(key, 0)
+        if suppressed > 0:
+            logger.info(f"[{key}] suppressed {suppressed} repeated messages")
+        self._log_last_time[key] = now
+        return True
 
     async def start(self) -> None:
         """Start all daemon components."""
@@ -574,21 +596,25 @@ class ElledDaemon:
                     )
                     self._events_total += inserted
                 except (TimeoutError, asyncio.TimeoutError):
-                    logger.error(f"DB insert timed out, dropping {len(events)} events")
+                    if self._should_log("db_insert_timeout"):
+                        logger.error(f"DB insert timed out, dropping {len(events)} events")
                 except Exception as e:
-                    logger.error(f"Failed to store events: {e}")
+                    if self._should_log("db_insert_error"):
+                        logger.error(f"Failed to store events: {e}")
 
                 # Correlate events (integrate with incident vault)
                 try:
                     await self._correlate_events(events)
                 except Exception as e:
-                    logger.error(f"Failed to correlate events: {e}")
+                    if self._should_log("correlate_error"):
+                        logger.error(f"Failed to correlate events: {e}")
 
                 # Route events to reactive functions
                 try:
                     await self._route_to_reactive(events)
                 except Exception as e:
-                    logger.error(f"Failed to route events: {e}")
+                    if self._should_log("route_error"):
+                        logger.error(f"Failed to route events: {e}")
 
                 # Handle package upgrade events for capability versioning
                 if self.config.capability_versioning_enabled:
@@ -602,7 +628,8 @@ class ElledDaemon:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Processor error: {e}")
+                if self._should_log("processor_error"):
+                    logger.error(f"Processor error: {e}")
                 await asyncio.sleep(1)
 
         logger.debug("Processor loop stopped")

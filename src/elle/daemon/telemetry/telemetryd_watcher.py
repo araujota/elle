@@ -20,6 +20,7 @@ import asyncio
 import json
 import logging
 import socket
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, cast
@@ -41,6 +42,9 @@ HEALTH_CHECK_INTERVAL = 30.0  # seconds between health checks
 STALE_THRESHOLD = 60.0  # seconds without events before considered unhealthy
 MAX_RESTART_ATTEMPTS = 5  # maximum restart attempts before giving up
 RESTART_COOLDOWN = 300.0  # seconds to wait before resetting restart counter
+
+# Log rate limiting
+LOG_RATE_LIMIT_SECONDS = 60.0  # minimum seconds between repeated log messages
 
 
 def is_telemetryd_available(socket_path: Path | None = None) -> bool:
@@ -110,6 +114,10 @@ class TelemetrydWatcher:
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
 
+        # Log rate limiting: tracks last log time and suppressed count per key
+        self._log_last_time: dict[str, float] = {}
+        self._log_suppressed: dict[str, int] = {}
+
     @property
     def running(self) -> bool:
         """Check if watcher is running."""
@@ -154,6 +162,23 @@ class TelemetrydWatcher:
     def restart_count(self) -> int:
         """Get number of restart attempts."""
         return self._restart_count
+
+    def _should_log(self, key: str) -> bool:
+        """Check if a log message should be emitted (rate-limited).
+
+        Returns True at most once per LOG_RATE_LIMIT_SECONDS per key.
+        When returning True after suppression, logs the suppressed count.
+        """
+        now = time.monotonic()
+        last = self._log_last_time.get(key, 0.0)
+        if now - last < LOG_RATE_LIMIT_SECONDS:
+            self._log_suppressed[key] = self._log_suppressed.get(key, 0) + 1
+            return False
+        suppressed = self._log_suppressed.pop(key, 0)
+        if suppressed > 0:
+            logger.info(f"[{key}] suppressed {suppressed} repeated messages")
+        self._log_last_time[key] = now
+        return True
 
     async def check_available(self) -> bool:
         """Check if telemetryd socket is available.
@@ -435,10 +460,11 @@ class TelemetrydWatcher:
                 if not self._connected:
                     if not await self._connect():
                         # Connection failed, wait before retry
-                        logger.warning(
-                            f"Cannot connect to telemetryd, retrying in {reconnect_delay}s. "
-                            "Restart with: sudo systemctl restart elled-telemetryd"
-                        )
+                        if self._should_log("reconnect"):
+                            logger.warning(
+                                f"Cannot connect to telemetryd, retrying in {reconnect_delay}s. "
+                                "Restart with: sudo systemctl restart elled-telemetryd"
+                            )
                         await asyncio.wait_for(
                             self._shutdown.wait(),
                             timeout=reconnect_delay,
@@ -458,7 +484,8 @@ class TelemetrydWatcher:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Watch loop error: {e}")
+                if self._should_log("watch_loop_error"):
+                    logger.error(f"Watch loop error: {e}")
                 await self._disconnect()
                 await asyncio.sleep(reconnect_delay)
 
@@ -488,13 +515,15 @@ class TelemetrydWatcher:
                     if event:
                         self._queue_event(event)
                 except json.JSONDecodeError as e:
-                    logger.warning(f"Invalid JSON from telemetryd: {e}")
+                    if self._should_log("invalid_json"):
+                        logger.warning(f"Invalid JSON from telemetryd: {e}")
                     self._total_errors += 1
 
             except (TimeoutError, asyncio.TimeoutError):
                 continue
             except Exception as e:
-                logger.error(f"Read error: {e}")
+                if self._should_log("read_error"):
+                    logger.error(f"Read error: {e}")
                 await self._disconnect()
                 return
 
@@ -545,7 +574,8 @@ class TelemetrydWatcher:
             )
 
         except Exception as e:
-            logger.warning(f"Failed to convert event: {e}")
+            if self._should_log("convert_event"):
+                logger.warning(f"Failed to convert event: {e}")
             self._total_errors += 1
             return None
 

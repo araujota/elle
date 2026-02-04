@@ -10,6 +10,8 @@ ExecStart=/usr/bin/elled
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=5
 TimeoutStopSec=10
 
 # User/Group (create during package install)
@@ -49,6 +51,8 @@ TasksMax=64
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=elled
+LogRateLimitIntervalSec=30
+LogRateLimitBurst=200
 
 # Environment
 Environment="ELLE_LOG_LEVEL=INFO"
