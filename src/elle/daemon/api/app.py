@@ -59,9 +59,19 @@ class _RateLimiter:
                 return False
             timestamps.append(now)
             self._requests[client_ip] = timestamps
-            # Evict all entries if map grows too large (H12)
-            if len(self._requests) > 10000:
-                self._requests.clear()
+            # Selective eviction if map grows too large (H12)
+            if len(self._requests) > 10_000:
+                # First pass: evict IPs with no recent activity
+                stale = [
+                    ip for ip, ts in self._requests.items() if not ts or ts[-1] < now - self._window_sec
+                ]
+                for ip in stale:
+                    del self._requests[ip]
+                # Second pass: if still too large, remove oldest 25%
+                if len(self._requests) > 10_000:
+                    sorted_ips = sorted(self._requests, key=lambda ip: self._requests[ip][-1])
+                    for ip in sorted_ips[: len(sorted_ips) // 4]:
+                        del self._requests[ip]
             return True
 
 

@@ -10,8 +10,9 @@ commit/rollback automatically.
 
 from __future__ import annotations
 
+import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
 import psycopg
@@ -37,6 +38,8 @@ from elle.daemon.incidents.models import (
 from elle.daemon.incidents.schema import PG_SCHEMA
 from elle.storage.engine import get_conn
 from elle.storage.helpers import json_dumps, json_loads, parse_datetime, serialize_datetime
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Incident CRUD
@@ -982,6 +985,41 @@ def get_snapshot_count() -> int:
     with get_conn(schema=PG_SCHEMA) as conn:
         row = conn.execute("SELECT COUNT(*) AS cnt FROM incident_snapshots").fetchone()
         return int(row["cnt"]) if row else 0
+
+
+# =============================================================================
+# Pruning
+# =============================================================================
+
+
+def prune_old_incidents(conn: psycopg.Connection, retention_days: int = 90) -> int:
+    """Delete incidents older than *retention_days*.
+
+    All child tables use ``ON DELETE CASCADE``, so a single DELETE on
+    ``incidents`` is sufficient.  Efficacy tables with zero total_incidents
+    are also cleaned up.
+
+    Args:
+        conn: Active psycopg connection (caller manages commit).
+        retention_days: Keep incidents newer than this many days.
+
+    Returns:
+        Number of incidents deleted.
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=retention_days)).isoformat()
+    result = conn.execute("DELETE FROM incidents WHERE created_at < %s", (cutoff,))
+    deleted = result.rowcount or 0
+
+    # Clean up orphaned efficacy rows
+    for table in ("domain_efficacy", "entity_efficacy", "solution_approach_efficacy"):
+        try:
+            conn.execute(f"DELETE FROM {table} WHERE total_incidents = 0")  # noqa: S608
+        except Exception:
+            pass  # table may not exist yet
+
+    if deleted:
+        logger.info("Pruned %d incidents older than %d days", deleted, retention_days)
+    return deleted
 
 
 # =============================================================================

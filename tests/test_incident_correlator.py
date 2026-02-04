@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
 
 import pytest
@@ -638,7 +639,7 @@ class TestClearActiveIncident:
     def test_clear_existing_key(self):
         """Clearing an existing key removes it."""
         corr = IncidentCorrelator()
-        corr._active_incidents["test:key"] = "inc-001"
+        corr._active_incidents["test:key"] = ("inc-001", time.monotonic())
         corr.clear_active_incident("test:key")
         assert "test:key" not in corr._active_incidents
 
@@ -668,7 +669,7 @@ class TestCheckForIncidentPattern:
 
         # Set up active incident for the correlation key
         key = corr._get_correlation_key(event)
-        corr._active_incidents[key] = "inc-existing"
+        corr._active_incidents[key] = ("inc-existing", time.monotonic())
 
         result = corr._check_for_incident_pattern(event)
         assert result == "inc-existing"
@@ -695,7 +696,7 @@ class TestCheckForIncidentPattern:
         result = corr._check_for_incident_pattern(event)
         assert result == "inc-new"
         key = corr._get_correlation_key(event)
-        assert corr._active_incidents[key] == "inc-new"
+        assert corr._active_incidents[key][0] == "inc-new"
 
     def test_below_threshold_returns_none(self):
         """Returns None when event count is below threshold."""

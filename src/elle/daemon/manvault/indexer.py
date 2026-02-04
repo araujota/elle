@@ -297,6 +297,8 @@ def render_manpage(
         "MAN_KEEP_FORMATTING": "1",
     }
 
+    man_proc: subprocess.Popen[bytes] | None = None
+    col_proc: subprocess.Popen[bytes] | None = None
     try:
         # Run man command
         man_proc = subprocess.Popen(
@@ -333,9 +335,13 @@ def render_manpage(
         return stdout.decode("utf-8", errors="replace")
 
     except subprocess.TimeoutExpired:
-        # Kill processes on timeout
-        man_proc.kill()
-        col_proc.kill()
+        # Kill processes on timeout and reap them
+        if man_proc:
+            man_proc.kill()
+            man_proc.wait()
+        if col_proc:
+            col_proc.kill()
+            col_proc.wait()
         logger.warning(f"Timeout rendering {name}({section})")
         return None
     except FileNotFoundError:
@@ -344,6 +350,12 @@ def render_manpage(
     except Exception as e:
         logger.error(f"Error rendering {name}({section}): {e}")
         return None
+    finally:
+        # Ensure both processes are reaped if any unexpected path leaves them alive
+        for proc in (man_proc, col_proc):
+            if proc is not None and proc.returncode is None:
+                proc.kill()
+                proc.wait()
 
 
 def normalize_text(text: str) -> str:

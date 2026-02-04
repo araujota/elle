@@ -25,6 +25,7 @@ import asyncio
 import logging
 import re
 import threading
+import time
 from collections.abc import Callable, Coroutine
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -118,8 +119,9 @@ class IncidentCorrelator:
         self._event_buffer: list[dict[str, Any]] = []
         self._buffer_lock = threading.Lock()
 
-        # Active incident tracking
-        self._active_incidents: dict[str, str] = {}  # key -> incident_id
+        # Active incident tracking: key -> (incident_id, timestamp)
+        self._active_incidents: dict[str, tuple[str, float]] = {}
+        self._active_eviction_counter = 0
 
     def process_event(
         self,
@@ -145,6 +147,12 @@ class IncidentCorrelator:
 
             # Clean old events from buffer
             self._clean_buffer()
+
+        # Periodic eviction of stale _active_incidents entries
+        self._active_eviction_counter += 1
+        if self._active_eviction_counter >= 100:
+            self._active_eviction_counter = 0
+            self._evict_stale_incidents()
 
         # Check for immediate trigger (critical severity)
         if self.critical_triggers_immediate and event.get("severity") == "critical":
@@ -277,7 +285,9 @@ class IncidentCorrelator:
         if len(related) >= self.min_events_for_incident:
             # Check if we already have an active incident for this key
             if key in self._active_incidents:
-                incident_id = self._active_incidents[key]
+                incident_id, _ts = self._active_incidents[key]
+                # Refresh timestamp on access
+                self._active_incidents[key] = (incident_id, time.monotonic())
                 # Link new events
                 event_ids = [str(e.get("id", "")) for e in related if e.get("id")]
                 if event_ids:
@@ -287,7 +297,7 @@ class IncidentCorrelator:
             # Create new incident
             incident_id = self._create_incident_from_events(related)
             if incident_id:
-                self._active_incidents[key] = incident_id
+                self._active_incidents[key] = (incident_id, time.monotonic())
             return incident_id
 
         return None
@@ -402,6 +412,23 @@ class IncidentCorrelator:
         """Clear an active incident tracking key."""
         if key in self._active_incidents:
             del self._active_incidents[key]
+
+    def _evict_stale_incidents(self) -> None:
+        """Remove stale entries from ``_active_incidents``.
+
+        Entries older than 1 hour are evicted. If the dict still exceeds
+        10 000 entries, the oldest 25% are removed.
+        """
+        now = time.monotonic()
+        max_age = 3600.0  # 1 hour
+        stale = [k for k, (_iid, ts) in self._active_incidents.items() if now - ts > max_age]
+        for k in stale:
+            del self._active_incidents[k]
+
+        if len(self._active_incidents) > 10_000:
+            sorted_keys = sorted(self._active_incidents, key=lambda k: self._active_incidents[k][1])
+            for k in sorted_keys[: len(sorted_keys) // 4]:
+                del self._active_incidents[k]
 
 
 # Module-level correlator instance

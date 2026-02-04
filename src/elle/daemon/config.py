@@ -159,6 +159,22 @@ class CloudSyncConfig:
 
 
 @dataclass(frozen=True)
+class RetentionConfig:
+    """Configuration for periodic maintenance and data retention."""
+
+    maintenance_interval_hours: float = 6.0
+    event_retention_days: int = 30
+    metric_sample_retention_days: int = 7
+    incident_retention_days: int = 90
+    reactive_history_retention_days: int = 30
+    installation_history_retention_days: int = 90
+    reboot_intent_retention_days: int = 30
+    mobile_audit_retention_days: int = 30
+    backup_retention_days: int = 30
+    backup_max_per_domain: int = 100
+
+
+@dataclass(frozen=True)
 class DatabaseConfig:
     """PostgreSQL connection configuration for the daemon.
 
@@ -200,6 +216,7 @@ class Config:
     mobile: MobileConfig = field(default_factory=MobileConfig)
     llm: DaemonLLMConfig = field(default_factory=DaemonLLMConfig)
     cloud_sync: CloudSyncConfig = field(default_factory=CloudSyncConfig)
+    retention: RetentionConfig = field(default_factory=RetentionConfig)
 
     # Inotify configuration
     inotify_watch_paths: tuple[str, ...] = (
@@ -503,6 +520,21 @@ def load_config(config_path: Path | None = None) -> Config:
         worker_poll_interval_sec=cloud_sync_section.get("worker_poll_interval_sec", 30.0),
     )
 
+    # Retention config
+    retention_section = _deep_get(data, "daemon", "retention", default={})
+    retention = RetentionConfig(
+        maintenance_interval_hours=retention_section.get("maintenance_interval_hours", 6.0),
+        event_retention_days=retention_section.get("event_retention_days", 30),
+        metric_sample_retention_days=retention_section.get("metric_sample_retention_days", 7),
+        incident_retention_days=retention_section.get("incident_retention_days", 90),
+        reactive_history_retention_days=retention_section.get("reactive_history_retention_days", 30),
+        installation_history_retention_days=retention_section.get("installation_history_retention_days", 90),
+        reboot_intent_retention_days=retention_section.get("reboot_intent_retention_days", 30),
+        mobile_audit_retention_days=retention_section.get("mobile_audit_retention_days", 30),
+        backup_retention_days=retention_section.get("backup_retention_days", 30),
+        backup_max_per_domain=retention_section.get("backup_max_per_domain", 100),
+    )
+
     return Config(
         database=database,
         log_level=log_level,
@@ -516,6 +548,7 @@ def load_config(config_path: Path | None = None) -> Config:
         mobile=mobile,
         llm=llm_config,
         cloud_sync=cloud_sync,
+        retention=retention,
         inotify_watch_paths=inotify_watch_paths,
         port_probe_interval=port_probe_interval,
         capability_versioning_enabled=capability_versioning_enabled,

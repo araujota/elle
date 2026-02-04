@@ -148,6 +148,12 @@ class ElledDaemon:
         When returning True after suppression, logs the suppressed count.
         """
         now = time.monotonic()
+        # Defensive cap: evict entries older than 5 minutes if dict grows
+        if len(self._log_last_time) > 100:
+            stale = [k for k, t in self._log_last_time.items() if now - t > 300.0]
+            for k in stale:
+                self._log_last_time.pop(k, None)
+                self._log_suppressed.pop(k, None)
         last = self._log_last_time.get(key, 0.0)
         if now - last < 60.0:
             self._log_suppressed[key] = self._log_suppressed.get(key, 0) + 1
@@ -246,6 +252,14 @@ class ElledDaemon:
             )
         )
 
+        # Start periodic maintenance loop
+        self._tasks.append(
+            asyncio.create_task(
+                self._maintenance_loop(),
+                name="maintenance",
+            )
+        )
+
         # Prune old telemetry events on startup
         try:
             from elle.daemon.telemetry.schema import prune_old_events
@@ -305,7 +319,12 @@ class ElledDaemon:
                     timeout=15.0,
                 )
             except (TimeoutError, asyncio.TimeoutError):
-                logger.warning("Some tasks did not stop in time")
+                alive = [t for t in self._tasks if not t.done()]
+                logger.warning("%d tasks did not stop in time, forcing", len(alive))
+                for task in alive:
+                    task.cancel()
+                # Give one final brief wait for cancellation to propagate
+                await asyncio.gather(*alive, return_exceptions=True)
 
         # Stop watchers explicitly
         if self._telemetryd_watcher:
@@ -585,7 +604,7 @@ class ElledDaemon:
                 )
 
                 if not events:
-                    await asyncio.sleep(0.05)
+                    await asyncio.sleep(0.5)
                     continue
 
                 # Store events via thread offload with timeout (C7)
@@ -825,6 +844,164 @@ class ElledDaemon:
             pass
         except Exception as e:
             logger.error(f"API server error: {e}")
+
+
+    # ------------------------------------------------------------------
+    # Periodic maintenance
+    # ------------------------------------------------------------------
+
+    async def _maintenance_loop(self) -> None:
+        """Run periodic housekeeping every ``retention.maintenance_interval_hours``.
+
+        Each cleanup step is wrapped in its own try/except so one failure
+        doesn't block others.
+        """
+        interval = self.config.retention.maintenance_interval_hours * 3600
+        while not self.shutdown.is_set():
+            try:
+                await asyncio.wait_for(self.shutdown.wait(), timeout=interval)
+                break  # shutdown signaled
+            except (TimeoutError, asyncio.TimeoutError):
+                pass  # timer expired, run maintenance
+
+            logger.info("Starting periodic maintenance")
+            total = 0
+            for name, fn in self._maintenance_tasks():
+                try:
+                    count = await asyncio.to_thread(fn)
+                    total += count
+                except Exception as e:
+                    if self._should_log(f"maint_{name}"):
+                        logger.warning("Maintenance task %s failed: %s", name, e)
+            logger.info("Maintenance complete: %d items cleaned", total)
+
+    def _maintenance_tasks(self) -> list[tuple[str, Any]]:
+        """Return a list of ``(name, callable)`` maintenance jobs.
+
+        Each callable runs in a thread and returns an int (items cleaned).
+        """
+        from elle.storage.engine import get_conn
+
+        ret = self.config.retention
+        tasks: list[tuple[str, Any]] = []
+
+        # 1. Prune old telemetry events
+        def _prune_events() -> int:
+            from elle.daemon.telemetry.schema import prune_old_events
+
+            with get_conn(schema="telemetry") as conn:
+                n = prune_old_events(conn, retention_days=ret.event_retention_days)
+                conn.commit()
+                return n
+
+        tasks.append(("prune_events", _prune_events))
+
+        # 2. Cleanup old metric samples
+        def _cleanup_samples() -> int:
+            from elle.daemon.telemetry.aggregator import cleanup_old_samples
+
+            with get_conn(schema="telemetry") as conn:
+                n = cleanup_old_samples(conn, retention_days=ret.metric_sample_retention_days)
+                conn.commit()
+                return n
+
+        tasks.append(("cleanup_samples", _cleanup_samples))
+
+        # 3. Prune old incidents (CASCADE handles children)
+        def _prune_incidents() -> int:
+            from elle.daemon.incidents.store import prune_old_incidents
+
+            with get_conn(schema="incidents") as conn:
+                n = prune_old_incidents(conn, retention_days=ret.incident_retention_days)
+                conn.commit()
+                return n
+
+        tasks.append(("prune_incidents", _prune_incidents))
+
+        # 4. Prune old reactive execution history
+        def _prune_reactive() -> int:
+            from elle.reactive.store import prune_old_execution_history
+
+            with get_conn(schema="reactive") as conn:
+                n = prune_old_execution_history(conn, retention_days=ret.reactive_history_retention_days)
+                conn.commit()
+                return n
+
+        tasks.append(("prune_reactive_history", _prune_reactive))
+
+        # 5. Prune old installation history
+        def _prune_install_history() -> int:
+            from elle.capabilities.dependencies.schema import prune_old_installation_history
+
+            with get_conn(schema="deps") as conn:
+                n = prune_old_installation_history(conn, retention_days=ret.installation_history_retention_days)
+                conn.commit()
+                return n
+
+        tasks.append(("prune_install_history", _prune_install_history))
+
+        # 6. Cleanup stale cloud queue entries
+        def _cleanup_cloud_queue() -> int:
+            try:
+                from elle.daemon.incidents.cloud_queue import cleanup_stale
+
+                return cleanup_stale(stale_hours=ret.reboot_intent_retention_days * 24)
+            except Exception:
+                return 0
+
+        tasks.append(("cleanup_cloud_queue", _cleanup_cloud_queue))
+
+        # 7. Cleanup stale reboot intents
+        def _cleanup_reboot_intents() -> int:
+            try:
+                import asyncio as _aio
+
+                from elle.daemon.reboot import get_manager
+
+                loop = _aio.new_event_loop()
+                try:
+                    return loop.run_until_complete(get_manager().cleanup_stale_intents())
+                finally:
+                    loop.close()
+            except Exception:
+                return 0
+
+        tasks.append(("cleanup_reboot_intents", _cleanup_reboot_intents))
+
+        # 8. Mobile cleanup (tokens, elevations, audit)
+        def _cleanup_mobile() -> int:
+            total = 0
+            try:
+                from elle.mobile.store import (
+                    cleanup_expired_elevations,
+                    cleanup_expired_tokens,
+                    cleanup_old_entries,
+                )
+
+                total += cleanup_expired_tokens()
+                total += cleanup_expired_elevations()
+                total += cleanup_old_entries(retention_days=ret.mobile_audit_retention_days)
+            except Exception:
+                pass
+            return total
+
+        tasks.append(("cleanup_mobile", _cleanup_mobile))
+
+        # 9. Cleanup old backups
+        def _cleanup_backups() -> int:
+            try:
+                from elle.ops.editing.backup_manager import cleanup_old_backups
+
+                return cleanup_old_backups(
+                    retention_days=ret.backup_retention_days,
+                    max_per_domain=ret.backup_max_per_domain,
+                )
+            except Exception:
+                return 0
+
+        tasks.append(("cleanup_backups", _cleanup_backups))
+
+        return tasks
 
 
 def setup_logging(level: str = "INFO") -> None:

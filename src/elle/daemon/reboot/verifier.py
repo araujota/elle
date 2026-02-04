@@ -198,9 +198,11 @@ async def run_port_check(
 
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    except Exception as e:
+        return (False, -1, "", str(e))
+    try:
         sock.settimeout(timeout)
         result = sock.connect_ex((host, port))
-        sock.close()
 
         passed = result == 0
         return (
@@ -211,6 +213,8 @@ async def run_port_check(
         )
     except Exception as e:
         return (False, -1, "", str(e))
+    finally:
+        sock.close()
 
 
 async def run_filesystem_writable_check(

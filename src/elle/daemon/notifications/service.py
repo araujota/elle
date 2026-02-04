@@ -237,8 +237,9 @@ def _create_action_callback(
                         proc.wait(timeout=30)
                     except subprocess.TimeoutExpired:
                         proc.kill()
-                        proc.wait(timeout=5)
                         logger.warning("Notification action command timed out after 30s")
+                    finally:
+                        proc.wait(timeout=10)  # reap in all cases
             except Exception as e:
                 logger.error(f"Failed to execute action command: {e}")
             try:
@@ -444,6 +445,13 @@ def _open_elle_repl(
         except subprocess.TimeoutExpired:
             # Terminal is running as expected (interactive process)
             pass
+        finally:
+            # Reap zombie if process exited between wait and here
+            if proc.returncode is None:
+                try:
+                    proc.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    pass  # still running, expected for interactive terminals
         logger.info(f"Opened ELLE REPL in {name}")
         return True
 

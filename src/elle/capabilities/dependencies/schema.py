@@ -6,6 +6,7 @@ Provides PostgreSQL schema initialization for the dependency system.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 
 import psycopg
 
@@ -81,3 +82,21 @@ def ensure_schema(conn: psycopg.Connection) -> None:
     from elle.storage.migrate import run_migrations
 
     run_migrations(conn, PG_SCHEMA)
+
+
+def prune_old_installation_history(conn: psycopg.Connection, retention_days: int = 90) -> int:
+    """Delete installation history records older than *retention_days*.
+
+    Args:
+        conn: Active psycopg connection (caller manages commit).
+        retention_days: Keep records newer than this many days.
+
+    Returns:
+        Number of records deleted.
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=retention_days)).isoformat()
+    result = conn.execute("DELETE FROM installation_history WHERE installed_at < %s", (cutoff,))
+    deleted = result.rowcount or 0
+    if deleted:
+        logger.info("Pruned %d installation history records older than %d days", deleted, retention_days)
+    return deleted

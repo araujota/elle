@@ -202,7 +202,7 @@ class SyscallManager:
                     self._program.poll(timeout_ms=100)  # type: ignore[attr-defined]
             except Exception as e:
                 logger.debug(f"Poll error: {e}")
-            time.sleep(0.01)  # Small sleep to prevent busy loop
+            time.sleep(0.05)  # Reduced from 0.01 to lower context switch rate
 
     @contextmanager
     def trace_command(

@@ -8,7 +8,8 @@ Storage backend: PostgreSQL via psycopg (schema ``reactive``).
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import logging
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import psycopg
@@ -33,6 +34,31 @@ from elle.storage.engine import get_conn
 from elle.storage.helpers import json_dumps, json_loads, parse_datetime, serialize_datetime
 
 PG_SCHEMA = "reactive"
+
+_logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Pruning
+# =============================================================================
+
+
+def prune_old_execution_history(conn: psycopg.Connection, retention_days: int = 30) -> int:
+    """Delete execution history records older than *retention_days*.
+
+    Args:
+        conn: Active psycopg connection (caller manages commit).
+        retention_days: Keep records newer than this many days.
+
+    Returns:
+        Number of records deleted.
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=retention_days)).isoformat()
+    result = conn.execute("DELETE FROM execution_history WHERE triggered_at < %s", (cutoff,))
+    deleted = result.rowcount or 0
+    if deleted:
+        _logger.info("Pruned %d reactive execution history records older than %d days", deleted, retention_days)
+    return deleted
 
 
 # =============================================================================

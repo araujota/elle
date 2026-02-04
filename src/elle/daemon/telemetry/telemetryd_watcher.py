@@ -61,14 +61,15 @@ def is_telemetryd_available(socket_path: Path | None = None) -> bool:
     if not path.exists():
         return False
 
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.settimeout(1.0)
         sock.connect(str(path))
-        sock.close()
         return True
     except OSError:
         return False
+    finally:
+        sock.close()
 
 
 class TelemetrydWatcher:
@@ -170,6 +171,12 @@ class TelemetrydWatcher:
         When returning True after suppression, logs the suppressed count.
         """
         now = time.monotonic()
+        # Defensive cap: evict entries older than 5 minutes if dict grows
+        if len(self._log_last_time) > 100:
+            stale = [k for k, t in self._log_last_time.items() if now - t > 300.0]
+            for k in stale:
+                self._log_last_time.pop(k, None)
+                self._log_suppressed.pop(k, None)
         last = self._log_last_time.get(key, 0.0)
         if now - last < LOG_RATE_LIMIT_SECONDS:
             self._log_suppressed[key] = self._log_suppressed.get(key, 0) + 1
@@ -359,6 +366,7 @@ class TelemetrydWatcher:
         await self._disconnect()
 
         # Try to restart telemetryd service
+        proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
                 "systemctl",
@@ -375,9 +383,15 @@ class TelemetrydWatcher:
                 logger.warning(f"systemctl restart failed with code {proc.returncode}")
 
         except (TimeoutError, asyncio.TimeoutError):
+            if proc is not None and proc.returncode is None:
+                proc.kill()
+                await proc.wait()
             logger.warning("systemctl restart timed out")
         except Exception as e:
             logger.warning(f"Failed to restart telemetryd service: {e}")
+            if proc is not None and proc.returncode is None:
+                proc.kill()
+                await proc.wait()
 
         # Wait for service to start
         await asyncio.sleep(2.0)
